@@ -5,8 +5,36 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ConvertZZ"
         mc:Ignorable="d"
-        Title="MainWindow" Height="350" Width="525">
+        Title="MainWindow" Height="auto" Width="auto" ResizeMode="NoResize" ShowInTaskbar="False" WindowStyle="None" 
+      AllowsTransparency="True"
+MouseDown="Window_MouseDown"
+     
+      Background="Transparent"
+        Topmost="True" MouseUp="Window_MouseUp" SizeToContent="WidthAndHeight">
+    
     <Grid>
         
+        <Ellipse Fill="#FFF4F4F5" HorizontalAlignment="Left" Height="64" Stroke="Black" VerticalAlignment="Top" Width="64">
+            <Ellipse.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="GBK>Big5"/>
+                    <MenuItem Header="Big5>GBK"/>
+                    <MenuItem Header="Unicod簡>Unicode繁"/>
+                    <MenuItem Header="Unicode繁>Unicode簡"/>
+                    <MenuItem Header="純文字檔案轉換"/>
+                    <MenuItem Header="資料夾及檔名轉換"/>
+                 
+                    <MenuItem Header="其他">
+                        <MenuItem Header="Unicode>Html十進制"/>
+                        <MenuItem Header="Unicode>Html十六進制"/>
+                    </MenuItem>
+                    <MenuItem Header="Setting" Click="Exit_Click"/>
+                    <MenuItem Header="Exit" Click="Exit_Click"/>
+                </ContextMenu>
+            </Ellipse.ContextMenu>
+            
+        </Ellipse>
+        <Label Content="z" HorizontalAlignment="Center" FontSize="48" IsEnabled="False" FontWeight="Bold" VerticalAlignment="Center" Margin="15,-7,15,6"  />
+
     </Grid>
 </Window>

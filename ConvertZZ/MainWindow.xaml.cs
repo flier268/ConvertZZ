@@ -23,6 +23,40 @@ namespace ConvertZZ
         public MainWindow()
         {
             InitializeComponent();
+            Console.WriteLine(ClipBoardHelper.GetClipBoard());
+        }
+        Point pointNow = new Point();
+        bool leftDown = false;
+        private void Window_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.LeftButton == MouseButtonState.Pressed)
+            {
+                pointNow = new Point(Left, Top);
+                leftDown = true;
+                this.DragMove();
+            }
+        }
+        private void Setting_Click(object sender, RoutedEventArgs e)
+        {
+            
+        }
+    
+        private void Exit_Click(object sender, RoutedEventArgs e)
+        {
+            this.Close();
+        }
+
+        private void Window_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (Left == pointNow.X && Top == pointNow.Y && leftDown)
+            {
+                leftDown = false;
+                if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
+                    MessageBox.Show("ctrl");
+                else
+                    MessageBox.Show("");
+            }
         }
     }
+
 }

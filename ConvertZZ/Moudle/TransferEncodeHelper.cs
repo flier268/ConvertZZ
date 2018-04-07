@@ -12,12 +12,8 @@ namespace ConvertZZ
         {
             try
             {
-                byte[] unicodeBytes = originalEncode.GetBytes(str);
-                byte[] asciiBytes = Encoding.Convert(originalEncode, targetEncode, unicodeBytes);
-                char[] asciiChars = new char[targetEncode.GetCharCount(asciiBytes, 0, asciiBytes.Length)];
-                targetEncode.GetChars(asciiBytes, 0, asciiBytes.Length, asciiChars, 0);
-                string result = new string(asciiChars);
-                return result;
+                byte[] c=targetEncode.GetBytes(str);
+                return originalEncode.GetString(c);
             }
             catch
             {

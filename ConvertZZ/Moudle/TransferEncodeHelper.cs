@@ -12,13 +12,33 @@ namespace ConvertZZ
         {
             try
             {
-                byte[] c=targetEncode.GetBytes(str);
-                return originalEncode.GetString(c);
+                /*
+                byte[] c = originalEncode.GetBytes(str);
+               byte[] d = Encoding.Convert(originalEncode, targetEncode, c);
+                return targetEncode.GetString(d);
+                */
+                /*
+                byte[] c = originalEncode.GetBytes(str);
+                return targetEncode.GetString(c);
+                */
+                //str = Encoding.Convert(Encoding.UTF8, originalEncode, str);
+                byte[] temp = originalEncode.GetBytes(str);
+                byte[] targetEncodeBytes = Encoding.Convert(originalEncode, targetEncode, temp);
+
+
+
+                char[] targetEncodeChars = new char[targetEncode.GetCharCount(targetEncodeBytes, 0, targetEncodeBytes.Length)];
+                targetEncode.GetChars(targetEncodeBytes, 0, targetEncodeBytes.Length, targetEncodeChars, 0);
+                string targetEncodeString = new string(targetEncodeChars);
+                return targetEncodeString;
+
+
+                //return targetEncode.GetString(targetEncodeBytes);
             }
             catch
             {
                 Console.WriteLine("There is an exception.");
-                return "";
+                return null;
             }
         }
     }

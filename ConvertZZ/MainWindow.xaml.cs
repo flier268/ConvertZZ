@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -69,17 +70,24 @@ namespace ConvertZZ
 
         private void MenuItem_Click(object sender, RoutedEventArgs e)
         {
-            string clip = ClipBoardHelper.GetClipBoard();
-            switch(((MenuItem)sender).Uid)
+            string clip = ClipBoardHelper.GetClipBoard_UnicodeText();
+            StringBuilder sb = new StringBuilder();
+            switch (((MenuItem)sender).Uid)
             {
                 case "a1":
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("GBK"), Encoding.GetEncoding("BIG5"));
+                    clip = ChineseConverter.ToTraditional(clip);
+                    if (App.Settings.VocabularyCorrection)
+                        clip = chineseConverter.Convert(clip);
+                    clip = Encoding.GetEncoding("GBK").GetString(Encoding.GetEncoding("BIG5").GetBytes(clip));
                     break;
-                case "a2":
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("BIG5"), Encoding.GetEncoding("GBK"));
+                case "a2":                    
+                    clip = ChineseConverter.ToSimplified(clip);
+                    if (App.Settings.VocabularyCorrection)
+                    { } //clip = chineseConverter.Convert(clip);
+                    clip = Encoding.GetEncoding("BIG5").GetString(Encoding.GetEncoding("GBK").GetBytes(clip));             
                     break;
                 case "a3":
-                    clip= ChineseConverter.ToTraditional(clip);
+                    clip = ChineseConverter.ToTraditional(clip);
                     if (App.Settings.VocabularyCorrection)
                         clip = chineseConverter.Convert(clip);
                     /*
@@ -95,6 +103,8 @@ namespace ConvertZZ
                     break;
                 case "a4":
                     clip = ChineseConverter.ToSimplified(clip);
+                    if (App.Settings.VocabularyCorrection)
+                        clip = chineseConverter.Convert(clip);                    
                     break;
                 case "b1":
                     Window_TextConvertr window_TextConvertr = new Window_TextConvertr();
@@ -104,58 +114,161 @@ namespace ConvertZZ
                     Window_FileConverter window_FileConverter = new Window_FileConverter();
                     window_FileConverter.Show();
                     break;
-                case "za1":
-                    clip = HttpUtility.UrlEncode(clip);
+                case "c1":
+
+                    break;
+                case "c2":
+
+                    break;
+                case "c3":
+
+                    break;
+                case "za1":                   
+                    foreach(char c in clip)
+                    {
+                        if ((' ' <= c && c <= '~') || (c == '\r') || (c == '\n'))
+                        {
+                            if (c == '&')
+                            {
+                                sb.Append("&amp;");
+                            }
+                            else if(c == '<') {
+                                sb.Append("&lt;");
+                            }
+                            else if(c == '>') {
+                                sb.Append("&gt;");
+                            } else {
+                                sb.Append(c.ToString());
+                            }
+                        }
+                        else
+                        {
+                            sb.Append("&#");
+                            sb.Append(Convert.ToInt32(c));
+                            sb.Append(";");
+                        }
+                    }
+                    clip = sb.ToString();
                     break;
                 case "za2":
+                    foreach (char c in clip)
+                    {
+                        if ((' ' <= c && c <= '~') || (c == '\r') || (c == '\n'))
+                        {
+                            if (c == '&')
+                            {
+                                sb.Append("&amp;");
+                            }
+                            else if (c == '<')
+                            {
+                                sb.Append("&lt;");
+                            }
+                            else if (c == '>')
+                            {
+                                sb.Append("&gt;");
+                            }
+                            else
+                            {
+                                sb.Append(c.ToString());
+                            }
+                        }
+                        else
+                        {
+                            sb.Append("&#x");
+                            sb.Append(Convert.ToInt32(c).ToString("X"));
+                            sb.Append(";");
+                        }
+                    }
+                    clip = sb.ToString();
+                    break;
+                case "za3":
+                    clip.Replace("&amp;", "&");
+                    clip.Replace("&lt;", "<");
+                    clip.Replace("&gt;", ">");
+                    //以;將文字拆成陣列
+                    string[] tmp = clip.Split(';');
+                    //檢查最後一個字元是否為【;】，因為有【英文】、【阿拉伯數字】、【&#XXXX;】
+                    //若最後一個要處理的字並非HTML UNICODE則不進行處理
+                    bool Process_last = clip.Substring(clip.Length - 1, 1).Equals(";");
+                    //Debug.WriteLine(tmp.Length + "");
+                    for (int i = 0; i < tmp.Length; i++)
+                    {
+                        //以&#將文字拆成陣列
+                        string[] tmp2 = tmp[i].Split(new string[] { "&#" }, StringSplitOptions.RemoveEmptyEntries);
+                        if (tmp2.Length == 1)
+                        {
+                            //如果長度為1則試圖轉換UNICODE回字符，若失敗則使用原本的字元
+                            if (i != tmp.Length - 1)
+                            {
+                                try
+                                {
+                                    if (tmp2[0].StartsWith("x"))
+                                        sb.Append(Convert.ToChar(Convert.ToInt32(tmp2[0].Substring(1, tmp2[0].Length - 1), 16)).ToString());
+                                    else
+                                        sb.Append(Convert.ToChar(Convert.ToInt32(int.Parse(tmp2[0]))).ToString());
+                                }
+                                catch
+                                {
+                                    sb.Append(tmp2[0]);
+                                }
+                            }
+                            else
+                            {
+                                sb.Append(tmp2[0]);
+                            }
+                        }
+                        if (tmp2.Length == 2)
+                        {
+                            //若長度為2，則第一項不處理，只處理第二項即可
+                            sb.Append(tmp2[0]);
+                            var g = Convert.ToInt32(tmp2[1].Substring(1, tmp2[1].Length - 1), 16);
+                            if (tmp2[1].StartsWith("x"))
+                                sb.Append(Convert.ToChar(Convert.ToInt32(tmp2[1].Substring(1, tmp2[1].Length - 1), 16)).ToString());
+                            else
+                                sb.Append(Convert.ToChar(Convert.ToInt32(tmp2[1])).ToString());
+                        }
+                    }
+                    clip = sb.ToString();
                     break;
                 case "zb1":
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("UTF-8"), Encoding.GetEncoding("GBK"));
+                    //Unicode>GBK
+                    clip = Encoding.Default.GetString(Encoding.GetEncoding("GBK").GetBytes(clip));
                     break;
                 case "zb2":
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("UTF-8"), Encoding.GetEncoding("BIG5"));
+                    clip = Encoding.Default.GetString(Encoding.GetEncoding("BIG5").GetBytes(clip));
                     break;
                 case "zb3":
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("UTF-8"), Encoding.GetEncoding("shift_jis"));
+                    clip = Encoding.Default.GetString(Encoding.GetEncoding("Shift-JIS").GetBytes(clip));                    
                     break;
                 case "zc1":
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("shift_jis"), Encoding.GetEncoding("GBK"));
+                    //Shift-JIS>GBK           
+                    clip = Encoding.GetEncoding("shift_jis").GetString(Encoding.GetEncoding("GBK").GetBytes(clip));
                     break;
                 case "zc2":
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("shift_jis"), Encoding.GetEncoding("BIG5"));
+                    clip = Encoding.GetEncoding("shift_jis").GetString(Encoding.GetEncoding("BIG5").GetBytes(clip));
                     break;
                 case "zc3":
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("GBK"), Encoding.GetEncoding("shift_jis"));
+                    clip = Encoding.GetEncoding("GBK").GetString(Encoding.GetEncoding("shift_jis").GetBytes(clip));
                     break;
                 case "zc4":
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("BIG5"), Encoding.GetEncoding("shift_jis"));
+                    clip = Encoding.GetEncoding("BIG5").GetString(Encoding.GetEncoding("shift_jis").GetBytes(clip));
                     break;
                 case "zd1":
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("hz-gb-2312"), Encoding.GetEncoding("GBK"));
+                    //hz-gb-2312>GBK
+                    clip = Encoding.GetEncoding("hz-gb-2312").GetString(Encoding.GetEncoding("GBK").GetBytes(clip));
                     break;
                 case "zd2":
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("hz-gb-2312"), Encoding.GetEncoding("BIG5"));
+                    clip = Encoding.GetEncoding("hz-gb-2312").GetString(Encoding.GetEncoding("BIG5").GetBytes(clip));
                     break;
                 case "zd3":
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("GBK"), Encoding.GetEncoding("hz-gb-2312"));
+                    clip = Encoding.GetEncoding("GBK").GetString(Encoding.GetEncoding("hz-gb-2312").GetBytes(clip));
                     break;
                 case "zd4":
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("BIG5"), Encoding.GetEncoding("hz-gb-2312"));
-                    break;
-                case "ze1":
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("GBK"), Encoding.GetEncoding("UFT-8"));
-                    clip = ChineseConverter.ToSimplified(clip);
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("UTF-8"), Encoding.GetEncoding("GBK"));
-                    break;
-                case "ze2":
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("GBK"), Encoding.GetEncoding("UFT-8"));
-                    clip = ChineseConverter.ToTraditional(clip);
-                    if (App.Settings.VocabularyCorrection)
-                        clip = chineseConverter.Convert(clip);
-                    clip = TransferEncodeHelper.TransferStr(clip, Encoding.GetEncoding("UTF-8"), Encoding.GetEncoding("GBK"));
-                    break;
+                    clip = Encoding.GetEncoding("BIG5").GetString(Encoding.GetEncoding("hz-gb-2312").GetBytes(clip));
+                    break;               
             }
-            ClipBoardHelper.SetClipBoard(clip);
+            ClipBoardHelper.SetClipBoard_UnicodeText(clip);
+            //ClipBoardHelper.SetClipBoard_ByteArray(clip);
         }
     }
 

@@ -21,9 +21,16 @@ MouseDown="Window_MouseDown"
                 <MenuItem Uid="b1"  Header="純文字檔案轉換" Click="MenuItem_Click"/>
                 <MenuItem Uid="b2" Header="資料夾及檔名轉換" Click="MenuItem_Click"/>
                 <Separator/>
+                <MenuItem Header="Audio標籤轉換">
+                    <MenuItem Uid="c1" Header="ID3" Click="MenuItem_Click"/>
+                    <MenuItem Uid="c2" Header="APE" Click="MenuItem_Click"/>
+                    <MenuItem Uid="c3" Header="OGG" Click="MenuItem_Click"/>
+                </MenuItem>
+                <Separator/>
                 <MenuItem Header="其他">
-                    <MenuItem Uid="za1" Header="Unicode>Html十進制" Click="MenuItem_Click"/>
-                    <MenuItem Uid="za2" Header="Unicode>Html十六進制" Click="MenuItem_Click"/>
+                    <MenuItem Uid="za1" Header="Unicode>Html Code十進制" Click="MenuItem_Click"/>
+                    <MenuItem Uid="za2" Header="Unicode>Html Code十六進制" Click="MenuItem_Click"/>
+                    <MenuItem Uid="za3" Header="HTML Code>Unicode" Click="MenuItem_Click"/>
                     <Separator/>
                     <MenuItem Uid="zb1" Header="Unicode>GBK" Click="MenuItem_Click"/>
                     <MenuItem Uid="zb2" Header="Unicode>Big5" Click="MenuItem_Click"/>
@@ -38,9 +45,7 @@ MouseDown="Window_MouseDown"
                     <MenuItem Uid="zd2" Header="HZ>Big5" Click="MenuItem_Click"/>
                     <MenuItem Uid="zd3" Header="GBK>HZ" Click="MenuItem_Click"/>
                     <MenuItem Uid="zd4" Header="Big5>HZ" Click="MenuItem_Click"/>
-                    <Separator/>
-                    <MenuItem Uid="ze1" Header="GBK繁體>GBK簡體" Click="MenuItem_Click"/>
-                    <MenuItem Uid="ze2" Header="GBK簡體>GBK繁體" Click="MenuItem_Click"/>                    
+                    <Separator/>                    
                 </MenuItem>
                 <MenuItem Header="Setting" Click="Exit_Click"/>
                 <MenuItem Header="Exit" Click="Exit_Click"/>

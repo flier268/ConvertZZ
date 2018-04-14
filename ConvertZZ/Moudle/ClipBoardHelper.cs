@@ -1,4 +1,6 @@
 ﻿using System;
+using System.IO;
+using System.Text;
 using System.Threading;
 using System.Windows;
 
@@ -6,7 +8,7 @@ namespace ConvertZZ
 {
     public class ClipBoardHelper
     {
-        public static string GetClipBoard()
+        public static string GetClipBoard_UnicodeText()
         {
             string idat = null;
             Exception threadEx = null;
@@ -28,7 +30,7 @@ namespace ConvertZZ
             staThread.Join();
             return idat;
         }
-        public static void SetClipBoard(string str)
+        public static void SetClipBoard_UnicodeText(string str)
         {
             Exception threadEx = null;
             Thread staThread = new Thread(
@@ -47,6 +49,6 @@ namespace ConvertZZ
             staThread.SetApartmentState(ApartmentState.STA);
             staThread.Start();
             staThread.Join();
-        }
+        }       
     }
 }

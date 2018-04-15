@@ -14,6 +14,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using static ConvertZZ.Window_TagConverter;
 
 namespace ConvertZZ
 {
@@ -49,6 +50,7 @@ namespace ConvertZZ
         private void Exit_Click(object sender, RoutedEventArgs e)
         {
             this.Close();
+            Environment.Exit(0);
         }
 
         private void Window_MouseUp(object sender, MouseButtonEventArgs e)
@@ -111,17 +113,20 @@ namespace ConvertZZ
                     window_TextConvertr.Show();
                     break;
                 case "b2":
-                    Window_FileConverter window_FileConverter = new Window_FileConverter();
-                    window_FileConverter.Show();
+                    Window_FolderFileNameConverter window_FolderFileNameConverter = new Window_FolderFileNameConverter();
+                    window_FolderFileNameConverter.Show();
                     break;
                 case "c1":
-
+                    Window_TagConverter window_TagConverter = new Window_TagConverter(Format.ID3);
+                    window_TagConverter.Show();
                     break;
                 case "c2":
-
+                    Window_TagConverter window_TagConverter2 = new Window_TagConverter(Format.APE);
+                    window_TagConverter2.Show();
                     break;
                 case "c3":
-
+                    Window_TagConverter window_TagConverter3 = new Window_TagConverter(Format.OGG);
+                    window_TagConverter3.Show();
                     break;
                 case "za1":                   
                     foreach(char c in clip)

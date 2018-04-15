@@ -15,13 +15,19 @@ using System.Windows.Shapes;
 namespace ConvertZZ
 {
     /// <summary>
-    /// Window_FileConverter.xaml 的互動邏輯
+    /// Window_TagConverter.xaml 的互動邏輯
     /// </summary>
-    public partial class Window_FileConverter : Window
+    public partial class Window_TagConverter : Window
     {
-        public Window_FileConverter()
+        public Window_TagConverter(Format Format)
         {
             InitializeComponent();
+        }
+        public enum Format
+        {
+            ID3,
+            APE,
+            OGG
         }
     }
 }

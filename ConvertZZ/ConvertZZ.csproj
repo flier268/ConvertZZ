@@ -62,11 +62,14 @@
     <Compile Include="Moudle\FastReplace.cs" />
     <Compile Include="Moudle\TransferEncodeHelper.cs" />
     <Compile Include="Settings.cs" />
+    <Compile Include="Window_TagConverter.xaml.cs">
+      <DependentUpon>Window_TagConverter.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Window_TextConvertr.xaml.cs">
       <DependentUpon>Window_TextConvertr.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Window_FileConverter.xaml.cs">
-      <DependentUpon>Window_FileConverter.xaml</DependentUpon>
+    <Compile Include="Window_FolderFileNameConverter.xaml.cs">
+      <DependentUpon>Window_FolderFileNameConverter.xaml</DependentUpon>
     </Compile>
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
@@ -81,11 +84,15 @@
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Page Include="Window_TagConverter.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Window_TextConvertr.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Window_FileConverter.xaml">
+    <Page Include="Window_FolderFileNameConverter.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

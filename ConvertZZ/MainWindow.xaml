@@ -47,6 +47,7 @@ MouseDown="Window_MouseDown"
                     <MenuItem Uid="zd4" Header="Big5>HZ" Click="MenuItem_Click"/>
                     <Separator/>                    
                 </MenuItem>
+                <MenuItem Header="隱藏懸浮球" Click="HideBall_Click"/>
                 <MenuItem Header="Setting" Click="Exit_Click"/>
                 <MenuItem Header="Exit" Click="Exit_Click"/>
             </ContextMenu>

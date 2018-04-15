@@ -56,6 +56,7 @@ namespace ConvertZZ
             VocabularyCorrection = true;
             HotKey = new HotKey();
             FileConvert = new FileConvert();
+            ShowBalloonTip = true;
         }
         /// <summary>
         /// 快速動作設定(輔助鍵+點擊)
@@ -98,7 +99,11 @@ namespace ConvertZZ
         /// </summary>
         [JsonProperty("FileConvert")]
         public FileConvert FileConvert { get; set; }
-
+        /// <summary>
+        /// 顯示器泡提示
+        /// </summary>
+        [JsonProperty("ShowBalloonTip")]
+        public bool ShowBalloonTip { get; set; }
     }
 
     public partial class FileConvert

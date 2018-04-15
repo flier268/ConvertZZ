@@ -1,19 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
-using System.Web;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 using static ConvertZZ.Window_TagConverter;
 
 namespace ConvertZZ
@@ -23,13 +12,9 @@ namespace ConvertZZ
     /// </summary>
     public partial class MainWindow : Window
     {
-        ChineseConverter chineseConverter = new ChineseConverter();
         public MainWindow()
         {
-            InitializeComponent();
-            foreach (string p in System.IO.Directory.GetFiles(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dictionary")))
-                chineseConverter.Load(p);
-            chineseConverter.ReloadFastReplaceDic();
+            InitializeComponent();            
         }
         Point pointNow = new Point();
         bool leftDown = false;
@@ -46,7 +31,12 @@ namespace ConvertZZ
         {
             
         }
-    
+        private void HideBall_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings.ShowBalloonTip)
+                App.nIcon.ShowBalloonTip(1500, "ConvertZZ", "ConvertZZ is here", System.Windows.Forms.ToolTipIcon.Info);
+            this.Hide();
+        }
         private void Exit_Click(object sender, RoutedEventArgs e)
         {
             this.Close();
@@ -79,7 +69,7 @@ namespace ConvertZZ
                 case "a1":
                     clip = ChineseConverter.ToTraditional(clip);
                     if (App.Settings.VocabularyCorrection)
-                        clip = chineseConverter.Convert(clip);
+                        clip = App.ChineseConverter.Convert(clip);
                     clip = Encoding.GetEncoding("GBK").GetString(Encoding.GetEncoding("BIG5").GetBytes(clip));
                     break;
                 case "a2":                    
@@ -91,7 +81,7 @@ namespace ConvertZZ
                 case "a3":
                     clip = ChineseConverter.ToTraditional(clip);
                     if (App.Settings.VocabularyCorrection)
-                        clip = chineseConverter.Convert(clip);
+                        clip = App.ChineseConverter.Convert(clip);
                     /*
                     byte[] bomBuffer = new byte[] { 0xef, 0xbb, 0xbf };
 
@@ -106,7 +96,7 @@ namespace ConvertZZ
                 case "a4":
                     clip = ChineseConverter.ToSimplified(clip);
                     if (App.Settings.VocabularyCorrection)
-                        clip = chineseConverter.Convert(clip);                    
+                        clip = App.ChineseConverter.Convert(clip);                    
                     break;
                 case "b1":
                     Window_TextConvertr window_TextConvertr = new Window_TextConvertr();

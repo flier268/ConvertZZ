@@ -29,8 +29,38 @@ namespace ConvertZZ
             RadioButton radiobutton = ((RadioButton)sender);
             switch (radiobutton.GroupName)
             {
-
+                case "origin":
+                    encoding[0] = Encoding.GetEncoding((string)radiobutton.Content);
+                    break;
+                case "target":
+                    encoding[1] = Encoding.GetEncoding((string)radiobutton.Content);
+                    break;
             }
+            listview_SelectionChanged(null, null);
+        }
+        private void listview_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (listview.SelectedItem != null)
+            {
+                FileList_Line line = ((FileList_Line)listview.SelectedItem);
+                string path = Path.Combine(line.FilePath, line.FileName);
+                if (File.Exists(path))
+                {
+                    using (StreamReader sr = new StreamReader(path, encoding[0]))
+                    {
+                        InputPreviewText = sr.ReadToEnd();
+                    }
+                    Convert();
+                }
+            }
+        }
+        private void Convert()
+        {
+
+        }
+        private void Button_Convert_Click(object sender, RoutedEventArgs e)
+        {
+
         }
         private void Button_Clear_Clicked(object sender, RoutedEventArgs e)
         {
@@ -63,7 +93,10 @@ namespace ConvertZZ
 
         private string _ClipBoard = "";
         public string ClipBoard { get => _ClipBoard; set { _ClipBoard = value; OnPropertyChanged("ClipBoard"); } }
-
+        private string _InputPreviewText = "";
+        public string InputPreviewText { get => _InputPreviewText; set { _InputPreviewText = value; OnPropertyChanged("InputPreviewText"); } }
+        private string _OutputPreviewText = "";
+        public string OutputPreviewText { get => _OutputPreviewText; set { _OutputPreviewText = value; OnPropertyChanged("OutputPreviewText"); } }
 
         private ObservableCollection<FileList_Line> _FileList = new ObservableCollection<FileList_Line>();
 
@@ -147,5 +180,7 @@ namespace ConvertZZ
         {
             ChangeClipboardChain(hWndSource.Handle, mNextClipBoardViewerHWnd);
         }
+
+       
     }
 }

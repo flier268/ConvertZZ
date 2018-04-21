@@ -4,8 +4,18 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ConvertZZ"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         mc:Ignorable="d"
-        Title="TextConvertr" Height="562" Width="1188" Loaded="Window_Loaded" Closing="Window_Closing">
+        Title="TextConvertr" Height="562" Width="1500" Loaded="Window_Loaded" Closing="Window_Closing">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.Button.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.Shadows.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.ToggleButton.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="auto"/>
@@ -14,12 +24,17 @@
             <RowDefinition Height="auto"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition/>
-            <ColumnDefinition/>
-            <ColumnDefinition/>
+            <ColumnDefinition Width="auto"/> 
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
-
-        <TabControl  Grid.Row="0" Grid.RowSpan="2">
+        <materialDesign:DialogHost SnackbarMessageQueue="{Binding ElementName=MySnackbar, Path=MessageQueue}">
+            <Grid>
+                <!-- app content here -->
+                <materialDesign:Snackbar x:Name="MySnackbar" MessageQueue="{materialDesign:MessageQueue}" />
+            </Grid>
+        </materialDesign:DialogHost>
+        <TabControl  Grid.Row="0" Grid.RowSpan="2" Width="400">
             <TabControl.Style>
                 <Style TargetType="{x:Type TabControl}">
                     <Setter Property="Background" Value="Transparent"/>
@@ -41,7 +56,7 @@
                 </Style>
             </TabControl.Style>
 
-            <TabItem Header="檔案模式">
+            <TabItem Header="檔案模式" Uid="TabItem_File" Selector.Selected="TabItem_Selected">
                 <TabItem.Style>
                     <Style TargetType="{x:Type TabItem}">
                         <Setter Property="Background" Value="Transparent"/>
@@ -79,8 +94,8 @@
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
                                 </GridViewColumn>
-                                <GridViewColumn Width="auto" Header="File Name" DisplayMemberBinding="{Binding FileName,Mode=TwoWay}" />
-                                <GridViewColumn Width="auto" Header="File Path" DisplayMemberBinding="{Binding FilePath}" />
+                                <GridViewColumn Width="auto" Header="檔案名稱" DisplayMemberBinding="{Binding FileName,Mode=TwoWay}" />
+                                <GridViewColumn Width="auto" Header="檔案路徑" DisplayMemberBinding="{Binding FilePath}" />
                             </GridView>
                         </ListView.View>                        
                     </ListView>
@@ -89,7 +104,7 @@
                     <Button Content="清空" Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" Margin="5" Padding="0,5" Click="Button_Clear_Clicked"/>
                 </Grid>
             </TabItem>
-            <TabItem Header="剪貼簿模式">
+            <TabItem Header="剪貼簿模式" Uid="TabItem_ClipBoard" Selector.Selected="TabItem_Selected">
                 <TabItem.Style>
                     <Style TargetType="{x:Type TabItem}">
                         <Setter Property="Background" Value="Transparent"/>
@@ -145,15 +160,16 @@
             </StackPanel>
             <DockPanel Grid.Row="1" Grid.ColumnSpan="2" HorizontalAlignment="Right" Margin="0,0,5,0">
                 <Label Content="輸出模式:" VerticalAlignment="Center"/>
-                <CheckBox Content="繁體中文" VerticalAlignment="Center" Padding="4,-1,5,0"/>
-                <CheckBox Content="繁體中文" VerticalAlignment="Center"/>
+                <RadioButton Content="一般" IsChecked="True" Uid="NChinese"  VerticalAlignment="Center" Margin="0,0,4,0" Checked="Chinese_Click"/>
+                <RadioButton Content="繁體中文" Uid="TChinese" VerticalAlignment="Center" Margin="0,0,4,0" Checked="Chinese_Click"/>
+                <RadioButton Content="簡體中文" Uid="CChinese" VerticalAlignment="Center" Margin="0,0,4,0" Checked="Chinese_Click"/>
             </DockPanel>
         </Grid>
-        <Label Content="Input Preview" Grid.Column="1" Margin="10,0" />
-        <Label Content="Output Preview" Grid.Column="2"/>
+        <Label Content="預覽輸入" Grid.Column="1" Margin="10,0" />
+        <Label Content="預覽輸出" Grid.Column="2"/>
         <TextBox Text="{Binding InputPreviewText}" TextWrapping="Wrap" AcceptsReturn="True" Grid.Row="1" Grid.Column="1" Grid.RowSpan="2" Margin="10,0" VerticalScrollBarVisibility="Auto" />
         <TextBox Text="{Binding OutputPreviewText}" TextWrapping="Wrap" AcceptsReturn="True" Grid.Row="1" Grid.Column="2" Grid.RowSpan="2" Margin="10,0" VerticalScrollBarVisibility="Auto" />
-        <Button Content="Convert" Grid.Row="3" Padding="5" Margin="0,10,0,0" Click="Button_Convert_Click"/>
-        <Button Content="Output Path" Grid.Row="3" Grid.Column="2" Padding="5,7,5,5" Margin="0,10,0,0"/>
+        <Button Content="轉換" Grid.Row="3" Padding="5" Margin="0,10,0,0" Click="Button_Convert_Click"/>
+        <Button Content="輸出路徑" Grid.Row="3" Grid.Column="2" Padding="5,7,5,5" Margin="0,10,0,0"/>
     </Grid>
 </Window>

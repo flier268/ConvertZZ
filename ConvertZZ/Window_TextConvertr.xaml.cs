@@ -23,44 +23,65 @@ namespace ConvertZZ
             DataContext = this;
             InitializeComponent();
         }
+        /// <summary>
+        /// 編碼轉換 [0]:來源編碼   [1]:輸出編碼
+        /// </summary>
         Encoding[] encoding = new Encoding[2];
-        private void Encoding_Selected(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// 輸出簡繁轉換：0:一般  1:繁體中文 2:簡體中文
+        /// </summary>
+        int ToChinese = 0;
+        /// <summary>
+        /// 模式   true:檔案模式   false:剪貼簿模式
+        /// </summary>
+        bool FileMode=false;
+        string OutputPath = "";
+        private string Convert(string origin)
         {
-            RadioButton radiobutton = ((RadioButton)sender);
-            switch (radiobutton.GroupName)
+            switch (ToChinese)
             {
-                case "origin":
-                    encoding[0] = Encoding.GetEncoding((string)radiobutton.Content);
+                case 1:
+                    origin = ChineseConverter.ToTraditional(origin);
+                    if (App.Settings.VocabularyCorrection)
+                        origin = App.ChineseConverter.Convert(origin);
                     break;
-                case "target":
-                    encoding[1] = Encoding.GetEncoding((string)radiobutton.Content);
+                case 2:
+                    origin = ChineseConverter.ToSimplified(origin);
+                    if (App.Settings.VocabularyCorrection)
+                        origin = App.ChineseConverter.Convert(origin);
                     break;
             }
-            listview_SelectionChanged(null, null);
-        }
-        private void listview_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (listview.SelectedItem != null)
-            {
-                FileList_Line line = ((FileList_Line)listview.SelectedItem);
-                string path = Path.Combine(line.FilePath, line.FileName);
-                if (File.Exists(path))
-                {
-                    using (StreamReader sr = new StreamReader(path, encoding[0]))
-                    {
-                        InputPreviewText = sr.ReadToEnd();
-                    }
-                    Convert();
-                }
-            }
-        }
-        private void Convert()
-        {
-
+           return encoding[1].GetString(encoding[0].GetBytes(origin));
         }
         private void Button_Convert_Click(object sender, RoutedEventArgs e)
         {
-
+            switch (FileMode)
+            {
+                case true:
+                    var temp = FileList.Where(x => x.isChecked).ToList();
+                    foreach (var _temp in temp)
+                    {
+                        string str = "";
+                        using (StreamReader sr = new StreamReader(_temp.FilePath, encoding[0]))
+                        {
+                            str = sr.ReadToEnd();
+                            sr.Close();
+                        }
+                        str = Convert(str);
+                        using (StreamWriter sw = new StreamWriter(Path.Combine(OutputPath, _temp.FileName), false, encoding[0]))
+                        {
+                            sw.Write(str);
+                            sw.Flush();
+                        }
+                    }
+                    break;
+                case false:
+                    string Clip = ClipBoardHelper.GetClipBoard_UnicodeText();
+                    InputPreviewText = Clip;
+                    Clip = Convert(Clip);
+                    OutputPreviewText = Clip;
+                    break;
+            }
         }
         private void Button_Clear_Clicked(object sender, RoutedEventArgs e)
         {
@@ -97,6 +118,7 @@ namespace ConvertZZ
         public string InputPreviewText { get => _InputPreviewText; set { _InputPreviewText = value; OnPropertyChanged("InputPreviewText"); } }
         private string _OutputPreviewText = "";
         public string OutputPreviewText { get => _OutputPreviewText; set { _OutputPreviewText = value; OnPropertyChanged("OutputPreviewText"); } }
+       
 
         private ObservableCollection<FileList_Line> _FileList = new ObservableCollection<FileList_Line>();
 
@@ -180,7 +202,63 @@ namespace ConvertZZ
         {
             ChangeClipboardChain(hWndSource.Handle, mNextClipBoardViewerHWnd);
         }
+        private void Encoding_Selected(object sender, RoutedEventArgs e)
+        {
+            RadioButton radiobutton = ((RadioButton)sender);
+            switch (radiobutton.GroupName)
+            {
+                case "origin":
+                    encoding[0] = Encoding.GetEncoding((string)radiobutton.Content);
+                    break;
+                case "target":
+                    encoding[1] = Encoding.GetEncoding((string)radiobutton.Content);
+                    break;
+            }
+            listview_SelectionChanged(null, null);
+        }
+        private void listview_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (listview.SelectedItem != null)
+            {
+                FileList_Line line = ((FileList_Line)listview.SelectedItem);
+                string path = Path.Combine(line.FilePath, line.FileName);
+                if (File.Exists(path))
+                {
+                    using (StreamReader sr = new StreamReader(path, encoding[0]))
+                    {
+                        InputPreviewText = sr.ReadToEnd();
+                    }
+                    OutputPreviewText = Convert(InputPreviewText);
+                }
+            }
+        }
+        private void Chinese_Click(object sender, RoutedEventArgs e)
+        {
+            switch(((RadioButton)sender).Uid)
+            {
+                case "NChinese":
+                    ToChinese = 0;
+                    break;
+                case "TChinese":
+                    ToChinese = 1;
+                    break;
+                case "CChinese":
+                    ToChinese = 2;
+                    break;
+            }
+        }
 
-       
+        private void TabItem_Selected(object sender, RoutedEventArgs e)
+        {
+            switch(((TabItem)sender).Uid)
+            {
+                case "TabItem_File":
+                    FileMode = true;
+                    break;
+                case "TabItem_ClipBoard":
+                    FileMode = false;
+                    break;
+            }
+        }
     }
 }

@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ConvertZZ"
         mc:Ignorable="d"
+        
         Title="MainWindow" Height="64" Width="64" ResizeMode="NoResize" ShowInTaskbar="False" WindowStyle="None" 
       AllowsTransparency="True" Background="Transparent"
 MouseDown="Window_MouseDown"      

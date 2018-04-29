@@ -10,16 +10,17 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Navigation;
 using System.Windows.Shapes;
 
-namespace ConvertZZ
+namespace ConvertZZ.Pages
 {
     /// <summary>
-    /// Window_TagConverter.xaml 的互動邏輯
+    /// Page_AudioTags.xaml 的互動邏輯
     /// </summary>
-    public partial class Window_TagConverter : Window
+    public partial class Page_AudioTags : Page
     {
-        public Window_TagConverter(Format Format)
+        public Page_AudioTags(Format format)
         {
             InitializeComponent();
         }

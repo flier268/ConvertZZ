@@ -66,18 +66,25 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="Enums\Enum_Mode.cs" />
     <Compile Include="Moudle\ChineseConverter.cs" />
     <Compile Include="Moudle\FastReplace.cs" />
     <Compile Include="Moudle\TransferEncodeHelper.cs" />
+    <Compile Include="Moudle\Window_MessageBoxEx.xaml.cs">
+      <DependentUpon>Window_MessageBoxEx.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Pages\Page_AudioTags.xaml.cs">
+      <DependentUpon>Page_AudioTags.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Pages\Page_ClipBoard.xaml.cs">
+      <DependentUpon>Page_ClipBoard.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Pages\Page_File.xaml.cs">
+      <DependentUpon>Page_File.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Settings.cs" />
-    <Compile Include="Window_TagConverter.xaml.cs">
-      <DependentUpon>Window_TagConverter.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Window_TextConvertr.xaml.cs">
-      <DependentUpon>Window_TextConvertr.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Window_FolderFileNameConverter.xaml.cs">
-      <DependentUpon>Window_FolderFileNameConverter.xaml</DependentUpon>
+    <Compile Include="Window_DialogHost.xaml.cs">
+      <DependentUpon>Window_DialogHost.xaml</DependentUpon>
     </Compile>
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
@@ -92,15 +99,23 @@
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Page Include="Window_TagConverter.xaml">
+    <Page Include="Moudle\Window_MessageBoxEx.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Window_TextConvertr.xaml">
+    <Page Include="Pages\Page_AudioTags.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Window_FolderFileNameConverter.xaml">
+    <Page Include="Pages\Page_ClipBoard.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Pages\Page_File.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Window_DialogHost.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

@@ -6,14 +6,12 @@
 
 namespace ConvertZZ
 {
-    using System;
+    using Newtonsoft.Json;
+    using Newtonsoft.Json.Converters;
     using System.Collections.Generic;
-
     using System.Globalization;
     using System.IO;
     using System.Text;
-    using Newtonsoft.Json;
-    using Newtonsoft.Json.Converters;
 
     public partial class App
     {
@@ -83,7 +81,7 @@ namespace ConvertZZ
         /// 預覽的最大長度(kb)
         /// </summary>
         [JsonProperty("MaxLengthPreview")]
-        public long MaxLengthPreview { get; set; }
+        public int MaxLengthPreview { get; set; }
         /// <summary>
         /// 詞彙修正
         /// </summary>
@@ -110,7 +108,7 @@ namespace ConvertZZ
     {
         public FileConvert()
         {
-            DefaultPath = "";
+            DefaultPath = "!";
             IgnoreType = "*.exe,*.dll,*.ocx,*.com,*.sys,*.vxd,*.ocx,*.drv,*.zip,*.z[0-9][0-9],*.rar,*.r[0-9][0-9],*.lha,*.lzh,*.ar?,*.cab,*.tar,*.gz,*.bin,*.img,*.bmp,*.gif,*.jp*g,*.tif*,*.png,*.pcx,*.psd,*.ico,*.hlp,*.chm,*.pdf,*.au,*.mid,*.wav,*.mp*,*.class,*.swf,*.pp?,*.doc,*.xl?,*.md?,*.db,*.r*m,*.ra,*.ape,*.avi,*.asf,*.wm*,*.og?,*.lnk,*.torrent";
             FixLabel = "*.htm*,*.shtm*,*.asp,*.apsx,*.php*,*.pl,*.cgi,*.js";
         }

@@ -3,7 +3,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using static ConvertZZ.Window_TagConverter;
+using static ConvertZZ.Pages.Page_AudioTags;
 
 namespace ConvertZZ
 {
@@ -99,24 +99,24 @@ namespace ConvertZZ
                         clip = App.ChineseConverter.Convert(clip);                    
                     break;
                 case "b1":
-                    Window_TextConvertr window_TextConvertr = new Window_TextConvertr();
-                    window_TextConvertr.Show();
+                    Window_DialogHost window_File_FileNameConverter = new Window_DialogHost(  Enums.Enum_Mode.Mode.File_FileName);
+                    window_File_FileNameConverter.Show();
                     break;
                 case "b2":
-                    Window_FolderFileNameConverter window_FolderFileNameConverter = new Window_FolderFileNameConverter();
-                    window_FolderFileNameConverter.Show();
+                    Window_DialogHost window_ClipBoard_Converter = new Window_DialogHost(Enums.Enum_Mode.Mode.ClipBoard);
+                    window_ClipBoard_Converter.Show();
                     break;
                 case "c1":
-                    Window_TagConverter window_TagConverter = new Window_TagConverter(Format.ID3);
-                    window_TagConverter.Show();
+                    Window_DialogHost Window_DialogHost = new Window_DialogHost(Enums.Enum_Mode.Mode.AutioTag,Format.ID3);
+                    Window_DialogHost.Show();
                     break;
                 case "c2":
-                    Window_TagConverter window_TagConverter2 = new Window_TagConverter(Format.APE);
-                    window_TagConverter2.Show();
+                    Window_DialogHost Window_DialogHost2 = new Window_DialogHost(Enums.Enum_Mode.Mode.AutioTag, Format.APE);
+                    Window_DialogHost2.Show();
                     break;
                 case "c3":
-                    Window_TagConverter window_TagConverter3 = new Window_TagConverter(Format.OGG);
-                    window_TagConverter3.Show();
+                    Window_DialogHost Window_DialogHost3 = new Window_DialogHost(Enums.Enum_Mode.Mode.AutioTag, Format.OGG);
+                    Window_DialogHost3.Show();
                     break;
                 case "za1":                   
                     foreach(char c in clip)

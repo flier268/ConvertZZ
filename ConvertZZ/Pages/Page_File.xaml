@@ -1,0 +1,139 @@
+﻿<Page x:Class="ConvertZZ.Pages.Page_File"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+      xmlns:local="clr-namespace:ConvertZZ.Pages"
+      xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+      mc:Ignorable="d" 
+      d:DesignHeight="700" d:DesignWidth="1200"
+      Title="Page_File">
+
+    <Page.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.Button.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.Shadows.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.ToggleButton.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Page.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="auto"/>
+            <RowDefinition />
+            <RowDefinition Height="auto" />
+            <RowDefinition Height="auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="auto"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+       
+        <Grid Margin="20,0" >
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition />
+                <ColumnDefinition />
+            </Grid.ColumnDefinitions>            
+            <DockPanel >
+                <RadioButton Name="RadioButton_FileNameMode" Content="檔名模式" GroupName="Mode" Checked="ModeChange" />
+                <CheckBox IsEnabled="{Binding ElementName=RadioButton_FileNameMode,Path=IsChecked}" IsChecked="{Binding AccordingToChild,Mode=TwoWay}" Content="包含子目錄" VerticalAlignment="Top" Margin="10,0,0,0" />
+            </DockPanel>
+            <RadioButton Name="RadioButton_FileMode" Grid.Column="1" Content="文件模式" IsChecked="{Binding FileMode,Mode=TwoWay}" GroupName="Mode"/>
+        </Grid>
+        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1"  Margin="10,2,10,5" Padding="10" Grid.Row="1" VerticalAlignment="Stretch">
+            <Grid Grid.Row="1" Width="400">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition/>
+                </Grid.ColumnDefinitions>
+                <ListView x:Name="listview" ItemsSource="{Binding FileList,Mode=TwoWay}" Grid.ColumnSpan="2" SelectionChanged="listview_SelectionChanged">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header=" ">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Tag="{Binding ID}" IsChecked="{Binding isChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Width="auto" Header="檔案名稱" DisplayMemberBinding="{Binding FileName,Mode=TwoWay}" />
+                            <GridViewColumn Width="auto" Header="檔案路徑" DisplayMemberBinding="{Binding FilePath}" />
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+
+                <Button Content="瀏覽" Grid.Row="1" VerticalAlignment="Center" Margin="5" Padding="0,5" Click="Button_SelectFile_Clicked"/>
+                <Button Content="清空" Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" Margin="5" Padding="0,5" Click="Button_Clear_Clicked"/>
+            </Grid>
+        </materialDesign:Card>
+        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="10,5,10,10" Padding="10" Grid.Row="2" VerticalAlignment="Stretch">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <StackPanel>
+
+                    <RadioButton GroupName="origin" Content="UTF-8" Click="Encoding_Selected"/>
+                    <RadioButton GroupName="origin" IsChecked="True" Content="BIG5" Click="Encoding_Selected"/>
+                    <RadioButton GroupName="origin" Content="GBK" Click="Encoding_Selected"/>
+                    <RadioButton GroupName="origin" Content="Shift-jis" Click="Encoding_Selected"/>
+                    <RadioButton GroupName="origin" Content="Unicode" Click="Encoding_Selected"/>
+                    <RadioButton GroupName="origin" Content="UnicodeFFFE" Click="Encoding_Selected"/>
+                    <RadioButton GroupName="origin" Content="hz-gb-2312 " Click="Encoding_Selected"/>
+                    <RadioButton GroupName="origin" Content="Iso-2022-jp" Click="Encoding_Selected"/>
+                    <RadioButton GroupName="origin" Content="EUC-JP" Click="Encoding_Selected"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1">
+                    <RadioButton GroupName="target" Content="UTF-8" Click="Encoding_Selected"/>
+                    <RadioButton GroupName="target" Content="BIG5" Click="Encoding_Selected"/>
+                    <RadioButton GroupName="target" IsChecked="True" Content="GBK" Click="Encoding_Selected"/>
+                    <RadioButton GroupName="target" Content="Shift-jis" Click="Encoding_Selected"/>
+                    <RadioButton GroupName="target" Content="Unicode" Click="Encoding_Selected"/>
+                    <RadioButton GroupName="target" Content="UnicodeFFFE" Click="Encoding_Selected"/>
+                    <RadioButton GroupName="target" Content="hz-gb-2312 " Click="Encoding_Selected"/>
+                    <RadioButton GroupName="target" Content="Iso-2022-jp" Click="Encoding_Selected"/>
+                    <RadioButton GroupName="target" Content="EUC-JP" Click="Encoding_Selected"/>
+                </StackPanel>
+                <DockPanel Grid.Row="1" Grid.ColumnSpan="2" HorizontalAlignment="Right" Margin="0,0,5,0">
+                    <Label Content="輸出模式:" VerticalAlignment="Center"/>
+                    <RadioButton Content="一般" IsChecked="True" Uid="NChinese"  VerticalAlignment="Center" Margin="0,0,4,0" Checked="Chinese_Click"/>
+                    <RadioButton Content="繁體中文" Uid="TChinese" VerticalAlignment="Center" Margin="0,0,4,0" Checked="Chinese_Click"/>
+                    <RadioButton Content="簡體中文" Uid="CChinese" VerticalAlignment="Center" Margin="0,0,4,0" Checked="Chinese_Click"/>
+
+                </DockPanel>
+
+
+            </Grid>
+        </materialDesign:Card>
+        <Label Content="預覽輸入" Grid.Column="1" Margin="20,0" FontSize="14" />
+        <Label Content="預覽輸出" Grid.Column="2" Margin="20,0" FontSize="14" />
+        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="10,2,10,10"  Grid.Row="1" Grid.Column="1" Grid.RowSpan="2" VerticalAlignment="Stretch">
+            <TextBox Text="{Binding InputPreviewText}" TextWrapping="Wrap" AcceptsReturn="True"  VerticalScrollBarVisibility="Auto" />
+        </materialDesign:Card>
+        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="10,2,10,10"  Grid.Row="1" Grid.Column="2" Grid.RowSpan="2"  VerticalAlignment="Stretch">
+
+            <TextBox Text="{Binding OutputPreviewText}" TextWrapping="Wrap" AcceptsReturn="True" Grid.Row="1" Grid.Column="2" Grid.RowSpan="2"  VerticalScrollBarVisibility="Auto" />
+        </materialDesign:Card>
+        <Button Content="轉換" Grid.Row="3" Padding="5" Margin="20,10,20,0" Click="Button_Convert_Click"/>
+        <Grid  Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox Text="{Binding OutputPath,Mode=TwoWay}"/>
+            <Button Content="輸出路徑" Grid.Column="1" Padding="10,7,10,5" Margin="20,10,20,0" Click="Button_OutputPath_Click"/>
+        </Grid>
+    </Grid>
+</Page>

@@ -23,22 +23,24 @@ namespace ConvertZZ.Moudle
         MessageBoxExResult Resoult= MessageBoxExResult.NONE;
         public Window_MessageBoxEx(string Text,string Caption,string button1_Text, string button2_Text, string button3_Text)
         {
-            TextBlock_Text = Text;
-            this.Title = Caption;
+            TextBlock_Text = Text;            
             ButtonText1 = button1_Text;
             ButtonText2 = button2_Text;
             ButtonText3 = button3_Text;
+            DataContext = this;
             InitializeComponent();
+            this.Title = Caption;
         }
         public Window_MessageBoxEx(string Text, string Caption, string button1_Text, string button2_Text, string button3_Text,string CheckBox_Text)
         {
             TextBlock_Text = Text;
-            this.Title = Caption;
             ButtonText1 = button1_Text;
             ButtonText2 = button2_Text;
             ButtonText3 = button3_Text;
             this.CheckBox_Text = CheckBox_Text;
+            DataContext = this;
             InitializeComponent();
+            this.Title = Caption;
         }
         public enum MessageBoxExResult
         {
@@ -86,16 +88,19 @@ namespace ConvertZZ.Moudle
         private void Button_Click(object sender, RoutedEventArgs e)
         {
             Resoult = (MessageBoxExResult)(1 * (CheckBox_IsChecked ? 2 : 1));
+            this.Close();
         }
 
         private void Button_Click_1(object sender, RoutedEventArgs e)
         {
             Resoult = (MessageBoxExResult)(3 * (CheckBox_IsChecked ? 2 : 1));
+            this.Close();
         }
 
         private void Button_Click_2(object sender, RoutedEventArgs e)
         {
             Resoult = (MessageBoxExResult)(4 * (CheckBox_IsChecked ? 2 : 1));
+            this.Close();
         }
 
         public string ButtonText3 { get => _ButtonText3; set { _ButtonText3 = value; OnPropertyChanged("ButtonText3"); } }
@@ -149,12 +154,8 @@ namespace ConvertZZ.Moudle
             // using construct ensures the resources are freed when form is closed
             using (var form = new Window_MessageBoxEx(Text, Caption, button1_Text, button2_Text, button3_Text))
             {
-                if (form.ShowDialog() == true)
-                {
-                    return form.Resoult;
-                }
-                else
-                    return MessageBoxExResult.NONE;
+                form.ShowDialog();
+                return form.Resoult;
             }
         }
         public static MessageBoxExResult Show(string Text, string Caption, string button1_Text, string button2_Text, string button3_Text, string CheckBox_Text)
@@ -162,12 +163,8 @@ namespace ConvertZZ.Moudle
             // using construct ensures the resources are freed when form is closed
             using (var form = new Window_MessageBoxEx(Text, Caption, button1_Text, button2_Text, button3_Text, CheckBox_Text))
             {
-                if (form.ShowDialog() == true)
-                {
-                    return form.Resoult;
-                }
-                else
-                    return MessageBoxExResult.NONE;
+                form.ShowDialog();
+                return form.Resoult;
             }
         }
     }

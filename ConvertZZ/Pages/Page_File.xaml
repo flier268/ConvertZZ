@@ -30,17 +30,21 @@
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
-       
+
         <Grid Margin="20,0" >
             <Grid.ColumnDefinitions>
-                <ColumnDefinition />
-                <ColumnDefinition />
-            </Grid.ColumnDefinitions>            
-            <DockPanel >
-                <RadioButton Name="RadioButton_FileNameMode" Content="檔名模式" GroupName="Mode" Checked="ModeChange" />
-                <CheckBox IsEnabled="{Binding ElementName=RadioButton_FileNameMode,Path=IsChecked}" IsChecked="{Binding AccordingToChild,Mode=TwoWay}" Content="包含子目錄" VerticalAlignment="Top" Margin="10,0,0,0" />
+                <ColumnDefinition Width="auto" />
+                <ColumnDefinition Width="auto"/>
+                <ColumnDefinition Width="auto"/>
+                <ColumnDefinition Width="auto"/>
+            </Grid.ColumnDefinitions>
+            <RadioButton Name="RadioButton_FileMode" Content="文件模式" IsChecked="{Binding FileMode,Mode=TwoWay}" GroupName="Mode" VerticalAlignment="Center"/>
+            <DockPanel Grid.Column="1" Margin="20,0,0,0">
+                <RadioButton Name="RadioButton_FileNameMode" Content="檔名模式" GroupName="Mode" Checked="ModeChange" VerticalAlignment="Center" />
+                <CheckBox IsEnabled="{Binding ElementName=RadioButton_FileNameMode,Path=IsChecked}" IsChecked="{Binding AccordingToMomFolder,Mode=TwoWay}" Content="包含母目錄" Margin="5,0,0,0" />
             </DockPanel>
-            <RadioButton Name="RadioButton_FileMode" Grid.Column="1" Content="文件模式" IsChecked="{Binding FileMode,Mode=TwoWay}" GroupName="Mode"/>
+            <GridSplitter Grid.Column="2" HorizontalAlignment="Left" Height="28" Margin="10,0,0,0" Width="5"/>
+            <CheckBox Grid.Column="3" IsChecked="{Binding AccordingToChild,Mode=TwoWay}" Content="包含子目錄下所有檔案" Margin="5,0,0,0" />
         </Grid>
         <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1"  Margin="10,2,10,5" Padding="10" Grid.Row="1" VerticalAlignment="Stretch">
             <Grid Grid.Row="1" Width="400">
@@ -52,7 +56,8 @@
                     <ColumnDefinition/>
                     <ColumnDefinition/>
                 </Grid.ColumnDefinitions>
-                <ListView x:Name="listview" ItemsSource="{Binding FileList,Mode=TwoWay}" Grid.ColumnSpan="2" SelectionChanged="listview_SelectionChanged">
+                <ListView x:Name="listview" ItemsSource="{Binding FileList,Mode=TwoWay}" materialDesign:DataGridAssist.CellPadding="4 2 2 2"
+  materialDesign:DataGridAssist.ColumnHeaderPadding="4 5 2 5" Grid.ColumnSpan="2" SelectionChanged="listview_SelectionChanged">
                     <ListView.View>
                         <GridView>
                             <GridViewColumn Header=" ">
@@ -62,12 +67,11 @@
                                     </DataTemplate>
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
-                            <GridViewColumn Width="auto" Header="檔案名稱" DisplayMemberBinding="{Binding FileName,Mode=TwoWay}" />
-                            <GridViewColumn Width="auto" Header="檔案路徑" DisplayMemberBinding="{Binding FilePath}" />
+                            <GridViewColumn Width="auto" Header="檔案名稱" DisplayMemberBinding="{Binding Name,Mode=TwoWay}" />
+                            <GridViewColumn Width="auto" Header="檔案路徑" DisplayMemberBinding="{Binding Path}" />
                         </GridView>
                     </ListView.View>
                 </ListView>
-
                 <Button Content="瀏覽" Grid.Row="1" VerticalAlignment="Center" Margin="5" Padding="0,5" Click="Button_SelectFile_Clicked"/>
                 <Button Content="清空" Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" Margin="5" Padding="0,5" Click="Button_Clear_Clicked"/>
             </Grid>
@@ -83,7 +87,6 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <StackPanel>
-
                     <RadioButton GroupName="origin" Content="UTF-8" Click="Encoding_Selected"/>
                     <RadioButton GroupName="origin" IsChecked="True" Content="BIG5" Click="Encoding_Selected"/>
                     <RadioButton GroupName="origin" Content="GBK" Click="Encoding_Selected"/>
@@ -94,7 +97,6 @@
                     <RadioButton GroupName="origin" Content="Iso-2022-jp" Click="Encoding_Selected"/>
                     <RadioButton GroupName="origin" Content="EUC-JP" Click="Encoding_Selected"/>
                 </StackPanel>
-
                 <StackPanel Grid.Column="1">
                     <RadioButton GroupName="target" Content="UTF-8" Click="Encoding_Selected"/>
                     <RadioButton GroupName="target" Content="BIG5" Click="Encoding_Selected"/>
@@ -111,10 +113,7 @@
                     <RadioButton Content="一般" IsChecked="True" Uid="NChinese"  VerticalAlignment="Center" Margin="0,0,4,0" Checked="Chinese_Click"/>
                     <RadioButton Content="繁體中文" Uid="TChinese" VerticalAlignment="Center" Margin="0,0,4,0" Checked="Chinese_Click"/>
                     <RadioButton Content="簡體中文" Uid="CChinese" VerticalAlignment="Center" Margin="0,0,4,0" Checked="Chinese_Click"/>
-
                 </DockPanel>
-
-
             </Grid>
         </materialDesign:Card>
         <Label Content="預覽輸入" Grid.Column="1" Margin="20,0" FontSize="14" />

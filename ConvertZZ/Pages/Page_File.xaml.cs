@@ -1,4 +1,5 @@
 ﻿using Microsoft.Win32;
+using Microsoft.WindowsAPICodePack.Dialogs;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -18,6 +19,7 @@ namespace ConvertZZ.Pages
         public Page_File()
         {
             DataContext = this;
+            OutputPath = App.Settings.FileConvert.DefaultPath.Substring(App.Settings.FileConvert.DefaultPath[0] == '!' ? 1 : 0);            
             InitializeComponent();
         }
         /// <summary>
@@ -28,7 +30,6 @@ namespace ConvertZZ.Pages
         /// 輸出簡繁轉換：0:一般  1:繁體中文 2:簡體中文
         /// </summary>
         int ToChinese = 0;
-        string OutputPath = "";
         private string Convert(string origin)
         {
             switch (ToChinese)
@@ -51,52 +52,76 @@ namespace ConvertZZ.Pages
             switch (FileMode)
             {
                 case true:
-                    var temp = FileList.Where(x => x.isChecked).ToList();
-                    bool replaceALL = false;
-                    bool skip = false;
-                    foreach (var _temp in temp)
                     {
-                        if (!replaceALL && File.Exists(Path.Combine(OutputPath, _temp.FileName)))
+                        var temp = FileList.Where(x => x.isChecked).ToList();
+                        bool replaceALL = false;
+                        bool skip = false;
+                        foreach (var _temp in temp)
                         {
-                            if (!skip)
-                                switch (Moudle.Window_MessageBoxEx.Show("{0}發生檔名衝突，是否取代?", "警告", "取代", "略過", "取消", "套用到全部"))
-                                {
-                                    case Moudle.Window_MessageBoxEx.MessageBoxExResult.A:
-                                        break;
-                                    case Moudle.Window_MessageBoxEx.MessageBoxExResult.B:
-                                        continue;
-                                    case Moudle.Window_MessageBoxEx.MessageBoxExResult.C:
-                                        return;
-                                    case Moudle.Window_MessageBoxEx.MessageBoxExResult.AO:
-                                        replaceALL = true;
-                                        break;
-                                    case Moudle.Window_MessageBoxEx.MessageBoxExResult.BO:
-                                        skip = true;
-                                        continue;
-                                    case Moudle.Window_MessageBoxEx.MessageBoxExResult.CO:
-                                        return;
-                                    case Moudle.Window_MessageBoxEx.MessageBoxExResult.NONE:
-                                        break;
-                                }
-                            else
-                                continue;
-                        }
-                        string str = "";
-                        using (StreamReader sr = new StreamReader(_temp.FilePath, encoding[0]))
-                        {
-                            str = sr.ReadToEnd();
-                            sr.Close();
-                        }
-                        str = Convert(str);
-                        using (StreamWriter sw = new StreamWriter(Path.Combine(OutputPath, _temp.FileName), false, encoding[0]))
-                        {
-                            sw.Write(str);
-                            sw.Flush();
+                            if (!replaceALL && File.Exists(Path.Combine(OutputPath, _temp.Name)))
+                            {
+                                if (!skip)
+                                    switch (Moudle.Window_MessageBoxEx.Show(string.Format("{0}發生檔名衝突，是否取代?", _temp.Name), "警告", "取代", "略過", "取消", "套用到全部"))
+                                    {
+                                        case Moudle.Window_MessageBoxEx.MessageBoxExResult.A:
+                                            break;
+                                        case Moudle.Window_MessageBoxEx.MessageBoxExResult.B:
+                                            continue;
+                                        case Moudle.Window_MessageBoxEx.MessageBoxExResult.C:
+                                            return;
+                                        case Moudle.Window_MessageBoxEx.MessageBoxExResult.AO:
+                                            replaceALL = true;
+                                            break;
+                                        case Moudle.Window_MessageBoxEx.MessageBoxExResult.BO:
+                                            skip = true;
+                                            continue;
+                                        case Moudle.Window_MessageBoxEx.MessageBoxExResult.CO:
+                                            return;
+                                        case Moudle.Window_MessageBoxEx.MessageBoxExResult.NONE:
+                                            continue;
+                                    }
+                                else
+                                    continue;
+                            }
+                            string str = "";
+                            using (StreamReader sr = new StreamReader(Path.Combine(_temp.Path, _temp.Name), encoding[0]))
+                            {
+                                str = sr.ReadToEnd();
+                                sr.Close();
+                            }
+                            str = Convert(str);
+                            using (StreamWriter sw = new StreamWriter(Path.Combine(OutputPath, _temp.Name), false, encoding[1]))
+                            {
+                                sw.Write(str);
+                                sw.Flush();
+                            }
                         }
                     }
                     break;
                 case false:
-                    
+                    {
+                        var temp = FileList.Where(x => x.isChecked).ToList();
+                        foreach (var _temp in temp)
+                        {
+                            try
+                            {
+                                string _Path = Path.Combine(_temp.Path, _temp.Name);
+                                if (File.Exists(_Path))
+                                {
+                                    string newName = Convert(_temp.Name);
+                                    if (newName != _temp.Name)
+                                        File.Move(_Path, Path.Combine(_temp.Path, newName));
+                                }
+                                else if (Directory.Exists(_Path))
+                                {
+                                    string newName = Convert(Path.GetFileName(_temp.Path));
+                                    if (newName != Path.GetFileName(_temp.Path))
+                                        Directory.Move(_temp.Path, Path.Combine(System.IO.Path.GetDirectoryName(_temp.Path), newName));
+                                }
+                            }
+                            catch { }
+                        }
+                    }
                     break;
             }
         }
@@ -111,24 +136,39 @@ namespace ConvertZZ.Pages
             fileDialog.FileName = "　";
             if (fileDialog.ShowDialog() == true)
             {
+                OutputPath = Path.GetDirectoryName(fileDialog.FileNames.First());
                 foreach (string str in fileDialog.FileNames)
                 {
                     if (Path.GetFileName(str) == "　" && System.IO.Directory.Exists(System.IO.Path.GetDirectoryName(str)))
                     {
                         string folderpath = System.IO.Path.GetDirectoryName(str);
-                        List<string> childFileList = System.IO.Directory.GetFiles(folderpath).ToList();
-                        childFileList.ForEach(x => FileList.Add(new FileList_Line() { isChecked = true, FileName = System.IO.Path.GetFileName(x), FilePath = folderpath }));
+                        List<string> childFileList = System.IO.Directory.GetFiles(folderpath, "*", AccordingToChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).ToList();
+                        childFileList.ForEach(x =>
+                        {
+                            FileList.Add(new FileList_Line() { isChecked = true, isFile = true, Name = System.IO.Path.GetFileName(x), Path = Path.GetDirectoryName(x) });
+                        });
+                        if (!FileMode)
+                        {
+                            if (AccordingToMomFolder)
+                                FileList.Add(new FileList_Line() { Name = Path.GetFileName(folderpath), isFile = false, Path = Path.GetDirectoryName(folderpath), isChecked = true });
+                            List<string> childDirectoriesList = System.IO.Directory.GetDirectories(folderpath, "*", AccordingToChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).ToList();
+                            childDirectoriesList.ForEach(x =>
+                            {
+                                FileList.Add(new FileList_Line() { isChecked = true, isFile = false, Name = x.Substring(folderpath.Length + 1), Path = folderpath });
+                            });
+                        }
+                        FileList = new ObservableCollection<FileList_Line>(FileList.OrderBy(x => x.Name).OrderBy(x => x.isFile).OrderBy(x => x.Path));
                     }
                     else if (File.Exists(str))
                     {
-                        FileList.Add(new FileList_Line() { isChecked = true, FileName = System.IO.Path.GetFileName(str), FilePath = Path.GetDirectoryName(str) });
+                        FileList.Add(new FileList_Line() { isChecked = true, Name = Path.GetFileName(str), Path = Path.GetDirectoryName(str) });
                     }
                 }
                 //listview.ItemsSource = FileList;
                 if(!FileMode)
                 {
                     StringBuilder sb = new StringBuilder();
-                    FileList.ToList().ForEach(x => sb.AppendLine(x.FileName));
+                    FileList.ToList().ForEach(x => sb.AppendLine(x.Name));
                     InputPreviewText = sb.ToString();
                     OutputPreviewText = Convert(InputPreviewText);
                 }
@@ -146,6 +186,10 @@ namespace ConvertZZ.Pages
         public bool FileMode { get => _FileMode; set { _FileMode = value; OnPropertyChanged("FileMode"); } }
         private bool _AccordingToChild = true;
         public bool AccordingToChild { get => _AccordingToChild; set { _AccordingToChild = value; OnPropertyChanged("AccordingToChild"); } }
+        private bool _AccordingToMomFolder = true;
+        public bool AccordingToMomFolder { get => _AccordingToMomFolder; set { _AccordingToMomFolder = value; OnPropertyChanged("AccordingToMomFolder"); } }
+        private string _OutputPath = "";
+        public string OutputPath { get => _OutputPath; set { _OutputPath = value; OnPropertyChanged("OutputPath"); } }
 
 
         private ObservableCollection<FileList_Line> _FileList = new ObservableCollection<FileList_Line>();
@@ -156,8 +200,9 @@ namespace ConvertZZ.Pages
         {
             public int ID { get; set; }
             public bool isChecked { get; set; }     //or IsSelected maybe? whichever name you want  
-            public string FileName { get; set; }
-            public string FilePath { get; set; }
+            public bool isFile { get; set; }
+            public string Name { get; set; }
+            public string Path { get; set; }
         }
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -185,7 +230,7 @@ namespace ConvertZZ.Pages
                 if (listview.SelectedItem != null)
                 {
                     FileList_Line line = ((FileList_Line)listview.SelectedItem);
-                    string path = Path.Combine(line.FilePath, line.FileName);
+                    string path = Path.Combine(line.Path, line.Name);
                     if (File.Exists(path))
                     {
                         using (StreamReader sr = new StreamReader(path, encoding[0]))
@@ -205,7 +250,7 @@ namespace ConvertZZ.Pages
             else
             {
                 StringBuilder sb = new StringBuilder();
-                FileList.ToList().ForEach(x => sb.AppendLine(x.FileName));
+                FileList.ToList().ForEach(x => sb.AppendLine(x.Name));
                 InputPreviewText = sb.ToString();
                 OutputPreviewText = Convert(InputPreviewText);
             }
@@ -231,7 +276,22 @@ namespace ConvertZZ.Pages
 
         private void Button_OutputPath_Click(object sender, RoutedEventArgs e)
         {
+            var dlg = new CommonOpenFileDialog();
+            dlg.Title = "Select Output folder";
+            dlg.IsFolderPicker = true;
+            dlg.AddToMostRecentlyUsedList = false;
+            dlg.AllowNonFileSystemItems = false;
+            dlg.EnsureFileExists = true;
+            dlg.EnsurePathExists = true;
+            dlg.EnsureReadOnly = false;
+            dlg.EnsureValidNames = true;
+            dlg.Multiselect = false;
+            dlg.ShowPlacesList = true;
 
+            if (dlg.ShowDialog() == CommonFileDialogResult.Ok)
+            {
+                OutputPath = dlg.FileName;
+            }
         }
     }
 }

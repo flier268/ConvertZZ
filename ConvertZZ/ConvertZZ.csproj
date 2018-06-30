@@ -81,6 +81,9 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="CheckboxTreeView.xaml.cs">
+      <DependentUpon>CheckboxTreeView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Enums\Enum_Mode.cs" />
     <Compile Include="Moudle\ChineseConverter.cs" />
     <Compile Include="Moudle\FastReplace.cs" />
@@ -101,6 +104,10 @@
     <Compile Include="Window_DialogHost.xaml.cs">
       <DependentUpon>Window_DialogHost.xaml</DependentUpon>
     </Compile>
+    <Page Include="CheckboxTreeView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>

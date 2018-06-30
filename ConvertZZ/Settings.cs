@@ -109,7 +109,7 @@ namespace ConvertZZ
         public FileConvert()
         {
             DefaultPath = "!";
-            IgnoreType = "*.exe,*.dll,*.ocx,*.com,*.sys,*.vxd,*.ocx,*.drv,*.zip,*.z[0-9][0-9],*.rar,*.r[0-9][0-9],*.lha,*.lzh,*.ar?,*.cab,*.tar,*.gz,*.bin,*.img,*.bmp,*.gif,*.jp*g,*.tif*,*.png,*.pcx,*.psd,*.ico,*.hlp,*.chm,*.pdf,*.au,*.mid,*.wav,*.mp*,*.class,*.swf,*.pp?,*.doc,*.xl?,*.md?,*.db,*.r*m,*.ra,*.ape,*.avi,*.asf,*.wm*,*.og?,*.lnk,*.torrent";
+            TypeFilter = "*.txt|*.log|*.ini|*.inf|*.bat|*.cmd|*.srt|*.lang";
             FixLabel = "*.htm*,*.shtm*,*.asp,*.apsx,*.php*,*.pl,*.cgi,*.js";
         }
         /// <summary>
@@ -118,10 +118,10 @@ namespace ConvertZZ
         [JsonProperty("DefaultPath")]
         public string DefaultPath { get; set; }
         /// <summary>
-        /// 忽略類型
+        /// 類型篩選器
         /// </summary>
-        [JsonProperty("IgnoreType")]
-        public string IgnoreType { get; set; }
+        [JsonProperty("TypeFilter")]
+        public string TypeFilter { get; set; }
         /// <summary>
         /// 修正檔案內文的編碼標籤
         /// </summary>

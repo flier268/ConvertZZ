@@ -52,16 +52,11 @@ namespace ConvertZZ
             Prompt = true;
             MaxLengthPreview = 16000;
             VocabularyCorrection = true;
+            AssistiveTouch = true;
             HotKey = new HotKey();
             FileConvert = new FileConvert();
             ShowBalloonTip = true;
         }
-        /// <summary>
-        /// 快速動作設定(輔助鍵+點擊)
-        /// </summary>
-        [JsonProperty("QuickStart")]
-        public QuickStart QuickStart { get; set; }
-
         /// <summary>
         /// 加入BOM到Unicode檔頭
         /// </summary>
@@ -88,6 +83,21 @@ namespace ConvertZZ
         [JsonProperty("Vocabulary correction")]
         public bool VocabularyCorrection { get; set; }
         /// <summary>
+        /// 顯示器泡提示
+        /// </summary>
+        [JsonProperty("ShowBalloonTip")]
+        public bool ShowBalloonTip { get; set; }
+        /// <summary>
+        /// 啟用懸浮球
+        /// </summary>
+        [JsonProperty("AssistiveTouch")]
+        public bool AssistiveTouch { get; set; }
+        /// <summary>
+        /// 快速動作設定(輔助鍵+點擊)
+        /// </summary>
+        [JsonProperty("QuickStart")]
+        public QuickStart QuickStart { get; set; }
+        /// <summary>
         /// 快捷鍵
         /// </summary>
         [JsonProperty("HotKey")]
@@ -97,11 +107,6 @@ namespace ConvertZZ
         /// </summary>
         [JsonProperty("FileConvert")]
         public FileConvert FileConvert { get; set; }
-        /// <summary>
-        /// 顯示器泡提示
-        /// </summary>
-        [JsonProperty("ShowBalloonTip")]
-        public bool ShowBalloonTip { get; set; }
     }
 
     public partial class FileConvert

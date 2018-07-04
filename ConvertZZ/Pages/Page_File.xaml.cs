@@ -1,4 +1,5 @@
-﻿using Microsoft.Win32;
+﻿using ConvertZZ.Moudle;
+using Microsoft.Win32;
 using Microsoft.WindowsAPICodePack.Dialogs;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -23,30 +24,13 @@ namespace ConvertZZ.Pages
             OutputPath = App.Settings.FileConvert.DefaultPath.Substring(App.Settings.FileConvert.DefaultPath[0] == '!' ? 1 : 0);
         }
         /// <summary>
-         /// 編碼轉換 [0]:來源編碼   [1]:輸出編碼
-         /// </summary>
+        /// 編碼轉換 [0]:來源編碼   [1]:輸出編碼
+        /// </summary>
         Encoding[] encoding = new Encoding[2] { Encoding.GetEncoding("BIG5"), Encoding.GetEncoding("GBK") };
         /// <summary>
         /// 輸出簡繁轉換：0:一般  1:繁體中文 2:簡體中文
         /// </summary>
         int ToChinese = 0;
-        private string Convert(string origin)
-        {
-            switch (ToChinese)
-            {
-                case 1:
-                    origin = ChineseConverter.ToTraditional(origin);
-                    if (App.Settings.VocabularyCorrection)
-                        origin = App.ChineseConverter.Convert(origin);
-                    break;
-                case 2:
-                    origin = ChineseConverter.ToSimplified(origin);
-                    if (App.Settings.VocabularyCorrection)
-                        origin = App.ChineseConverter.Convert(origin);
-                    break;
-            }
-            return encoding[1].GetString(encoding[0].GetBytes(origin));
-        }
         private void Button_Convert_Click(object sender, RoutedEventArgs e)
         {
             switch (FileMode)
@@ -89,7 +73,7 @@ namespace ConvertZZ.Pages
                                 str = sr.ReadToEnd();
                                 sr.Close();
                             }
-                            str = Convert(str);
+                            str = ConvertHelper.Convert(str, encoding, ToChinese);
                             using (StreamWriter sw = new StreamWriter(Path.Combine(OutputPath, _temp.Name), false, encoding[1]))
                             {
                                 sw.Write(str);
@@ -99,7 +83,7 @@ namespace ConvertZZ.Pages
                     }
                     break;
                 case false:
-                    {              
+                    {
                         treeview_nodes.ForEach(x => {
                             if (x.Nodes != null)
                             {
@@ -109,7 +93,7 @@ namespace ConvertZZ.Pages
                                     {
                                         string temp = "";
                                         string path = GetParentSum(y, ref temp);
-                                        string newpath = Path.Combine(Path.GetDirectoryName(path), Convert(Path.GetFileName(path)));
+                                        string newpath = Path.Combine(Path.GetDirectoryName(path), ConvertHelper.Convert(Path.GetFileName(path), encoding, ToChinese));
                                         try
                                         {
                                             if (y.isFile)
@@ -163,7 +147,7 @@ namespace ConvertZZ.Pages
         private string GetParentSum(Node node, ref string sum)
         {
             if (node.Generation != 1)
-                sum = Path.Combine(Path.Combine(sum, GetParentSum((Node)node.Parent, ref sum)) , node.DisplayName);
+                sum = Path.Combine(Path.Combine(sum, GetParentSum((Node)node.Parent, ref sum)), node.DisplayName);
             else if (node.Generation == 1)
                 return node.DisplayName;
             return sum;
@@ -171,7 +155,7 @@ namespace ConvertZZ.Pages
         private List<Node> GetAllChildNode(Node node)
         {
             List<Node> temp = new List<Node>();
-            if (node.Nodes.Count>0)
+            if (node.Nodes.Count > 0)
             {
                 node.Nodes.ForEach(x => temp.AddRange(GetAllChildNode(x)));
                 temp.Add(node);
@@ -253,7 +237,7 @@ namespace ConvertZZ.Pages
                         {
                             string temp = "";
                             string path = GetParentSum(y, ref temp);
-                            string newpath = Path.Combine(Path.GetDirectoryName(path), Convert(Path.GetFileName(path)));
+                            string newpath = Path.Combine(Path.GetDirectoryName(path), ConvertHelper.Convert(Path.GetFileName(path), encoding, ToChinese));
                             sb.AppendLine(path);
                             sb2.AppendLine(newpath);
                         }
@@ -310,7 +294,7 @@ namespace ConvertZZ.Pages
                             InputPreviewText = new string(c);
                         }
                     }
-                    OutputPreviewText = Convert(InputPreviewText);
+                    OutputPreviewText = ConvertHelper.Convert(InputPreviewText, encoding, ToChinese);
                 }
             }
         }
@@ -374,5 +358,5 @@ namespace ConvertZZ.Pages
             }
         }
     }
-    
+
 }

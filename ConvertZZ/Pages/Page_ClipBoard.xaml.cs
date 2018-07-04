@@ -1,34 +1,83 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using ConvertZZ.Moudle;
+using System;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
 using System.Windows.Interop;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
 namespace ConvertZZ.Pages
 {
     /// <summary>
     /// Page_ClipBoard.xaml 的互動邏輯
     /// </summary>
-    public partial class Page_ClipBoard : Page
+    public partial class Page_ClipBoard : Page, INotifyPropertyChanged
     {
         IntPtr hwnd = IntPtr.Zero;
         public Page_ClipBoard(IntPtr hwnd)
         {
             this.hwnd = hwnd;
             InitializeComponent();
+            DataContext = this;
         }
 
+        private string _ClipBoard;
+        public string ClipBoard { get => _ClipBoard; set { _ClipBoard = value; OnPropertyChanged("ClipBoard"); } }
+        private string _Output;
+        public string Output { get => _Output; set { _Output = value; OnPropertyChanged("Output"); } }
+
+
+
+
+
+        /// <summary>
+        /// 編碼轉換 [0]:來源編碼   [1]:輸出編碼
+        /// </summary>
+        Encoding[] encoding = new Encoding[2] { Encoding.GetEncoding("BIG5"), Encoding.GetEncoding("GBK") };
+        /// <summary>
+        /// 輸出簡繁轉換：0:一般  1:繁體中文 2:簡體中文
+        /// </summary>
+        int ToChinese = 0;
+        private void Encoding_Selected(object sender, RoutedEventArgs e)
+        {
+            RadioButton radiobutton = ((RadioButton)sender);
+            switch (radiobutton.GroupName)
+            {
+                case "origin":
+                    encoding[0] = Encoding.GetEncoding((string)radiobutton.Content);
+                    break;
+                case "target":
+                    encoding[1] = Encoding.GetEncoding((string)radiobutton.Content);
+                    break;
+            }
+            Output = ConvertHelper.Convert(ClipBoard, encoding, ToChinese);
+        }
+        private void Chinese_Click(object sender, RoutedEventArgs e)
+        {
+            switch (((RadioButton)sender).Uid)
+            {
+                case "NChinese":
+                    ToChinese = 0;
+                    break;
+                case "TChinese":
+                    ToChinese = 1;
+                    break;
+                case "CChinese":
+                    ToChinese = 2;
+                    break;
+            }
+            Output = ConvertHelper.Convert(ClipBoard, encoding, ToChinese);
+        }
+
+
+
+
+
+
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         private void Page_Loaded(object sender, RoutedEventArgs e)
         {
             #region 註冊Hook並監聽剪貼簿            
@@ -63,7 +112,8 @@ namespace ConvertZZ.Pages
                     // clipboard content changed 
                     if (Clipboard.ContainsText())
                     {
-                       // ClipBoard = ClipBoardHelper.GetClipBoard_UnicodeText();
+                        ClipBoard = ClipBoardHelper.GetClipBoard_UnicodeText();
+                        Output = ConvertHelper.Convert(ClipBoard, encoding, ToChinese);
                     }
 
 
@@ -91,5 +141,10 @@ namespace ConvertZZ.Pages
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern int SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
         #endregion
+
+        private void Button_CopyOutput_Click(object sender, RoutedEventArgs e)
+        {
+            ClipBoardHelper.SetClipBoard_UnicodeText(ConvertHelper.Convert(ClipBoard, encoding, ToChinese));
+        }
     }
 }

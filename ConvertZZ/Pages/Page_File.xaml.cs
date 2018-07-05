@@ -266,10 +266,10 @@ namespace ConvertZZ.Pages
             switch (radiobutton.GroupName)
             {
                 case "origin":
-                    encoding[0] = Encoding.GetEncoding((string)radiobutton.Content);
+                    encoding[0] = Encoding.GetEncoding(((string)radiobutton.Content).Trim());
                     break;
                 case "target":
-                    encoding[1] = Encoding.GetEncoding((string)radiobutton.Content);
+                    encoding[1] = Encoding.GetEncoding(((string)radiobutton.Content).Trim());
                     break;
             }
             ModeChange(null, null);

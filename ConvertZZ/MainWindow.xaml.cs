@@ -1,4 +1,7 @@
-﻿using System;
+﻿using ConvertZZ.Moudle;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -12,10 +15,61 @@ namespace ConvertZZ
     /// </summary>
     public partial class MainWindow : Window
     {
+        List<Moudle.HotKey> hotKeys = new List<Moudle.HotKey>();
         public MainWindow()
         {
-            InitializeComponent();            
+            App.nIcon.MouseClick += NIcon_MouseClick;
+            if (!App.Settings.AssistiveTouch)
+                this.Hide();
+            InitializeComponent();
+            RegAllHotkey();
         }
+
+        private void NIcon_MouseClick(object sender, System.Windows.Forms.MouseEventArgs e)
+        {
+            if (e.Button == System.Windows.Forms.MouseButtons.Right)
+            {
+                ContextMenu NotifyIconMenu = (ContextMenu)this.FindResource("NotifyIconMenu");
+                NotifyIconMenu.IsOpen = true;
+            }
+        }
+
+        void HotkeyAction1(Moudle.HotKey hotKey)
+        {
+            MenuItem_Click(new MenuItem { Uid = App.Settings.HotKey.Feature1.Action }, null);
+        }
+        void HotkeyAction2(Moudle.HotKey hotKey)
+        {
+            MenuItem_Click(new MenuItem { Uid = App.Settings.HotKey.Feature2.Action }, null);
+        }
+        void HotkeyAction3(Moudle.HotKey hotKey)
+        {
+            MenuItem_Click(new MenuItem { Uid = App.Settings.HotKey.Feature3.Action }, null);
+        }
+        void HotkeyAction4(Moudle.HotKey hotKey)
+        {
+            MenuItem_Click(new MenuItem { Uid = App.Settings.HotKey.Feature4.Action }, null);
+        }
+        private void RegHotkey(Feature feature, Action<Moudle.HotKey> action)
+        {
+            if (!feature.Enable) return;
+            KeyModifier keyModifier = KeyModifier.None;
+            feature.Modift.Split(',').ToList().ForEach(x => keyModifier = keyModifier | (KeyModifier)Enum.Parse(typeof(KeyModifier), x.Trim()));
+            hotKeys.Add(new Moudle.HotKey((Key)Enum.Parse(typeof(Key), feature.Key), keyModifier, action));
+        }
+        public void RegAllHotkey()
+        {
+            RegHotkey(App.Settings.HotKey.Feature1, HotkeyAction1);
+            RegHotkey(App.Settings.HotKey.Feature2, HotkeyAction2);
+            RegHotkey(App.Settings.HotKey.Feature3, HotkeyAction3);
+            RegHotkey(App.Settings.HotKey.Feature4, HotkeyAction4);
+        }       
+        public void UnRegAllHotkey()
+        {
+            hotKeys.ForEach(x => x.Dispose());
+            hotKeys.Clear();
+        }
+        
         Point pointNow = new Point();
         bool leftDown = false;
         private void Window_MouseDown(object sender, MouseButtonEventArgs e)
@@ -29,13 +83,10 @@ namespace ConvertZZ
         }
         private void Setting_Click(object sender, RoutedEventArgs e)
         {
-            
-        }
-        private void HideBall_Click(object sender, RoutedEventArgs e)
-        {
-            if (App.Settings.ShowBalloonTip)
-                App.nIcon.ShowBalloonTip(1500, "ConvertZZ", "ConvertZZ is here", System.Windows.Forms.ToolTipIcon.Info);
-            this.Hide();
+            UnRegAllHotkey();
+            Window_Setting window_Setting = new Window_Setting() { Owner = this };
+            window_Setting.ShowDialog();
+            RegAllHotkey();
         }
         private void Exit_Click(object sender, RoutedEventArgs e)
         {
@@ -54,25 +105,51 @@ namespace ConvertZZ
                     MessageBox.Show("");
             }
         }
-
+        DragDropKeyStates dragDropKeyStates;
+        private void Window_DragEnter(object sender, DragEventArgs e)
+        {
+            //紀錄拖曳進來時的按鍵
+            dragDropKeyStates = e.KeyStates;
+        }
         private void Window_Drop(object sender, DragEventArgs e)
         {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                //減去輔助鍵，得到現在是左鍵還是右鍵
+                dragDropKeyStates -= e.KeyStates;
+                if (dragDropKeyStates == DragDropKeyStates.LeftMouseButton)
+                {
 
+                }
+                else if (dragDropKeyStates == DragDropKeyStates.RightMouseButton)
+                {
+
+                }
+                
+                // Note that you can have more than one file.
+                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+
+            }
         }
-
         private void MenuItem_Click(object sender, RoutedEventArgs e)
         {
             string clip = ClipBoardHelper.GetClipBoard_UnicodeText();
             StringBuilder sb = new StringBuilder();
+            System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
+            sw.Reset();
+            sw.Start();
             switch (((MenuItem)sender).Uid)
             {
+                case "1":
+                    this.Visibility = this.Visibility == Visibility.Visible ? Visibility.Hidden : Visibility.Visible;
+                    break;
                 case "a1":
                     clip = ChineseConverter.ToTraditional(clip);
                     if (App.Settings.VocabularyCorrection)
                         clip = App.ChineseConverter.Convert(clip);
                     clip = Encoding.GetEncoding("GBK").GetString(Encoding.GetEncoding("BIG5").GetBytes(clip));
                     break;
-                case "a2":                    
+                case "a2":
                     clip = ChineseConverter.ToSimplified(clip);
                     if (App.Settings.VocabularyCorrection)
                     { } //clip = chineseConverter.Convert(clip);
@@ -263,7 +340,29 @@ namespace ConvertZZ
                     break;               
             }
             ClipBoardHelper.SetClipBoard_UnicodeText(clip);
-            //ClipBoardHelper.SetClipBoard_ByteArray(clip);
+            //顯示提示
+            switch(((MenuItem)sender).Uid)
+            {
+                case "1":
+                case "b1":
+                case "b2":
+                case "c1":
+                case "c2":
+                case "c3":
+                    break;
+                default:
+                    if (App.Settings.Prompt)
+                    {
+                        sw.Stop();
+                        MessageBox.Show(this,String.Format("轉換完成\r\n耗時：{0} ms",sw.ElapsedMilliseconds));
+                    }
+                    break;
+            }
+        }
+
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            UnRegAllHotkey();
         }
     }
 

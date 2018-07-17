@@ -20,8 +20,7 @@ namespace ConvertZZ
         {
             this.AudioFormat = AudioFormat;
             this.mode = mode;
-            InitializeComponent();
-            
+            InitializeComponent();            
         }
         private void UIElement_OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {

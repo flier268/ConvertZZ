@@ -88,6 +88,7 @@
     <Compile Include="Moudle\ChineseConverter.cs" />
     <Compile Include="Moudle\ConvertString.cs" />
     <Compile Include="Moudle\FastReplace.cs" />
+    <Compile Include="Moudle\Hotkey.cs" />
     <Compile Include="Moudle\TransferEncodeHelper.cs" />
     <Compile Include="Moudle\Window_MessageBoxEx.xaml.cs">
       <DependentUpon>Window_MessageBoxEx.xaml</DependentUpon>
@@ -104,6 +105,9 @@
     <Compile Include="Settings.cs" />
     <Compile Include="Window_DialogHost.xaml.cs">
       <DependentUpon>Window_DialogHost.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Window_Setting.xaml.cs">
+      <DependentUpon>Window_Setting.xaml</DependentUpon>
     </Compile>
     <Page Include="CheckboxTreeView.xaml">
       <SubType>Designer</SubType>
@@ -139,6 +143,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Window_DialogHost.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Window_Setting.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

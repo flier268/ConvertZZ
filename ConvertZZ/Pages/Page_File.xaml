@@ -1,11 +1,11 @@
 ﻿<Page
-      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-      xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-      xmlns:local="clr-namespace:ConvertZZ.Pages"
-      xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
-      xmlns:ConvertZZ="clr-namespace:ConvertZZ" x:Class="ConvertZZ.Pages.Page_File"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ConvertZZ="clr-namespace:ConvertZZ"
+    x:Class="ConvertZZ.Pages.Page_File"
       mc:Ignorable="d" 
       d:DesignHeight="700" d:DesignWidth="1200"
       Title="Page_File">
@@ -39,8 +39,8 @@
                 <ColumnDefinition Width="auto"/>
                 <ColumnDefinition Width="auto"/>
             </Grid.ColumnDefinitions>
-            <RadioButton x:Name="RadioButton_FileMode" Content="文件模式" IsChecked="{Binding FileMode, Mode=TwoWay}" Checked="ModeChange" GroupName="Mode" VerticalAlignment="Center"/>            
-            <RadioButton x:Name="RadioButton_FileNameMode" Content="檔名模式" GroupName="Mode" Checked="ModeChange" Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0" />                            
+            <RadioButton x:Name="RadioButton_FileMode" Content="文件模式" IsChecked="{Binding FileMode, Mode=TwoWay}" Checked="ModeChange" GroupName="Mode" VerticalAlignment="Center"/>
+            <RadioButton x:Name="RadioButton_FileNameMode" Content="檔名模式" GroupName="Mode" Checked="ModeChange" Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0" />
             <CheckBox Grid.Column="3" IsChecked="{Binding AccordingToChild, Mode=TwoWay}" Content="包含子目錄下所有檔案" Margin="5,0,0,0" />
         </Grid>
         <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1"  Margin="10,2,10,5" Padding="10" Grid.Row="1" VerticalAlignment="Stretch">

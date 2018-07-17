@@ -8,26 +8,22 @@ namespace ConvertZZ
 {
     using Newtonsoft.Json;
     using Newtonsoft.Json.Converters;
-    using System.Collections.Generic;
     using System.Globalization;
     using System.IO;
     using System.Text;
 
     public partial class App
     {
-        private static Settings settings = new Settings();
         static string _FilePath;
-
-        public static Settings Settings { get => settings; set => settings = value; }
-
+        public static Settings Settings { get; set; } = new Settings();
         public static void Reload(string FilePath)
         {
+            _FilePath = FilePath;
             if (File.Exists(FilePath))
             {
-                _FilePath = FilePath;
                 using (StreamReader streamReader = new StreamReader(FilePath, Encoding.UTF8))
                 {
-                    settings = Settings.FromJson(streamReader.ReadToEnd());
+                    Settings = Settings.FromJson(streamReader.ReadToEnd());
                 }
             }
         }
@@ -35,7 +31,7 @@ namespace ConvertZZ
         {
             using (StreamWriter sw = new StreamWriter(_FilePath, false, Encoding.UTF8))
             {
-                sw.Write(settings.ToJson());
+                sw.Write(Settings.ToJson());
                 sw.Flush();
             }
         }
@@ -47,7 +43,6 @@ namespace ConvertZZ
         public Settings()
         {
             QuickStart = new QuickStart();
-            UnicodeAddBom = false;
             RecognitionEncoding = true;
             Prompt = true;
             MaxLengthPreview = 16000;
@@ -55,13 +50,7 @@ namespace ConvertZZ
             AssistiveTouch = true;
             HotKey = new HotKey();
             FileConvert = new FileConvert();
-            ShowBalloonTip = true;
         }
-        /// <summary>
-        /// 加入BOM到Unicode檔頭
-        /// </summary>
-        [JsonProperty("UnicodeAddBOM")]
-        public bool UnicodeAddBom { get; set; }
         /// <summary>
         /// 試圖自動辨識編碼
         /// </summary>
@@ -82,11 +71,6 @@ namespace ConvertZZ
         /// </summary>
         [JsonProperty("Vocabulary correction")]
         public bool VocabularyCorrection { get; set; }
-        /// <summary>
-        /// 顯示器泡提示
-        /// </summary>
-        [JsonProperty("ShowBalloonTip")]
-        public bool ShowBalloonTip { get; set; }
         /// <summary>
         /// 啟用懸浮球
         /// </summary>
@@ -113,9 +97,10 @@ namespace ConvertZZ
     {
         public FileConvert()
         {
+            UnicodeAddBom = false;
             DefaultPath = "!";
             TypeFilter = "*.txt|*.log|*.ini|*.inf|*.bat|*.cmd|*.srt|*.lang";
-            FixLabel = "*.htm*,*.shtm*,*.asp,*.apsx,*.php*,*.pl,*.cgi,*.js";
+            FixLabel = "*.htm*|*.shtm*|*.asp|*.apsx|*.php*|*.pl|*.cgi|*.js";
         }
         /// <summary>
         /// 預設路徑
@@ -132,6 +117,11 @@ namespace ConvertZZ
         /// </summary>
         [JsonProperty("FixLabel")]
         public string FixLabel { get; set; }
+        /// <summary>
+        /// 加入BOM到Unicode檔頭
+        /// </summary>
+        [JsonProperty("UnicodeAddBOM")]
+        public bool UnicodeAddBom { get; set; }
     }
 
     public partial class HotKey
@@ -140,10 +130,10 @@ namespace ConvertZZ
         {
             AutoCopy = true;
             AutoPaste = true;
-            Feature1 = new Feature() { Action = "a1", Enable = false, Key = 0, Modift = new List<int>() };
-            Feature2 = new Feature() { Action = "a2", Enable = false, Key = 0, Modift = new List<int>() };
-            Feature3 = new Feature() { Action = "a3", Enable = false, Key = 0, Modift = new List<int>() };
-            Feature4 = new Feature() { Action = "a4", Enable = false, Key = 0, Modift = new List<int>() };
+            Feature1 = new Feature() { Action = "a1", Enable = false, Key = "None", Modift = "None" };
+            Feature2 = new Feature() { Action = "a2", Enable = false, Key = "None", Modift = "None" };
+            Feature3 = new Feature() { Action = "a3", Enable = false, Key = "None", Modift = "None" };
+            Feature4 = new Feature() { Action = "a4", Enable = false, Key = "None", Modift = "None" };
         }
         [JsonProperty("AutoCopy")]
         public bool AutoCopy { get; set; }
@@ -170,8 +160,8 @@ namespace ConvertZZ
         {
             Action = "";
             Enable = false;
-            Key = 0;
-            Modift = new List<int>();
+            Key = "";
+            Modift = "";
         }
         [JsonProperty("Action")]
         public string Action { get; set; }
@@ -180,40 +170,53 @@ namespace ConvertZZ
         public bool Enable { get; set; }
 
         [JsonProperty("Key")]
-        public int Key { get; set; }
+        public string Key { get; set; }
 
         [JsonProperty("Modift")]
-        public List<int> Modift { get; set; }
+        public string Modift { get; set; }
     }
 
     public partial class QuickStart
     {
         public QuickStart()
         {
-            CtrlClick = "";
-            CtrlDrop = "";
-            AltClick = "";
-            AltDrop = "";
-            ShiftClick = "";
-            ShiftDrop = "";
+            LeftClick_Ctrl = "";
+            LeftClick_Alt = "";
+            LeftClick_Shift = "";
+            RightClick_Ctrl = "";
+            RightClick_Alt = "";
+            RightClick_Shift = "";
+            LeftDrop_Ctrl = "";
+            LeftDrop_Alt = "";
+            LeftDrop_Shift = "";
+            RightDrop_Ctrl = "";
+            RightDrop_Alt = "";
+            RightDrop_Shift = "";
         }
-        [JsonProperty("CtrlClick")]
-        public string CtrlClick { get; set; }
-
-        [JsonProperty("AltClick")]
-        public string AltClick { get; set; }
-
-        [JsonProperty("ShiftClick")]
-        public string ShiftClick { get; set; }
-
-        [JsonProperty("CtrlDrop")]
-        public string CtrlDrop { get; set; }
-
-        [JsonProperty("AltDrop")]
-        public string AltDrop { get; set; }
-
-        [JsonProperty("ShiftDrop")]
-        public string ShiftDrop { get; set; }
+        [JsonProperty("LeftClick_Ctrl")]
+        public string LeftClick_Ctrl { get; set; }
+        [JsonProperty("LeftClick_Alt")]
+        public string LeftClick_Alt { get; set; }
+        [JsonProperty("LeftClick_Shift")]
+        public string LeftClick_Shift { get; set; }
+        [JsonProperty("RightClick_Ctrl")]
+        public string RightClick_Ctrl { get; set; }
+        [JsonProperty("RightClick_Alt")]
+        public string RightClick_Alt { get; set; }
+        [JsonProperty("RightClick_Shift")]
+        public string RightClick_Shift { get; set; }
+        [JsonProperty("LeftDrop_Ctrl")]
+        public string LeftDrop_Ctrl { get; set; }
+        [JsonProperty("LeftDrop_Alt")]
+        public string LeftDrop_Alt { get; set; }
+        [JsonProperty("LeftDrop_Shift")]
+        public string LeftDrop_Shift { get; set; }
+        [JsonProperty("RightDrop_Ctrl")]
+        public string RightDrop_Ctrl { get; set; }
+        [JsonProperty("RightDrop_Alt")]
+        public string RightDrop_Alt { get; set; }
+        [JsonProperty("RightDrop_Shift")]
+        public string RightDrop_Shift { get; set; }
     }
 
     public partial class Settings

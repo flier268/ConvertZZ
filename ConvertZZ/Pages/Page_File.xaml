@@ -41,7 +41,8 @@
             </Grid.ColumnDefinitions>
             <RadioButton x:Name="RadioButton_FileMode" Content="文件模式" IsChecked="{Binding FileMode, Mode=TwoWay}" Checked="ModeChange" GroupName="Mode" VerticalAlignment="Center"/>
             <RadioButton x:Name="RadioButton_FileNameMode" Content="檔名模式" GroupName="Mode" Checked="ModeChange" Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0" />
-            <CheckBox Grid.Column="3" IsChecked="{Binding AccordingToChild, Mode=TwoWay}" Content="包含子目錄下所有檔案" Margin="5,0,0,0" />
+            <CheckBox Grid.Column="2" IsChecked="{Binding AccordingToChild, Mode=TwoWay}" Content="包含子目錄下所有檔案" Margin="5,0,0,0" />
+            <CheckBox Grid.Column="3" IsChecked="{Binding UseFilter, Mode=TwoWay}" Content="檔名篩選器" Margin="5,0,0,0" />
         </Grid>
         <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1"  Margin="10,2,10,5" Padding="10" Grid.Row="1" VerticalAlignment="Stretch">
             <Grid Grid.Row="1" Width="400">

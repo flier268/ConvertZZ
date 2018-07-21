@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -20,6 +21,7 @@ namespace ConvertZZ.Pages
         public Page_File()
         {
             InitializeComponent();
+            _UseFilter = App.Settings.FileConvert.UseFilter;
             DataContext = this;
             OutputPath = App.Settings.FileConvert.DefaultPath.Substring(App.Settings.FileConvert.DefaultPath[0] == '!' ? 1 : 0);
         }
@@ -176,7 +178,7 @@ namespace ConvertZZ.Pages
                 OutputPath = Path.GetDirectoryName(fileDialog.FileNames.First());
                 if (!FileMode)
                 {
-                    treeview_nodes = new List<Node>() { GetChildPath(OutputPath, AccordingToChild, App.Settings.FileConvert.TypeFilter) };
+                    treeview_nodes = new List<Node>() { GetChildPath(OutputPath, AccordingToChild, UseFilter ? App.Settings.FileConvert.TypeFilter : "*") };
                     treeview.ItemSources = treeview_nodes;
                     treeview_CheckedChanged(null);
                 }
@@ -187,14 +189,23 @@ namespace ConvertZZ.Pages
                         if (Path.GetFileName(str) == "　" && System.IO.Directory.Exists(System.IO.Path.GetDirectoryName(str)))
                         {
                             string folderpath = System.IO.Path.GetDirectoryName(str);
-                            App.Settings.FileConvert.TypeFilter.Split('|').ToList().ForEach(filter =>
+                            if (UseFilter)
+                                App.Settings.FileConvert.TypeFilter.Split('|').ToList().ForEach(filter =>
+                                {
+                                    List<string> childFileList = System.IO.Directory.GetFiles(folderpath, filter.Trim(), AccordingToChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).ToList();
+                                    childFileList.ForEach(x =>
+                                    {
+                                        FileList.Add(new FileList_Line() { isChecked = true, isFile = true, Name = System.IO.Path.GetFileName(x), Path = Path.GetDirectoryName(x) });
+                                    });
+                                });
+                            else
                             {
-                                List<string> childFileList = System.IO.Directory.GetFiles(folderpath, filter.Trim(), AccordingToChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).ToList();
+                                List<string> childFileList = System.IO.Directory.GetFiles(folderpath, "*", AccordingToChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).ToList();
                                 childFileList.ForEach(x =>
                                 {
                                     FileList.Add(new FileList_Line() { isChecked = true, isFile = true, Name = System.IO.Path.GetFileName(x), Path = Path.GetDirectoryName(x) });
                                 });
-                            });
+                            }
                             FileList = new ObservableCollection<FileList_Line>(FileList.OrderBy(x => x.Name).Distinct().OrderBy(x => x.isFile).OrderBy(x => x.Path));
                         }
                         else if (File.Exists(str))
@@ -206,22 +217,24 @@ namespace ConvertZZ.Pages
             }
         }
         private string _ClipBoard = "";
-        public string ClipBoard { get => _ClipBoard; set { _ClipBoard = value; OnPropertyChanged("ClipBoard"); } }
+        public string ClipBoard { get => _ClipBoard; set { _ClipBoard = value; OnPropertyChanged(); } }
         private string _InputPreviewText = "";
-        public string InputPreviewText { get => _InputPreviewText; set { _InputPreviewText = value; OnPropertyChanged("InputPreviewText"); } }
+        public string InputPreviewText { get => _InputPreviewText; set { _InputPreviewText = value; OnPropertyChanged(); } }
         private string _OutputPreviewText = "";
-        public string OutputPreviewText { get => _OutputPreviewText; set { _OutputPreviewText = value; OnPropertyChanged("OutputPreviewText"); } }
+        public string OutputPreviewText { get => _OutputPreviewText; set { _OutputPreviewText = value; OnPropertyChanged(); } }
         private bool _FileMode = true;
-        public bool FileMode { get => _FileMode; set { _FileMode = value; OnPropertyChanged("FileMode"); } }
+        public bool FileMode { get => _FileMode; set { _FileMode = value; OnPropertyChanged(); } }
         private bool _AccordingToChild = true;
-        public bool AccordingToChild { get => _AccordingToChild; set { _AccordingToChild = value; OnPropertyChanged("AccordingToChild"); } }
+        public bool AccordingToChild { get => _AccordingToChild; set { _AccordingToChild = value; OnPropertyChanged(); } }
+        private bool _UseFilter = true;
+        public bool UseFilter { get => _UseFilter; set { _UseFilter = value; OnPropertyChanged(); App.Settings.FileConvert.UseFilter = value; App.Save(); } }
         private string _OutputPath = "";
-        public string OutputPath { get => _OutputPath; set { _OutputPath = value; OnPropertyChanged("OutputPath"); } }
+        public string OutputPath { get => _OutputPath; set { _OutputPath = value; OnPropertyChanged(); } }
 
 
         private ObservableCollection<FileList_Line> _FileList = new ObservableCollection<FileList_Line>();
 
-        public ObservableCollection<FileList_Line> FileList { get => _FileList; set { _FileList = value; OnPropertyChanged("FileList"); } }
+        public ObservableCollection<FileList_Line> FileList { get => _FileList; set { _FileList = value; OnPropertyChanged(); } }
 
         List<Node> treeview_nodes = new List<Node>();
         private void treeview_CheckedChanged(CheckBox sender)
@@ -256,8 +269,10 @@ namespace ConvertZZ.Pages
             public string Path { get; set; }
         }
         public event PropertyChangedEventHandler PropertyChanged;
-
-        protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
 
 
         private void Encoding_Selected(object sender, RoutedEventArgs e)

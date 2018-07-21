@@ -99,6 +99,7 @@ namespace ConvertZZ
         {
             UnicodeAddBom = false;
             DefaultPath = "!";
+            UseFilter = true;
             TypeFilter = "*.txt|*.log|*.ini|*.inf|*.bat|*.cmd|*.srt|*.lang";
             FixLabel = "*.htm*|*.shtm*|*.asp|*.apsx|*.php*|*.pl|*.cgi|*.js";
         }
@@ -107,6 +108,11 @@ namespace ConvertZZ
         /// </summary>
         [JsonProperty("DefaultPath")]
         public string DefaultPath { get; set; }
+        /// <summary>
+        /// 類型篩選器開啟/關閉
+        /// </summary>
+        [JsonProperty("UseFilter")]
+        public bool UseFilter { get; set; }
         /// <summary>
         /// 類型篩選器
         /// </summary>

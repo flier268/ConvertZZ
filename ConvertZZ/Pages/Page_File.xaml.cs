@@ -76,7 +76,7 @@ namespace ConvertZZ.Pages
                                 sr.Close();
                             }
                             str = ConvertHelper.Convert(str, encoding, ToChinese);
-                            using (StreamWriter sw = new StreamWriter(Path.Combine(OutputPath, _temp.Name), false, encoding[1]))
+                            using (StreamWriter sw = new StreamWriter(Path.Combine(OutputPath, _temp.Name), false, encoding[1] == Encoding.UTF8 ? new UTF8Encoding(App.Settings.FileConvert.UnicodeAddBom) : encoding[1]))
                             {
                                 sw.Write(str);
                                 sw.Flush();

@@ -96,14 +96,44 @@ namespace ConvertZZ
 
         private void Window_MouseUp(object sender, MouseButtonEventArgs e)
         {
-            if (Left == pointNow.X && Top == pointNow.Y && leftDown)
+            ContextMenu NotifyIconMenu = (ContextMenu)this.FindResource("NotifyIconMenu");
+            e.Handled = true;
+            switch (e.ChangedButton)
             {
-                leftDown = false;
-                if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
-                    MessageBox.Show("ctrl");
-                else
-                    MessageBox.Show("");
+                case MouseButton.Left:
+                    {
+                        if (Left == pointNow.X && Top == pointNow.Y && leftDown)
+                        {
+                            if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
+                                MenuItem_Click(GetByUid(NotifyIconMenu, App.Settings.QuickStart.LeftClick_Ctrl), null);
+                            else if (Keyboard.IsKeyDown(Key.LeftAlt) || Keyboard.IsKeyDown(Key.RightAlt))
+                                MenuItem_Click(GetByUid(NotifyIconMenu, App.Settings.QuickStart.LeftClick_Alt), null);
+                            else if (Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift))
+                                MenuItem_Click(GetByUid(NotifyIconMenu, App.Settings.QuickStart.LeftClick_Shift), null);
+                            else                            
+                                e.Handled = false;                            
+                        }
+                        else
+                            e.Handled = false;
+                    }
+                    break;
+                case MouseButton.Right:
+                    {
+                        if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
+                            MenuItem_Click(GetByUid(NotifyIconMenu, App.Settings.QuickStart.RightClick_Ctrl), null);
+                        else if (Keyboard.IsKeyDown(Key.LeftAlt) || Keyboard.IsKeyDown(Key.RightAlt))
+                            MenuItem_Click(GetByUid(NotifyIconMenu, App.Settings.QuickStart.RightClick_Alt), null);
+                        else if (Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift))
+                            MenuItem_Click(GetByUid(NotifyIconMenu, App.Settings.QuickStart.RightClick_Shift), null);
+                        else
+                            e.Handled = false;
+                    }
+                    break;
+                default:
+                    e.Handled = false;
+                    break;
             }
+            leftDown = false;
         }
         DragDropKeyStates dragDropKeyStates;
         private void Window_DragEnter(object sender, DragEventArgs e)
@@ -133,11 +163,12 @@ namespace ConvertZZ
         }
         private void MenuItem_Click(object sender, RoutedEventArgs e)
         {
+            if (sender == null) return;
             string clip = ClipBoardHelper.GetClipBoard_UnicodeText();
             StringBuilder sb = new StringBuilder();
             System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
             sw.Reset();
-            sw.Start();
+            sw.Start();            
             switch (((MenuItem)sender).Uid)
             {
                 case "1":
@@ -147,7 +178,7 @@ namespace ConvertZZ
                     clip = ChineseConverter.ToTraditional(clip);
                     if (App.Settings.VocabularyCorrection)
                         clip = App.ChineseConverter.Convert(clip);
-                    clip = Encoding.GetEncoding("GBK").GetString(Encoding.GetEncoding("BIG5").GetBytes(clip));
+                    clip = Encoding.GetEncoding("GBK").GetString(Encoding.GetEncoding("BIG5").GetBytes(clip));                    
                     break;
                 case "a2":
                     clip = ChineseConverter.ToSimplified(clip);
@@ -354,12 +385,32 @@ namespace ConvertZZ
                     if (App.Settings.Prompt)
                     {
                         sw.Stop();
-                        MessageBox.Show(this,String.Format("轉換完成\r\n耗時：{0} ms",sw.ElapsedMilliseconds));
+                        string ItemInfo = (sender as MenuItem).Header.ToString();
+                        MessageBox.Show(this, String.Format("{0}轉換完成\r\n耗時：{1} ms", ItemInfo, sw.ElapsedMilliseconds));
                     }
                     break;
             }
         }
 
+        public static UIElement GetByUid(DependencyObject rootElement, string uid)
+        {
+            foreach (UIElement element in LogicalTreeHelper.GetChildren(rootElement).OfType<UIElement>())
+            {
+                if(element as MenuItem !=null)                
+                    if ((element as MenuItem).Items.Count > 0)
+                    {
+                        UIElement resoult= GetByUid(element, uid);
+                        if (resoult != null)
+                            return resoult;
+                    }                       
+                if (element.Uid == uid)
+                    return element;
+                UIElement resultChildren = GetByUid(element, uid);
+                if (resultChildren != null)
+                    return resultChildren;
+            }
+            return null;
+        }
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
             UnRegAllHotkey();

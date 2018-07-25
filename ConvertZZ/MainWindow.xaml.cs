@@ -98,6 +98,8 @@ namespace ConvertZZ
         private void Exit_Click(object sender, RoutedEventArgs e)
         {
             this.Close();
+            App.nIcon.Visible = false;
+            App.nIcon.Dispose();
             Environment.Exit(0);
         }
 

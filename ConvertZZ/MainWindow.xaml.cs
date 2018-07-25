@@ -154,10 +154,42 @@ namespace ConvertZZ
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
+                /*
                 string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
                 //減去輔助鍵，得到現在是左鍵還是右鍵
                 dragDropKeyStates -= e.KeyStates;
-                
+                Pages.Page_File page_File = new Pages.Page_File();
+                page_File.Button_Convert_Click(null, null);
+                if (dragDropKeyStates == DragDropKeyStates.LeftMouseButton)
+                {
+                    switch (e.KeyStates)
+                    {
+                        case DragDropKeyStates.ControlKey:
+                            MenuItem_Click(new MenuItem { Uid = App.Settings.QuickStart.LeftDrop_Ctrl }, null);
+                            break;
+                        case DragDropKeyStates.ShiftKey:
+                            MenuItem_Click(new MenuItem { Uid = App.Settings.QuickStart.LeftDrop_Shift }, null);
+                            break;
+                        case DragDropKeyStates.AltKey:
+                            MenuItem_Click(new MenuItem { Uid = App.Settings.QuickStart.LeftDrop_Alt }, null);
+                            break;
+                    }
+                }
+                else if (dragDropKeyStates == DragDropKeyStates.RightMouseButton)
+                {
+                    switch (e.KeyStates)
+                    {
+                        case DragDropKeyStates.ControlKey:
+                            MenuItem_Click(new MenuItem { Uid = App.Settings.QuickStart.RightDrop_Ctrl }, null);
+                            break;
+                        case DragDropKeyStates.ShiftKey:
+                            MenuItem_Click(new MenuItem { Uid = App.Settings.QuickStart.RightDrop_Shift }, null);
+                            break;
+                        case DragDropKeyStates.AltKey:
+                            MenuItem_Click(new MenuItem { Uid = App.Settings.QuickStart.RightDrop_Alt }, null);
+                            break;
+                    }
+                }*/
             }
             else if (e.Data.GetDataPresent(DataFormats.UnicodeText))
             {
@@ -242,16 +274,6 @@ namespace ConvertZZ
                     clip = ChineseConverter.ToTraditional(clip);
                     if (App.Settings.VocabularyCorrection)
                         clip = App.ChineseConverter.Convert(clip);
-                    /*
-                    byte[] bomBuffer = new byte[] { 0xef, 0xbb, 0xbf };
-
-                    if (buffer[0] == bomBuffer[0]
-                        && buffer[1] == bomBuffer[1]
-                        && buffer[2] == bomBuffer[2])
-                    {
-                        return new UTF8Encoding(false).GetString(buffer, 3, buffer.Length - 3);
-                    }
-                    */
                     break;
                 case "a4":
                     clip = ChineseConverter.ToSimplified(clip);

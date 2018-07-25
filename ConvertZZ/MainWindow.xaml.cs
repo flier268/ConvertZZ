@@ -154,26 +154,69 @@ namespace ConvertZZ
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
+                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
                 //減去輔助鍵，得到現在是左鍵還是右鍵
                 dragDropKeyStates -= e.KeyStates;
+                
+            }
+            else if (e.Data.GetDataPresent(DataFormats.UnicodeText))
+            {
+                dragDropKeyStates -= e.KeyStates;
+                string s = (string)e.Data.GetData(DataFormats.UnicodeText);
                 if (dragDropKeyStates == DragDropKeyStates.LeftMouseButton)
                 {
-
+                    switch (e.KeyStates)
+                    {
+                        case DragDropKeyStates.ControlKey:
+                            MenuItem_Click(new MenuItem { Uid = App.Settings.QuickStart.LeftDrop_Ctrl, ToolTip = s }, null);
+                            break;
+                        case DragDropKeyStates.ShiftKey:
+                            MenuItem_Click(new MenuItem { Uid = App.Settings.QuickStart.LeftDrop_Shift, ToolTip = s }, null);
+                            break;
+                        case DragDropKeyStates.AltKey:
+                            MenuItem_Click(new MenuItem { Uid = App.Settings.QuickStart.LeftDrop_Alt, ToolTip = s }, null);
+                            break;
+                    }
                 }
                 else if (dragDropKeyStates == DragDropKeyStates.RightMouseButton)
                 {
-
+                    switch (e.KeyStates)
+                    {
+                        case DragDropKeyStates.ControlKey:
+                            MenuItem_Click(new MenuItem { Uid = App.Settings.QuickStart.RightDrop_Ctrl, ToolTip = s }, null);
+                            break;
+                        case DragDropKeyStates.ShiftKey:
+                            MenuItem_Click(new MenuItem { Uid = App.Settings.QuickStart.RightDrop_Shift, ToolTip = s }, null);
+                            break;
+                        case DragDropKeyStates.AltKey:
+                            MenuItem_Click(new MenuItem { Uid = App.Settings.QuickStart.RightDrop_Alt, ToolTip = s }, null);
+                            break;
+                    }
                 }
-                
-                // Note that you can have more than one file.
-                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+            }
+            else
+            {
+                var g=e.Data.GetFormats(true);
+                foreach( var h in g)
+                {
+                    object ss = e.Data.GetData(h);
+                    if(ss!=null)
+                    {
 
+                    }
+                }
+                string s = (string)e.Data.GetData(DataFormats.EnhancedMetafile);
             }
         }
         private void MenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (sender == null) return;
+            if (((MenuItem)sender).Uid == null) return;
             string clip = ClipBoardHelper.GetClipBoard_UnicodeText();
+            if (!string.IsNullOrWhiteSpace((string)(((MenuItem)sender).ToolTip)))
+            {
+                clip= (string)(((MenuItem)sender).ToolTip);
+            }
             StringBuilder sb = new StringBuilder();
             System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
             sw.Reset();
@@ -395,7 +438,7 @@ namespace ConvertZZ
                     if (App.Settings.Prompt && !(((MenuItem)sender).Visibility == Visibility.Hidden && (App.Settings.HotKey.AutoCopy || App.Settings.HotKey.AutoPaste)))
                     {
                         ContextMenu NotifyIconMenu = (ContextMenu)this.FindResource("NotifyIconMenu");
-                        string ItemInfo = ((MenuItem)GetByUid(NotifyIconMenu, App.Settings.QuickStart.LeftClick_Ctrl)).Header.ToString();                        
+                        string ItemInfo = ((MenuItem)GetByUid(NotifyIconMenu, ((MenuItem)sender).Uid)).Header.ToString();                        
                         MessageBox.Show(this, String.Format("{0}轉換完成\r\n耗時：{1} ms", ItemInfo, sw.ElapsedMilliseconds));
                     }
                     break;

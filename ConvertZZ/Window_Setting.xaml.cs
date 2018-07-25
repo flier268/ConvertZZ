@@ -152,7 +152,7 @@ namespace ConvertZZ
         public bool PromptEnable { get => _PromptEnable; set { _PromptEnable = value; OnPropertyChanged(); SaveSetting(); } }
         public bool RecognitionEncodingEnable { get => _RecognitionEncodingEnable; set { _RecognitionEncodingEnable = value; OnPropertyChanged(); SaveSetting(); } }
 
-        public string MaxPriviewLength { get => _MaxPriviewLength; set => _MaxPriviewLength = value; }
+        public string MaxPriviewLength { get => _MaxPriviewLength; set { _MaxPriviewLength = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_L1 { get => _Quick_L1; set { _Quick_L1 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_L2 { get => _Quick_L2; set { _Quick_L2 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_L3 { get => _Quick_L3; set { _Quick_L3 = value; OnPropertyChanged(); SaveSetting(); } }

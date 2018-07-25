@@ -36,25 +36,25 @@ namespace ConvertZZ
         void HotkeyAction1(Moudle.HotKey hotKey)
         {
             if (App.Settings.HotKey.AutoCopy) ClipBoardHelper.Copy(hotKey.Key, hotKey.KeyModifiers);
-            MenuItem_Click(new MenuItem { Uid = App.Settings.HotKey.Feature1.Action }, null);
+            MenuItem_Click(new MenuItem { Uid = App.Settings.HotKey.Feature1.Action, Visibility = Visibility.Hidden }, null);
             if (App.Settings.HotKey.AutoPaste) ClipBoardHelper.Paste();
         }
         void HotkeyAction2(Moudle.HotKey hotKey)
-        {
+        {            
             if (App.Settings.HotKey.AutoCopy) ClipBoardHelper.Copy(hotKey.Key,hotKey.KeyModifiers);
-            MenuItem_Click(new MenuItem { Uid = App.Settings.HotKey.Feature2.Action }, null);
+            MenuItem_Click(new MenuItem { Uid = App.Settings.HotKey.Feature2.Action, Visibility = Visibility.Hidden }, null);
             if (App.Settings.HotKey.AutoPaste) ClipBoardHelper.Paste();
         }
         void HotkeyAction3(Moudle.HotKey hotKey)
         {
             if (App.Settings.HotKey.AutoCopy) ClipBoardHelper.Copy(hotKey.Key, hotKey.KeyModifiers);
-            MenuItem_Click(new MenuItem { Uid = App.Settings.HotKey.Feature3.Action }, null);
+            MenuItem_Click(new MenuItem { Uid = App.Settings.HotKey.Feature3.Action, Visibility = Visibility.Hidden }, null);
             if (App.Settings.HotKey.AutoPaste) ClipBoardHelper.Paste();
         }
         void HotkeyAction4(Moudle.HotKey hotKey)
         {
             if (App.Settings.HotKey.AutoCopy) ClipBoardHelper.Copy(hotKey.Key, hotKey.KeyModifiers);
-            MenuItem_Click(new MenuItem { Uid = App.Settings.HotKey.Feature4.Action }, null);
+            MenuItem_Click(new MenuItem { Uid = App.Settings.HotKey.Feature4.Action, Visibility = Visibility.Hidden }, null);
             if (App.Settings.HotKey.AutoPaste) ClipBoardHelper.Paste();
         }
         private void RegHotkey(Feature feature, Action<Moudle.HotKey> action)
@@ -392,9 +392,10 @@ namespace ConvertZZ
                 case "c3":
                     break;
                 default:
-                    if (App.Settings.Prompt && e==null && !(App.Settings.HotKey.AutoCopy || App.Settings.HotKey.AutoPaste))
+                    if (App.Settings.Prompt && !(((MenuItem)sender).Visibility == Visibility.Hidden && (App.Settings.HotKey.AutoCopy || App.Settings.HotKey.AutoPaste)))
                     {
-                        string ItemInfo = (sender as MenuItem).Header.ToString();
+                        ContextMenu NotifyIconMenu = (ContextMenu)this.FindResource("NotifyIconMenu");
+                        string ItemInfo = ((MenuItem)GetByUid(NotifyIconMenu, App.Settings.QuickStart.LeftClick_Ctrl)).Header.ToString();                        
                         MessageBox.Show(this, String.Format("{0}轉換完成\r\n耗時：{1} ms", ItemInfo, sw.ElapsedMilliseconds));
                     }
                     break;

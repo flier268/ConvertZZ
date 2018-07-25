@@ -101,7 +101,7 @@ namespace ConvertZZ
             DefaultPath = "!";
             UseFilter = true;
             TypeFilter = "*.txt|*.log|*.ini|*.inf|*.bat|*.cmd|*.srt|*.lang";
-            FixLabel = "*.htm*|*.shtm*|*.asp|*.apsx|*.php*|*.pl|*.cgi|*.js";
+            FixLabel = ".htm|.html|.shtm|.shtml|.asp|.apsx|.php";
         }
         /// <summary>
         /// 預設路徑

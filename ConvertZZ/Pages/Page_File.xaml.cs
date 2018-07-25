@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -76,6 +77,31 @@ namespace ConvertZZ.Pages
                                 sr.Close();
                             }
                             str = ConvertHelper.Convert(str, encoding, ToChinese);
+                            if(!string.IsNullOrWhiteSpace(App.Settings.FileConvert.FixLabel))
+                            {
+                                var list = App.Settings.FileConvert.FixLabel.Split('|').ToList();
+                                list.ForEach(x => {
+                                    if (Path.GetExtension(_temp.Name) == x)
+                                    {
+                                        switch (x)
+                                        {
+                                            //"*.htm|*.html|*.shtm|*.shtml|*.asp|*.apsx|*.php|*.pl|*.cgi|*.js"
+                                            case ".html":
+                                            case ".htm":
+                                            case ".php":
+                                            case ".shtm":
+                                            case ".shtml":
+                                            case ".asp":
+                                            case ".aspx":
+                                                str = Regex.Replace(str, "<meta\\s*charset=\"(.*?)\"\\s*\\/?>", string.Format("<meta charset=\"{0}\">", encoding[1].WebName), RegexOptions.IgnoreCase);
+                                                str = Regex.Replace(str, @"<meta\s*http-equiv\s*=\s*""Content-Type""\s*content\s*=\s*""text\/html;charset=(.*?)""\s*\/?>", string.Format(@"<meta http-equiv=""Content-Type"" content=""text/html;charset={0}"">", encoding[1].WebName), RegexOptions.IgnoreCase);
+                                                str = Regex.Replace(str, @"header(""Content-Type:text/html;\s*charset=(.*?)"");", string.Format(@"header(""Content-Type:text/html; charset={0}"");", encoding[1].WebName), RegexOptions.IgnoreCase);
+                                                break;
+
+                                        }
+                                    }                              
+                                });
+                            }
                             using (StreamWriter sw = new StreamWriter(Path.Combine(OutputPath, _temp.Name), false, encoding[1] == Encoding.UTF8 ? new UTF8Encoding(App.Settings.FileConvert.UnicodeAddBom) : encoding[1]))
                             {
                                 sw.Write(str);

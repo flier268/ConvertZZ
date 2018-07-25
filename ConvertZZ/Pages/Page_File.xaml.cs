@@ -330,9 +330,9 @@ namespace ConvertZZ.Pages
                         char[] c = null;
                         if (sr.Peek() >= 0)
                         {
-                            c = new char[App.Settings.MaxLengthPreview];
+                            c = new char[App.Settings.MaxLengthPreview * 1000];
                             sr.Read(c, 0, c.Length);
-                            InputPreviewText = new string(c);
+                            InputPreviewText = new string(c).TrimEnd('\0');
                         }
                     }
                     OutputPreviewText = ConvertHelper.Convert(InputPreviewText, encoding, ToChinese);

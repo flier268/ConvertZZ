@@ -53,7 +53,8 @@
         </ContextMenu>
     </Window.Resources>
     <Grid ContextMenu="{StaticResource NotifyIconMenu}">
-        <Ellipse Fill="#FFF4F4F5" HorizontalAlignment="Left" Height="64" Stroke="Black" VerticalAlignment="Top" Width="64"/>
-        <TextBlock  Text="Z" FontSize="48"  FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.99"/>
+        <Grid.Background>
+            <ImageBrush ImageSource="icon.ico" Stretch="Uniform"/>
+        </Grid.Background>
     </Grid>
 </Window>

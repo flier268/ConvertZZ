@@ -18,7 +18,7 @@ namespace ConvertZZ
                 ChineseConverter.Load(p);
             ChineseConverter.ReloadFastReplaceDic();
             
-            nIcon.Icon = ConvertZZ.Properties.Resources.favicon;
+            nIcon.Icon = ConvertZZ.Properties.Resources.icon;
             nIcon.Visible = true;
         }
 

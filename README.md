@@ -15,7 +15,7 @@
 * 漂亮的UI
 
 ## Download
-* [Download](https://github.com/flier268/ConvertZZ/releases "Release")
+* [Release](https://github.com/flier268/ConvertZZ/releases "Release")
 
 ## Issue
 * 簡體轉繁體不支援詞彙本地化轉換

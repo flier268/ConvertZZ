@@ -50,6 +50,7 @@ namespace ConvertZZ
             AssistiveTouch = true;
             HotKey = new HotKey();
             FileConvert = new FileConvert();
+            CheckVersion = true;
         }
         /// <summary>
         /// 試圖自動辨識編碼
@@ -91,6 +92,11 @@ namespace ConvertZZ
         /// </summary>
         [JsonProperty("FileConvert")]
         public FileConvert FileConvert { get; set; }
+        /// <summary>
+        /// 啟動時檢查更新
+        /// </summary>
+        [JsonProperty("CheckVersion")]
+        public bool CheckVersion { get; set; }
     }
 
     public partial class FileConvert

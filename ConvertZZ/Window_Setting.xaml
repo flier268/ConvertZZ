@@ -42,6 +42,8 @@
                     <ToggleButton IsChecked="{Binding PromptEnable}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="Default ToggleButton Style" Grid.Row="2" Grid.Column="1"  />
                     <Label Content="自動判定編碼" Grid.Row="3"/>
                     <ToggleButton IsChecked="{Binding RecognitionEncodingEnable}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="Default ToggleButton Style" Grid.Row="3" Grid.Column="1"  />
+                    <Label Content="檢查版本更新" Grid.Row="4"/>
+                    <ToggleButton IsChecked="{Binding CheckVersion}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="Default ToggleButton Style" Grid.Row="4" Grid.Column="1"  />
                     <Separator Style="{StaticResource MaterialDesignLightSeparator}" Grid.Row="4" Grid.ColumnSpan="2" />
                     <Label Content="預覽最大長度(k)" Grid.Row="5" VerticalAlignment="Bottom"/>
                     <TextBox Text="{Binding MaxPriviewLength}" materialDesign:HintAssist.Hint="預覽最大長度" Style="{StaticResource MaterialDesignFloatingHintTextBox}" Grid.Row="5" Grid.Column="1" />

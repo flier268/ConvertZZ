@@ -17,7 +17,7 @@ namespace ConvertZZ
         {
             LoadSetting();
             DataContext = this;
-            InitializeComponent();         
+            InitializeComponent();
         }
         private void LoadSetting()
         {
@@ -26,6 +26,7 @@ namespace ConvertZZ
             _PromptEnable = App.Settings.Prompt;
             _RecognitionEncodingEnable = App.Settings.RecognitionEncoding;
             _MaxPriviewLength = App.Settings.MaxLengthPreview.ToString();
+            _CheckVersion = App.Settings.CheckVersion;
 
             _DefaultPath = App.Settings.FileConvert.DefaultPath;
             _FixLabel = App.Settings.FileConvert.FixLabel;
@@ -71,6 +72,7 @@ namespace ConvertZZ
             App.Settings.Prompt = PromptEnable;
             App.Settings.RecognitionEncoding = RecognitionEncodingEnable;
             App.Settings.MaxLengthPreview = int.Parse(MaxPriviewLength);
+            App.Settings.CheckVersion = CheckVersion;
 
             App.Settings.FileConvert.DefaultPath = DefaultPath;
             App.Settings.FileConvert.FixLabel = FixLabel;
@@ -93,7 +95,7 @@ namespace ConvertZZ
             App.Settings.HotKey.AutoCopy = AutoCopy;
             App.Settings.HotKey.AutoPaste = AutoPaste;
             App.Settings.HotKey.Feature1.Enable = ShortCut1_IsActived;
-            App.Settings.HotKey.Feature1.Action =ShortCut1_Action.Value;
+            App.Settings.HotKey.Feature1.Action = ShortCut1_Action.Value;
             App.Settings.HotKey.Feature1.Key = ShortCut1_Key;
             App.Settings.HotKey.Feature1.Modift = ShortCut1_ModifyKey;
             App.Settings.HotKey.Feature2.Enable = ShortCut2_IsActived;
@@ -114,29 +116,30 @@ namespace ConvertZZ
         }
         public static Dictionary<string, string> Action { get; } = new Dictionary<string, string>()
         {
-            { "無" , "0" } , 
-            { "隱藏/顯示懸浮球" , "1" } , 
-            { "GBK>Big5" , "a1" } , 
-            { "Big5>GBK" , "a2" } , 
-            { "Unicod簡>Unicode繁" , "a3" } , 
-            { "Unicode繁>Unicode簡" , "a4" } , 
-            { "Unicode>Html Code十進制" , "za1" } , 
-            { "Unicode>Html Code十六進制" , "za2" } , 
-            { "HTML Code>Unicode" , "za3" } , 
-            { "Unicode>GBK" , "zb1" } , 
-            { "Unicode>Big5" , "zb2" } , 
-            { "Unicode>Shift-JIS" , "zb3" } , 
-            { "Shift-JIS>GBK" , "zc1" } , 
-            { "Shift-JIS>Big5" , "zc2" } , 
-            { "GBK>Shift-JIS" , "zc3" } , 
-            { "Big5>Shift-JIS" , "zc4" } , 
-            { "HZ>GBK" , "zd1" } , 
-            { "HZ>Big5" , "zd1" } , 
-            { "GBK>HZ" , "zd1" } , 
+            { "無" , "0" } ,
+            { "隱藏/顯示懸浮球" , "1" } ,
+            { "GBK>Big5" , "a1" } ,
+            { "Big5>GBK" , "a2" } ,
+            { "Unicod簡>Unicode繁" , "a3" } ,
+            { "Unicode繁>Unicode簡" , "a4" } ,
+            { "Unicode>Html Code十進制" , "za1" } ,
+            { "Unicode>Html Code十六進制" , "za2" } ,
+            { "HTML Code>Unicode" , "za3" } ,
+            { "Unicode>GBK" , "zb1" } ,
+            { "Unicode>Big5" , "zb2" } ,
+            { "Unicode>Shift-JIS" , "zb3" } ,
+            { "Shift-JIS>GBK" , "zc1" } ,
+            { "Shift-JIS>Big5" , "zc2" } ,
+            { "GBK>Shift-JIS" , "zc3" } ,
+            { "Big5>Shift-JIS" , "zc4" } ,
+            { "HZ>GBK" , "zd1" } ,
+            { "HZ>Big5" , "zd1" } ,
+            { "GBK>HZ" , "zd1" } ,
             { "Big5>HZ" , "zd1" }
         };
         private bool _AssistiveTouchEnable, _VocabularyCorrenctionEnable, _PromptEnable, _RecognitionEncodingEnable;
         private string _MaxPriviewLength;
+        private bool _CheckVersion;
         private KeyValuePair<string, string> _Quick_L1, _Quick_L2, _Quick_L3, _Quick_L4, _Quick_L5, _Quick_L6;
         private KeyValuePair<string, string> _Quick_R1, _Quick_R2, _Quick_R3, _Quick_R4, _Quick_R5, _Quick_R6;
         private bool _UnicodeAddBom;
@@ -153,6 +156,7 @@ namespace ConvertZZ
         public bool RecognitionEncodingEnable { get => _RecognitionEncodingEnable; set { _RecognitionEncodingEnable = value; OnPropertyChanged(); SaveSetting(); } }
 
         public string MaxPriviewLength { get => _MaxPriviewLength; set { _MaxPriviewLength = value; OnPropertyChanged(); SaveSetting(); } }
+        public bool CheckVersion { get => _CheckVersion; set { _CheckVersion = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_L1 { get => _Quick_L1; set { _Quick_L1 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_L2 { get => _Quick_L2; set { _Quick_L2 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_L3 { get => _Quick_L3; set { _Quick_L3 = value; OnPropertyChanged(); SaveSetting(); } }
@@ -160,19 +164,19 @@ namespace ConvertZZ
         private void TextBox_ShortCut_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             e.Handled = true;
-            TextBox textbox = sender as TextBox;            
-            textbox.Text = (e.Key == Key.System ? e.SystemKey : e.Key== Key.ImeProcessed?e.ImeProcessedKey:e.Key).ToString();
+            TextBox textbox = sender as TextBox;
+            textbox.Text = (e.Key == Key.System ? e.SystemKey : e.Key == Key.ImeProcessed ? e.ImeProcessedKey : e.Key).ToString();
         }
         private void TextBox_ShortCut_Modify_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             e.Handled = true;
             TextBox textbox = sender as TextBox;
-            textbox.Text = e.KeyboardDevice.Modifiers.ToString();            
+            textbox.Text = e.KeyboardDevice.Modifiers.ToString();
         }
         public KeyValuePair<string, string> Quick_L4 { get => _Quick_L4; set { _Quick_L4 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_L5 { get => _Quick_L5; set { _Quick_L5 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_L6 { get => _Quick_L6; set { _Quick_L6 = value; OnPropertyChanged(); SaveSetting(); } }
-        public KeyValuePair<string, string> Quick_R1 { get => _Quick_R1; set { _Quick_R1 = value; OnPropertyChanged(); SaveSetting(); } }        
+        public KeyValuePair<string, string> Quick_R1 { get => _Quick_R1; set { _Quick_R1 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_R2 { get => _Quick_R2; set { _Quick_R2 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_R3 { get => _Quick_R3; set { _Quick_R3 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_R4 { get => _Quick_R4; set { _Quick_R4 = value; OnPropertyChanged(); SaveSetting(); } }
@@ -200,9 +204,9 @@ namespace ConvertZZ
         public bool ShortCut4_IsActived { get => _ShortCut4_IsActived; set { _ShortCut4_IsActived = value; OnPropertyChanged(); SaveSetting(); } }
 
         public KeyValuePair<string, string> ShortCut1_Action { get => _ShortCut1_Action; set { _ShortCut1_Action = value; OnPropertyChanged(); SaveSetting(); } }
-        public KeyValuePair<string, string> ShortCut2_Action { get => _ShortCut2_Action; set {_ShortCut2_Action = value; OnPropertyChanged(); SaveSetting(); } }
+        public KeyValuePair<string, string> ShortCut2_Action { get => _ShortCut2_Action; set { _ShortCut2_Action = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> ShortCut3_Action { get => _ShortCut3_Action; set { _ShortCut3_Action = value; OnPropertyChanged(); SaveSetting(); } }
-        public KeyValuePair<string, string> ShortCut4_Action { get => _ShortCut4_Action; set{ _ShortCut4_Action = value; OnPropertyChanged(); SaveSetting(); } }
+        public KeyValuePair<string, string> ShortCut4_Action { get => _ShortCut4_Action; set { _ShortCut4_Action = value; OnPropertyChanged(); SaveSetting(); } }
 
         public bool UnicodeAddBom { get => _UnicodeAddBom; set { _UnicodeAddBom = value; OnPropertyChanged(); SaveSetting(); } }
 

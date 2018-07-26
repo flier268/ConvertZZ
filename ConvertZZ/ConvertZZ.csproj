@@ -94,6 +94,7 @@
     <Compile Include="Moudle\FastReplace.cs" />
     <Compile Include="Moudle\Hotkey.cs" />
     <Compile Include="Moudle\TransferEncodeHelper.cs" />
+    <Compile Include="Moudle\UpdateChecker.cs" />
     <Compile Include="Moudle\Window_MessageBoxEx.xaml.cs">
       <DependentUpon>Window_MessageBoxEx.xaml</DependentUpon>
     </Compile>

@@ -49,6 +49,7 @@
             </MenuItem>
             <MenuItem Uid="1" Header="隱藏/顯示懸浮球" Click="MenuItem_Click"/>
             <MenuItem Header="Setting" Click="Setting_Click"/>
+            <MenuItem Header="About" Click="About_Click"/>
             <MenuItem Header="Exit" Click="Exit_Click"/>
         </ContextMenu>
     </Window.Resources>

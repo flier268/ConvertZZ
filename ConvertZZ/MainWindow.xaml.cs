@@ -88,6 +88,11 @@ namespace ConvertZZ
                 this.DragMove();
             }
         }
+        private void About_Click(object sender, RoutedEventArgs e)
+        {
+            Window_About window_About = new Window_About();
+            window_About.ShowDialog();
+        }
         private void Setting_Click(object sender, RoutedEventArgs e)
         {
             UnRegAllHotkey();
@@ -101,8 +106,7 @@ namespace ConvertZZ
             App.nIcon.Visible = false;
             App.nIcon.Dispose();
             Environment.Exit(0);
-        }
-
+        }        
         private void Window_MouseUp(object sender, MouseButtonEventArgs e)
         {
             ContextMenu NotifyIconMenu = (ContextMenu)this.FindResource("NotifyIconMenu");

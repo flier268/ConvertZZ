@@ -14,6 +14,8 @@
 * 具有懸浮球，使用自定的手勢，使用各種快捷功能
 * 漂亮的UI
 
+## Download
+* [Download](https://github.com/flier268/ConvertZZ/releases "Release")
 
 ## Issue
 * 簡體轉繁體不支援詞彙本地化轉換

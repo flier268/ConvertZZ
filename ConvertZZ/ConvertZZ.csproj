@@ -87,6 +87,7 @@
     <Compile Include="Enums\Enum_Mode.cs" />
     <Compile Include="Moudle\ChineseConverter.cs" />
     <Compile Include="Moudle\ConvertString.cs" />
+    <Compile Include="Moudle\EncodingAnalyzer.cs" />
     <Compile Include="Moudle\FastReplace.cs" />
     <Compile Include="Moudle\Hotkey.cs" />
     <Compile Include="Moudle\TransferEncodeHelper.cs" />

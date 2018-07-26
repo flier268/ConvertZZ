@@ -27,7 +27,7 @@ namespace ConvertZZ
                 Task.Run(() =>
                 {
                     var versionReport = UpdateChecker.ChecktVersion();
-                    if (versionReport != null && !versionReport.HaveNew)
+                    if (versionReport != null && versionReport.HaveNew)
                     {
                         if (MessageBox.Show(String.Format("發現新版本{0}(目前版本：{1})\r\n前往官網下載更新？", versionReport.Newst.ToString(), versionReport.Current.ToString()), "發現更新", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
                         {

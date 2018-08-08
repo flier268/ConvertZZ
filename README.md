@@ -18,7 +18,7 @@
 * [Release](https://github.com/flier268/ConvertZZ/releases "Release")
 
 ## Require
-* .Net 4.6.1以上
+* .Net 4.7.2以上
 
 ## Issue
 * 簡體轉繁體不支援詞彙本地化轉換

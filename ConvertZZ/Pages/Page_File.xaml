@@ -6,9 +6,9 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ConvertZZ="clr-namespace:ConvertZZ"
     x:Class="ConvertZZ.Pages.Page_File"
-      mc:Ignorable="d" 
-      d:DesignHeight="700" d:DesignWidth="1200"
-      Title="Page_File">
+    mc:Ignorable="d" materialDesign:ShadowAssist.CacheMode="{x:Null}"
+    d:DesignHeight="700" d:DesignWidth="1200"
+    Title="Page_File">
 
     <Page.Resources>
         <ResourceDictionary>

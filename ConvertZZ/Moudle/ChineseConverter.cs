@@ -115,7 +115,7 @@ namespace ConvertZZ
                 var m = r.Match(mapping);
                 if (m.Success)
                 {
-                    this.Add(m.Groups[1].ToString(), m.Groups[2].ToString());
+                    this.Add(m.Groups[1].ToString(), m.Groups[2].ToString().Split(' ')[0].ToString());
                 }
             }
             return this;

@@ -8,22 +8,29 @@ namespace ConvertZZ.Moudle
 {
     public class ConvertHelper
     {
-        public static string Convert(string origin,Encoding[] encoding,int ToChinese)
+        public static string Convert(string origin, int ToChinese)
         {
+            if (String.IsNullOrWhiteSpace(origin)) return origin;
             switch (ToChinese)
             {
                 case 1:
-                    origin = ChineseConverter.ToTraditional(origin);
                     if (App.Settings.VocabularyCorrection)
                         origin = App.ChineseConverter.Convert(origin);
+                    origin = ChineseConverter.ToTraditional(origin);
                     break;
                 case 2:
-                    origin = ChineseConverter.ToSimplified(origin);
+                    /*
                     if (App.Settings.VocabularyCorrection)
-                        origin = App.ChineseConverter.Convert(origin);
+                        origin = App.ChineseConverter.Convert(origin);*/
+                    origin = ChineseConverter.ToSimplified(origin);
                     break;
             }
-            return origin == null ? null : encoding[1].GetString(encoding[0].GetBytes(origin));
+            return origin;
+        }
+        public static string Convert(string origin, Encoding[] encoding, int ToChinese)
+        {
+            if (String.IsNullOrWhiteSpace(origin)) return origin;
+            return encoding[0].GetString(encoding[1].GetBytes(Convert(origin, ToChinese)));
         }
     }
 }

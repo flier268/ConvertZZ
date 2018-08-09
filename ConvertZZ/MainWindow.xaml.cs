@@ -270,10 +270,7 @@ namespace ConvertZZ
                             if (MessageBox.Show(this, "編碼似乎已是Big5，繼續轉換?", "警告", MessageBoxButton.YesNo) == MessageBoxResult.No)
                                 return;
                     }
-                    clip = ChineseConverter.ToTraditional(clip);
-                    if (App.Settings.VocabularyCorrection)
-                        clip = App.ChineseConverter.Convert(clip);
-                    clip = Encoding.GetEncoding("GBK").GetString(Encoding.GetEncoding("BIG5").GetBytes(clip));                   
+                    clip = ConvertHelper.Convert(clip, new Encoding[] { Encoding.GetEncoding("GBK"), Encoding.GetEncoding("BIG5") }, 1);
                     break;
                 case "a2":
                     if (App.Settings.RecognitionEncoding)
@@ -283,20 +280,13 @@ namespace ConvertZZ
                             if (MessageBox.Show(this, "編碼似乎已是GBK，繼續轉換?", "警告", MessageBoxButton.YesNo) == MessageBoxResult.No)
                                 return;
                     }
-                    clip = ChineseConverter.ToSimplified(clip);
-                    if (App.Settings.VocabularyCorrection)
-                    { } //clip = chineseConverter.Convert(clip);
-                    clip = Encoding.GetEncoding("BIG5").GetString(Encoding.GetEncoding("GBK").GetBytes(clip));             
+                    clip = ConvertHelper.Convert(clip, new Encoding[] { Encoding.GetEncoding("BIG5"), Encoding.GetEncoding("GBK") }, 2);
                     break;
                 case "a3":
-                    clip = ChineseConverter.ToTraditional(clip);
-                    if (App.Settings.VocabularyCorrection)
-                        clip = App.ChineseConverter.Convert(clip);
+                    clip = ConvertHelper.Convert(clip, 1);
                     break;
                 case "a4":
-                    clip = ChineseConverter.ToSimplified(clip);
-                    if (App.Settings.VocabularyCorrection)
-                        clip = App.ChineseConverter.Convert(clip);                    
+                    clip = ConvertHelper.Convert(clip, 2);
                     break;
                 case "b1":
                     Window_DialogHost window_File_FileNameConverter = new Window_DialogHost(  Enums.Enum_Mode.Mode.File_FileName);

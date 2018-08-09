@@ -106,7 +106,7 @@ namespace ConvertZZ
             UnicodeAddBom = false;
             DefaultPath = "!";
             UseFilter = true;
-            TypeFilter = "*.txt|*.log|*.ini|*.inf|*.bat|*.cmd|*.srt|*.lang";
+            TypeFilter = "*.txt|*.log|*.ini|*.inf|*.bat|*.cmd|*.srt|*.ass|*.lang";
             FixLabel = ".htm|.html|.shtm|.shtml|.asp|.apsx|.php";
         }
         /// <summary>

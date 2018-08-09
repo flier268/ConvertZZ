@@ -120,7 +120,7 @@ namespace ConvertZZ
             { "隱藏/顯示懸浮球" , "1" } ,
             { "GBK>Big5" , "a1" } ,
             { "Big5>GBK" , "a2" } ,
-            { "Unicod簡>Unicode繁" , "a3" } ,
+            { "Unicode簡>Unicode繁" , "a3" } ,
             { "Unicode繁>Unicode簡" , "a4" } ,
             { "Unicode>Html Code十進制" , "za1" } ,
             { "Unicode>Html Code十六進制" , "za2" } ,

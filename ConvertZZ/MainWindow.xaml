@@ -16,7 +16,7 @@
         <ContextMenu x:Key="NotifyIconMenu">
             <MenuItem Uid="a1" Header="GBK>Big5" Click="MenuItem_Click"/>
             <MenuItem Uid="a2" Header="Big5>GBK" Click="MenuItem_Click"/>
-            <MenuItem Uid="a3" Header="Unicod簡>Unicode繁" Click="MenuItem_Click"/>
+            <MenuItem Uid="a3" Header="Unicode簡>Unicode繁" Click="MenuItem_Click"/>
             <MenuItem Uid="a4" Header="Unicode繁>Unicode簡" Click="MenuItem_Click"/>
             <Separator/>
             <MenuItem Uid="b1"  Header="文件/檔名轉換" Click="MenuItem_Click"/>

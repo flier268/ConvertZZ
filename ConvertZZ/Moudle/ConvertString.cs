@@ -19,14 +19,18 @@ namespace ConvertZZ.Moudle
                         System.Threading.SpinWait.SpinUntil(() => App.DicLoaded, 3000);
                         if (!App.DicLoaded)
                             throw new Exception("詞彙修正的Dictionary載入失敗");
-                        origin = App.ChineseConverter.Convert(origin);
+                        origin = App.ChineseConverter.Convert(origin, true);
                     }
                     origin = ChineseConverter.ToTraditional(origin);
                     break;
                 case 2:
-                    /*
                     if (App.Settings.VocabularyCorrection)
-                        origin = App.ChineseConverter.Convert(origin);*/
+                    {
+                        System.Threading.SpinWait.SpinUntil(() => App.DicLoaded, 3000);
+                        if (!App.DicLoaded)
+                            throw new Exception("詞彙修正的Dictionary載入失敗");
+                        origin = App.ChineseConverter.Convert(origin, false);
+                    }
                     origin = ChineseConverter.ToSimplified(origin);
                     break;
             }

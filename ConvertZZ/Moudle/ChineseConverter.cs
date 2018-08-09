@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using static ConvertZZ.FastReplace;
 
 namespace ConvertZZ
@@ -50,14 +48,15 @@ namespace ConvertZZ
 
         #endregion OS的轉換
 
-        private SortedDictionary<string, string> _dictionary;
+        private SortedDictionary<string, string> _dictionary, _dictionaryRevert;
         private bool _hasError;
         private StringBuilder _logs;
-        FastReplace FR = new FastReplace();
+        FastReplace FR = new FastReplace(), FRRevert = new FastReplace();
         public ChineseConverter()
         {
             var cmp = new WordMappingComparer();
             _dictionary = new SortedDictionary<string, string>(cmp);
+            _dictionaryRevert = new SortedDictionary<string, string>(cmp);
             _logs = new StringBuilder();
             _hasError = false;
         }
@@ -69,7 +68,7 @@ namespace ConvertZZ
         public void Load(string fileName)
         {
             using (var reader = new StreamReader(fileName, Encoding.UTF8))
-            {               
+            {
                 string line = reader.ReadLine();
                 while (line != null)
                 {
@@ -90,21 +89,45 @@ namespace ConvertZZ
         public void ReloadFastReplaceDic()
         {
             FR = new FastReplace(_dictionary);
+            FRRevert = new FastReplace(_dictionaryRevert);
         }
 
-        public ChineseConverter Add(string sourceWord, string targetWord)
+        private void Add(string sourceWord, string targetWord)
         {
-            if (sourceWord == targetWord)
-                return this;
-            // Skip duplicated words.
-            if (_dictionary.ContainsKey(sourceWord))
+            var source = sourceWord.Split(' ');
+            var target = targetWord.Split(' ');
+            for (int i = 0; i < source.Length; i++)
             {
-                _hasError = true;
-                _logs.AppendLine(String.Format("警告: '{0}={1}' 的來源字串重複定義, 故忽略此項。", sourceWord, targetWord));
-                return this;
+                for (int j = 0; j < target.Length; j++)
+                {
+                    if (j == 0)
+                    {
+                        if (!String.IsNullOrWhiteSpace(source[i]))
+                        {
+                            if (_dictionary.ContainsKey(source[i]))
+                            {
+                                _hasError = true;
+                                _logs.AppendLine(String.Format("警告: '{0}={1}' 的來源字串重複定義, 故忽略此項。", source[i], target[j]));
+                            }
+                            else
+                                _dictionary.Add(source[i], target[j]);
+                        }
+                    }
+                    if (i == 0)
+                    {
+                        if (!String.IsNullOrWhiteSpace(target[j]))
+                        {
+                            if (_dictionaryRevert.ContainsKey(target[j]))
+                            {
+                                _hasError = true;
+                                _logs.AppendLine(String.Format("警告: '{0}={1}' 的來源字串重複定義, 故忽略此項。", target[j], source[i]));
+                            }
+                            else
+                                _dictionaryRevert.Add(target[j], source[i]);
+                        }
+                    }
+                }
             }
-            _dictionary.Add(sourceWord, targetWord);
-            return this;
         }
 
         public ChineseConverter Add(string mapping)
@@ -115,7 +138,7 @@ namespace ConvertZZ
                 var m = r.Match(mapping);
                 if (m.Success)
                 {
-                    this.Add(m.Groups[1].ToString(), m.Groups[2].ToString().Split(' ')[0].ToString());
+                    this.Add(m.Groups[1].ToString(), m.Groups[2].ToString().ToString());
                 }
             }
             return this;
@@ -130,10 +153,19 @@ namespace ConvertZZ
             return this;
         }
 
-        public string Convert(string input)
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="input"></param>
+        /// <param name="C2T">True:簡體轉繁體  False:繁體轉簡體</param>
+        /// <returns></returns>
+        public string Convert(string input, bool C2T)
         {
             //這個方法最快
-            return FR.ReplaceAll(input);
+            if (C2T)
+                return FR.ReplaceAll(input);
+            else
+                return FRRevert.ReplaceAll(input);
             /* 第二快
             foreach (var temp in _dictionary)
             {
@@ -155,6 +187,10 @@ namespace ConvertZZ
             {
                 Console.WriteLine(key);
             }
+            foreach (var key in _dictionaryRevert.Keys)
+            {
+                Console.WriteLine(key);
+            }
         }
 
         public bool HasError
@@ -173,5 +209,4 @@ namespace ConvertZZ
             }
         }
     }
-
 }

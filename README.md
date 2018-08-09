@@ -23,4 +23,5 @@
 ## Issue
 * No,發現任何bug麻煩請回報給我，感謝
 
-Donate: http://paypal.me/flier268
+## Donate:
+* http://paypal.me/flier268

@@ -15,7 +15,12 @@ namespace ConvertZZ.Moudle
             {
                 case 1:
                     if (App.Settings.VocabularyCorrection)
+                    {
+                        System.Threading.SpinWait.SpinUntil(() => App.DicLoaded, 3000);
+                        if (!App.DicLoaded)
+                            throw new Exception("詞彙修正的Dictionary載入失敗");
                         origin = App.ChineseConverter.Convert(origin);
+                    }
                     origin = ChineseConverter.ToTraditional(origin);
                     break;
                 case 2:

@@ -12,14 +12,16 @@ namespace ConvertZZ
     public partial class App : Application
     {
         public static System.Windows.Forms.NotifyIcon nIcon = new System.Windows.Forms.NotifyIcon();
-
+        public static bool DicLoaded { get; set; } = false;
         public App()
         {
             App.Reload(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"ConvertZZ.json"));
-            foreach (string p in System.IO.Directory.GetFiles(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dictionary")))
-                ChineseConverter.Load(p);
-            ChineseConverter.ReloadFastReplaceDic();
-            
+            Task.Run(() => {
+                foreach (string p in System.IO.Directory.GetFiles(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dictionary")))
+                    ChineseConverter.Load(p);
+                ChineseConverter.ReloadFastReplaceDic();
+                DicLoaded = true;
+            });
             nIcon.Icon = ConvertZZ.Properties.Resources.icon;
             nIcon.Visible = true;
             if (Settings.CheckVersion)

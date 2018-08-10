@@ -4,6 +4,7 @@ using Microsoft.WindowsAPICodePack.Dialogs;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -36,6 +37,7 @@ namespace ConvertZZ.Pages
         int ToChinese = 0;
         private void Button_Convert_Click(object sender, RoutedEventArgs e)
         {
+            Stopwatch stopwatch = new Stopwatch();
             switch (FileMode)
             {
                 case true:
@@ -71,6 +73,7 @@ namespace ConvertZZ.Pages
                                 else
                                     continue;
                             }
+                            stopwatch.Start();
                             string str = "";
                             using (StreamReader sr = new StreamReader(Path.Combine(_temp.Path, _temp.Name), encoding[0], false))
                             {
@@ -109,11 +112,13 @@ namespace ConvertZZ.Pages
                                 sw.Write(str);
                                 sw.Flush();
                             }
+                            stopwatch.Stop();
                         }
                     }
                     break;
                 case false:
                     {
+                        stopwatch.Start();
                         treeview_nodes.ForEach(x => {
                             if (x.Nodes != null)
                             {
@@ -136,8 +141,13 @@ namespace ConvertZZ.Pages
                                 });
                             }
                         });
+                        stopwatch.Stop();
                     }
                     break;
+            }
+            if(App.Settings.Prompt)
+            {
+                MessageBox.Show(string.Format("轉換完成\r\n耗時：{0} ms", stopwatch.ElapsedMilliseconds));
             }
         }
         private void Button_Clear_Clicked(object sender, RoutedEventArgs e)

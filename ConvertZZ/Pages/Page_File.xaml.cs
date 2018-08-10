@@ -29,7 +29,7 @@ namespace ConvertZZ.Pages
         /// <summary>
         /// 編碼轉換 [0]:來源編碼   [1]:輸出編碼
         /// </summary>
-        Encoding[] encoding = new Encoding[2] { Encoding.GetEncoding("BIG5"), Encoding.GetEncoding("GBK") };
+        Encoding[] encoding = new Encoding[2] { Encoding.UTF8, Encoding.UTF8 };
         /// <summary>
         /// 輸出簡繁轉換：0:一般  1:繁體中文 2:簡體中文
         /// </summary>
@@ -71,13 +71,13 @@ namespace ConvertZZ.Pages
                                     continue;
                             }
                             string str = "";
-                            using (StreamReader sr = new StreamReader(Path.Combine(_temp.Path, _temp.Name), encoding[0]))
+                            using (StreamReader sr = new StreamReader(Path.Combine(_temp.Path, _temp.Name), encoding[0], false))
                             {
                                 str = sr.ReadToEnd();
                                 sr.Close();
                             }
-                            str = ConvertHelper.Convert(str, encoding, ToChinese);
-                            if(!string.IsNullOrWhiteSpace(App.Settings.FileConvert.FixLabel))
+                            str = ConvertHelper.FileConvert(str, encoding, ToChinese);
+                            if (!string.IsNullOrWhiteSpace(App.Settings.FileConvert.FixLabel))
                             {
                                 var list = App.Settings.FileConvert.FixLabel.Split('|').ToList();
                                 list.ForEach(x => {
@@ -325,17 +325,19 @@ namespace ConvertZZ.Pages
                 string path = Path.Combine(line.Path, line.Name);
                 if (File.Exists(path))
                 {
-                    using (StreamReader sr = new StreamReader(path, encoding[0]))
+                    using (StreamReader sr = new StreamReader(path, encoding[0], false))
                     {
                         char[] c = null;
                         if (sr.Peek() >= 0)
                         {
                             c = new char[App.Settings.MaxLengthPreview * 1000];
-                            sr.Read(c, 0, c.Length);
-                            InputPreviewText = new string(c).TrimEnd('\0');
+                            sr.ReadBlock(c, 0, c.Length);
+                            StringBuilder @string = new StringBuilder(c.Length);
+                            @string.Append(c);
+                            InputPreviewText = @string.ToString().TrimEnd('\0');
                         }
                     }
-                    OutputPreviewText = ConvertHelper.Convert(InputPreviewText, encoding, ToChinese);
+                    OutputPreviewText = ConvertHelper.FileConvert(InputPreviewText, encoding, ToChinese);
                 }
             }
         }

@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace ConvertZZ.Moudle
 {
@@ -40,6 +37,27 @@ namespace ConvertZZ.Moudle
         {
             if (String.IsNullOrWhiteSpace(origin)) return origin;
             return encoding[0].GetString(encoding[1].GetBytes(Convert(origin, ToChinese)));
+        }
+
+        public static string FileConvert(string origin, Encoding[] encoding, int ToChinese)
+        {
+            if (ToChinese == 0)
+            {
+                //經研究，ConvertZ在轉檔案時，做了一些小動作，他會先把原本big5顯示不出來的字轉成繁體，證據是'软'都變成'軟'了
+                StringBuilder sb = new StringBuilder(origin.Length);
+                foreach (char c in origin.ToCharArray())
+                    if (encoding[1].GetChars(encoding[1].GetBytes(new char[] { c }))[0] != c)
+                    {
+                        sb.Append(ChineseConverter.ToTraditional(new String(c, 1)));
+                    }
+                    else
+                        sb.Append(c);
+                origin = sb.ToString();
+            }
+            if (encoding[1] == Encoding.Default || encoding[1] == Encoding.UTF8 || encoding[1] == Encoding.Unicode || encoding[1] == Encoding.GetEncoding("UnicodeFFFE") || encoding[0] == encoding[1])
+                return Convert(origin, ToChinese);
+            else
+                return Convert(origin, new Encoding[2] { Encoding.Default, encoding[1] }, ToChinese);
         }
     }
 }

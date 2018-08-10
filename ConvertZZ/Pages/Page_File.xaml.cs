@@ -45,7 +45,8 @@ namespace ConvertZZ.Pages
                         bool skip = false;
                         foreach (var _temp in temp)
                         {
-                            if (!replaceALL && File.Exists(Path.Combine(OutputPath, _temp.Name)))
+                            string TargetPath = Path.Combine(Path.Combine(OutputPath, _temp.Path.Substring(_temp.ParentPath.Length + (_temp.Path.Length == _temp.ParentPath.Length ? 0 : 1))), _temp.Name);
+                            if (!replaceALL && File.Exists(TargetPath))
                             {
                                 if (!skip)
                                     switch (Moudle.Window_MessageBoxEx.Show(string.Format("{0}發生檔名衝突，是否取代?", _temp.Name), "警告", "取代", "略過", "取消", "套用到全部"))
@@ -102,7 +103,8 @@ namespace ConvertZZ.Pages
                                     }                              
                                 });
                             }
-                            using (StreamWriter sw = new StreamWriter(Path.Combine(OutputPath, _temp.Name), false, encoding[1] == Encoding.UTF8 ? new UTF8Encoding(App.Settings.FileConvert.UnicodeAddBom) : encoding[1]))
+                            Directory.CreateDirectory(Path.GetDirectoryName(TargetPath));
+                            using (StreamWriter sw = new StreamWriter(TargetPath, false, encoding[1] == Encoding.UTF8 ? new UTF8Encoding(App.Settings.FileConvert.UnicodeAddBom) : encoding[1]))
                             {
                                 sw.Write(str);
                                 sw.Flush();
@@ -201,6 +203,7 @@ namespace ConvertZZ.Pages
             fileDialog.FileName = "　";
             if (fileDialog.ShowDialog() == true)
             {
+                string ParentPath= Path.GetDirectoryName(fileDialog.FileNames.First());
                 OutputPath = Path.GetDirectoryName(fileDialog.FileNames.First());
                 if (!FileMode)
                 {
@@ -221,7 +224,7 @@ namespace ConvertZZ.Pages
                                     List<string> childFileList = System.IO.Directory.GetFiles(folderpath, filter.Trim(), AccordingToChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).ToList();
                                     childFileList.ForEach(x =>
                                     {
-                                        FileList.Add(new FileList_Line() { isChecked = true, isFile = true, Name = System.IO.Path.GetFileName(x), Path = Path.GetDirectoryName(x) });
+                                        FileList.Add(new FileList_Line() { isChecked = true, isFile = true, Name = System.IO.Path.GetFileName(x), ParentPath = ParentPath, Path = Path.GetDirectoryName(x) });
                                     });
                                 });
                             else
@@ -229,14 +232,14 @@ namespace ConvertZZ.Pages
                                 List<string> childFileList = System.IO.Directory.GetFiles(folderpath, "*", AccordingToChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).ToList();
                                 childFileList.ForEach(x =>
                                 {
-                                    FileList.Add(new FileList_Line() { isChecked = true, isFile = true, Name = System.IO.Path.GetFileName(x), Path = Path.GetDirectoryName(x) });
+                                    FileList.Add(new FileList_Line() { isChecked = true, isFile = true, Name = System.IO.Path.GetFileName(x), ParentPath = ParentPath, Path = Path.GetDirectoryName(x) });
                                 });
                             }
                             FileList = new ObservableCollection<FileList_Line>(FileList.OrderBy(x => x.Name).Distinct().OrderBy(x => x.isFile).OrderBy(x => x.Path));
                         }
                         else if (File.Exists(str))
                         {
-                            FileList.Add(new FileList_Line() { isChecked = true, Name = Path.GetFileName(str), Path = Path.GetDirectoryName(str) });
+                            FileList.Add(new FileList_Line() { isChecked = true, Name = Path.GetFileName(str), ParentPath = ParentPath, Path = Path.GetDirectoryName(str) });
                         }
                     }
                 }
@@ -292,6 +295,7 @@ namespace ConvertZZ.Pages
             public bool isChecked { get; set; }     //or IsSelected maybe? whichever name you want  
             public bool isFile { get; set; }
             public string Name { get; set; }
+            public string ParentPath { get; set; }
             public string Path { get; set; }
         }
         public event PropertyChangedEventHandler PropertyChanged;

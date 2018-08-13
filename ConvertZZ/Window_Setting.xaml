@@ -17,7 +17,7 @@
         </Grid.ColumnDefinitions>
 
 
-        <materialDesign:Card Padding="8" Margin="10,10,5,10">
+        <materialDesign:Card Padding="8" Margin="30,20,10,10">
             <StackPanel>
                 <TextBlock Margin="16 16 12 8" FontSize="16" Text="全域設定"/>
                 <Grid Margin="26,0,0,0">
@@ -50,7 +50,7 @@
                 </Grid>
             </StackPanel>
         </materialDesign:Card>
-        <materialDesign:Card Padding="8" Margin="10,10,5,10" Grid.Row="1" VerticalAlignment="Stretch">
+        <materialDesign:Card Padding="8" Margin="30,10,10,30" Grid.Row="1" VerticalAlignment="Stretch">
             <StackPanel Margin="0,0,5,0">
                 <TextBlock Margin="16 16 12 8" FontSize="16" Text="懸浮球快捷功能"/>
                 <Grid Margin="26,0,0,0">
@@ -157,7 +157,7 @@
                 </Grid>
             </StackPanel>
         </materialDesign:Card>
-        <materialDesign:Card Padding="8" Margin="10,10,5,10" Grid.Column="1" VerticalAlignment="Stretch">
+        <materialDesign:Card Padding="8" Margin="10,20,30,10" Grid.Column="1" VerticalAlignment="Stretch">
             <StackPanel>
                 <TextBlock Margin="16 16 12 8" FontSize="16" Text="檔案編碼轉換"/>
                 <Grid Margin="26,0,0,0">
@@ -177,7 +177,7 @@
                 </Grid>
             </StackPanel>
         </materialDesign:Card>
-        <materialDesign:Card Padding="8,8,17,8" Margin="10,10,5,10" Grid.Column="1" Grid.Row="1" VerticalAlignment="Stretch">
+        <materialDesign:Card Padding="8,8,17,8" Margin="10,10,30,30" Grid.Column="1" Grid.Row="1" VerticalAlignment="Stretch">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="auto"/>

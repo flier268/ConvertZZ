@@ -19,7 +19,7 @@
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Page.Resources>
-    <Grid>
+    <Grid Margin="0 0 0 10">
         <Grid.RowDefinitions>
             <RowDefinition Height="auto"/>
             <RowDefinition />
@@ -44,7 +44,7 @@
             <CheckBox Grid.Column="2" IsChecked="{Binding AccordingToChild, Mode=TwoWay}" Content="包含子目錄下所有檔案" Margin="20,0,0,0" />
             <CheckBox Grid.Column="3" IsChecked="{Binding UseFilter, Mode=TwoWay}" Content="檔名篩選器" Margin="20,0,0,0" />
         </Grid>
-        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1"  Margin="10,2,10,5" Padding="10" Grid.Row="1" VerticalAlignment="Stretch">
+        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1"  Margin="20,4,20,10" Padding="10" Grid.Row="1" VerticalAlignment="Stretch">
             <Grid Grid.Row="1" Width="400">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
@@ -81,7 +81,7 @@
                 <Button Content="清空" Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" Margin="5" Padding="0,5" Click="Button_Clear_Clicked"/>
             </Grid>
         </materialDesign:Card>
-        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="10,5,10,10" Padding="10" Grid.Row="2" VerticalAlignment="Stretch">
+        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="20,10,20,20" Padding="10" Grid.Row="2" VerticalAlignment="Stretch">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition/>
@@ -123,10 +123,10 @@
         </materialDesign:Card>
         <Label Content="預覽輸入" Grid.Column="1" Margin="20,0" FontSize="14" />
         <Label Content="預覽輸出" Grid.Column="2" Margin="20,0" FontSize="14" />
-        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="10,2,10,10"  Grid.Row="1" Grid.Column="1" Grid.RowSpan="2" VerticalAlignment="Stretch">
+        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="20,4,20,20"  Grid.Row="1" Grid.Column="1" Grid.RowSpan="2" VerticalAlignment="Stretch">
             <TextBox Text="{Binding InputPreviewText}" TextWrapping="Wrap" AcceptsReturn="True"  VerticalScrollBarVisibility="Auto" />
         </materialDesign:Card>
-        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="10,2,10,10"  Grid.Row="1" Grid.Column="2" Grid.RowSpan="2"  VerticalAlignment="Stretch">
+        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="20,4,20,20"  Grid.Row="1" Grid.Column="2" Grid.RowSpan="2"  VerticalAlignment="Stretch">
             <TextBox Text="{Binding OutputPreviewText}" TextWrapping="Wrap" AcceptsReturn="True" Grid.Row="1" Grid.Column="2" Grid.RowSpan="2"  VerticalScrollBarVisibility="Auto" />
         </materialDesign:Card>
         <Button Content="轉換" Grid.Row="3" Padding="5" Margin="20,10,20,0" Click="Button_Convert_ClickAsync"/>

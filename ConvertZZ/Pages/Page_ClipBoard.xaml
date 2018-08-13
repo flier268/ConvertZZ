@@ -13,7 +13,7 @@
             <ColumnDefinition Width="auto"/>
             <ColumnDefinition/>
         </Grid.ColumnDefinitions>
-        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="10,2,10,10" VerticalAlignment="Stretch">
+        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="20,20,20,20" VerticalAlignment="Stretch">
             <RichTextBox>
                 <FlowDocument>
                     <Paragraph>
@@ -22,7 +22,7 @@
                 </FlowDocument>
             </RichTextBox>
         </materialDesign:Card>
-        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="10,5,10,10" Padding="10" Grid.Row="2" VerticalAlignment="Stretch" Grid.Column="1">
+        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="20,20,20,20" Padding="10" Grid.Row="2" VerticalAlignment="Stretch" Grid.Column="1">
             <Grid>
                 <Grid VerticalAlignment="Center">
                     <Grid.ColumnDefinitions>
@@ -68,7 +68,7 @@
             </Grid>
 
         </materialDesign:Card>
-        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="10,2,10,10" VerticalAlignment="Stretch" Grid.Column="2">
+        <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="20,20,20,20" VerticalAlignment="Stretch" Grid.Column="2">
             <RichTextBox>
                 <FlowDocument>
                     <Paragraph>

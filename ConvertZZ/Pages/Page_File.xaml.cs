@@ -10,8 +10,10 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 
 namespace ConvertZZ.Pages
 {
@@ -35,8 +37,9 @@ namespace ConvertZZ.Pages
         /// 輸出簡繁轉換：0:一般  1:繁體中文 2:簡體中文
         /// </summary>
         int ToChinese = 0;
-        private void Button_Convert_Click(object sender, RoutedEventArgs e)
+        private async void Button_Convert_ClickAsync(object sender, RoutedEventArgs e)
         {
+            ((Button)e.Source).IsEnabled = false;
             Stopwatch stopwatch = new Stopwatch();
             switch (FileMode)
             {
@@ -73,57 +76,65 @@ namespace ConvertZZ.Pages
                                 else
                                     continue;
                             }
-                            stopwatch.Start();
-                            string str = "";
-                            using (StreamReader sr = new StreamReader(Path.Combine(_temp.Path, _temp.Name), encoding[0], false))
+                            Mouse.OverrideCursor = Cursors.Wait;
+                            await Task.Run(() =>
                             {
-                                str = sr.ReadToEnd();
-                                sr.Close();
-                            }
-                            str = ConvertHelper.FileConvert(str, encoding, ToChinese);
-                            if (!string.IsNullOrWhiteSpace(App.Settings.FileConvert.FixLabel))
-                            {
-                                var list = App.Settings.FileConvert.FixLabel.Split('|').ToList();
-                                list.ForEach(x => {
-                                    if (Path.GetExtension(_temp.Name) == x)
+                                stopwatch.Start();
+                                string str = "";
+                                using (StreamReader sr = new StreamReader(Path.Combine(_temp.Path, _temp.Name), encoding[0], false))
+                                {
+                                    str = sr.ReadToEnd();
+                                    sr.Close();
+                                }
+                                str = ConvertHelper.FileConvert(str, encoding, ToChinese);
+                                if (!string.IsNullOrWhiteSpace(App.Settings.FileConvert.FixLabel))
+                                {
+                                    var list = App.Settings.FileConvert.FixLabel.Split('|').ToList();
+                                    list.ForEach(x =>
                                     {
-                                        switch (x)
+                                        if (Path.GetExtension(_temp.Name) == x)
                                         {
-                                            //"*.htm|*.html|*.shtm|*.shtml|*.asp|*.apsx|*.php|*.pl|*.cgi|*.js"
-                                            case ".html":
-                                            case ".htm":
-                                            case ".php":
-                                            case ".shtm":
-                                            case ".shtml":
-                                            case ".asp":
-                                            case ".aspx":
-                                                str = Regex.Replace(str, "<meta\\s*charset=\"(.*?)\"\\s*\\/?>", string.Format("<meta charset=\"{0}\">", encoding[1].WebName), RegexOptions.IgnoreCase);
-                                                str = Regex.Replace(str, @"<meta\s*http-equiv\s*=\s*""Content-Type""\s*content\s*=\s*""text\/html;charset=(.*?)""\s*\/?>", string.Format(@"<meta http-equiv=""Content-Type"" content=""text/html;charset={0}"">", encoding[1].WebName), RegexOptions.IgnoreCase);
-                                                str = Regex.Replace(str, @"header(""Content-Type:text/html;\s*charset=(.*?)"");", string.Format(@"header(""Content-Type:text/html; charset={0}"");", encoding[1].WebName), RegexOptions.IgnoreCase);
-                                                break;
+                                            switch (x)
+                                            {
+                                                //"*.htm|*.html|*.shtm|*.shtml|*.asp|*.apsx|*.php|*.pl|*.cgi|*.js"
+                                                case ".html":
+                                                case ".htm":
+                                                case ".php":
+                                                case ".shtm":
+                                                case ".shtml":
+                                                case ".asp":
+                                                case ".aspx":
+                                                    str = Regex.Replace(str, "<meta\\s*charset=\"(.*?)\"\\s*\\/?>", string.Format("<meta charset=\"{0}\">", encoding[1].WebName), RegexOptions.IgnoreCase);
+                                                    str = Regex.Replace(str, @"<meta\s*http-equiv\s*=\s*""Content-Type""\s*content\s*=\s*""text\/html;charset=(.*?)""\s*\/?>", string.Format(@"<meta http-equiv=""Content-Type"" content=""text/html;charset={0}"">", encoding[1].WebName), RegexOptions.IgnoreCase);
+                                                    str = Regex.Replace(str, @"header(""Content-Type:text/html;\s*charset=(.*?)"");", string.Format(@"header(""Content-Type:text/html; charset={0}"");", encoding[1].WebName), RegexOptions.IgnoreCase);
+                                                    break;
 
+                                            }
                                         }
-                                    }                              
-                                });
-                            }
-                            Directory.CreateDirectory(Path.GetDirectoryName(TargetPath));
-                            using (StreamWriter sw = new StreamWriter(TargetPath, false, encoding[1] == Encoding.UTF8 ? new UTF8Encoding(App.Settings.FileConvert.UnicodeAddBom) : encoding[1]))
-                            {
-                                sw.Write(str);
-                                sw.Flush();
-                            }
-                            stopwatch.Stop();
+                                    });
+                                }
+                                Directory.CreateDirectory(Path.GetDirectoryName(TargetPath));
+                                using (StreamWriter sw = new StreamWriter(TargetPath, false, encoding[1] == Encoding.UTF8 ? new UTF8Encoding(App.Settings.FileConvert.UnicodeAddBom) : encoding[1]))
+                                {
+                                    sw.Write(str);
+                                    sw.Flush();
+                                }
+                                stopwatch.Stop();
+                            });
+                            Mouse.OverrideCursor = null;
                         }
                     }
                     break;
                 case false:
                     {
                         stopwatch.Start();
-                        treeview_nodes.ForEach(x => {
+                        treeview_nodes.ForEach(x =>
+                        {
                             if (x.Nodes != null)
                             {
                                 var childlist = GetAllChildNode(x);
-                                childlist.OrderByDescending(y => y.Generation).ToList().ForEach(y => {
+                                childlist.OrderByDescending(y => y.Generation).ToList().ForEach(y =>
+                                {
                                     if (y.IsChecked)
                                     {
                                         string temp = "";
@@ -145,10 +156,11 @@ namespace ConvertZZ.Pages
                     }
                     break;
             }
-            if(App.Settings.Prompt)
+            if (App.Settings.Prompt)
             {
                 MessageBox.Show(string.Format("轉換完成\r\n耗時：{0} ms", stopwatch.ElapsedMilliseconds));
             }
+            ((Button)e.Source).IsEnabled = true;
         }
         private void Button_Clear_Clicked(object sender, RoutedEventArgs e)
         {

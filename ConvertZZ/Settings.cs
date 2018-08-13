@@ -45,7 +45,7 @@ namespace ConvertZZ
             QuickStart = new QuickStart();
             RecognitionEncoding = true;
             Prompt = true;
-            MaxLengthPreview = 16000;
+            MaxLengthPreview = 6;
             VocabularyCorrection = true;
             AssistiveTouch = true;
             HotKey = new HotKey();

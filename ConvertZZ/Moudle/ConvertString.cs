@@ -8,14 +8,17 @@ namespace ConvertZZ.Moudle
         public static string Convert(string origin, int ToChinese)
         {
             if (String.IsNullOrWhiteSpace(origin)) return origin;
+            if (!App.DicLoaded)
+            {
+                System.Threading.SpinWait.SpinUntil(() => App.DicLoaded, 3000);
+                if (!App.DicLoaded)
+                    throw new Exception("詞彙修正的Dictionary載入失敗");
+            }
             switch (ToChinese)
             {
                 case 1:
                     if (App.Settings.VocabularyCorrection)
                     {
-                        System.Threading.SpinWait.SpinUntil(() => App.DicLoaded, 3000);
-                        if (!App.DicLoaded)
-                            throw new Exception("詞彙修正的Dictionary載入失敗");
                         origin = App.ChineseConverter.Convert(origin, true);
                     }
                     origin = ChineseConverter.ToTraditional(origin);
@@ -23,9 +26,6 @@ namespace ConvertZZ.Moudle
                 case 2:
                     if (App.Settings.VocabularyCorrection)
                     {
-                        System.Threading.SpinWait.SpinUntil(() => App.DicLoaded, 3000);
-                        if (!App.DicLoaded)
-                            throw new Exception("詞彙修正的Dictionary載入失敗");
                         origin = App.ChineseConverter.Convert(origin, false);
                     }
                     origin = ChineseConverter.ToSimplified(origin);

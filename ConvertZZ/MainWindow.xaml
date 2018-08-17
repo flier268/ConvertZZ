@@ -50,7 +50,10 @@
             </MenuItem>
             <MenuItem Uid="1" Header="隱藏/顯示懸浮球" Click="MenuItem_Click"/>
             <MenuItem Header="設定" Click="Setting_Click"/>
-            <MenuItem Header="關於ConvertZZ" Click="About_Click"/>
+            <MenuItem Header="說明">
+                <MenuItem Header="關於ConvertZZ" Click="About_Click"/>
+                <MenuItem Header="回報問題" Click="Report_Click"/>
+            </MenuItem>
             <MenuItem Header="結束ConvertZZ" Click="Exit_Click"/>
         </ContextMenu>
     </Window.Resources>

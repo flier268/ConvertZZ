@@ -93,6 +93,11 @@ namespace ConvertZZ
             Window_About window_About = new Window_About();
             window_About.ShowDialog();
         }
+        private void Report_Click(object sender, RoutedEventArgs e)
+        {
+            Window_Report window_Report = new Window_Report();
+            window_Report.ShowDialog();
+        }
         private void Setting_Click(object sender, RoutedEventArgs e)
         {
             UnRegAllHotkey();

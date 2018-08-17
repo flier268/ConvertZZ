@@ -115,6 +115,9 @@
     <Compile Include="Window_DialogHost.xaml.cs">
       <DependentUpon>Window_DialogHost.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Window_Report.xaml.cs">
+      <DependentUpon>Window_Report.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Window_Setting.xaml.cs">
       <DependentUpon>Window_Setting.xaml</DependentUpon>
     </Compile>
@@ -156,6 +159,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Window_DialogHost.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Window_Report.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

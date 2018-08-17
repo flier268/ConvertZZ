@@ -38,7 +38,11 @@ namespace ConvertZZ
                 MessageBox.Show(this, "姓名與標題為必填");
                 return;
             }
-            SendGoogleFormAsync(TextBox_Name.Text, TextBox_Email.Text, TextBox_Title.Text, Textbox_Content.Text);            
+            Button_Send.Content = "發送中...";
+            Button_Send.IsEnabled = false;
+            SendGoogleFormAsync(TextBox_Name.Text, TextBox_Email.Text, TextBox_Title.Text, Textbox_Content.Text);
+            Button_Send.Content = "送出";
+            Button_Send.IsEnabled = true;
         }
         private async void SendGoogleFormAsync(string Name, string Email, string Title, string Content)
         {
@@ -56,7 +60,11 @@ namespace ConvertZZ
                      byte[] response = client.UploadValues(uri, "POST", keyValue);
                      string result = Encoding.UTF8.GetString(response);
                      MessageBox.Show("感謝您的回報");
-                     Close();
+                     Action methodDelegate = delegate ()
+                     {
+                         Close();
+                     };
+                     this.Dispatcher.BeginInvoke(methodDelegate);
                  }
                  catch(Exception e) {
                      MessageBox.Show("回報單傳送失敗，請確認網路連線狀態");

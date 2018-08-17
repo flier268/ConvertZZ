@@ -45,7 +45,7 @@
                         </Paragraph>
                     </FlowDocument>
                 </RichTextBox>
-                <Button Content="送出" Grid.Row="4" Grid.Column="1" Click="Button_Click"/>
+                <Button Name="Button_Send" Content="送出" Grid.Row="4" Grid.Column="1" Click="Button_Click"/>
             </Grid>
         </Grid>
     </materialDesign:Card>

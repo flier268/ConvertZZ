@@ -58,7 +58,9 @@ namespace ConvertZZ
                      MessageBox.Show("感謝您的回報");
                      Close();
                  }
-                 catch(Exception e) { }
+                 catch(Exception e) {
+                     MessageBox.Show("回報單傳送失敗，請確認網路連線狀態");
+                 }
              });
         }
     }

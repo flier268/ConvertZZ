@@ -19,46 +19,40 @@
         </ResourceDictionary>
     </Window.Resources>
     <Border BorderBrush="LightGray" BorderThickness="1,0,1,1">
-    <materialDesign:DialogHost Identifier="RootDialog" SnackbarMessageQueue="{Binding ElementName=MainSnackbar, Path=MessageQueue}">
-        <materialDesign:DrawerHost IsLeftDrawerOpen="{Binding ElementName=MenuToggleButton, Path=IsChecked}">
-            <materialDesign:DrawerHost.LeftDrawerContent>
-                <DockPanel MinWidth="212">
-                    <ToggleButton Style="{StaticResource MaterialDesignHamburgerToggleButton}" 
+        <materialDesign:DialogHost Identifier="RootDialog" SnackbarMessageQueue="{Binding ElementName=MainSnackbar, Path=MessageQueue}">
+            <materialDesign:DrawerHost IsLeftDrawerOpen="{Binding ElementName=MenuToggleButton, Path=IsChecked}">
+                <materialDesign:DrawerHost.LeftDrawerContent>
+                    <DockPanel MinWidth="212">
+                        <ToggleButton Style="{StaticResource MaterialDesignHamburgerToggleButton}" 
                                     DockPanel.Dock="Top"
                                     HorizontalAlignment="Right" Margin="16"
                                     IsChecked="{Binding ElementName=MenuToggleButton, Path=IsChecked, Mode=TwoWay}" />
-                    <ListBox x:Name="DemoItemsListBox" Margin="0 16 0 16" 
+                        <ListBox x:Name="DemoItemsListBox" Margin="0 16 0 16" 
                              PreviewMouseLeftButtonUp="UIElement_OnPreviewMouseLeftButtonUp" SelectionChanged="DemoItemsListBox_SelectionChanged">
-                        <ListBoxItem Uid="Item_File_FileName_Convert" Content="文件/檔名轉換"/>
-                        <ListBoxItem Uid="Item_Clipboard_Convert" Content="剪貼簿轉換"/>
-                        <ListBoxItem Visibility="Collapsed" Uid="Item_AudioTagConvert" Content="Audio標籤轉換"/>
-                        <ListBoxItem Uid="Item_Exit" Content="結束"/>
-                    </ListBox>
-                </DockPanel>
-            </materialDesign:DrawerHost.LeftDrawerContent>
-            <DockPanel>
-                <materialDesign:ColorZone Padding="16" materialDesign:ShadowAssist.ShadowDepth="Depth2"
-                                            Mode="PrimaryMid" DockPanel.Dock="Top" MouseDown="DragMove">
-                    <DockPanel>
-                        <ToggleButton Style="{StaticResource MaterialDesignHamburgerToggleButton}" IsChecked="False"
-                                        x:Name="MenuToggleButton"/>
-                        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="22">ConvertZZ</TextBlock>
+                            <ListBoxItem Uid="Item_File_FileName_Convert" Content="文件/檔名轉換"/>
+                            <ListBoxItem Uid="Item_Clipboard_Convert" Content="剪貼簿轉換"/>
+                            <ListBoxItem Visibility="Collapsed" Uid="Item_AudioTagConvert" Content="Audio標籤轉換"/>
+                            <ListBoxItem Uid="Item_Exit" Content="結束"/>
+                        </ListBox>
                     </DockPanel>
-                </materialDesign:ColorZone>
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-
-                          <Frame x:Name="Frame_Report" NavigationUIVisibility="Hidden" Grid.Row="1" Margin="10" />
-                    
-
-                    <materialDesign:Snackbar MessageQueue="{materialDesign:MessageQueue}" x:Name="MainSnackbar"
-                                            Grid.Row="1" />
-                </Grid>
-            </DockPanel>
-        </materialDesign:DrawerHost>
-    </materialDesign:DialogHost>
+                </materialDesign:DrawerHost.LeftDrawerContent>
+                <DockPanel>
+                    <materialDesign:ColorZone Padding="16" materialDesign:ShadowAssist.ShadowDepth="Depth2" Mode="PrimaryMid" DockPanel.Dock="Top" MouseDown="DragMove">
+                        <DockPanel>
+                            <ToggleButton Style="{StaticResource MaterialDesignHamburgerToggleButton}" IsChecked="False" x:Name="MenuToggleButton"/>
+                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="22">ConvertZZ</TextBlock>
+                        </DockPanel>
+                    </materialDesign:ColorZone>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Frame x:Name="Frame_Report" NavigationUIVisibility="Hidden" Grid.Row="1" Margin="10" />
+                        <materialDesign:Snackbar MessageQueue="{materialDesign:MessageQueue}" x:Name="MainSnackbar" Grid.Row="1" />
+                    </Grid>
+                </DockPanel>
+            </materialDesign:DrawerHost>
+        </materialDesign:DialogHost>
     </Border>
 </Window>

@@ -19,14 +19,14 @@ namespace ConvertZZ.Moudle
                 case 1:
                     if (App.Settings.VocabularyCorrection)
                     {
-                        origin = App.ChineseConverter.Convert(origin, true);
+                        origin = App.ChineseConverter.Convert(ChineseConverter.ToSimplified(origin), true);
                     }
                     origin = ChineseConverter.ToTraditional(origin);
                     break;
                 case 2:
                     if (App.Settings.VocabularyCorrection)
                     {
-                        origin = App.ChineseConverter.Convert(origin, false);
+                        origin = App.ChineseConverter.Convert(ChineseConverter.ToTraditional(origin), false);
                     }
                     origin = ChineseConverter.ToSimplified(origin);
                     break;

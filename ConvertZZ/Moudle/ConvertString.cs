@@ -19,14 +19,14 @@ namespace ConvertZZ.Moudle
                 case 1:
                     if (App.Settings.VocabularyCorrection)
                     {
-                        origin = App.ChineseConverter.Convert(ChineseConverter.ToSimplified(origin), true);
+                        origin = App.ChineseConverter.Convert(origin, true);
                     }
                     origin = ChineseConverter.ToTraditional(origin);
                     break;
                 case 2:
                     if (App.Settings.VocabularyCorrection)
                     {
-                        origin = App.ChineseConverter.Convert(ChineseConverter.ToTraditional(origin), false);
+                        origin = App.ChineseConverter.Convert(origin, false);
                     }
                     origin = ChineseConverter.ToSimplified(origin);
                     break;
@@ -36,7 +36,14 @@ namespace ConvertZZ.Moudle
         public static string Convert(string origin, Encoding[] encoding, int ToChinese)
         {
             if (String.IsNullOrWhiteSpace(origin)) return origin;
-            return encoding[0].GetString(encoding[1].GetBytes(Convert(origin, ToChinese)));
+            switch (ToChinese)
+            {
+                case 1:
+                    return Convert(encoding[0].GetString(encoding[1].GetBytes(Convert(origin, 0))),ToChinese);
+                case 2:                    
+                default:
+                    return encoding[0].GetString(encoding[1].GetBytes(Convert(origin, ToChinese)));
+            }
         }
 
         public static string FileConvert(string origin, Encoding[] encoding, int ToChinese)

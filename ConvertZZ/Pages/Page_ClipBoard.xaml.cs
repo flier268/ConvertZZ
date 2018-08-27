@@ -135,9 +135,9 @@ namespace ConvertZZ.Pages
 
         //API declarations...  
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        static public extern IntPtr SetClipboardViewer(IntPtr hWndNewViewer);
+        private static extern IntPtr SetClipboardViewer(IntPtr hWndNewViewer);
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        static public extern bool ChangeClipboardChain(IntPtr HWnd, IntPtr HWndNext);
+        private static extern bool ChangeClipboardChain(IntPtr HWnd, IntPtr HWndNext);
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern int SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
         #endregion

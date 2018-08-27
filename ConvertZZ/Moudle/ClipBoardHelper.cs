@@ -120,7 +120,7 @@ namespace ConvertZZ
         static byte VK_V = 0x56;
 
         [DllImport("user32.dll")]
-        static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, uint dwExtraInfo);
+        private extern static void keybd_event(byte bVk, byte bScan, uint dwFlags, uint dwExtraInfo);
         #endregion
     }
 }

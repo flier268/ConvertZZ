@@ -66,7 +66,8 @@ namespace ConvertZZ
                      };
                      this.Dispatcher.BeginInvoke(methodDelegate);
                  }
-                 catch(Exception e) {
+                 catch
+                 {
                      MessageBox.Show("回報單傳送失敗，請確認網路連線狀態");
                  }
              });

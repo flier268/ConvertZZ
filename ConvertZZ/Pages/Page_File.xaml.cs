@@ -86,7 +86,7 @@ namespace ConvertZZ.Pages
                                     str = sr.ReadToEnd();
                                     sr.Close();
                                 }
-                                str = ConvertHelper.FileConvert(str, encoding, ToChinese);
+                                str = ConvertHelper.Convert(str, ToChinese);
                                 if (!string.IsNullOrWhiteSpace(App.Settings.FileConvert.FixLabel))
                                 {
                                     var list = App.Settings.FileConvert.FixLabel.Split('|').ToList();

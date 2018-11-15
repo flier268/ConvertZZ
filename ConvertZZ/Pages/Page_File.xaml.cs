@@ -45,7 +45,7 @@ namespace ConvertZZ.Pages
             {
                 case true:
                     {
-                        var temp = FileList.Where(x => x.isChecked).ToList();
+                        var temp = FileList.Where(x => x.IsChecked).ToList();
                         bool replaceALL = false;
                         bool skip = false;
                         foreach (var _temp in temp)
@@ -142,7 +142,7 @@ namespace ConvertZZ.Pages
                                         string newpath = Path.Combine(Path.GetDirectoryName(path), ConvertHelper.Convert(Path.GetFileName(path), encoding, ToChinese));
                                         try
                                         {
-                                            if (y.isFile)
+                                            if (y.IsFile)
                                                 File.Move(path, newpath);
                                             else
                                                 Directory.Move(path, newpath);
@@ -161,7 +161,7 @@ namespace ConvertZZ.Pages
                 MessageBox.Show(string.Format("轉換完成\r\n耗時：{0} ms", stopwatch.ElapsedMilliseconds));
             }
             ((Button)e.Source).IsEnabled = true;
-            listview_SelectionChanged(null, null);
+            Listview_SelectionChanged(null, null);
         }
         private void Button_Clear_Clicked(object sender, RoutedEventArgs e)
         {
@@ -184,7 +184,7 @@ namespace ConvertZZ.Pages
                 {
                     DisplayName = Path.GetFileName(x),
                     IsChecked = true,
-                    isFile = false,
+                    IsFile = false,
                     Nodes = searchAll ? GetChildPath(Path.Combine(path, x), searchAll, filter).Nodes : new List<Node>()
                 });
             });
@@ -193,7 +193,7 @@ namespace ConvertZZ.Pages
                 dir = Directory.GetFiles(path, y);
                 dir.ToList().ForEach(x =>
                 {
-                    temp.Nodes.Add(new Node(temp) { DisplayName = Path.GetFileName(x), isFile = true, IsChecked = true });
+                    temp.Nodes.Add(new Node(temp) { DisplayName = Path.GetFileName(x), IsFile = true, IsChecked = true });
                 });
             });
             temp.Nodes = temp.Nodes.Distinct().ToList();
@@ -234,7 +234,7 @@ namespace ConvertZZ.Pages
                 {
                     treeview_nodes = new List<Node>() { GetChildPath(OutputPath, AccordingToChild, UseFilter ? App.Settings.FileConvert.TypeFilter : "*") };
                     treeview.ItemSources = treeview_nodes;
-                    treeview_CheckedChanged(null);
+                    Treeview_CheckedChanged(null);
                 }
                 else
                 {
@@ -249,7 +249,7 @@ namespace ConvertZZ.Pages
                                     List<string> childFileList = System.IO.Directory.GetFiles(folderpath, filter.Trim(), AccordingToChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).ToList();
                                     childFileList.ForEach(x =>
                                     {
-                                        FileList.Add(new FileList_Line() { isChecked = true, isFile = true, Name = System.IO.Path.GetFileName(x), ParentPath = ParentPath, Path = Path.GetDirectoryName(x) });
+                                        FileList.Add(new FileList_Line() { IsChecked = true, IsFile = true, Name = System.IO.Path.GetFileName(x), ParentPath = ParentPath, Path = Path.GetDirectoryName(x) });
                                     });
                                 });
                             else
@@ -257,14 +257,14 @@ namespace ConvertZZ.Pages
                                 List<string> childFileList = System.IO.Directory.GetFiles(folderpath, "*", AccordingToChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).ToList();
                                 childFileList.ForEach(x =>
                                 {
-                                    FileList.Add(new FileList_Line() { isChecked = true, isFile = true, Name = System.IO.Path.GetFileName(x), ParentPath = ParentPath, Path = Path.GetDirectoryName(x) });
+                                    FileList.Add(new FileList_Line() { IsChecked = true, IsFile = true, Name = System.IO.Path.GetFileName(x), ParentPath = ParentPath, Path = Path.GetDirectoryName(x) });
                                 });
                             }
-                            FileList = new ObservableCollection<FileList_Line>(FileList.OrderBy(x => x.Name).Distinct().OrderBy(x => x.isFile).OrderBy(x => x.Path));
+                            FileList = new ObservableCollection<FileList_Line>(FileList.OrderBy(x => x.Name).Distinct().OrderBy(x => x.IsFile).OrderBy(x => x.Path));
                         }
                         else if (File.Exists(str))
                         {
-                            FileList.Add(new FileList_Line() { isChecked = true, Name = Path.GetFileName(str), ParentPath = ParentPath, Path = Path.GetDirectoryName(str) });
+                            FileList.Add(new FileList_Line() { IsChecked = true, Name = Path.GetFileName(str), ParentPath = ParentPath, Path = Path.GetDirectoryName(str) });
                         }
                     }
                 }
@@ -291,7 +291,7 @@ namespace ConvertZZ.Pages
         public ObservableCollection<FileList_Line> FileList { get => _FileList; set { _FileList = value; OnPropertyChanged(); } }
 
         List<Node> treeview_nodes = new List<Node>();
-        private void treeview_CheckedChanged(CheckBox sender)
+        private void Treeview_CheckedChanged(CheckBox sender)
         {
             StringBuilder sb = new StringBuilder();
             StringBuilder sb2 = new StringBuilder();
@@ -317,8 +317,8 @@ namespace ConvertZZ.Pages
         public class FileList_Line
         {
             public int ID { get; set; }
-            public bool isChecked { get; set; }     //or IsSelected maybe? whichever name you want  
-            public bool isFile { get; set; }
+            public bool IsChecked { get; set; }     //or IsSelected maybe? whichever name you want  
+            public bool IsFile { get; set; }
             public string Name { get; set; }
             public string ParentPath { get; set; }
             public string Path { get; set; }
@@ -344,7 +344,7 @@ namespace ConvertZZ.Pages
             }
             ModeChange(null, null);
         }
-        private void listview_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void Listview_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             treeview_nodes.Clear();
             treeview.ItemSources = null;
@@ -391,17 +391,17 @@ namespace ConvertZZ.Pages
         {
             if (FileMode)
             {
-                switchPage(Page1, Page2);
-                listview_SelectionChanged(null, null);
+                SwitchPage(Page1, Page2);
+                Listview_SelectionChanged(null, null);
             }
             else
             {
-                switchPage(Page2, Page1);
-                treeview_CheckedChanged(null);
+                SwitchPage(Page2, Page1);
+                Treeview_CheckedChanged(null);
             }
         }
         Grid g;
-        private void switchPage(Grid preGide, Grid nextGrid)
+        private void SwitchPage(Grid preGide, Grid nextGrid)
         {
             preGide.Visibility = Visibility.Collapsed;
             g = nextGrid;

@@ -56,17 +56,17 @@
                 </Grid.ColumnDefinitions>
                 <Grid Grid.ColumnSpan="2">
                     <Grid x:Name="Page1">
-                        <ConvertZZ:CheckboxTreeView x:Name="treeview" CheckedChanged="treeview_CheckedChanged" />
+                        <ConvertZZ:CheckboxTreeView x:Name="treeview" CheckedChanged="Treeview_CheckedChanged" />
                     </Grid>
                     <Grid x:Name="Page2" Canvas.Top="600">
                         <ListView x:Name="listview" Grid.Row="1" ItemsSource="{Binding FileList, Mode=TwoWay}" materialDesign:DataGridAssist.CellPadding="4 2 2 2"
-  materialDesign:DataGridAssist.ColumnHeaderPadding="4 5 2 5" Grid.ColumnSpan="2" SelectionChanged="listview_SelectionChanged">
+  materialDesign:DataGridAssist.ColumnHeaderPadding="4 5 2 5" Grid.ColumnSpan="2" SelectionChanged="Listview_SelectionChanged">
                             <ListView.View>
                                 <GridView>
                                     <GridViewColumn Header=" ">
                                         <GridViewColumn.CellTemplate>
                                             <DataTemplate>
-                                                <CheckBox Tag="{Binding ID}" IsChecked="{Binding isChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                                <CheckBox Tag="{Binding ID}" IsChecked="{Binding IsChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                             </DataTemplate>
                                         </GridViewColumn.CellTemplate>
                                     </GridViewColumn>

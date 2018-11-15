@@ -86,7 +86,7 @@ namespace ConvertZZ
         public string DisplayName { get => _DisplayName; set { _DisplayName = value; OnPropertyChanged("DisplayName"); } }
         private bool _IsChecked;
         public bool IsChecked { get => _IsChecked; set { _IsChecked = value; OnPropertyChanged("IsChecked"); } }
-        public bool isFile { get; set; }
+        public bool IsFile { get; set; }
         private Node _Parent;
         public Node Parent {
             get => _Parent;

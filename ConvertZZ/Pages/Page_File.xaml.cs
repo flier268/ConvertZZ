@@ -161,6 +161,7 @@ namespace ConvertZZ.Pages
                 MessageBox.Show(string.Format("轉換完成\r\n耗時：{0} ms", stopwatch.ElapsedMilliseconds));
             }
             ((Button)e.Source).IsEnabled = true;
+            listview_SelectionChanged(null, null);
         }
         private void Button_Clear_Clicked(object sender, RoutedEventArgs e)
         {

@@ -51,11 +51,13 @@ namespace ConvertZZ
                  try
                  {
                      WebClient client = new WebClient();
-                     var keyValue = new NameValueCollection();
-                     keyValue.Add("entry.1633774934", Name);
-                     keyValue.Add("entry.1516933929", Email);
-                     keyValue.Add("entry.586000024", Title);
-                     keyValue.Add("entry.1890682106", Content);
+                     var keyValue = new NameValueCollection
+                     {
+                         { "entry.1633774934", Name },
+                         { "entry.1516933929", Email },
+                         { "entry.586000024", Title },
+                         { "entry.1890682106", Content }
+                     };
                      Uri uri = new Uri("https://docs.google.com/forms/d/e/1FAIpQLSfCOOFaY8vx-isqg6y3J2QXhF88VyVnpW2Cdw-opZZHPMECbg/formResponse");
                      byte[] response = client.UploadValues(uri, "POST", keyValue);
                      string result = Encoding.UTF8.GetString(response);

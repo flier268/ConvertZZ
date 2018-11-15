@@ -114,13 +114,13 @@ namespace ConvertZZ
             }
         }
         #region Win32
-        static uint KEYEVENTF_KEYUP = 2;
-        static byte VK_CONTROL = 0x11;
-        static byte VK_C = 0x43;
-        static byte VK_V = 0x56;
+        static readonly uint KEYEVENTF_KEYUP = 2;
+        static readonly byte VK_CONTROL = 0x11;
+        static readonly byte VK_C = 0x43;
+        static readonly byte VK_V = 0x56;
 
         [DllImport("user32.dll")]
-        private extern static void keybd_event(byte bVk, byte bScan, uint dwFlags, uint dwExtraInfo);
+        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, uint dwExtraInfo);
         #endregion
     }
 }

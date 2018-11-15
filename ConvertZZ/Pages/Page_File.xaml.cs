@@ -172,8 +172,10 @@ namespace ConvertZZ.Pages
 
         private Node GetChildPath(string path, bool searchAll, string filter)
         {
-            Node temp = new Node(null);
-            temp.DisplayName = path;
+            Node temp = new Node(null)
+            {
+                DisplayName = path
+            };
             var dir = Directory.GetDirectories(path);
 
             dir.ToList().ForEach(x =>
@@ -410,17 +412,19 @@ namespace ConvertZZ.Pages
         }
         private void Button_OutputPath_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new CommonOpenFileDialog();
-            dlg.Title = "Select Output folder";
-            dlg.IsFolderPicker = true;
-            dlg.AddToMostRecentlyUsedList = false;
-            dlg.AllowNonFileSystemItems = false;
-            dlg.EnsureFileExists = true;
-            dlg.EnsurePathExists = true;
-            dlg.EnsureReadOnly = false;
-            dlg.EnsureValidNames = true;
-            dlg.Multiselect = false;
-            dlg.ShowPlacesList = true;
+            var dlg = new CommonOpenFileDialog
+            {
+                Title = "Select Output folder",
+                IsFolderPicker = true,
+                AddToMostRecentlyUsedList = false,
+                AllowNonFileSystemItems = false,
+                EnsureFileExists = true,
+                EnsurePathExists = true,
+                EnsureReadOnly = false,
+                EnsureValidNames = true,
+                Multiselect = false,
+                ShowPlacesList = true
+            };
 
             if (dlg.ShowDialog() == CommonFileDialogResult.Ok)
             {

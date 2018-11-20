@@ -31,7 +31,7 @@
                              PreviewMouseLeftButtonUp="UIElement_OnPreviewMouseLeftButtonUp" SelectionChanged="DemoItemsListBox_SelectionChanged">
                             <ListBoxItem Uid="Item_File_FileName_Convert" Content="文件/檔名轉換"/>
                             <ListBoxItem Uid="Item_Clipboard_Convert" Content="剪貼簿轉換"/>
-                            <ListBoxItem Visibility="Collapsed" Uid="Item_AudioTagConvert" Content="Audio標籤轉換"/>
+                            <ListBoxItem Uid="Item_AudioTagConvert" Content="Audio標籤轉換"/>
                             <ListBoxItem Uid="Item_Exit" Content="結束"/>
                         </ListBox>
                     </DockPanel>

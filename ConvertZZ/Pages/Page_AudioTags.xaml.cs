@@ -25,6 +25,8 @@ namespace ConvertZZ.Pages
             InitializeComponent();
             DataContext = this;
             ComboBox_ID3v2_Version_SelectionChanged(Combobox_Encoding_ID3v2, null);
+            Combobox_Filter.ItemsSource = App.Settings.FileConvert.GetFilterList();
+            Combobox_Filter.SelectedIndex = 0;
         }
         private void Page_Loaded(object sender, RoutedEventArgs e)
         {
@@ -74,26 +76,30 @@ namespace ConvertZZ.Pages
                         TagLib.Id3v2.Tag.DefaultEncoding = TagLib.StringType.UTF16LE;
                         break;
                 }
-                var tfile = TagLib.File.Create(Path.Combine(_temp.Path, _temp.Name));
-                tfile.RemoveTags((Enable_ID3v1 ? TagLib.TagTypes.None : TagLib.TagTypes.Id3v1) | (Enable_ID3v2 ? TagLib.TagTypes.None : TagLib.TagTypes.Id3v2));
-                TagLib.Id3v1.Tag t = (TagLib.Id3v1.Tag)tfile.GetTag(TagLib.TagTypes.Id3v1);
-                TagLib.Id3v2.Tag t2 = (TagLib.Id3v2.Tag)tfile.GetTag(TagLib.TagTypes.Id3v2, Enable_ID3v1 ? true : false);
-                
-                GetAllStringProperties(t).ForEach(x =>
+                try
                 {
-                    x.Value = encoding[1].GetString(Encoding.GetEncoding("ISO-8859-1").GetBytes(x.Value));
-                    x.Value_Preview = ConvertHelper.Convert(x.Value, encoding, ToChinese1);
-                    SetPropertiesValue(t, x.TagName, Encoding.GetEncoding("ISO-8859-1").GetString(encoding[1].GetBytes(x.Value_Preview)));
-                });
+                    var tfile = TagLib.File.Create(Path.Combine(_temp.Path, _temp.Name));
+                    tfile.RemoveTags((Enable_ID3v1 ? TagLib.TagTypes.None : TagLib.TagTypes.Id3v1) | (Enable_ID3v2 ? TagLib.TagTypes.None : TagLib.TagTypes.Id3v2));
+                    TagLib.Id3v1.Tag t = (TagLib.Id3v1.Tag)tfile.GetTag(TagLib.TagTypes.Id3v1);
+                    TagLib.Id3v2.Tag t2 = (TagLib.Id3v2.Tag)tfile.GetTag(TagLib.TagTypes.Id3v2, Enable_ID3v1 ? true : false);
 
-                GetAllStringProperties(t2).ForEach(x =>
-                {
-                    x.Value_Preview = ConvertHelper.Convert(x.Value, ToChinese2);
-                    SetPropertiesValue(t2, x.TagName, x.Value_Preview);
-                });
-                t2.Version = (Combobox_ID3v2_Version.Text == "2.3") ? (byte)3 : (byte)4;
-                tfile.Save();
+                    GetAllStringProperties(t).ForEach(x =>
+                    {
+                        x.Value = encoding[1].GetString(Encoding.GetEncoding("ISO-8859-1").GetBytes(x.Value));
+                        x.Value_Preview = ConvertHelper.Convert(x.Value, encoding, ToChinese1);
+                        SetPropertiesValue(t, x.TagName, Encoding.GetEncoding("ISO-8859-1").GetString(encoding[1].GetBytes(x.Value_Preview)));
+                    });
 
+                    GetAllStringProperties(t2).ForEach(x =>
+                    {
+                        x.Value_Preview = ConvertHelper.Convert(x.Value, ToChinese2);
+                        SetPropertiesValue(t2, x.TagName, x.Value_Preview);
+                    });
+                    t2.Version = (Combobox_ID3v2_Version.Text == "2.3") ? (byte)3 : (byte)4;
+                    tfile.Save();
+                }
+                catch (TagLib.UnsupportedFormatException) { MessageBox.Show(string.Format("轉換{0}時出現錯誤，該檔案並非音訊檔", _temp.Name)); }
+                catch { MessageBox.Show(string.Format("轉換{0}時出現未知錯誤", _temp.Name)); }
                 Mouse.OverrideCursor = null;
             }
 
@@ -109,24 +115,41 @@ namespace ConvertZZ.Pages
         {
             if (!File.Exists(path))
                 return;
-            var tfile = TagLib.File.Create(path, TagLib.ReadStyle.None);
-            TagLib.Id3v1.Tag t = (TagLib.Id3v1.Tag)tfile.GetTag(TagLib.TagTypes.Id3v1);
-            TagLib.Id3v2.Tag t2 = (TagLib.Id3v2.Tag)tfile.GetTag(TagLib.TagTypes.Id3v2);
-
-            ID3v1_TagList.Clear();
-            ID3v2_TagList.Clear();
-            GetAllStringProperties(t).ForEach(x =>
+            try
             {
-                x.Value = encoding[1].GetString(Encoding.GetEncoding("ISO-8859-1").GetBytes(x.Value));
-                x.Value_Preview = ConvertHelper.Convert(x.Value, encoding, ToChinese1);
-                ID3v1_TagList.Add(x);
-            });
+                var tfile = TagLib.File.Create(path, TagLib.ReadStyle.None);
+                TagLib.Id3v1.Tag t = (TagLib.Id3v1.Tag)tfile.GetTag(TagLib.TagTypes.Id3v1);
+                TagLib.Id3v2.Tag t2 = (TagLib.Id3v2.Tag)tfile.GetTag(TagLib.TagTypes.Id3v2);
 
-            GetAllStringProperties(t2).ForEach(x =>
+                ID3v1_TagList.Clear();
+                ID3v2_TagList.Clear();
+                GetAllStringProperties(t).ForEach(x =>
+                {
+                    x.Value = encoding[1].GetString(Encoding.GetEncoding("ISO-8859-1").GetBytes(x.Value));
+                    x.Value_Preview = ConvertHelper.Convert(x.Value, encoding, ToChinese1);
+                    ID3v1_TagList.Add(x);
+                });
+
+                GetAllStringProperties(t2).ForEach(x =>
+                {
+                    x.Value_Preview = ConvertHelper.Convert(x.Value, ToChinese2);
+                    ID3v2_TagList.Add(x);
+                });
+            }
+            catch(TagLib.UnsupportedFormatException)
             {
-                x.Value_Preview = ConvertHelper.Convert(x.Value, ToChinese2);
-                ID3v2_TagList.Add(x);
-            });
+                ID3v1_TagList.Clear();
+                ID3v2_TagList.Clear();
+                ID3v1_TagList.Add(new TagList_Line() { TagName = "Error", Value = "非音訊檔" });
+                ID3v2_TagList.Add(new TagList_Line() { TagName = "Error", Value = "非音訊檔" });
+            }
+            catch (System.Exception)
+            {
+                ID3v1_TagList.Clear();
+                ID3v2_TagList.Clear();
+                ID3v1_TagList.Add(new TagList_Line() { TagName = "Error", Value = "未知" });
+                ID3v2_TagList.Add(new TagList_Line() { TagName = "Error", Value = "未知" });
+            }
         }
         private List<TagList_Line> GetAllStringProperties(object obj)
         {
@@ -179,43 +202,37 @@ namespace ConvertZZ.Pages
             OpenFileDialog fileDialog = new OpenFileDialog() { Multiselect = true, CheckFileExists = false, CheckPathExists = true, ValidateNames = false };
             fileDialog.InitialDirectory = App.Settings.FileConvert.DefaultPath;
             fileDialog.FileName = "　";
+            fileDialog.Filter = Combobox_Filter.SelectedValue.ToString();
             if (fileDialog.ShowDialog() == true)
             {
                 string ParentPath = Path.GetDirectoryName(fileDialog.FileNames.First());
                 foreach (string str in fileDialog.FileNames)
                 {
-                    if (Path.GetFileName(str) == "　" && System.IO.Directory.Exists(System.IO.Path.GetDirectoryName(str)))
+                    if (Path.GetFileNameWithoutExtension(str) == "　" && System.IO.Directory.Exists(System.IO.Path.GetDirectoryName(str)))
                     {
                         string folderpath = System.IO.Path.GetDirectoryName(str);
-                        if (UseFilter)
-                            App.Settings.FileConvert.TypeFilter.Split('|').ToList().ForEach(filter =>
-                            {
-                                List<string> childFileList = System.IO.Directory.GetFiles(folderpath, filter.Trim(), AccordingToChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).ToList();
-                                childFileList.ForEach(x =>
-                                {
-                                    FileList.Add(new FileList_Line() { IsChecked = true, IsFile = true, Name = System.IO.Path.GetFileName(x), ParentPath = ParentPath, Path = Path.GetDirectoryName(x) });
-                                });
-                            });
-                        else
+                        App.Settings.FileConvert.GetExtentionArray(Combobox_Filter.Text).ForEach(filter =>
                         {
-                            List<string> childFileList = System.IO.Directory.GetFiles(folderpath, "*", AccordingToChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).ToList();
+                            List<string> childFileList = System.IO.Directory.GetFiles(folderpath, filter.Trim(), AccordingToChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).Where(x => App.Settings.FileConvert.CheckExtension(x, filter)).ToList();
                             childFileList.ForEach(x =>
                             {
-                                FileList.Add(new FileList_Line() { IsChecked = true, IsFile = true, Name = System.IO.Path.GetFileName(x), ParentPath = ParentPath, Path = Path.GetDirectoryName(x) });
+                                FileListTemp.Add(new FileList_Line() { IsChecked = true, IsFile = true, Name = System.IO.Path.GetFileName(x), ParentPath = ParentPath, Path = Path.GetDirectoryName(x) });
                             });
-                        }
-                        FileList = new ObservableCollection<FileList_Line>(FileList.OrderBy(x => x.Name).Distinct().OrderBy(x => x.IsFile).OrderBy(x => x.Path));
+                        });
+                        FileListTemp = new ObservableCollection<FileList_Line>(FileListTemp.OrderBy(x => x.Name).Distinct().OrderBy(x => x.IsFile).OrderBy(x => x.Path));
                     }
                     else if (File.Exists(str))
                     {
-                        FileList.Add(new FileList_Line() { IsChecked = true, Name = Path.GetFileName(str), ParentPath = ParentPath, Path = Path.GetDirectoryName(str) });
+                        FileListTemp.Add(new FileList_Line() { IsChecked = true, Name = Path.GetFileName(str), ParentPath = ParentPath, Path = Path.GetDirectoryName(str) });
                     }
                 }
+                Combobox_Filter_SelectionChanged(Combobox_Filter, null);
             }
         }
         private void Button_Clear_Clicked(object sender, RoutedEventArgs e)
         {
             FileList.Clear();
+            FileListTemp.Clear();
             ID3v1_TagList.Clear();
             ID3v2_TagList.Clear();
             LastPath = "";
@@ -278,8 +295,6 @@ namespace ConvertZZ.Pages
 
         private bool _ID3Mode = true;
         public bool ID3Mode { get => _ID3Mode; set { _ID3Mode = value; OnPropertyChanged(); } }
-        private bool _UseFilter = true;
-        public bool UseFilter { get => _UseFilter; set { _UseFilter = value; OnPropertyChanged(); App.Settings.FileConvert.UseFilter = value; App.Save(); } }
         private bool _AccordingToChild = true;
         public bool AccordingToChild { get => _AccordingToChild; set { _AccordingToChild = value; OnPropertyChanged(); } }
         private ObservableCollection<FileList_Line> _FileList = new ObservableCollection<FileList_Line>();
@@ -327,6 +342,18 @@ namespace ConvertZZ.Pages
             }
             if (Combobox_Encoding_ID3v2.SelectedValue == null)
                 Combobox_Encoding_ID3v2.SelectedItem = "UTF-16";
+        }
+        ObservableCollection<FileList_Line> FileListTemp = new ObservableCollection<FileList_Line>();
+        private void Combobox_Filter_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            ObservableCollection<FileList_Line> temp = new ObservableCollection<FileList_Line>();
+            App.Settings.FileConvert.GetExtentionArray((sender as ComboBox).SelectedValue.ToString()).ForEach(x =>
+            {
+                foreach (var t in FileListTemp)
+                    if (App.Settings.FileConvert.CheckExtension(t.Name, x))
+                        temp.Add(t);
+            });
+            FileList = new ObservableCollection<FileList_Line>(temp.Distinct());
         }
     }
 }

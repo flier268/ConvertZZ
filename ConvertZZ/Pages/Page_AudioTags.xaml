@@ -54,7 +54,6 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="auto"/>
-                    <RowDefinition Height="auto"/>
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition/>
@@ -62,7 +61,11 @@
                 </Grid.ColumnDefinitions>
                 <Grid Grid.ColumnSpan="2">
                     <Grid>
-                        <ListView x:Name="listview" Grid.Row="1" ItemsSource="{Binding FileList, Mode=TwoWay}" materialDesign:DataGridAssist.CellPadding="4 2 2 2" materialDesign:DataGridAssist.ColumnHeaderPadding="4 5 2 5" Grid.ColumnSpan="2" SelectionChanged="Listview_SelectionChanged">
+                        <Grid.RowDefinitions>
+                            <RowDefinition/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <ListView x:Name="listview" ItemsSource="{Binding FileList, Mode=TwoWay}" materialDesign:DataGridAssist.CellPadding="4 2 2 2" materialDesign:DataGridAssist.ColumnHeaderPadding="4 5 2 5" Grid.ColumnSpan="2" SelectionChanged="Listview_SelectionChanged">
                             <ListView.View>
                                 <GridView>
                                     <GridViewColumn Header=" ">
@@ -77,6 +80,12 @@
                                 </GridView>
                             </ListView.View>
                         </ListView>
+                        <DockPanel Grid.Row="1" Margin="5">
+                            <Button HorizontalAlignment="Left" >
+                                <materialDesign:PackIcon Kind="FilterVariant" />
+                            </Button>
+                            <ComboBox Name="Combobox_Filter" SelectionChanged="Combobox_Filter_SelectionChanged" Margin="10,0,0,0"/>
+                        </DockPanel>
                     </Grid>
                 </Grid>
                 <Button Content="瀏覽" Grid.Row="1" VerticalAlignment="Center" Margin="5" Padding="0,5" Click="Button_SelectFile_Clicked"/>

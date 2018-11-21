@@ -8,8 +8,10 @@ namespace ConvertZZ
 {
     using Newtonsoft.Json;
     using Newtonsoft.Json.Converters;
+    using System.Collections.Generic;
     using System.Globalization;
     using System.IO;
+    using System.Linq;
     using System.Text;
 
     public partial class App
@@ -23,7 +25,10 @@ namespace ConvertZZ
             {
                 using (StreamReader streamReader = new StreamReader(FilePath, Encoding.UTF8))
                 {
-                    Settings = Settings.FromJson(streamReader.ReadToEnd());
+                    var temp = Settings.FromJson(streamReader.ReadToEnd());
+                    if (!temp.FileConvert.TypeFilter.Contains("<"))
+                        temp.FileConvert.TypeFilter = new Settings().FileConvert.TypeFilter;
+                    Settings = temp;
                 }
             }
         }
@@ -105,8 +110,7 @@ namespace ConvertZZ
         {
             UnicodeAddBom = false;
             DefaultPath = "!";
-            UseFilter = true;
-            TypeFilter = "*.txt|*.log|*.ini|*.inf|*.bat|*.cmd|*.srt|*.ass|*.lang";
+            TypeFilter = "<任意檔案(*.*)|*.*>/<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音頻文件|*.mp3>";
             FixLabel = ".htm|.html|.shtm|.shtml|.asp|.apsx|.php";
         }
         /// <summary>
@@ -114,11 +118,6 @@ namespace ConvertZZ
         /// </summary>
         [JsonProperty("DefaultPath")]
         public string DefaultPath { get; set; }
-        /// <summary>
-        /// 類型篩選器開啟/關閉
-        /// </summary>
-        [JsonProperty("UseFilter")]
-        public bool UseFilter { get; set; }
         /// <summary>
         /// 類型篩選器
         /// </summary>
@@ -134,6 +133,33 @@ namespace ConvertZZ
         /// </summary>
         [JsonProperty("UnicodeAddBOM")]
         public bool UnicodeAddBom { get; set; }
+        /// <summary>
+        /// 取得副檔名篩選器清單
+        /// </summary>
+        /// <returns></returns>
+        public List<string> GetFilterList()
+        {
+            List<string> filter = new List<string>();
+            System.Text.RegularExpressions.Regex r_filter = new System.Text.RegularExpressions.Regex("<(.*?)>");
+            TypeFilter.Split('/').ToList().ForEach(x =>
+            {
+                filter.Add(r_filter.Match(x).Groups[1].Value);
+            });
+            return filter;
+        }
+        public string GetExtentionString(string str)
+        {
+            return System.Text.RegularExpressions.Regex.Match(str, @".*?\|(.*?)$").Groups[1].Value;
+        }
+        public List<string> GetExtentionArray(string str)
+        {
+            return GetExtentionString(str).Split(';').ToList();
+        }
+        public bool CheckExtension(string filename,string extension)
+        {
+            extension = extension.Trim().Replace(".", "||||||||").Replace("*", ".*?").Replace("||||||||", @"\.") + "$";
+            return System.Text.RegularExpressions.Regex.IsMatch(filename, extension);
+        }
     }
 
     public partial class HotKey

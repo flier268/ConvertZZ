@@ -9,7 +9,6 @@
     mc:Ignorable="d" materialDesign:ShadowAssist.CacheMode="{x:Null}"
     d:DesignHeight="700" d:DesignWidth="1200"
     Title="Page_File">
-
     <Page.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -42,7 +41,6 @@
             <RadioButton x:Name="RadioButton_FileMode" Content="文件模式" IsChecked="{Binding FileMode, Mode=TwoWay}" Checked="ModeChange" GroupName="Mode" VerticalAlignment="Center"/>
             <RadioButton x:Name="RadioButton_FileNameMode" Content="檔名模式" GroupName="Mode" Checked="ModeChange" Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0" />
             <CheckBox Grid.Column="2" IsChecked="{Binding AccordingToChild, Mode=TwoWay}" Content="包含子目錄下所有檔案" Margin="20,0,0,0" />
-            <CheckBox Grid.Column="3" IsChecked="{Binding UseFilter, Mode=TwoWay}" Content="檔名篩選器" Margin="20,0,0,0" />
         </Grid>
         <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1"  Margin="20,4,20,10" Padding="10" Grid.Row="1" VerticalAlignment="Stretch">
             <Grid Grid.Row="1" Width="400">
@@ -59,8 +57,11 @@
                         <ConvertZZ:CheckboxTreeView x:Name="treeview" CheckedChanged="Treeview_CheckedChanged" />
                     </Grid>
                     <Grid x:Name="Page2" Canvas.Top="600">
-                        <ListView x:Name="listview" Grid.Row="1" ItemsSource="{Binding FileList, Mode=TwoWay}" materialDesign:DataGridAssist.CellPadding="4 2 2 2"
-  materialDesign:DataGridAssist.ColumnHeaderPadding="4 5 2 5" Grid.ColumnSpan="2" SelectionChanged="Listview_SelectionChanged">
+                        <Grid.RowDefinitions>
+                            <RowDefinition/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <ListView x:Name="listview" ItemsSource="{Binding FileList, Mode=TwoWay}" materialDesign:DataGridAssist.CellPadding="4 2 2 2" materialDesign:DataGridAssist.ColumnHeaderPadding="4 5 2 5" Grid.ColumnSpan="2" SelectionChanged="Listview_SelectionChanged">
                             <ListView.View>
                                 <GridView>
                                     <GridViewColumn Header=" ">
@@ -75,6 +76,12 @@
                                 </GridView>
                             </ListView.View>
                         </ListView>
+                        <DockPanel Grid.Row="1" Margin="5">
+                            <Button HorizontalAlignment="Left" >
+                                <materialDesign:PackIcon Kind="FilterVariant" />
+                            </Button>
+                            <ComboBox Name="Combobox_Filter" SelectionChanged="Combobox_Filter_SelectionChanged" Margin="10,0,0,0"/>
+                        </DockPanel>
                     </Grid>
                 </Grid>
                 <Button Content="瀏覽" Grid.Row="1" VerticalAlignment="Center" Margin="5" Padding="0,5" Click="Button_SelectFile_Clicked"/>

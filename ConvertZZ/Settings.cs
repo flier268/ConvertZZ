@@ -6,9 +6,11 @@
 
 namespace ConvertZZ
 {
+    using ConvertZZ.Moudle;
     using Newtonsoft.Json;
     using Newtonsoft.Json.Converters;
     using System.Collections.Generic;
+    using System.Collections.ObjectModel;
     using System.Globalization;
     using System.IO;
     using System.Linq;
@@ -110,7 +112,7 @@ namespace ConvertZZ
         {
             UnicodeAddBom = false;
             DefaultPath = "!";
-            TypeFilter = "<任意檔案(*.*)|*.*>/<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音頻文件|*.mp3>";
+            TypeFilter = "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音頻文件|*.mp3>";
             FixLabel = ".htm|.html|.shtm|.shtml|.asp|.apsx|.php";
         }
         /// <summary>
@@ -133,13 +135,16 @@ namespace ConvertZZ
         /// </summary>
         [JsonProperty("UnicodeAddBOM")]
         public bool UnicodeAddBom { get; set; }
+
         /// <summary>
         /// 取得副檔名篩選器清單
         /// </summary>
         /// <returns></returns>
-        public List<string> GetFilterList()
+        public List<string> GetFilterList(bool AddFixedItem = true)
         {
             List<string> filter = new List<string>();
+            if (AddFixedItem)
+                filter.Add("任意檔案(*.*)|*.*");
             System.Text.RegularExpressions.Regex r_filter = new System.Text.RegularExpressions.Regex("<(.*?)>");
             TypeFilter.Split('/').ToList().ForEach(x =>
             {
@@ -147,18 +152,68 @@ namespace ConvertZZ
             });
             return filter;
         }
-        public string GetExtentionString(string str)
+        /// <summary>
+        /// 傳回(.*?)|(.*?)
+        /// </summary>
+        /// <param name="Filter"></param>
+        /// <returns></returns>
+        public string[] SplitFilterString(string Filter)
         {
-            return System.Text.RegularExpressions.Regex.Match(str, @".*?\|(.*?)$").Groups[1].Value;
+            var r = System.Text.RegularExpressions.Regex.Match(Filter, @"(.*?)\|(.*?)$");
+            return new string[] { r.Groups[1].Value, r.Groups[2].Value };
         }
+        /// <summary>
+        /// 傳回用';'分割的List
+        /// </summary>
+        /// <param name="str"></param>
+        /// <returns></returns>
         public List<string> GetExtentionArray(string str)
         {
-            return GetExtentionString(str).Split(';').ToList();
+            return SplitFilterString(str)[1].Split(';').ToList();
         }
-        public bool CheckExtension(string filename,string extension)
+        /// <summary>
+        /// 檢查filename是否符合正則表達式extension
+        /// </summary>
+        /// <param name="filename"></param>
+        /// <param name="extension"></param>
+        /// <returns></returns>
+        public bool CheckExtension(string filename, string extension)
         {
             extension = extension.Trim().Replace(".", "||||||||").Replace("*", ".*?").Replace("||||||||", @"\.") + "$";
             return System.Text.RegularExpressions.Regex.IsMatch(filename, extension);
+        }
+
+        public void CallFilterEditor()
+        {
+            var temp = new ObservableCollection<Window_KeyValueEditor.KeyValueItem>();
+            App.Settings.FileConvert.GetFilterList(false).ForEach(x =>
+            {
+                var _t = App.Settings.FileConvert.SplitFilterString(x);
+                temp.Add(new Window_KeyValueEditor.KeyValueItem() { Key = _t[0], Value = _t[1] });
+            });
+            Window_KeyValueEditor window_KeyValueEditor = new Window_KeyValueEditor(
+                new Window_KeyValueEditor.Button() { Content = "Save" },
+                new Window_KeyValueEditor.Button() { Content = "Close" },
+                temp
+                );
+            window_KeyValueEditor.Button2_Action = new System.Action(() =>
+            {
+                window_KeyValueEditor.Close();
+            });
+            window_KeyValueEditor.Button1_Action = new System.Action(() =>
+            {
+                StringBuilder sb = new StringBuilder();
+                window_KeyValueEditor.KeyValueItems.ToList().ForEach(x =>
+                {
+                    if (sb.Length > 0)
+                        sb.Append("/");
+                    sb.AppendFormat("<{0}|{1}>", x.Key, x.Value);
+                });
+                TypeFilter = sb.ToString();
+                App.Save();
+                window_KeyValueEditor.Close();
+            });
+            window_KeyValueEditor.ShowDialog();
         }
     }
 

@@ -101,7 +101,7 @@ namespace ConvertZZ
         private void Setting_Click(object sender, RoutedEventArgs e)
         {
             UnRegAllHotkey();
-            Window_Setting window_Setting = new Window_Setting() { Owner = this };
+            Window_Setting window_Setting = new Window_Setting();
             window_Setting.ShowDialog();
             RegAllHotkey();
         }

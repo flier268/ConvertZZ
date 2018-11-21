@@ -1,6 +1,5 @@
 ﻿using ConvertZZ.Moudle;
 using Microsoft.Win32;
-using Microsoft.WindowsAPICodePack.Dialogs;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -347,6 +346,12 @@ namespace ConvertZZ.Pages
         private void Combobox_Filter_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             ObservableCollection<FileList_Line> temp = new ObservableCollection<FileList_Line>();
+            if((sender as ComboBox).SelectedValue==null)
+            {
+                FileList = FileListTemp;
+                (sender as ComboBox).SelectedIndex = 0;
+                return;
+            }
             App.Settings.FileConvert.GetExtentionArray((sender as ComboBox).SelectedValue.ToString()).ForEach(x =>
             {
                 foreach (var t in FileListTemp)
@@ -354,6 +359,12 @@ namespace ConvertZZ.Pages
                         temp.Add(t);
             });
             FileList = new ObservableCollection<FileList_Line>(temp.Distinct());
+        }
+
+        private void Button_FilterEditor_Click(object sender, RoutedEventArgs e)
+        {
+            App.Settings.FileConvert.CallFilterEditor();
+            Combobox_Filter.ItemsSource = App.Settings.FileConvert.GetFilterList();
         }
     }
 }

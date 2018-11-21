@@ -15,8 +15,6 @@
             <ColumnDefinition Width="1*"/>
             <ColumnDefinition Width="2*"/>
         </Grid.ColumnDefinitions>
-
-
         <materialDesign:Card Padding="8" Margin="30,20,10,10">
             <StackPanel>
                 <TextBlock Margin="16 16 12 8" FontSize="16" Text="全域設定"/>
@@ -168,7 +166,12 @@
                         <RowDefinition/>
                     </Grid.RowDefinitions>
                     <TextBox Grid.Row="0" materialDesign:HintAssist.Hint="預設路徑" Text="{Binding DefaultPath}" Style="{StaticResource MaterialDesignFloatingHintTextBox}" />
-                    <TextBox Grid.Row="1" materialDesign:HintAssist.Hint="副檔名篩選" Text="{Binding TypeFilter}" Style="{StaticResource MaterialDesignFloatingHintTextBox}" />
+                    <DockPanel Grid.Row="1">
+                        <TextBox materialDesign:HintAssist.Hint="副檔名篩選器" Text="{Binding TypeFilter}" MaxWidth="600" IsEnabled="False" Style="{StaticResource MaterialDesignFloatingHintTextBox}" />
+                        <Button HorizontalAlignment="Right" Margin="10 0 0 0" Click="Button_FilterEditor_Click" >
+                            <materialDesign:PackIcon Kind="FilterVariant" />
+                        </Button>
+                    </DockPanel>
                     <TextBox Grid.Row="2" materialDesign:HintAssist.Hint="修正編碼標籤" Text="{Binding FixLabel}" Style="{StaticResource MaterialDesignFloatingHintTextBox}" />
                     <DockPanel Grid.Row="3" Height="35">
                         <Label Content="UTF8加入BOM檔首" VerticalAlignment="Bottom"/>

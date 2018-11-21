@@ -77,7 +77,7 @@
                             </ListView.View>
                         </ListView>
                         <DockPanel Grid.Row="1" Margin="5">
-                            <Button HorizontalAlignment="Left" >
+                            <Button HorizontalAlignment="Left" Click="Button_FilterEditor_Click" >
                                 <materialDesign:PackIcon Kind="FilterVariant" />
                             </Button>
                             <ComboBox Name="Combobox_Filter" SelectionChanged="Combobox_Filter_SelectionChanged" Margin="10,0,0,0"/>

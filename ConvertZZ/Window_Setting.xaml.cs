@@ -177,6 +177,13 @@ namespace ConvertZZ
         public KeyValuePair<string, string> Quick_L5 { get => _Quick_L5; set { _Quick_L5 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_L6 { get => _Quick_L6; set { _Quick_L6 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_R1 { get => _Quick_R1; set { _Quick_R1 = value; OnPropertyChanged(); SaveSetting(); } }
+
+        private void Button_FilterEditor_Click(object sender, RoutedEventArgs e)
+        {
+            App.Settings.FileConvert.CallFilterEditor();
+            TypeFilter = App.Settings.FileConvert.TypeFilter;
+        }
+
         public KeyValuePair<string, string> Quick_R2 { get => _Quick_R2; set { _Quick_R2 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_R3 { get => _Quick_R3; set { _Quick_R3 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_R4 { get => _Quick_R4; set { _Quick_R4 = value; OnPropertyChanged(); SaveSetting(); } }

@@ -102,6 +102,9 @@
     <Compile Include="Moudle\Hotkey.cs" />
     <Compile Include="Moudle\TransferEncodeHelper.cs" />
     <Compile Include="Moudle\UpdateChecker.cs" />
+    <Compile Include="Moudle\Window_KeyValueEditor.xaml.cs">
+      <DependentUpon>Window_KeyValueEditor.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Moudle\Window_MessageBoxEx.xaml.cs">
       <DependentUpon>Window_MessageBoxEx.xaml</DependentUpon>
     </Compile>
@@ -144,6 +147,9 @@
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Page Include="Moudle\Window_KeyValueEditor.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Moudle\Window_MessageBoxEx.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>

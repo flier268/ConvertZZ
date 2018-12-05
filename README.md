@@ -13,6 +13,7 @@
 * 仿造自ConvertZ，因此功能近似ConvertZ，修正ConvertZ的部分BUG
 * 具有懸浮球，使用自定的手勢，使用各種快捷功能
 * 漂亮的UI
+* ID3 tag轉換
 
 ## Download
 * [Release](https://github.com/flier268/ConvertZZ/releases "Release")

@@ -46,7 +46,7 @@
                 <ColumnDefinition Width="auto"/>
             </Grid.ColumnDefinitions>
             <RadioButton x:Name="RadioButton_ID3" Content="ID3" IsChecked="{Binding ID3Mode, Mode=TwoWay}" Checked="ModeChange" GroupName="Mode" VerticalAlignment="Center"/>
-            <RadioButton x:Name="RadioButton_APE" Content="APE" Checked="ModeChange" GroupName="Mode" VerticalAlignment="Center" Grid.Column="1" />
+            <RadioButton x:Name="RadioButton_APE" Content="APE" IsEnabled="False" Checked="ModeChange" GroupName="Mode" VerticalAlignment="Center" Grid.Column="1" />
             <CheckBox Grid.Column="2" IsChecked="{Binding AccordingToChild, Mode=TwoWay}" Content="包含子目錄下所有檔案" Margin="20,0,0,0" />
         </Grid>
         <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1"  Margin="20,4,20,10" Padding="10" Grid.Row="1" VerticalAlignment="Stretch">

@@ -49,12 +49,17 @@ namespace ConvertZZ.Pages
                         var temp = FileList.Where(x => x.IsChecked).ToList();
                         bool replaceALL = false;
                         bool skip = false;
+                        Mouse.OverrideCursor = Cursors.Wait;
+                        stopwatch.Start();
                         foreach (var _temp in temp)
                         {
                             string TargetPath = Path.Combine(Path.Combine(OutputPath, _temp.Path.Substring(_temp.ParentPath.Length + (_temp.Path.Length == _temp.ParentPath.Length ? 0 : 1))), _temp.Name);
                             if (!replaceALL && File.Exists(TargetPath))
                             {
                                 if (!skip)
+                                {
+                                    Mouse.OverrideCursor = null;
+                                    stopwatch.Stop();
                                     switch (Moudle.Window_MessageBoxEx.Show(string.Format("{0}發生檔名衝突，是否取代?", _temp.Name), "警告", "取代", "略過", "取消", "套用到全部"))
                                     {
                                         case Moudle.Window_MessageBoxEx.MessageBoxExResult.A:
@@ -74,13 +79,14 @@ namespace ConvertZZ.Pages
                                         case Moudle.Window_MessageBoxEx.MessageBoxExResult.NONE:
                                             continue;
                                     }
+                                    Mouse.OverrideCursor = Cursors.Wait;
+                                    stopwatch.Start();
+                                }
                                 else
                                     continue;
                             }
-                            Mouse.OverrideCursor = Cursors.Wait;
                             await Task.Run(() =>
                             {
-                                stopwatch.Start();
                                 string str = "";
                                 using (StreamReader sr = new StreamReader(Path.Combine(_temp.Path, _temp.Name), encoding[0], false))
                                 {
@@ -120,10 +126,10 @@ namespace ConvertZZ.Pages
                                     sw.Write(str);
                                     sw.Flush();
                                 }
-                                stopwatch.Stop();
                             });
-                            Mouse.OverrideCursor = null;
                         }
+                        stopwatch.Stop();
+                        Mouse.OverrideCursor = null;
                     }
                     break;
                 case false:

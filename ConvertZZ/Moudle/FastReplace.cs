@@ -50,7 +50,7 @@ namespace ConvertZZ
             {
 
                 sb.Append(source.Substring(indexPass, indexNow - indexPass));
-                var _dic = Dic_Grouped[Char.Parse(source.Substring(indexNow, 1))];
+                var _dic = Dic_Grouped[source[indexNow]];
                 bool replaced = false;
                 foreach (var a in _dic)
                 {

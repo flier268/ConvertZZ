@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
+
 namespace ConvertZZ
 {
     /// <summary>
@@ -42,7 +43,7 @@ namespace ConvertZZ
                 bool EncodingSetted = false;
                 int ToChinese = 0;
                 string path1 = null, path2 = null;
-                Regex Regex_path1 = null, Regex_path2 = null;
+                Regex Regex_path1 = null;
                 int VocabularyCorrection = -1;
                 for (int i = 0; i < e.Args.Length; i++)
                 {
@@ -110,7 +111,6 @@ namespace ConvertZZ
                             else
                             {
                                 path2 = e.Args[i];
-                                Regex_path2 = new Regex(path2.Replace("*", "(.*?)") + "$");
                             }
                             break;
                     }

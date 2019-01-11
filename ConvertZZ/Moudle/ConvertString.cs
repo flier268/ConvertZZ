@@ -5,7 +5,14 @@ namespace ConvertZZ.Moudle
 {
     public class ConvertHelper
     {
-        public static string Convert(string origin, int ToChinese)
+        /// <summary>
+        /// 轉換文字
+        /// </summary>
+        /// <param name="origin">原始文字</param>
+        /// <param name="ToChinese">0: 不轉換 1: 簡體轉繁體 2:繁體轉簡體</param>
+        /// <param name="VocabularyCorrection">-1: 依照設定值變動 0:不使用辭典轉換 1:使用辭典轉換</param>
+        /// <returns></returns>
+        public static string Convert(string origin, int ToChinese, int VocabularyCorrection = -1)
         {
             if (String.IsNullOrWhiteSpace(origin)) return origin;
             if (!App.DicLoaded)
@@ -17,14 +24,14 @@ namespace ConvertZZ.Moudle
             switch (ToChinese)
             {
                 case 1:
-                    if (App.Settings.VocabularyCorrection)
+                    if ((App.Settings.VocabularyCorrection && VocabularyCorrection != 0) || VocabularyCorrection == 1)
                     {
                         origin = App.ChineseConverter.Convert(origin, true);
                     }
                     origin = ChineseConverter.ToTraditional(origin);
                     break;
                 case 2:
-                    if (App.Settings.VocabularyCorrection)
+                    if ((App.Settings.VocabularyCorrection && VocabularyCorrection != 0) || VocabularyCorrection == 1)
                     {
                         origin = App.ChineseConverter.Convert(origin, false);
                     }
@@ -33,20 +40,28 @@ namespace ConvertZZ.Moudle
             }
             return origin;
         }
-        public static string Convert(string origin, Encoding[] encoding, int ToChinese)
+        /// <summary>
+        /// 轉換文字
+        /// </summary>
+        /// <param name="origin">原始文字</param>
+        /// <param name="encoding">encoding[0]:來源編碼  encoding[1]:目標編碼</param>
+        /// <param name="ToChinese">0: 不轉換 1: 簡體轉繁體 2:繁體轉簡體</param>
+        /// <param name="VocabularyCorrection">-1: 依照設定值變動 0:不使用辭典轉換 1:使用辭典轉換</param>
+        /// <returns></returns>
+        public static string Convert(string origin, Encoding[] encoding, int ToChinese, int VocabularyCorrection = -1)
         {
             if (String.IsNullOrWhiteSpace(origin)) return origin;
             switch (ToChinese)
             {
                 case 1:
-                    return Convert(encoding[0].GetString(encoding[1].GetBytes(Convert(origin, 0))),ToChinese);
+                    return Convert(encoding[0].GetString(encoding[1].GetBytes(Convert(origin, 0, VocabularyCorrection))),ToChinese);
                 case 2:                    
                 default:
-                    return encoding[0].GetString(encoding[1].GetBytes(Convert(origin, ToChinese)));
+                    return encoding[0].GetString(encoding[1].GetBytes(Convert(origin, ToChinese, VocabularyCorrection)));
             }
         }
 
-        public static string FileConvert(string origin, Encoding[] encoding, int ToChinese)
+        public static string FileConvert(string origin, Encoding[] encoding, int ToChinese, int VocabularyCorrection = -1)
         {
             if (ToChinese == 0)
             {
@@ -62,9 +77,9 @@ namespace ConvertZZ.Moudle
                 origin = sb.ToString();
             }
             if (encoding[1] == Encoding.Default || encoding[1] == Encoding.UTF8 || encoding[1] == Encoding.Unicode || encoding[1] == Encoding.GetEncoding("UnicodeFFFE") || encoding[0] == encoding[1])
-                return Convert(origin, ToChinese);
+                return Convert(origin, ToChinese, VocabularyCorrection);
             else
-                return Convert(origin, new Encoding[2] { Encoding.Default, encoding[1] }, ToChinese);
+                return Convert(origin, new Encoding[2] { Encoding.Default, encoding[1] }, ToChinese, VocabularyCorrection);
         }
     }
 }

@@ -164,7 +164,7 @@ namespace ConvertZZ
                 {
                     using (Stream stream = new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.Read))
                     {
-                        using (StreamReader streamReader = new StreamReader(stream))
+                        using (StreamReader streamReader = new StreamReader(stream, encoding[0], false))
                         {
                             s = streamReader.ReadToEnd();
                         }
@@ -187,7 +187,7 @@ namespace ConvertZZ
                     s = ConvertHelper.FileConvert(s, encoding, ToChinese, VocabularyCorrection);
                     if (ModeIsOneFile)
                     {
-                        using (StreamWriter streamWriter = new StreamWriter(path2))
+                        using (StreamWriter streamWriter = new StreamWriter(path2, false, encoding[1] == Encoding.UTF8 ? new UTF8Encoding(App.Settings.FileConvert.UnicodeAddBom) : encoding[1]))
                         {
                             streamWriter.Write(s);
                             streamWriter.Flush();
@@ -210,7 +210,7 @@ namespace ConvertZZ
                                 }
 
                                 Directory.CreateDirectory(Path.GetDirectoryName(@string));
-                                using (StreamWriter streamWriter = new StreamWriter(@string))
+                                using (StreamWriter streamWriter = new StreamWriter(@string, false, encoding[1] == Encoding.UTF8 ? new UTF8Encoding(App.Settings.FileConvert.UnicodeAddBom) : encoding[1]))
                                 {
                                     streamWriter.Write(s);
                                     streamWriter.Flush();
@@ -219,7 +219,7 @@ namespace ConvertZZ
                             else
                             {
                                 Directory.CreateDirectory(Path.GetDirectoryName(path2));
-                                using (StreamWriter streamWriter = new StreamWriter(Path.Combine(Path.GetDirectoryName(path2), Path.GetFileName(f))))
+                                using (StreamWriter streamWriter = new StreamWriter(Path.Combine(Path.GetDirectoryName(path2), Path.GetFileName(f)), false, encoding[1] == Encoding.UTF8 ? new UTF8Encoding(App.Settings.FileConvert.UnicodeAddBom) : encoding[1]))
                                 {
                                     streamWriter.Write(s);
                                     streamWriter.Flush();

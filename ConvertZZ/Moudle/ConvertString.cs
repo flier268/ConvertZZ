@@ -17,7 +17,7 @@ namespace ConvertZZ.Moudle
             if (String.IsNullOrWhiteSpace(origin)) return origin;
             if (!App.DicLoaded)
             {
-                System.Threading.SpinWait.SpinUntil(() => App.DicLoaded, 3000);
+                System.Threading.SpinWait.SpinUntil(() => App.DicLoaded, 10000);
                 if (!App.DicLoaded)
                     throw new Exception("詞彙修正的Dictionary載入失敗");
             }

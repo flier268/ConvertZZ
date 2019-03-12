@@ -1,6 +1,7 @@
 ﻿using ConvertZZ.Moudle;
 using Microsoft.Win32;
 using Microsoft.WindowsAPICodePack.Dialogs;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -10,10 +11,12 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace ConvertZZ.Pages
 {
@@ -38,19 +41,45 @@ namespace ConvertZZ.Pages
         /// 輸出簡繁轉換：0:一般  1:繁體中文 2:簡體中文
         /// </summary>
         int ToChinese = 0;
+
+        private void ResetConvertButton(Button button)
+        {
+            DismissButtonProgress = 0;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                Mouse.OverrideCursor = null;
+                button.Content = "轉換";
+                Listview_SelectionChanged(null, null);
+            }), DispatcherPriority.SystemIdle);
+        }
+
+        CancellationTokenSource cts = new CancellationTokenSource();
         private async void Button_Convert_ClickAsync(object sender, RoutedEventArgs e)
         {
-            ((Button)e.Source).IsEnabled = false;
+            if ((string)((Button)e.Source).Content == "停止中...")
+                return;
+            else if ((string)((Button)e.Source).Content == "停止")
+            {
+                cts.Cancel();
+                ((Button)e.Source).Content = "停止中...";
+                return;
+            }
+            else if ((string)((Button)e.Source).Content == "轉換")
+            {
+                cts = new CancellationTokenSource();
+                ((Button)e.Source).Content = "停止";
+            }
             Stopwatch stopwatch = new Stopwatch();
             switch (FileMode)
             {
                 case true:
                     {
+                        FileList.ToList().ForEach(x => x.IsReplace = false);
                         var temp = FileList.Where(x => x.IsChecked).ToList();
+                        double count_total = temp.Count, count_current = 0.0;
+                        DismissButtonProgress = 0;
                         bool replaceALL = false;
                         bool skip = false;
-                        Mouse.OverrideCursor = Cursors.Wait;
-                        stopwatch.Start();
                         foreach (var _temp in temp)
                         {
                             string TargetPath = Path.Combine(Path.Combine(OutputPath, _temp.Path.Substring(_temp.ParentPath.Length + (_temp.Path.Length == _temp.ParentPath.Length ? 0 : 1))), _temp.Name);
@@ -58,8 +87,6 @@ namespace ConvertZZ.Pages
                             {
                                 if (!skip)
                                 {
-                                    Mouse.OverrideCursor = null;
-                                    stopwatch.Stop();
                                     switch (Moudle.Window_MessageBoxEx.Show(string.Format("{0}發生檔名衝突，是否取代?", _temp.Name), "警告", "取代", "略過", "取消", "套用到全部"))
                                     {
                                         case Moudle.Window_MessageBoxEx.MessageBoxExResult.A:
@@ -67,6 +94,8 @@ namespace ConvertZZ.Pages
                                         case Moudle.Window_MessageBoxEx.MessageBoxExResult.B:
                                             continue;
                                         case Moudle.Window_MessageBoxEx.MessageBoxExResult.C:
+                                        case Moudle.Window_MessageBoxEx.MessageBoxExResult.CO:
+                                            DismissButtonProgress = 100.0;
                                             return;
                                         case Moudle.Window_MessageBoxEx.MessageBoxExResult.AO:
                                             replaceALL = true;
@@ -74,17 +103,24 @@ namespace ConvertZZ.Pages
                                         case Moudle.Window_MessageBoxEx.MessageBoxExResult.BO:
                                             skip = true;
                                             continue;
-                                        case Moudle.Window_MessageBoxEx.MessageBoxExResult.CO:
-                                            return;
                                         case Moudle.Window_MessageBoxEx.MessageBoxExResult.NONE:
                                             continue;
                                     }
-                                    Mouse.OverrideCursor = Cursors.Wait;
-                                    stopwatch.Start();
                                 }
                                 else
                                     continue;
                             }
+                            _temp.IsReplace = true;
+                        }
+                        temp = FileList.Where(x => x.IsChecked && x.IsReplace).ToList();
+                        count_current = count_total - temp.Count;
+                        DismissButtonProgress = count_current / count_total * 100.0;
+                        Mouse.OverrideCursor = Cursors.Wait;
+                        stopwatch.Start();
+                        foreach (var _temp in temp)
+                        {
+                            if (cts.IsCancellationRequested) { ResetConvertButton((Button)e.Source); return; }
+                            string TargetPath = Path.Combine(Path.Combine(OutputPath, _temp.Path.Substring(_temp.ParentPath.Length + (_temp.Path.Length == _temp.ParentPath.Length ? 0 : 1))), _temp.Name);
                             await Task.Run(() =>
                             {
                                 string str = "";
@@ -120,14 +156,18 @@ namespace ConvertZZ.Pages
                                         }
                                     });
                                 }
+                                if (cts.IsCancellationRequested) { ResetConvertButton((Button)e.Source); return; }
                                 Directory.CreateDirectory(Path.GetDirectoryName(TargetPath));
                                 using (StreamWriter sw = new StreamWriter(TargetPath, false, encoding[1] == Encoding.UTF8 ? new UTF8Encoding(App.Settings.FileConvert.UnicodeAddBom) : encoding[1]))
                                 {
                                     sw.Write(str);
                                     sw.Flush();
                                 }
-                            });
+                            }, cts.Token);
+                            count_current++;
+                            DismissButtonProgress = count_current / count_total * 100.0;
                         }
+                        DismissButtonProgress = 0.0;
                         stopwatch.Stop();
                         Mouse.OverrideCursor = null;
                     }
@@ -167,7 +207,7 @@ namespace ConvertZZ.Pages
             {
                 new Toast(string.Format("轉換完成\r\n耗時：{0} ms", stopwatch.ElapsedMilliseconds)).Show();
             }
-            ((Button)e.Source).IsEnabled = true;
+            ((Button)e.Source).Content = "轉換";
             Listview_SelectionChanged(null, null);
         }
         private void Button_Clear_Clicked(object sender, RoutedEventArgs e)
@@ -281,7 +321,8 @@ namespace ConvertZZ.Pages
         public bool AccordingToChild { get => _AccordingToChild; set { _AccordingToChild = value; OnPropertyChanged(); } }
         private string _OutputPath = "";
         public string OutputPath { get => _OutputPath; set { _OutputPath = value; OnPropertyChanged(); } }
-
+        private double _DismissButtonProgress;
+        public double DismissButtonProgress { get => _DismissButtonProgress; set { _DismissButtonProgress = value; OnPropertyChanged(); } }
 
         private ObservableCollection<FileList_Line> _FileList = new ObservableCollection<FileList_Line>();
 
@@ -292,11 +333,13 @@ namespace ConvertZZ.Pages
         {
             StringBuilder sb = new StringBuilder();
             StringBuilder sb2 = new StringBuilder();
-            treeview_nodes.ForEach(x => {
+            treeview_nodes.ForEach(x =>
+            {
                 if (x.Nodes != null)
                 {
                     var childlist = GetAllChildNode(x);
-                    childlist.OrderByDescending(y => y.Generation).ToList().ForEach(y => {
+                    childlist.OrderByDescending(y => y.Generation).ToList().ForEach(y =>
+                    {
                         if (y.IsChecked)
                         {
                             string temp = "";
@@ -319,6 +362,7 @@ namespace ConvertZZ.Pages
             public string Name { get; set; }
             public string ParentPath { get; set; }
             public string Path { get; set; }
+            public bool IsReplace { get; set; }
         }
         public event PropertyChangedEventHandler PropertyChanged;
         protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -453,5 +497,4 @@ namespace ConvertZZ.Pages
             Combobox_Filter.ItemsSource = App.Settings.FileConvert.GetFilterList();
         }
     }
-
 }

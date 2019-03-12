@@ -1,0 +1,14 @@
+﻿<Window x:Class="ConvertZZ.Moudle.Toast"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" Loaded="Window_Loaded" MouseDown="Window_MouseDown"
+        Title="Toast" MinHeight="100" MinWidth="200"  Background="Transparent" AllowsTransparency="True" WindowStartupLocation="CenterScreen" WindowStyle="None" Topmost="True" SizeToContent="WidthAndHeight" Foreground="#00000000" ResizeMode="NoResize">
+    <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="3"  VerticalAlignment="Stretch">
+        <Grid>
+            <Label Content="{Binding Message,Mode=TwoWay}" FontWeight="Black" Margin="20" FontSize="13" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+        </Grid>
+    </materialDesign:Card>
+</Window>

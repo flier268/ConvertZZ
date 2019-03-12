@@ -100,6 +100,9 @@
     <Compile Include="Moudle\EncodingAnalyzer.cs" />
     <Compile Include="Moudle\FastReplace.cs" />
     <Compile Include="Moudle\Hotkey.cs" />
+    <Compile Include="Moudle\Toast.xaml.cs">
+      <DependentUpon>Toast.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Moudle\TransferEncodeHelper.cs" />
     <Compile Include="Moudle\UpdateChecker.cs" />
     <Compile Include="Moudle\Window_KeyValueEditor.xaml.cs">
@@ -147,6 +150,9 @@
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Page Include="Moudle\Toast.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Moudle\Window_KeyValueEditor.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>

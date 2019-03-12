@@ -483,8 +483,8 @@ namespace ConvertZZ
                     if (App.Settings.Prompt && !(((MenuItem)sender).Visibility == Visibility.Hidden && (App.Settings.HotKey.AutoCopy || App.Settings.HotKey.AutoPaste)))
                     {
                         ContextMenu NotifyIconMenu = (ContextMenu)this.FindResource("NotifyIconMenu");
-                        string ItemInfo = ((MenuItem)GetByUid(NotifyIconMenu, ((MenuItem)sender).Uid)).Header.ToString();                        
-                        MessageBox.Show(this, String.Format("{0}轉換完成\r\n耗時：{1} ms", ItemInfo, sw.ElapsedMilliseconds));
+                        string ItemInfo = ((MenuItem)GetByUid(NotifyIconMenu, ((MenuItem)sender).Uid)).Header.ToString();
+                        new Toast(string.Format("轉換完成\r\n耗時：{0} ms", sw.ElapsedMilliseconds)).Show();
                     }
                     break;
             }

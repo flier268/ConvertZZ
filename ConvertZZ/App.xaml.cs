@@ -233,6 +233,12 @@ namespace ConvertZZ
             }
             else
             {
+                if ((Process.GetProcessesByName(Process.GetCurrentProcess().ProcessName).Length > 1))
+                {
+                    MessageBox.Show("應用程式 " + Process.GetCurrentProcess().ProcessName + " 己在執行中，請先關閉舊視窗。", "警告", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Shutdown(1);
+                    return;
+                }
                 nIcon.Icon = ConvertZZ.Properties.Resources.icon;
                 nIcon.Visible = true;
                 if (Settings.CheckVersion)

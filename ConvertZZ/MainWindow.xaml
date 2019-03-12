@@ -36,6 +36,9 @@
                 <MenuItem Uid="zb1" Header="Unicode>GBK" Click="MenuItem_Click"/>
                 <MenuItem Uid="zb2" Header="Unicode>Big5" Click="MenuItem_Click"/>
                 <MenuItem Uid="zb3" Header="Unicode>Shift-JIS" Click="MenuItem_Click"/>
+                <MenuItem Uid="zb4" Header="GBK>Unicode" Click="MenuItem_Click"/>
+                <MenuItem Uid="zb5" Header="Big5>Unicode" Click="MenuItem_Click"/>
+                <MenuItem Uid="zb6" Header="Shift-JIS>Unicode" Click="MenuItem_Click"/>
                 <Separator/>
                 <MenuItem Uid="zc1" Header="Shift-JIS>GBK" Click="MenuItem_Click"/>
                 <MenuItem Uid="zc2" Header="Shift-JIS>Big5" Click="MenuItem_Click"/>

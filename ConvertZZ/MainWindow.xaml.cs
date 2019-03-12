@@ -430,6 +430,16 @@ namespace ConvertZZ
                 case "zb3":
                     clip = Encoding.Default.GetString(Encoding.GetEncoding("Shift-JIS").GetBytes(clip));                    
                     break;
+                case "zb4":
+                    //GBK>Unicode
+                    clip = Encoding.GetEncoding("GBK").GetString(Encoding.Default.GetBytes(clip));
+                    break;
+                case "zb5":
+                    clip = Encoding.GetEncoding("BIG5").GetString(Encoding.Default.GetBytes(clip));
+                    break;
+                case "zb6":
+                    clip = Encoding.GetEncoding("Shift-JIS").GetString(Encoding.Default.GetBytes(clip));
+                    break;
                 case "zc1":
                     //Shift-JIS>GBK           
                     clip = Encoding.GetEncoding("shift_jis").GetString(Encoding.GetEncoding("GBK").GetBytes(clip));

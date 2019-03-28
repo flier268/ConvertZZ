@@ -82,5 +82,15 @@ namespace ConvertZZ
             if(e.LeftButton== MouseButtonState.Pressed)
             this.DragMove();
         }
+
+        private void Button_Minimize(object sender, RoutedEventArgs e)
+        {
+            WindowState = WindowState.Minimized;
+        }
+
+        private void Button_Close(object sender, RoutedEventArgs e)
+        {
+            this.Close();
+        }
     }
 }

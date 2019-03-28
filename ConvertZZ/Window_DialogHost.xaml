@@ -36,14 +36,26 @@
                         </ListBox>
                     </DockPanel>
                 </materialDesign:DrawerHost.LeftDrawerContent>
-                <DockPanel>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
                     <materialDesign:ColorZone Padding="16" materialDesign:ShadowAssist.ShadowDepth="Depth2" Mode="PrimaryMid" DockPanel.Dock="Top" MouseDown="DragMove">
                         <DockPanel>
                             <ToggleButton Style="{StaticResource MaterialDesignHamburgerToggleButton}" IsChecked="False" x:Name="MenuToggleButton"/>
                             <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="22">ConvertZZ</TextBlock>
                         </DockPanel>
                     </materialDesign:ColorZone>
-                    <Grid>
+                    <DockPanel HorizontalAlignment="Right" VerticalAlignment="Top">
+                        <Button Click="Button_Minimize" BorderBrush="Transparent" Background="Transparent">
+                            <materialDesign:PackIcon Kind="WindowMinimize" />
+                        </Button>
+                        <Button Click="Button_Close" BorderBrush="Transparent" Background="Transparent">
+                            <materialDesign:PackIcon Kind="CloseOutline" Width="25" Height="25" />
+                        </Button>
+                    </DockPanel>
+                    <Grid Grid.Row="1">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
@@ -51,7 +63,7 @@
                         <Frame x:Name="Frame_Report" NavigationUIVisibility="Hidden" Grid.Row="1" Margin="10" />
                         <materialDesign:Snackbar MessageQueue="{materialDesign:MessageQueue}" x:Name="MainSnackbar" Grid.Row="1" />
                     </Grid>
-                </DockPanel>
+                </Grid>
             </materialDesign:DrawerHost>
         </materialDesign:DialogHost>
     </Border>

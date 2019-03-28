@@ -147,11 +147,13 @@ namespace ConvertZZ.Pages
                                                 case ".shtml":
                                                 case ".asp":
                                                 case ".aspx":
-                                                    str = Regex.Replace(str, "<meta\\s*charset=\"(.*?)\"\\s*\\/?>", string.Format("<meta charset=\"{0}\">", encoding[1].WebName), RegexOptions.IgnoreCase);
-                                                    str = Regex.Replace(str, @"<meta\s*http-equiv\s*=\s*""Content-Type""\s*content\s*=\s*""text\/html;charset=(.*?)""\s*\/?>", string.Format(@"<meta http-equiv=""Content-Type"" content=""text/html;charset={0}"">", encoding[1].WebName), RegexOptions.IgnoreCase);
+                                                    //html5
+                                                    str = Regex.Replace(str, "<meta(\\s+.*?)charset=\"(.*?)\"(.*?)>", string.Format("<meta$1charset=\"{0}\"$3>", encoding[1].WebName), RegexOptions.IgnoreCase);
+                                                    //html4
+                                                    str = Regex.Replace(str, "<meta\\s+(.*?)content=\"(.*?)charset=(.*?)\"(.*?)>", string.Format("<meta $1content=\"$2charset={0}\"$4>", encoding[1].WebName), RegexOptions.IgnoreCase);
+                                                    //php
                                                     str = Regex.Replace(str, @"header(""Content-Type:text/html;\s*charset=(.*?)"");", string.Format(@"header(""Content-Type:text/html; charset={0}"");", encoding[1].WebName), RegexOptions.IgnoreCase);
                                                     break;
-
                                             }
                                         }
                                     });

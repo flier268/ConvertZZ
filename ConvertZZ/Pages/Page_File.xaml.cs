@@ -132,10 +132,10 @@ namespace ConvertZZ.Pages
                                 str = ConvertHelper.Convert(str, ToChinese);
                                 if (!string.IsNullOrWhiteSpace(App.Settings.FileConvert.FixLabel))
                                 {
-                                    var list = App.Settings.FileConvert.FixLabel.Split('|').ToList();
+                                    var list = App.Settings.FileConvert.FixLabel.Split('|').Select(x=>x.ToLower()).ToList();
                                     list.ForEach(x =>
                                     {
-                                        if (Path.GetExtension(_temp.Name) == x)
+                                        if (Path.GetExtension(_temp.Name).ToLower() == x)
                                         {
                                             switch (x)
                                             {

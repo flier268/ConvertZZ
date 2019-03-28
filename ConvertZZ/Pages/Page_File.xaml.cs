@@ -154,6 +154,9 @@ namespace ConvertZZ.Pages
                                                     //php
                                                     str = Regex.Replace(str, @"header(""Content-Type:text/html;\s*charset=(.*?)"");", string.Format(@"header(""Content-Type:text/html; charset={0}"");", encoding[1].WebName), RegexOptions.IgnoreCase);
                                                     break;
+                                                case "css":
+                                                    str = Regex.Replace(str, "@charset \"(.*?)\"", string.Format("@charset \"{0}\"", encoding[1].WebName), RegexOptions.IgnoreCase);
+                                                    break;
                                             }
                                         }
                                     });

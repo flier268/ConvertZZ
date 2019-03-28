@@ -136,9 +136,9 @@ namespace ConvertZZ
             { "GBK>Shift-JIS" , "zc3" } ,
             { "Big5>Shift-JIS" , "zc4" } ,
             { "HZ>GBK" , "zd1" } ,
-            { "HZ>Big5" , "zd1" } ,
-            { "GBK>HZ" , "zd1" } ,
-            { "Big5>HZ" , "zd1" }
+            { "HZ>Big5" , "zd2" } ,
+            { "GBK>HZ" , "zd3" } ,
+            { "Big5>HZ" , "zd4" }
         };
         private bool _AssistiveTouchEnable, _VocabularyCorrenctionEnable, _PromptEnable, _RecognitionEncodingEnable;
         private string _MaxPriviewLength;

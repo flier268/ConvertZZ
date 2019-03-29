@@ -465,7 +465,13 @@ namespace ConvertZZ
                     break;
                 case "zd4":
                     clip = Encoding.GetEncoding("BIG5").GetString(Encoding.GetEncoding("hz-gb-2312").GetBytes(clip));
-                    break;               
+                    break;
+                case "ze1":
+                    clip = Moudle.ConvertHelper.ConvertSymbol(clip, 0);
+                    break;
+                case "ze2":
+                    clip = Moudle.ConvertHelper.ConvertSymbol(clip, 1);
+                    break;
             }
             ClipBoardHelper.SetClipBoard_UnicodeText(clip);
             sw.Stop();

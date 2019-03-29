@@ -50,6 +50,8 @@
                 <MenuItem Uid="zd3" Header="GBK>HZ" Click="MenuItem_Click"/>
                 <MenuItem Uid="zd4" Header="Big5>HZ" Click="MenuItem_Click"/>
                 <Separator/>
+                <MenuItem Uid="ze1" Header="半形>全形" Click="MenuItem_Click"/>
+                <MenuItem Uid="ze2" Header="全形>半形" Click="MenuItem_Click"/>
             </MenuItem>
             <MenuItem Uid="1" Header="隱藏/顯示懸浮球" Click="MenuItem_Click"/>
             <MenuItem Header="設定" Click="Setting_Click"/>

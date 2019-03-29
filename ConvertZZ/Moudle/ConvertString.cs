@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace ConvertZZ.Moudle
@@ -81,5 +83,54 @@ namespace ConvertZZ.Moudle
             else
                 return Convert(origin, new Encoding[2] { Encoding.Default, encoding[1] }, ToChinese, VocabularyCorrection);
         }
+
+        /// <summary>
+        /// 進行標點符號轉換
+        /// </summary>
+        /// <param name="origin">來源字串</param>
+        /// <param name="mode">0: 半形轉全形 ; 1:全形轉半形</param>
+        /// <returns></returns>
+        public static string ConvertSymbol(string origin, int mode)
+        {   
+            FastReplace fastReplace = new FastReplace(mode == 0 ? SymbolTable : (SymbolTable.ToLookup(pair => pair.Value, pair => pair.Key).ToDictionary(grp => grp.Key, grp => grp.ToArray()[0])));
+            return fastReplace.ReplaceAll(origin);
+        }
+        private static Dictionary<string, string> SymbolTable = new Dictionary<string, string>()
+        {
+            { "," , "，" },
+            { "~" , "～" },
+            { "!" , "！" },
+            { "#" , "＃" },
+            { "$" , "＄" },
+            { "%" , "％" },
+            { "^" , "︿" },
+            { "&" , "＆" },
+            { "*" , "＊" },
+            { "-" , "－" },
+            { "+" , "＋" },
+            { "{" , "｛" },
+            { "}" , "｝" },
+            { ";" , "；" },
+            { "|" , "｜" },
+            { "?" , "？" },
+            { "(" , "（" },
+            { ")" , "）" },
+            { "“" , "「" },
+            { "”" , "」" },
+            { "‘" , "『" },
+            { "’" , "』" },
+            { "[" , "［" },
+            { "]" , "］" },
+            //{ "·" , "．" },
+            { " " , "　" },
+
+            { ":" , "：" },
+            { "." , "。" },
+            { "\"" , "、" },
+            { "@" , "＠" },
+            { "<" , "＜" },
+            { ">" , "＞" },
+            { "=" , "＝" },
+        };
     }
 }

@@ -138,7 +138,9 @@ namespace ConvertZZ
             { "HZ>GBK" , "zd1" } ,
             { "HZ>Big5" , "zd2" } ,
             { "GBK>HZ" , "zd3" } ,
-            { "Big5>HZ" , "zd4" }
+            { "Big5>HZ" , "zd4" } ,
+            { "半形>全形" , "ze1" } ,
+            { "全形>半形" , "ze2" }
         };
         private bool _AssistiveTouchEnable, _VocabularyCorrenctionEnable, _PromptEnable, _RecognitionEncodingEnable;
         private string _MaxPriviewLength;

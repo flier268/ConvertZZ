@@ -6,7 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
+using System.Threading;
 using System.Windows;
 
 namespace ConvertZZ
@@ -25,16 +25,11 @@ namespace ConvertZZ
 
         public static ChineseConverter ChineseConverter { get; set; } = new ChineseConverter();
 
-        private void Application_Startup(object sender, StartupEventArgs e)
+        private async void Application_Startup(object sender, StartupEventArgs e)
         {
             App.Reload(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ConvertZZ.json"));
-            Task.Run(() =>
-            {
-                foreach (string p in System.IO.Directory.GetFiles(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dictionary")))
-                    ChineseConverter.Load(p);
-                ChineseConverter.ReloadFastReplaceDic();
-                DicLoaded = true;
-            });
+            await ChineseConverter.Load(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dictionary.csv"));
+            DicLoaded = true;
 
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             if (e.Args.Length > 0)
@@ -243,7 +238,7 @@ namespace ConvertZZ
                 nIcon.Visible = true;
                 if (Settings.CheckVersion)
                 {
-                    Task.Run(() =>
+                    new Thread(new ThreadStart(() =>
                     {
                         var versionReport = UpdateChecker.ChecktVersion();
                         if (versionReport != null && versionReport.HaveNew)
@@ -253,7 +248,7 @@ namespace ConvertZZ
                                 Process.Start("https://github.com/flier268/ConvertZZ/releases");
                             }
                         }
-                    });
+                    })).Start();
                 }
                 MainWindow window = new MainWindow();
                 MainWindow = window;

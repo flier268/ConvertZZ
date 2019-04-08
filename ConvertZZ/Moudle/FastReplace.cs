@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
@@ -7,37 +6,17 @@ namespace ConvertZZ
 {
     public class FastReplace
     {
-        SortedDictionary<string, string> Dic_ALL;
+        Dictionary<string, string> Dic_ALL;
         Dictionary<char, List<KeyValuePair<string, string>>> Dic_Grouped;
-        public FastReplace()
+
+        /// <summary>
+        /// 以Dictionary初始化
+        /// </summary>
+        /// <param name="Dictionary"></param>
+        public FastReplace(Dictionary<string, string> Dictionary)
         {
-            var cmp = new WordMappingComparer();
-            Dic_ALL = new SortedDictionary<string, string>(cmp);
-            Dic_Grouped = Dic_ALL.OrderBy(x => x.Key, cmp).GroupBy(x => x.Key.First()).ToDictionary(x => x.Key, x => x.ToList());
-        }
-        public FastReplace(Dictionary<string, string> _dic)
-        {
-            var cmp = new WordMappingComparer();
-            Dic_ALL = new SortedDictionary<string, string>(_dic, cmp);
-            Dic_Grouped = Dic_ALL.OrderBy(x => x.Key, cmp).GroupBy(x => x.Key.First()).ToDictionary(x => x.Key, x => x.ToList());
-        }
-        public FastReplace(SortedDictionary<string, string> _dic)
-        {
-            var cmp = new WordMappingComparer();
-            Dic_ALL = _dic;
-            Dic_Grouped = Dic_ALL.OrderBy(x => x.Key, cmp).GroupBy(x => x.Key.First()).ToDictionary(x => x.Key, x => x.ToList());
-        }
-        internal class WordMappingComparer : IComparer<string>
-        {
-            public int Compare(string x, string y)
-            {
-                // 越長的字串排在越前面，字串長度相等者，則採用字串預設的比序。
-                if (x.Length == y.Length)
-                {
-                    return x.CompareTo(y);
-                }
-                return y.Length - x.Length;
-            }
+            Dic_ALL = Dictionary;
+            Dic_Grouped = Dic_ALL.GroupBy(x => x.Key.First()).ToDictionary(x => x.Key, x => x.ToList());
         }
         public string ReplaceAll(string source)
         {
@@ -48,7 +27,6 @@ namespace ConvertZZ
             indexNow = source.IndexOfAny(key, indexNow);
             while (indexNow != -1)
             {
-
                 sb.Append(source.Substring(indexPass, indexNow - indexPass));
                 var _dic = Dic_Grouped[source[indexNow]];
                 bool replaced = false;
@@ -73,7 +51,6 @@ namespace ConvertZZ
             }
             sb.Append(source.Substring(indexPass, source.Length - indexPass));
             return sb.ToString();
-
         }
     }
 }

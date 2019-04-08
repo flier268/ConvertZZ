@@ -1,10 +1,9 @@
-﻿using System;
+﻿using ConvertZZ.Moudle;
+using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Text.RegularExpressions;
-using static ConvertZZ.FastReplace;
+using System.Threading.Tasks;
 
 namespace ConvertZZ
 {
@@ -48,111 +47,21 @@ namespace ConvertZZ
 
         #endregion OS的轉換
 
-        private SortedDictionary<string, string> _dictionary, _dictionaryRevert;
-        private bool _hasError;
-        private StringBuilder _logs;
-        FastReplace FR = new FastReplace(), FRRevert = new FastReplace();
+        private List<DictionaryFile_Helper.Line> Lines { get; set; } = new List<DictionaryFile_Helper.Line>();
+        FastReplace FR = null, FRRevert = null;
         public ChineseConverter()
         {
-            var cmp = new WordMappingComparer();
-            _dictionary = new SortedDictionary<string, string>(cmp);
-            _dictionaryRevert = new SortedDictionary<string, string>(cmp);
-            _logs = new StringBuilder();
-            _hasError = false;
         }
-        public void ClearLogs()
+        public async Task Load(string fileName)
         {
-            _logs.Clear();
-            _hasError = false;
-        }
-        public void Load(string fileName)
-        {
-            using (var reader = new StreamReader(fileName, Encoding.UTF8))
-            {
-                string line = reader.ReadLine();
-                while (line != null)
-                {
-                    this.Add(line);
-                    line = reader.ReadLine();
-                }
-            }
+            Lines.AddRange(await DictionaryFile_Helper.Load(fileName));
 
-        }
+            var lines = Lines.ToLookup(x => x.SimplifiedChinese).Select(coll => coll.First()).ToList();
+            FR = new FastReplace(lines.Where(x => x.Enable).OrderByDescending(x => x.SimplifiedChinese_Priority).ThenByDescending(x => x.SimplifiedChinese.Length).ToDictionary(x => x.SimplifiedChinese, x => x.TraditionalChinese));
 
-        public void Load(string[] fileNames)
-        {
-            foreach (string fname in fileNames)
-            {
-                Load(fname);
-            }
+            lines = Lines.ToLookup(x => x.TraditionalChinese).Select(coll => coll.First()).ToList();
+            FRRevert = new FastReplace(lines.Where(x => x.Enable).OrderByDescending(x => x.TraditionalChinese_Priority).ThenByDescending(x => x.TraditionalChinese.Length).ToDictionary(x => x.TraditionalChinese, x => x.SimplifiedChinese));
         }
-        public void ReloadFastReplaceDic()
-        {
-            FR = new FastReplace(_dictionary);
-            FRRevert = new FastReplace(_dictionaryRevert);
-        }
-
-        private void Add(string sourceWord, string targetWord)
-        {
-            var source = sourceWord.Split(' ');
-            var target = targetWord.Split(' ');
-            for (int i = 0; i < source.Length; i++)
-            {
-                for (int j = 0; j < target.Length; j++)
-                {
-                    if (j == 0)
-                    {
-                        if (!String.IsNullOrWhiteSpace(source[i]))
-                        {
-                            if (_dictionary.ContainsKey(source[i]))
-                            {
-                                _hasError = true;
-                                _logs.AppendLine(String.Format("警告: '{0}={1}' 的來源字串重複定義, 故忽略此項。", source[i], target[j]));
-                            }
-                            else
-                                _dictionary.Add(source[i], target[j]);
-                        }
-                    }
-                    if (i == 0)
-                    {
-                        if (!String.IsNullOrWhiteSpace(target[j]))
-                        {
-                            if (_dictionaryRevert.ContainsKey(target[j]))
-                            {
-                                _hasError = true;
-                                _logs.AppendLine(String.Format("警告: '{0}={1}' 的來源字串重複定義, 故忽略此項。", target[j], source[i]));
-                            }
-                            else
-                                _dictionaryRevert.Add(target[j], source[i]);
-                        }
-                    }
-                }
-            }
-        }
-
-        public ChineseConverter Add(string mapping)
-        {
-            if (!String.IsNullOrWhiteSpace(mapping) && !mapping.StartsWith(";"))
-            {
-                Regex r = new Regex("(.*?),(.*)");
-                var m = r.Match(mapping);
-                if (m.Success)
-                {
-                    this.Add(m.Groups[1].ToString(), m.Groups[2].ToString().ToString());
-                }
-            }
-            return this;
-        }
-
-        public ChineseConverter Add(IDictionary<string, string> dict)
-        {
-            foreach (var key in dict.Keys)
-            {
-                Add(key, dict[key]);
-            }
-            return this;
-        }
-
         /// <summary>
         /// 
         /// </summary>
@@ -179,34 +88,6 @@ namespace ConvertZZ
                 sb.Replace(temp.Key, temp.Value);                    
             }
             return input;*/
-        }
-
-        public void DumpKeys()
-        {
-            foreach (var key in _dictionary.Keys)
-            {
-                Console.WriteLine(key);
-            }
-            foreach (var key in _dictionaryRevert.Keys)
-            {
-                Console.WriteLine(key);
-            }
-        }
-
-        public bool HasError
-        {
-            get
-            {
-                return _hasError;
-            }
-        }
-
-        public string Logs
-        {
-            get
-            {
-                return _logs.ToString();
-            }
         }
     }
 }

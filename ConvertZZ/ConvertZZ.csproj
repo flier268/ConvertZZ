@@ -97,6 +97,7 @@
     <Compile Include="Enums\Enum_Mode.cs" />
     <Compile Include="Moudle\ChineseConverter.cs" />
     <Compile Include="Moudle\ConvertString.cs" />
+    <Compile Include="Moudle\DictionaryFile_Helper.cs" />
     <Compile Include="Moudle\EncodingAnalyzer.cs" />
     <Compile Include="Moudle\FastReplace.cs" />
     <Compile Include="Moudle\Hotkey.cs" />
@@ -207,19 +208,7 @@
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
-    <None Include="Dictionary\BI_TradFix.dat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="Dictionary\Minecraft.dat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="Dictionary\Other.dat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="Dictionary\STPhrases.dat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="Dictionary\TWPhrasesIT.dat">
+    <None Include="Dictionary.csv">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="packages.config" />

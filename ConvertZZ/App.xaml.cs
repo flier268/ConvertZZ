@@ -25,12 +25,9 @@ namespace ConvertZZ
 
         public static ChineseConverter ChineseConverter { get; set; } = new ChineseConverter();
 
-        private async void Application_Startup(object sender, StartupEventArgs e)
+        private void Application_Startup(object sender, StartupEventArgs e)
         {
             App.Reload(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ConvertZZ.json"));
-            await ChineseConverter.Load(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dictionary.csv"));
-            DicLoaded = true;
-
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             if (e.Args.Length > 0)
             {
@@ -110,6 +107,12 @@ namespace ConvertZZ
                             break;
                     }
                 }
+                if(VocabularyCorrection==1 || (VocabularyCorrection==-1 && App.Settings.VocabularyCorrection))
+                    new Thread(new ThreadStart(async () =>
+                    {
+                        await ChineseConverter.Load(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dictionary.csv"));
+                        DicLoaded = true;
+                    })).Start();
                 string s = "";
                 List<string> file = new List<string>();
                 bool ModeIsOneFile = true;
@@ -234,6 +237,11 @@ namespace ConvertZZ
                     Shutdown(1);
                     return;
                 }
+                new Thread(new ThreadStart(async () =>
+                {
+                    await ChineseConverter.Load(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dictionary.csv"));
+                    DicLoaded = true;
+                })).Start();
                 nIcon.Icon = ConvertZZ.Properties.Resources.icon;
                 nIcon.Visible = true;
                 if (Settings.CheckVersion)

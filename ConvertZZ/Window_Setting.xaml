@@ -44,7 +44,7 @@
                     <ToggleButton IsChecked="{Binding CheckVersion}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="Default ToggleButton Style" Grid.Row="4" Grid.Column="1"  />
                     <Separator Style="{StaticResource MaterialDesignLightSeparator}" Grid.Row="4" Grid.ColumnSpan="2" />
                     <Label Content="預覽最大長度(k)" Grid.Row="5" VerticalAlignment="Bottom"/>
-                    <TextBox Text="{Binding MaxPriviewLength}" materialDesign:HintAssist.Hint="預覽最大長度" Style="{StaticResource MaterialDesignFloatingHintTextBox}" Grid.Row="5" Grid.Column="1" />
+                    <TextBox Text="{Binding MaxPriviewLength}" materialDesign:HintAssist.Hint="預覽最大長度" Style="{StaticResource MaterialDesignFloatingHintTextBox}" Grid.Row="5" Grid.Column="1" HorizontalContentAlignment="Center" />
                 </Grid>
             </StackPanel>
         </materialDesign:Card>

@@ -52,7 +52,7 @@
                             <materialDesign:PackIcon Kind="WindowMinimize" />
                         </Button>
                         <Button Click="Button_Close" BorderBrush="Transparent" Background="Transparent">
-                            <materialDesign:PackIcon Kind="CloseOutline" Width="25" Height="25" />
+                            <materialDesign:PackIcon Kind="CloseOutline"/>
                         </Button>
                     </DockPanel>
                     <Grid Grid.Row="1">

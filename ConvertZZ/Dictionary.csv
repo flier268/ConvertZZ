@@ -56662,7 +56662,7 @@ True	TWPhrasesIT	字节	0	位元組	0
 True	TWPhrasesIT	字体	0	字型	0
 True	TWPhrasesIT	存储	0	儲存	0
 True	TWPhrasesIT	存盘	0	存檔	0
-True	TWPhrasesIT	宏	0	巨集	0
+False	TWPhrasesIT	宏	0	巨集	0
 True	TWPhrasesIT	宏内核	0	單核心	0
 True	TWPhrasesIT	寄存器	0	暫存器	0
 True	TWPhrasesIT	密钥	0	金鑰	0

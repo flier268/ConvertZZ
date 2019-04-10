@@ -25,6 +25,7 @@ namespace ConvertZZ
             int indexPass = 0, indexNow = 0;
             indexPass = indexNow;
             indexNow = source.IndexOfAny(key, indexNow);
+            int i;
             while (indexNow != -1)
             {
                 sb.Append(source.Substring(indexPass, indexNow - indexPass));
@@ -34,12 +35,19 @@ namespace ConvertZZ
                 {
                     if (indexNow + a.Key.Length > source.Length)
                         continue;
-                    if (source.Substring(indexNow, a.Key.Length) == a.Key)
-                    {
-                        sb.Append(a.Value);
-                        indexNow += a.Key.Length;
-                        replaced = true;
-                    }
+                    bool equal = true;
+                    for (i = 0; i < a.Key.Length; i++)
+                        if (source[indexNow + i] != a.Key[i])
+                        {
+                            equal = false;
+                            break;
+                        }
+                    if (!equal)
+                        continue;
+                    sb.Append(a.Value);
+                    indexNow += a.Key.Length;
+                    replaced = true;
+                    break;
                 }
                 if (!replaced)
                 {

@@ -120,7 +120,9 @@
                     <RadioButton GroupName="target" Content="Iso-2022-jp" Click="Encoding_Selected"/>
                     <RadioButton GroupName="target" Content="EUC-JP" Click="Encoding_Selected"/>
                 </StackPanel>
-                <DockPanel Grid.Row="1" Grid.ColumnSpan="2" HorizontalAlignment="Right" Margin="0,0,5,0">
+                <DockPanel Grid.Row="1" Grid.ColumnSpan="2">
+                    <Label Content="UTF8添加BOM" HorizontalAlignment="Left"/>
+                    <ToggleButton IsChecked="{Binding UnicodeAddBom}" Style="{StaticResource MaterialDesignSwitchToggleButton}" Margin="0,0,16,0"/>
                     <Label Content="輸出模式:" VerticalAlignment="Center"/>
                     <RadioButton Content="一般" IsChecked="True" Uid="NChinese"  VerticalAlignment="Center" Margin="0,0,4,0" Checked="Chinese_Click"/>
                     <RadioButton Content="繁體中文" Uid="TChinese" VerticalAlignment="Center" Margin="0,0,4,0" Checked="Chinese_Click"/>

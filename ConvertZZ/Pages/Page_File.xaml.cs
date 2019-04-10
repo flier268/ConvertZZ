@@ -328,10 +328,11 @@ namespace ConvertZZ.Pages
         public string OutputPath { get => _OutputPath; set { _OutputPath = value; OnPropertyChanged(); } }
         private double _DismissButtonProgress;
         public double DismissButtonProgress { get => _DismissButtonProgress; set { _DismissButtonProgress = value; OnPropertyChanged(); } }
-
         private ObservableCollection<FileList_Line> _FileList = new ObservableCollection<FileList_Line>();
-
         public ObservableCollection<FileList_Line> FileList { get => _FileList; set { _FileList = value; OnPropertyChanged(); } }
+        private bool _UnicodeAddBom;
+        public bool UnicodeAddBom { get => App.Settings.FileConvert.UnicodeAddBom; set { App.Settings.FileConvert.UnicodeAddBom = value; App.Save(); } }
+
 
         List<Node> treeview_nodes = new List<Node>();
         private void Treeview_CheckedChanged(CheckBox sender)

@@ -38,6 +38,9 @@
     <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Flier.Toolbox.Text, Version=1.0.1.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\Flier.Toolbox.Text.1.0.1\lib\netstandard2.0\Flier.Toolbox.Text.dll</HintPath>
+    </Reference>
     <Reference Include="MaterialDesignColors, Version=1.1.3.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\MaterialDesignColors.1.1.3\lib\net45\MaterialDesignColors.dll</HintPath>
     </Reference>
@@ -99,7 +102,6 @@
     <Compile Include="Moudle\ConvertString.cs" />
     <Compile Include="Moudle\DictionaryFile_Helper.cs" />
     <Compile Include="Moudle\EncodingAnalyzer.cs" />
-    <Compile Include="Moudle\FastReplace.cs" />
     <Compile Include="Moudle\Hotkey.cs" />
     <Compile Include="Moudle\Toast.xaml.cs">
       <DependentUpon>Toast.xaml</DependentUpon>

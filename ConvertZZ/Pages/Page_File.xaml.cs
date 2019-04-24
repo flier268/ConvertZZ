@@ -330,7 +330,6 @@ namespace ConvertZZ.Pages
         public double DismissButtonProgress { get => _DismissButtonProgress; set { _DismissButtonProgress = value; OnPropertyChanged(); } }
         private ObservableCollection<FileList_Line> _FileList = new ObservableCollection<FileList_Line>();
         public ObservableCollection<FileList_Line> FileList { get => _FileList; set { _FileList = value; OnPropertyChanged(); } }
-        private bool _UnicodeAddBom;
         public bool UnicodeAddBom { get => App.Settings.FileConvert.UnicodeAddBom; set { App.Settings.FileConvert.UnicodeAddBom = value; App.Save(); } }
 
 

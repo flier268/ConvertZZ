@@ -1,17 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
 
 namespace ConvertZZ.Moudle
 {
@@ -42,6 +33,18 @@ namespace ConvertZZ.Moudle
             InitializeComponent();
             this.Title = Caption;
         }
+        public Window_MessageBoxEx(string Text, string Caption, string button1_Text, string button2_Text)
+        {
+            TextBlock_Text = Text;
+            ButtonText1 = button1_Text;
+            ButtonText2 = button2_Text;
+            Button3_Visibility = Visibility.Collapsed;
+            Button3_Width = new GridLength(1, GridUnitType.Auto);
+            DataContext = this;
+            InitializeComponent();
+            this.Title = Caption;
+        }
+
         public enum MessageBoxExResult
         {
             NONE = 0,
@@ -101,15 +104,21 @@ namespace ConvertZZ.Moudle
         {
             Resoult = (MessageBoxExResult)(4 * (CheckBox_IsChecked ? 2 : 1));
             this.Close();
-        }
+            ColumnDefinition columnDefinition = new ColumnDefinition();
+            columnDefinition.Width = new GridLength(1, GridUnitType.Star);
+    }
 
         public string ButtonText3 { get => _ButtonText3; set { _ButtonText3 = value; OnPropertyChanged("ButtonText3"); } }
+        private GridLength _Button3_Width = new GridLength();
+        private Visibility _Button3_Visibility = Visibility.Visible;
+        public Visibility Button3_Visibility { get => _Button3_Visibility; set { _Button3_Visibility = value; OnPropertyChanged(); } }
+        public GridLength Button3_Width { get => _Button3_Width; set { _Button3_Width = value; OnPropertyChanged(); } }
 
         public event PropertyChangedEventHandler PropertyChanged;
-
-      
-
-        protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
 
         #region IDisposable Support
         private bool disposedValue = false; // 偵測多餘的呼叫
@@ -162,6 +171,15 @@ namespace ConvertZZ.Moudle
         {
             // using construct ensures the resources are freed when form is closed
             using (var form = new Window_MessageBoxEx(Text, Caption, button1_Text, button2_Text, button3_Text, CheckBox_Text))
+            {
+                form.ShowDialog();
+                return form.Resoult;
+            }
+        }
+        public static MessageBoxExResult Show(string Text, string Caption, string button1_Text, string button2_Text)
+        {
+            // using construct ensures the resources are freed when form is closed
+            using (var form = new Window_MessageBoxEx(Text, Caption, button1_Text, button2_Text))
             {
                 form.ShowDialog();
                 return form.Resoult;

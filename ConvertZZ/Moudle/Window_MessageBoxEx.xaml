@@ -15,16 +15,15 @@
                 <RowDefinition Height="auto"/>
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition/>
+                <ColumnDefinition/>
+                <ColumnDefinition Width="{Binding Button3_Width}"/>
             </Grid.ColumnDefinitions>
-
             <TextBlock TextWrapping="Wrap" Text="{Binding TextBlock_Text}" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" Margin="10" Foreground="Black" />
             <CheckBox Content="{Binding CheckBox_Text,Mode=TwoWay}" IsChecked="{Binding CheckBox_IsChecked}" Visibility="{Binding CheckBox_Visibility}" Grid.Row="1" Grid.ColumnSpan="3" Foreground="Black" Margin="10"/>
             <Button Content="{Binding ButtonText1,Mode=TwoWay}" Grid.Row="2" Grid.Column="0" Margin="10" Click="Button_Click"/>
             <Button Content="{Binding ButtonText2,Mode=TwoWay}" Grid.Row="2" Grid.Column="1" Margin="10" Click="Button_Click_1"/>
-            <Button Content="{Binding ButtonText3,Mode=TwoWay}" Grid.Row="2" Grid.Column="2" Margin="10" Click="Button_Click_2"/>
+            <Button Content="{Binding ButtonText3,Mode=TwoWay}" Grid.Row="2" Grid.Column="2" Margin="10" Click="Button_Click_2" Visibility="{Binding Button3_Visibility}"/>
         </Grid>
     </materialDesign:Card>
 </Window>

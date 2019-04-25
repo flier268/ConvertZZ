@@ -31,10 +31,14 @@
                         <ColumnDefinition Width="auto"/>
                         <ColumnDefinition/>
                     </Grid.ColumnDefinitions>
-
                     <Label Content="懸浮球"/>
                     <ToggleButton IsChecked="{Binding AssistiveTouchEnable}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="就是那個寫'Z'的小圓球啦" Grid.Column="1"/>
-                    <Label Content="簡繁轉換後進行詞彙修正" Grid.Row="1"/>
+                    <DockPanel Grid.Row="1">
+                        <Label Content="簡繁轉換後進行詞彙修正" />
+                        <Button Click="Button_DictionaryEdit_Click" Style="{StaticResource MaterialDesignFlatButton}" Padding="0" Height="Auto">
+                            <materialDesign:PackIcon Kind="DatabaseEdit"/>
+                        </Button>
+                    </DockPanel>
                     <ToggleButton IsChecked="{Binding VocabularyCorrenctionEnable}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="由於有時一個簡體對應到多個繁體字，開啟此功能將會自動修正此問題(但有時不盡人意)" Grid.Row="1" Grid.Column="1"  />
                     <Label Content="轉換完成後提示" Grid.Row="2"/>
                     <ToggleButton IsChecked="{Binding PromptEnable}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="轉換後顯示轉換所花費的毫秒數" Grid.Row="2" Grid.Column="1"  />

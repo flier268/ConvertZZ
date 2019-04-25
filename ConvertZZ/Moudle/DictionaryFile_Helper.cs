@@ -53,14 +53,16 @@ namespace ConvertZZ.Moudle
                     lines.ForEach(x =>
                     {
                         Line temp = x.Clone();
-
-                        if (temp.Type.Contains("\""))
-                            temp.Type = $"\"{temp.Type.Replace("\"", "\"\"")}\"";
-                        if (temp.SimplifiedChinese.Contains("\""))
-                            temp.SimplifiedChinese = $"\"{temp.SimplifiedChinese.Replace("\"", "\"\"")}\"";
-                        if (temp.TraditionalChinese.Contains("\""))
-                            temp.TraditionalChinese = $"\"{temp.TraditionalChinese.Replace("\"", "\"\"")}\"";
-                        streamWriter.WriteLine($"{temp.Enable}\t{temp.Type}\t{temp.SimplifiedChinese}\t{temp.SimplifiedChinese_Priority}\t{temp.TraditionalChinese}\t{temp.TraditionalChinese_Priority}");
+                        if (temp.SimplifiedChinese_Length + temp.TraditionalChinese_Length > 0)
+                        {
+                            if (temp.Type.Contains("\""))
+                                temp.Type = $"\"{temp.Type.Replace("\"", "\"\"")}\"";
+                            if (temp.SimplifiedChinese.Contains("\""))
+                                temp.SimplifiedChinese = $"\"{temp.SimplifiedChinese.Replace("\"", "\"\"")}\"";
+                            if (temp.TraditionalChinese.Contains("\""))
+                                temp.TraditionalChinese = $"\"{temp.TraditionalChinese.Replace("\"", "\"\"")}\"";
+                            streamWriter.WriteLine($"{temp.Enable}\t{temp.Type}\t{temp.SimplifiedChinese}\t{temp.SimplifiedChinese_Priority}\t{temp.TraditionalChinese}\t{temp.TraditionalChinese_Priority}");
+                        }
                     });
                     await streamWriter.FlushAsync();
                 }
@@ -77,14 +79,18 @@ namespace ConvertZZ.Moudle
                 temp.Type = Type;
                 temp.TraditionalChinese = TraditionalChinese;
                 temp.SimplifiedChinese = SimplifiedChinese;
+                temp.SimplifiedChinese_Priority = SimplifiedChinese_Priority;
+                temp.TraditionalChinese_Priority = TraditionalChinese_Priority;
                 return temp;
             }
             public bool Enable { get; set; }
-            public string Type { get; set; }
-            public string SimplifiedChinese { get; set; }
+            public string SimplifiedChinese { get; set; } = "";
+            public int SimplifiedChinese_Length { get => SimplifiedChinese.Length; }
             public int SimplifiedChinese_Priority { get; set; }
-            public string TraditionalChinese { get; set; }
+            public string TraditionalChinese { get; set; } = "";
+            public int TraditionalChinese_Length { get => TraditionalChinese.Length; }
             public int TraditionalChinese_Priority { get; set; }
+            public string Type { get; set; } = "Default";
         }
     }
 }

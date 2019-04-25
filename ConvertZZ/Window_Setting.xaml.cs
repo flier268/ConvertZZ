@@ -189,6 +189,11 @@ namespace ConvertZZ
             TypeFilter = App.Settings.FileConvert.TypeFilter;
         }
 
+        private void Button_DictionaryEdit_Click(object sender, RoutedEventArgs e)
+        {
+            new Window_DictionaryEditor().ShowDialog();
+        }
+
         public KeyValuePair<string, string> Quick_R2 { get => _Quick_R2; set { _Quick_R2 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_R3 { get => _Quick_R3; set { _Quick_R3 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_R4 { get => _Quick_R4; set { _Quick_R4 = value; OnPropertyChanged(); SaveSetting(); } }

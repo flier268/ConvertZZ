@@ -130,6 +130,9 @@
     <Compile Include="Window_DialogHost.xaml.cs">
       <DependentUpon>Window_DialogHost.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Window_DictionaryEditor.xaml.cs">
+      <DependentUpon>Window_DictionaryEditor.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Window_Report.xaml.cs">
       <DependentUpon>Window_Report.xaml</DependentUpon>
     </Compile>
@@ -180,6 +183,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Window_DialogHost.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Window_DictionaryEditor.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

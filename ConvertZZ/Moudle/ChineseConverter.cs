@@ -48,7 +48,7 @@ namespace ConvertZZ
 
         #endregion OS的轉換
 
-        private List<DictionaryFile_Helper.Line> Lines { get; set; } = new List<DictionaryFile_Helper.Line>();
+        internal List<DictionaryFile_Helper.Line> Lines { get; set; } = new List<DictionaryFile_Helper.Line>();
         FastReplace FR = null, FRRevert = null;
         public ChineseConverter()
         {

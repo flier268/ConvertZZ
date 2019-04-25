@@ -115,6 +115,13 @@ namespace ConvertZZ.Moudle
         public GridLength Button3_Width { get => _Button3_Width; set { _Button3_Width = value; OnPropertyChanged(); } }
 
         public event PropertyChangedEventHandler PropertyChanged;
+
+        private void ThisWindows_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (e.LeftButton == System.Windows.Input.MouseButtonState.Pressed)
+                this.DragMove();
+        }
+
         protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

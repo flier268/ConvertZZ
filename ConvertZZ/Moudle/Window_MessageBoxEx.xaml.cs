@@ -165,7 +165,7 @@ namespace ConvertZZ.Moudle
     }
     public partial class Window_MessageBoxEx
     {
-        public static MessageBoxExResult Show(string Text, string Caption, string button1_Text, string button2_Text, string button3_Text)
+        public static MessageBoxExResult ShowDialog(string Text, string Caption, string button1_Text, string button2_Text, string button3_Text)
         {
             // using construct ensures the resources are freed when form is closed
             using (var form = new Window_MessageBoxEx(Text, Caption, button1_Text, button2_Text, button3_Text))
@@ -174,7 +174,7 @@ namespace ConvertZZ.Moudle
                 return form.Resoult;
             }
         }
-        public static MessageBoxExResult Show(string Text, string Caption, string button1_Text, string button2_Text, string button3_Text, string CheckBox_Text)
+        public static MessageBoxExResult ShowDialog(string Text, string Caption, string button1_Text, string button2_Text, string button3_Text, string CheckBox_Text)
         {
             // using construct ensures the resources are freed when form is closed
             using (var form = new Window_MessageBoxEx(Text, Caption, button1_Text, button2_Text, button3_Text, CheckBox_Text))
@@ -183,7 +183,7 @@ namespace ConvertZZ.Moudle
                 return form.Resoult;
             }
         }
-        public static MessageBoxExResult Show(string Text, string Caption, string button1_Text, string button2_Text)
+        public static MessageBoxExResult ShowDialog(string Text, string Caption, string button1_Text, string button2_Text)
         {
             // using construct ensures the resources are freed when form is closed
             using (var form = new Window_MessageBoxEx(Text, Caption, button1_Text, button2_Text))

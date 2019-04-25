@@ -167,7 +167,7 @@ namespace ConvertZZ
         }
         private async void Button_Save_CheckedAsync(object sender, RoutedEventArgs e)
         {
-            if (Window_MessageBoxEx.Show("注意！此操作將不可逆，請先做好備份(Dictionary.csv)", "儲存字典?", "儲存", "取消") == Window_MessageBoxEx.MessageBoxExResult.A)
+            if (Window_MessageBoxEx.ShowDialog("注意！此操作將不可逆，請先做好備份(Dictionary.csv)", "儲存字典?", "儲存", "取消") == Window_MessageBoxEx.MessageBoxExResult.A)
             {
                 await DictionaryFile_Helper.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dictionary.csv"), DataGrid_ItemSource);
                 await App.ChineseConverter.Load(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dictionary.csv"));

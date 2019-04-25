@@ -87,7 +87,7 @@ namespace ConvertZZ.Pages
                             {
                                 if (!skip)
                                 {
-                                    switch (Moudle.Window_MessageBoxEx.Show(string.Format("{0}發生檔名衝突，是否取代?", _temp.Name), "警告", "取代", "略過", "取消", "套用到全部"))
+                                    switch (Moudle.Window_MessageBoxEx.ShowDialog(string.Format("{0}發生檔名衝突，是否取代?", _temp.Name), "警告", "取代", "略過", "取消", "套用到全部"))
                                     {
                                         case Moudle.Window_MessageBoxEx.MessageBoxExResult.A:
                                             break;

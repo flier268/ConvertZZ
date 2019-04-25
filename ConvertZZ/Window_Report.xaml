@@ -38,13 +38,7 @@
                 <TextBox Name="TextBox_Name" Grid.Row="0" Grid.Column="1"/>
                 <TextBox Name="TextBox_Email" Grid.Row="1" Grid.Column="1"/>
                 <TextBox Name="TextBox_Title" Grid.Row="2" Grid.Column="1"/>
-                <RichTextBox Grid.Row="3" Grid.Column="1" Margin="0 15 0 15">
-                    <FlowDocument>
-                        <Paragraph>
-                            <Run Name="Textbox_Content" IsEnabled="False"/>
-                        </Paragraph>
-                    </FlowDocument>
-                </RichTextBox>
+                <TextBox Name="Textbox_Content" Grid.Row="3" Grid.Column="1" Margin="0 15 0 15" Style="{StaticResource MaterialDesignOutlinedTextFieldTextBox}" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" materialDesign:HintAssist.Hint="內文"/>
                 <Button Name="Button_Send" Content="送出" Grid.Row="4" Grid.Column="1" Click="Button_Click"/>
             </Grid>
         </Grid>

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Specialized;
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
@@ -73,6 +74,11 @@ namespace ConvertZZ
                      MessageBox.Show("回報單傳送失敗，請確認網路連線狀態");
                  }
              });
+        }
+
+        private void Text_Github_Click(object sender, RoutedEventArgs e)
+        {
+            Process.Start("https://github.com/flier268/ConvertZZ/issues");
         }
     }
 }

@@ -24,6 +24,7 @@
                     <RowDefinition Height="auto"/>
                     <RowDefinition Height="auto"/>
                     <RowDefinition Height="auto"/>
+                    <RowDefinition Height="auto"/>
                     <RowDefinition/>
                     <RowDefinition Height="auto"/>
                 </Grid.RowDefinitions>
@@ -31,15 +32,22 @@
                     <ColumnDefinition Width="auto"/>
                     <ColumnDefinition/>
                 </Grid.ColumnDefinitions>
-                <Label Content="姓名*" Grid.Row="0" Margin="0,0,20,0"/>
-                <Label Content="Email" Grid.Row="1" Margin="0 5"/>
-                <Label Content="標題*" Grid.Row="2"  Margin="0 5"/>
-                <Label Content="內文" Grid.Row="3"  Margin="0 10"/>
-                <TextBox Name="TextBox_Name" Grid.Row="0" Grid.Column="1"/>
-                <TextBox Name="TextBox_Email" Grid.Row="1" Grid.Column="1"/>
-                <TextBox Name="TextBox_Title" Grid.Row="2" Grid.Column="1"/>
-                <TextBox Name="Textbox_Content" Grid.Row="3" Grid.Column="1" Margin="0 15 0 15" Style="{StaticResource MaterialDesignOutlinedTextFieldTextBox}" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" materialDesign:HintAssist.Hint="內文"/>
-                <Button Name="Button_Send" Content="送出" Grid.Row="4" Grid.Column="1" Click="Button_Click"/>
+                <DockPanel Grid.ColumnSpan="2" HorizontalAlignment="Right">
+                    <TextBlock Text="為了方便追蹤問題，建議到"/>
+                    <Button Click="Text_Github_Click" Style="{StaticResource MaterialDesignFlatButton}" Padding="0" Height="Auto">
+                        <TextBlock Text="Github" Cursor="Hand"/>
+                    </Button>
+                    <TextBlock Text="上回報喔！"/>
+                </DockPanel>
+                <Label Content="姓名*" Grid.Row="1" Margin="0,0,20,0"/>
+                <Label Content="Email" Grid.Row="2" Margin="0 5"/>
+                <Label Content="標題*" Grid.Row="3"  Margin="0 5"/>
+                <Label Content="內文" Grid.Row="4"  Margin="0 10"/>
+                <TextBox Name="TextBox_Name" Grid.Row="1" Grid.Column="1"/>
+                <TextBox Name="TextBox_Email" Grid.Row="2" Grid.Column="1"/>
+                <TextBox Name="TextBox_Title" Grid.Row="3" Grid.Column="1"/>
+                <TextBox Name="Textbox_Content" Grid.Row="4" Grid.Column="1" Margin="0 15 0 15" Style="{StaticResource MaterialDesignOutlinedTextFieldTextBox}" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" materialDesign:HintAssist.Hint="內文"/>
+                <Button Name="Button_Send" Content="送出" Grid.Row="5" Grid.Column="1" Click="Button_Click"/>
             </Grid>
         </Grid>
     </materialDesign:Card>

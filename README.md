@@ -19,7 +19,7 @@
 * [Release](https://github.com/flier268/ConvertZZ/releases "Release")
 
 ## Wiki
-* [GWiki](https://github.com/flier268/ConvertZZ/wiki)
+* [Github Wiki](https://github.com/flier268/ConvertZZ/wiki)
 
 ## Require
 * .Net 4.7.2以上

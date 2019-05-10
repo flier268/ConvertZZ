@@ -86,7 +86,10 @@ namespace ConvertZZ
                         default:
                             var obj = (DataGrid_Dictionary.Items[rowIndex] as DictionaryFile_Helper.Line);
                             var propertyInfo = obj.GetType().GetProperty(bindingPath);
-                            propertyInfo.SetValue(obj, (e.EditingElement as TextBox).Text);
+                            if (propertyInfo.PropertyType == typeof(int))
+                                propertyInfo.SetValue(obj, int.Parse((e.EditingElement as TextBox).Text));
+                            else
+                                propertyInfo.SetValue(obj, (e.EditingElement as TextBox).Text);
                             break;
                     }
                 }

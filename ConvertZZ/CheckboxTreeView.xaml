@@ -15,9 +15,7 @@
             </TreeView.ItemContainerStyle>
             <TreeView.Resources>
                 <HierarchicalDataTemplate DataType="{x:Type local:Node}" ItemsSource="{Binding Nodes}">
-                    <CheckBox IsChecked="{Binding IsChecked}" Content="{Binding DisplayName}" Checked="CheckBox_Checked" Unchecked="CheckBox_Checked"
-                              Command="{Binding DataContext.MyCommand,  RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type Window}}}"
-                              CommandParameter="{Binding}"></CheckBox>
+                    <CheckBox IsChecked="{Binding IsChecked}" Content="{Binding DisplayName}" Checked="CheckBox_Checked" Unchecked="CheckBox_Checked"></CheckBox>
                 </HierarchicalDataTemplate>
             </TreeView.Resources>
         </TreeView>

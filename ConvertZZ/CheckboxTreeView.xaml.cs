@@ -25,48 +25,7 @@ namespace ConvertZZ
 
         private IList<Node> _ItemSources;
         public IList<Node> ItemSources { get => _ItemSources; set { _ItemSources = value; OnPropertyChanged("ItemSources"); } }
-        private RelayCommand _myCommand;
-        public RelayCommand MyCommand
-        {
-            get
-            {
-                return _myCommand
-                    ?? (_myCommand = new RelayCommand(
-                    p => DoCheckNodes((Node)p)));
-            }
-        }
-        private void DoCheckNodes(Node selectedNode)
-        {
-            RecursiveChildren(selectedNode, selectedNode.IsChecked);
-            RecursiveParent(selectedNode.Parent, selectedNode.IsChecked);
-        }
-        private void RecursiveChildren(Node current, bool isChecked)
-        {
-            foreach (var node in current.Nodes)
-            {
-                node.IsChecked = isChecked;
-                RecursiveChildren(node, isChecked);
-            }
-        }
-        private void RecursiveParent(Node current, bool isChecked)
-        {
-            if (current == null)
-                return;
-
-            if (isChecked)
-            {
-                // 若有勾子節點，則是否全部子節點都勾了
-                current.IsChecked = current.Nodes.All(x => x.IsChecked == isChecked);
-            }
-            else
-            {
-                // 子節點一個沒勾，上面的父節點就不用勾了
-                current.IsChecked = false;
-            }
-
-            RecursiveParent(current.Parent, isChecked);
-        }
-
+        
         private void CheckBox_Checked(object sender, System.Windows.RoutedEventArgs e)
         {
             CheckedChanged?.Invoke(sender as CheckBox);

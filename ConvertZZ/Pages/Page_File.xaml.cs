@@ -221,6 +221,8 @@ namespace ConvertZZ.Pages
             FileListTemp.Clear();
             treeview_nodes.Clear();
             treeview.ItemSources = null;
+            InputPreviewText = "";
+            OutputPreviewText = "";
         }
 
         private Node GetChildPath(string path, bool searchAll, string filter)

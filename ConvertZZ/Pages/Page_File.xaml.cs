@@ -340,21 +340,22 @@ namespace ConvertZZ.Pages
         {
             StringBuilder sb = new StringBuilder();
             StringBuilder sb2 = new StringBuilder();
+            Dictionary<int, string[]> keyValuePairs = new Dictionary<int, string[]>();
             treeview_nodes.ForEach(x =>
             {
                 if (x.Nodes != null)
                 {
                     var childlist = GetAllChildNode(x);
-                    childlist.OrderByDescending(y => y.Generation).ToList().ForEach(y =>
+                    childlist.Where(y => y.IsChecked).Reverse().ToList().ForEach(y =>
                     {
-                        if (y.IsChecked)
-                        {
-                            string temp = "";
-                            string path = GetParentSum(y, ref temp);
-                            string newpath = Path.Combine(Path.GetDirectoryName(path), ConvertHelper.Convert(Path.GetFileName(path), encoding, ToChinese));
-                            sb.AppendLine(path);
-                            sb2.AppendLine(newpath);
-                        }
+                        string temp = "";
+                        string path = GetParentSum(y, ref temp);
+                        string newpath = Path.Combine(Path.GetDirectoryName(path), ConvertHelper.Convert(Path.GetFileName(path), encoding, ToChinese));
+                        sb.AppendLine(path);
+                        if (y.Generation > 1 && keyValuePairs.ContainsKey(y.Generation - 1))
+                            newpath = newpath.Replace(keyValuePairs[y.Generation - 1][0], keyValuePairs[y.Generation - 1][1]);
+                        sb2.AppendLine(newpath);
+                        keyValuePairs[y.Generation] = new string[] { path, newpath };
                     });
                 }
             });

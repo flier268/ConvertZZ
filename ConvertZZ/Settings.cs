@@ -49,6 +49,8 @@ namespace ConvertZZ
     {
         public Settings()
         {
+            PositionX = -1;
+            PositionY = -1;
             QuickStart = new QuickStart();
             RecognitionEncoding = true;
             Prompt = true;
@@ -59,6 +61,16 @@ namespace ConvertZZ
             FileConvert = new FileConvert();
             CheckVersion = true;
         }
+        /// <summary>
+        /// 上次關閉時的X座標
+        /// </summary>
+        [JsonProperty("PositionX")]
+        public double PositionX { get; set; }
+        /// <summary>
+        /// 上次關閉時的Y座標
+        /// </summary>
+        [JsonProperty("PositionY")]
+        public double PositionY { get; set; }
         /// <summary>
         /// 試圖自動辨識編碼
         /// </summary>

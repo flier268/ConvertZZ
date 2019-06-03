@@ -103,8 +103,10 @@ namespace ConvertZZ
         private void Setting_Click(object sender, RoutedEventArgs e)
         {
             UnRegAllHotkey();
+            Topmost = false;
             Window_Setting window_Setting = new Window_Setting() { Owner = this };
             window_Setting.ShowDialog();
+            Topmost = true;
             RegAllHotkey();
         }
         private void Exit_Click(object sender, RoutedEventArgs e)

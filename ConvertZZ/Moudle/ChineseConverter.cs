@@ -35,10 +35,12 @@ namespace ConvertZZ
         /// </summary> 
         /// <param name="pSource">要轉換的繁體字：體</param> 
         /// <returns>轉換後的簡體字：體</returns> 
-        public static string ToSimplified(string pSource)
+        public string ToSimplified(string pSource)
         {
+            pSource = FR_Reserved.ReplaceAll(pSource);
             String tTarget = new String(' ', pSource.Length);
             int tReturn = LCMapStringEx(LOCALE_SYSTEM_DEFAULT, LCMAP_SIMPLIFIED_CHINESE, pSource, pSource.Length, tTarget, pSource.Length);
+            tTarget = FRRevert_Reserved.ReplaceAll(tTarget);
             return tTarget;
         }
 
@@ -47,10 +49,12 @@ namespace ConvertZZ
         /// </summary> 
         /// <param name="pSource">要轉換的繁體字：體</param> 
         /// <returns>轉換後的簡體字：體</returns> 
-        public static string ToTraditional(string pSource)
+        public string ToTraditional(string pSource)
         {
+            pSource = FR_Reserved.ReplaceAll(pSource);
             String tTarget = new String(' ', pSource.Length);
             int tReturn = LCMapStringEx(LOCALE_SYSTEM_DEFAULT, LCMAP_TRADITIONAL_CHINESE, pSource, pSource.Length, tTarget, pSource.Length);
+            tTarget = FRRevert_Reserved.ReplaceAll(tTarget);
             return tTarget;
         }
 
@@ -58,18 +62,29 @@ namespace ConvertZZ
 
         internal List<DictionaryFile_Helper.Line> Lines { get; set; } = new List<DictionaryFile_Helper.Line>();
         FastReplace FR = null, FRRevert = null;
+        Dictionary<string, string> ReservedWordTable = new Dictionary<string, string>();
+        Dictionary<string, string> ReservedWordTable_Revert = new Dictionary<string, string>();
+        public FastReplace FR_Reserved = null, FRRevert_Reserved = null;
         public ChineseConverter()
         {
         }
         public async Task Load(string fileName)
-        {
+        {   
             Lines.AddRange(await DictionaryFile_Helper.Load(fileName));
-
+            Reload();
+        }
+        public void Reload()
+        {
             var lines = Lines.ToLookup(x => x.SimplifiedChinese).Select(coll => coll.First()).ToList();
             FR = new FastReplace(lines.Where(x => x.Enable).OrderByDescending(x => x.SimplifiedChinese_Priority).ThenByDescending(x => x.SimplifiedChinese.Length).ToDictionary(x => x.SimplifiedChinese, x => x.TraditionalChinese));
 
             lines = Lines.ToLookup(x => x.TraditionalChinese).Select(coll => coll.First()).ToList();
             FRRevert = new FastReplace(lines.Where(x => x.Enable).OrderByDescending(x => x.TraditionalChinese_Priority).ThenByDescending(x => x.TraditionalChinese.Length).ToDictionary(x => x.TraditionalChinese, x => x.SimplifiedChinese));
+            ReservedWordTable.Clear();
+            ReservedWordTable_Revert.Clear();
+            lines.Where(x => x.Enable).Where(x => x.SimplifiedChinese_Priority == 9999 && x.TraditionalChinese_Priority == 9999 && x.SimplifiedChinese == x.TraditionalChinese).ToList().ForEach(x => InsertTo_ReservedWordTable(x.SimplifiedChinese));
+            FR_Reserved = new FastReplace(ReservedWordTable);
+            FRRevert_Reserved = new FastReplace(ReservedWordTable_Revert);
         }
         /// <summary>
         /// 
@@ -97,6 +112,17 @@ namespace ConvertZZ
                 sb.Replace(temp.Key, temp.Value);                    
             }
             return input;*/
+        }
+        private void InsertTo_ReservedWordTable(string str)
+        {
+            string temp;
+            do
+            {
+                temp = $"❂{Guid.NewGuid().ToString()}❂";
+            }
+            while (ReservedWordTable.ContainsKey(temp));
+            ReservedWordTable.Add(str, temp);
+            ReservedWordTable_Revert.Add(temp, str);
         }
     }
 }

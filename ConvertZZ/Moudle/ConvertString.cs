@@ -31,14 +31,14 @@ namespace ConvertZZ.Moudle
                     {
                         origin = App.ChineseConverter.Convert(origin, true);
                     }
-                    origin = ChineseConverter.ToTraditional(origin);
+                    origin = App.ChineseConverter.ToTraditional(origin);
                     break;
                 case 2:
                     if ((App.Settings.VocabularyCorrection && VocabularyCorrection != 0) || VocabularyCorrection == 1)
                     {
                         origin = App.ChineseConverter.Convert(origin, false);
                     }
-                    origin = ChineseConverter.ToSimplified(origin);
+                    origin = App.ChineseConverter.ToSimplified(origin);
                     break;
             }
             return origin;
@@ -73,7 +73,7 @@ namespace ConvertZZ.Moudle
                 foreach (char c in origin.ToCharArray())
                     if (encoding[1].GetChars(encoding[1].GetBytes(new char[] { c }))[0] != c)
                     {
-                        sb.Append(ChineseConverter.ToTraditional(new String(c, 1)));
+                        sb.Append(App.ChineseConverter.ToTraditional(new String(c, 1)));
                     }
                     else
                         sb.Append(c);

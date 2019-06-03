@@ -34,7 +34,7 @@ namespace ConvertZZ
             DataGrid_Dictionary.ItemsSource = DataGrid_ItemSource;
             PerformCustomSort(true);
         }
-        FastReplace FastReplace;
+        ChineseConverter ChineseConverter = new ChineseConverter();
         List<DictionaryFile_Helper.Line> DataGrid_ItemSource { get; set; }
         private string _Input = "";
         public string Input { get => _Input; set { _Input = value; OnPropertyChanged(); } }
@@ -44,29 +44,16 @@ namespace ConvertZZ
         public bool C_to_T { get; set; } = true;
         void FastReplace_Reload()
         {
-            if (C_to_T)
-            {
-                var lines = DataGrid_ItemSource.Where(x => x.Enable).ToLookup(x => x.SimplifiedChinese).Select(coll => coll.First()).ToList();
-                FastReplace = new FastReplace(lines.Where(x => x.Enable).OrderByDescending(x => x.SimplifiedChinese_Priority).ThenByDescending(x => x.SimplifiedChinese.Length).ToDictionary(x => x.SimplifiedChinese, x => x.TraditionalChinese));
-            }
-            else
-            {
-                var lines = DataGrid_ItemSource.Where(x => x.Enable).ToLookup(x => x.TraditionalChinese).Select(coll => coll.First()).ToList();
-                FastReplace = new FastReplace(lines.Where(x => x.Enable).OrderByDescending(x => x.TraditionalChinese_Priority).ThenByDescending(x => x.TraditionalChinese.Length).ToDictionary(x => x.TraditionalChinese, x => x.SimplifiedChinese));
-            }
+            ChineseConverter.Lines = DataGrid_ItemSource;
+            ChineseConverter.Reload();
         }
         void InputToOutput()
         {
+            _Output = ChineseConverter.Convert(Input, C_to_T);
             if (C_to_T)
-            {
-                _Output = FastReplace.ReplaceAll(Input);
                 Output = ChineseConverter.ToTraditional(_Output);
-            }
             else
-            {
-                _Output = FastReplace.ReplaceAll(Input);
                 Output = ChineseConverter.ToSimplified(_Output);
-            }
         }
 
         private void DataGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
@@ -166,6 +153,9 @@ namespace ConvertZZ
             await Task.Delay(0);
             DataGrid_ItemSource = App.ChineseConverter.Lines.Select(x => x.Clone()).ToList();
             DataGrid_Dictionary.ItemsSource = DataGrid_ItemSource;
+            ChineseConverter.Lines = DataGrid_ItemSource;
+            ChineseConverter.Reload();
+            InputToOutput();
             PerformCustomSort(true);
         }
         private async void Button_Save_CheckedAsync(object sender, RoutedEventArgs e)
@@ -183,7 +173,6 @@ namespace ConvertZZ
             await Task.Delay(0);
             if (DataGrid_Dictionary.ItemsSource == null)
                 return;
-            FastReplace_Reload();
             InputToOutput();
             PerformCustomSort(C_to_T);
         }
@@ -234,7 +223,7 @@ namespace ConvertZZ
 
         private void TextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-            if (FastReplace == null) return;
+            if (ChineseConverter == null) return;
             string value = (e.Source as TextBox).Text;
             _Input = value.Substring(0, Math.Min(500, value.Length));
             InputToOutput();

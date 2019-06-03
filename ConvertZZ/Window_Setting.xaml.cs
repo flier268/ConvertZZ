@@ -191,7 +191,7 @@ namespace ConvertZZ
 
         private void Button_DictionaryEdit_Click(object sender, RoutedEventArgs e)
         {
-            new Window_DictionaryEditor().Show();
+            new Window_DictionaryEditor().ShowDialog();
         }
 
         public KeyValuePair<string, string> Quick_R2 { get => _Quick_R2; set { _Quick_R2 = value; OnPropertyChanged(); SaveSetting(); } }

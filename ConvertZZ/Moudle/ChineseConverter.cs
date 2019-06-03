@@ -22,6 +22,14 @@ namespace ConvertZZ
         [DllImport("kernel32", CharSet = CharSet.Auto, SetLastError = true)]
         internal static extern int LCMapString(int Locale, int dwMapFlags, string lpSrcStr, int cchSrc, [Out] string lpDestStr, int cchDest);
 
+
+        /// <summary> 
+        /// 使用OS的kernel.dll做為簡繁轉換工具，只要有裝OS就可以使用，不用額外引用dll，但只能做逐字轉換，無法進行詞意的轉換 
+        /// <para>所以無法將電腦轉成計算機</para> 
+        /// </summary> 
+        [DllImport("kernel32", CharSet = CharSet.Auto, SetLastError = true)]
+        internal static extern int LCMapStringEx(int Locale, int dwMapFlags, string lpSrcStr, int cchSrc, [Out] string lpDestStr, int cchDest, int lpVersionInformation = 0, int lpReserved = 0, int sortHandle = 0);
+       
         /// <summary> 
         /// 繁體轉簡體 
         /// </summary> 
@@ -30,7 +38,7 @@ namespace ConvertZZ
         public static string ToSimplified(string pSource)
         {
             String tTarget = new String(' ', pSource.Length);
-            int tReturn = LCMapString(LOCALE_SYSTEM_DEFAULT, LCMAP_SIMPLIFIED_CHINESE, pSource, pSource.Length, tTarget, pSource.Length);
+            int tReturn = LCMapStringEx(LOCALE_SYSTEM_DEFAULT, LCMAP_SIMPLIFIED_CHINESE, pSource, pSource.Length, tTarget, pSource.Length);
             return tTarget;
         }
 
@@ -42,7 +50,7 @@ namespace ConvertZZ
         public static string ToTraditional(string pSource)
         {
             String tTarget = new String(' ', pSource.Length);
-            int tReturn = LCMapString(LOCALE_SYSTEM_DEFAULT, LCMAP_TRADITIONAL_CHINESE, pSource, pSource.Length, tTarget, pSource.Length);
+            int tReturn = LCMapStringEx(LOCALE_SYSTEM_DEFAULT, LCMAP_TRADITIONAL_CHINESE, pSource, pSource.Length, tTarget, pSource.Length);
             return tTarget;
         }
 

@@ -20,8 +20,6 @@ namespace ConvertZZ
         {
             InitializeComponent();
             App.nIcon.MouseClick += NIcon_MouseClick;
-            if (!App.Settings.AssistiveTouch)
-                this.Visibility = Visibility.Hidden;
             if (0 < App.Settings.PositionX && App.Settings.PositionX < SystemParameters.WorkArea.Width)
                 Left = App.Settings.PositionX;
             if (0 < App.Settings.PositionY && App.Settings.PositionY < SystemParameters.WorkArea.Height)
@@ -525,6 +523,12 @@ namespace ConvertZZ
             App.Settings.PositionY = Top;
             App.Save();
             UnRegAllHotkey();
+        }
+
+        private void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (!App.Settings.AssistiveTouch)
+                this.Visibility = Visibility.Hidden;
         }
     }
 

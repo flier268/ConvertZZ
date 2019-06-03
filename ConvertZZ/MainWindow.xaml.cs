@@ -18,10 +18,10 @@ namespace ConvertZZ
         List<Moudle.HotKey> hotKeys = new List<Moudle.HotKey>();
         public MainWindow()
         {
+            InitializeComponent();
             App.nIcon.MouseClick += NIcon_MouseClick;
             if (!App.Settings.AssistiveTouch)
-                this.Hide();
-            InitializeComponent();
+                this.Visibility = Visibility.Hidden;
             RegAllHotkey();
         }
 

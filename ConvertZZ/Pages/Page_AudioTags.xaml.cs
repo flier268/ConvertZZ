@@ -41,6 +41,10 @@ namespace ConvertZZ.Pages
         /// </summary>
         Encoding[] encoding = new Encoding[2] { Encoding.GetEncoding("GBK"), Encoding.GetEncoding("Big5") };
         /// <summary>
+        /// 編碼轉換 [0]:來源編碼   [1]:輸出編碼
+        /// </summary>
+        Encoding[] encoding2 = new Encoding[2] { Encoding.GetEncoding("GBK"), Encoding.GetEncoding("Big5") };
+        /// <summary>
         /// 輸出簡繁轉換：0:一般  1:繁體中文 2:簡體中文
         /// </summary>
         int ToChinese1 = 0;
@@ -60,48 +64,44 @@ namespace ConvertZZ.Pages
             {
                 Mouse.OverrideCursor = Cursors.Wait;
                 stopwatch.Start();
-                switch (Encoding_Output_ID3v2)
-                {
-                    case "UTF-8":
-                        TagLib.Id3v2.Tag.DefaultEncoding = TagLib.StringType.UTF8;
-                        break;
-                    case "UTF-16":
-                        TagLib.Id3v2.Tag.DefaultEncoding = TagLib.StringType.UTF16;
-                        break;
-                    case "UTF-16BE":
-                        TagLib.Id3v2.Tag.DefaultEncoding = TagLib.StringType.UTF16BE;
-                        break;
-                    case "UTF-16LE":
-                        TagLib.Id3v2.Tag.DefaultEncoding = TagLib.StringType.UTF16LE;
-                        break;
-                }
                 try
                 {
                     var tfile = TagLib.File.Create(Path.Combine(_temp.Path, _temp.Name));
                     tfile.RemoveTags((Enable_ID3v1 ? TagLib.TagTypes.None : TagLib.TagTypes.Id3v1) | (Enable_ID3v2 ? TagLib.TagTypes.None : TagLib.TagTypes.Id3v2));
-                    TagLib.Id3v1.Tag t = (TagLib.Id3v1.Tag)tfile.GetTag(TagLib.TagTypes.Id3v1);
-                    TagLib.Id3v2.Tag t2 = (TagLib.Id3v2.Tag)tfile.GetTag(TagLib.TagTypes.Id3v2, Enable_ID3v1 ? true : false);
-
-                    GetAllStringProperties(t).ForEach(x =>
+                    TagLib.Id3v1.Tag t = (TagLib.Id3v1.Tag)tfile.GetTag(TagLib.TagTypes.Id3v1, Enable_ID3v1 ? true : false);
+                    TagLib.Id3v2.Tag t2 = (TagLib.Id3v2.Tag)tfile.GetTag(TagLib.TagTypes.Id3v2, Enable_ID3v2 ? true : false);
+                    SetID3v2Encoding(Encoding_Output_ID3v2);
+                    if (t != null)
                     {
-                        x.Value = encoding[1].GetString(Encoding.GetEncoding("ISO-8859-1").GetBytes(x.Value));
-                        x.Value_Preview = ConvertHelper.Convert(x.Value, encoding, ToChinese1);
-                        SetPropertiesValue(t, x.TagName, Encoding.GetEncoding("ISO-8859-1").GetString(encoding[1].GetBytes(x.Value_Preview)));
-                    });
-
-                    GetAllStringProperties(t2).ForEach(x =>
+                        GetAllStringProperties(t).ForEach(x =>
+                        {
+                            x.Value = StringToUnicode.TryToConvertLatin1ToUnicode(x.Value, encoding[0]);
+                            x.Value_Preview = ConvertHelper.Convert(x.Value, encoding, ToChinese1);                            
+                            t.SetPropertiesValue(x.TagName, Encoding.GetEncoding("ISO-8859-1").GetString(encoding[1].GetBytes(x.Value_Preview)));
+                        });
+                    }
+                    if (t2 != null)
                     {
-                        x.Value_Preview = ConvertHelper.Convert(x.Value, ToChinese2);
-                        SetPropertiesValue(t2, x.TagName, x.Value_Preview);
-                    });
-                    t2.Version = (Combobox_ID3v2_Version.Text == "2.3") ? (byte)3 : (byte)4;
+                        GetAllStringProperties(t2).ForEach(x =>
+                        {
+                            if (tfile.TagTypesOnDisk.HasFlag(TagLib.TagTypes.Id3v2))
+                                x.Value = StringToUnicode.TryToConvertLatin1ToUnicode(x.Value, encoding2[0]);
+                            else
+                            {
+                                var _ = ID3v1_TagList.Where(y => y.TagName == x.TagName).FirstOrDefault();
+                                x.Value = _ != null ? _.Value_Preview : "";
+                            }
+                            x.Value_Preview = ConvertHelper.Convert(x.Value, ToChinese2);
+                            t2.SetPropertiesValue(x.TagName, x.Value_Preview);
+                        });
+                        t2.Version = (Combobox_ID3v2_Version.Text == "2.3") ? (byte)3 : (byte)4;
+                    }
                     tfile.Save();
                 }
                 catch (TagLib.UnsupportedFormatException) { MessageBox.Show(string.Format("轉換{0}時出現錯誤，該檔案並非音訊檔", _temp.Name)); }
-                catch { MessageBox.Show(string.Format("轉換{0}時出現未知錯誤", _temp.Name)); }
-                Mouse.OverrideCursor = null;
+                catch { MessageBox.Show(string.Format("轉換{0}時出現未知錯誤", _temp.Name)); }                
             }
-
+            Mouse.OverrideCursor = null;
             stopwatch.Stop();
             if (App.Settings.Prompt)
             {
@@ -122,20 +122,28 @@ namespace ConvertZZ.Pages
 
                 ID3v1_TagList.Clear();
                 ID3v2_TagList.Clear();
+
                 GetAllStringProperties(t).ForEach(x =>
                 {
-                    x.Value = encoding[1].GetString(Encoding.GetEncoding("ISO-8859-1").GetBytes(x.Value));
+                    x.Value = StringToUnicode.TryToConvertLatin1ToUnicode(x.Value, encoding[0]);
                     x.Value_Preview = ConvertHelper.Convert(x.Value, encoding, ToChinese1);
                     ID3v1_TagList.Add(x);
                 });
 
                 GetAllStringProperties(t2).ForEach(x =>
                 {
+                    if (tfile.TagTypesOnDisk.HasFlag(TagLib.TagTypes.Id3v2))
+                        x.Value = StringToUnicode.TryToConvertLatin1ToUnicode(x.Value, encoding2[0]);
+                    else
+                    { 
+                        var _ = ID3v1_TagList.Where(y => y.TagName == x.TagName).FirstOrDefault();
+                        x.Value = _ != null ? _.Value_Preview : "";
+                    }
                     x.Value_Preview = ConvertHelper.Convert(x.Value, ToChinese2);
                     ID3v2_TagList.Add(x);
                 });
             }
-            catch(TagLib.UnsupportedFormatException)
+            catch (TagLib.UnsupportedFormatException)
             {
                 ID3v1_TagList.Clear();
                 ID3v2_TagList.Clear();
@@ -168,6 +176,9 @@ namespace ConvertZZ.Pages
         }
         private bool SetPropertiesValue(object obj, string key, object value)
         {
+            obj.GetType().GetProperty(key).SetValue(obj, value, null);
+            return true;
+            /*
             List<TagList_Line> keyValuePair = new List<TagList_Line>();
             foreach (PropertyDescriptor descriptor in TypeDescriptor.GetProperties(obj))
             {
@@ -178,6 +189,7 @@ namespace ConvertZZ.Pages
                 }
             }
             return false;
+            */
         }
         private void ModeChange(object sender, RoutedEventArgs e)
         {
@@ -275,6 +287,31 @@ namespace ConvertZZ.Pages
             }
             Preview(LastPath);
         }
+
+        private void SetID3v2Encoding(string Encoding)
+        {
+            TagLib.Id3v2.Tag.ForceDefaultEncoding = true;
+            switch (Encoding)
+            {
+                case "ISO-8859-1":
+                    TagLib.Id3v2.Tag.DefaultEncoding = TagLib.StringType.Latin1;
+                    break;
+                case "UTF-8":
+                    TagLib.Id3v2.Tag.DefaultEncoding = TagLib.StringType.UTF8;
+                    break;
+                case "Unicode":
+                case "UTF-16":
+                    TagLib.Id3v2.Tag.DefaultEncoding = TagLib.StringType.UTF16;
+                    break;
+                case "UTF-16BE":
+                    TagLib.Id3v2.Tag.DefaultEncoding = TagLib.StringType.UTF16BE;
+                    break;
+                case "UTF-16LE":
+                    TagLib.Id3v2.Tag.DefaultEncoding = TagLib.StringType.UTF16LE;
+                    break;
+            }
+        }
+
         public class FileList_Line
         {
             public int ID { get; set; }
@@ -308,8 +345,10 @@ namespace ConvertZZ.Pages
         public bool Enable_ID3v2 { get; set; } = true;
         private string _Encoding_Source_ID3v1 = "GBK";
         private string _Encoding_Output_ID3v1 = "Big5";
+        private string _Encoding_Source_ID3v2 = "GBK";
         public string Encoding_Source_ID3v1 { get => _Encoding_Source_ID3v1; set { _Encoding_Source_ID3v1 = value; encoding[0] = Encoding.GetEncoding(value); Preview(LastPath); } }
         public string Encoding_Output_ID3v1 { get => _Encoding_Output_ID3v1; set { _Encoding_Output_ID3v1 = value; encoding[1] = Encoding.GetEncoding(value); Preview(LastPath); } }
+        public string Encoding_Source_ID3v2 { get => _Encoding_Source_ID3v2; set { _Encoding_Source_ID3v2 = value; encoding2[0] = Encoding.GetEncoding(value); Preview(LastPath); } }
         public string Encoding_Output_ID3v2 { get; set; } = "UTF-16";
 
         public event PropertyChangedEventHandler PropertyChanged;

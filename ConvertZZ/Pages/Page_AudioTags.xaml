@@ -154,6 +154,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition/>
@@ -165,8 +166,10 @@
                         <ComboBoxItem Content="2.3"/>
                         <ComboBoxItem Content="2.4"/>
                     </ComboBox>
-                    <Label Content="輸出編碼" Margin="20 0" Grid.Row="2"/>
-                    <ComboBox Name="Combobox_Encoding_ID3v2" SelectedValue="{Binding Encoding_Output_ID3v2}" IsEnabled="{Binding ElementName=Checkbox_ID3v2,Path=IsChecked}" HorizontalContentAlignment="Center" Grid.Row="2" Grid.Column="1"/>
+                    <Label Content="輸入編碼" Margin="20 0" Grid.Row="2"/>
+                    <ComboBox ItemsSource="{StaticResource Encoding_ID3v1}" SelectedValue="{Binding Encoding_Source_ID3v2}" IsEnabled="{Binding ElementName=Checkbox_ID3v2,Path=IsChecked}" HorizontalContentAlignment="Center" Grid.Row="2" Grid.Column="1" SelectedIndex="0"/>
+                    <Label Content="輸出編碼" Margin="20 0" Grid.Row="3"/>
+                    <ComboBox Name="Combobox_Encoding_ID3v2" SelectedValue="{Binding Encoding_Output_ID3v2}" IsEnabled="{Binding ElementName=Checkbox_ID3v2,Path=IsChecked}" HorizontalContentAlignment="Center" Grid.Row="3" Grid.Column="1"/>
                 </Grid>
                 <DockPanel IsEnabled="{Binding ElementName=Checkbox_ID3v2,Path=IsChecked}" Grid.Row="1" Grid.ColumnSpan="2" HorizontalAlignment="Right" Margin="0,0,5,0">
                     <Label Content="輸出模式:" VerticalAlignment="Center"/>

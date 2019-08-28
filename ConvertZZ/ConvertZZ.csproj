@@ -102,7 +102,9 @@
     <Compile Include="Moudle\ConvertString.cs" />
     <Compile Include="Moudle\DictionaryFile_Helper.cs" />
     <Compile Include="Moudle\EncodingAnalyzer.cs" />
+    <Compile Include="Moudle\Extension_ID3.cs" />
     <Compile Include="Moudle\Hotkey.cs" />
+    <Compile Include="Moudle\StringToUnicode.cs" />
     <Compile Include="Moudle\Toast.xaml.cs">
       <DependentUpon>Toast.xaml</DependentUpon>
     </Compile>

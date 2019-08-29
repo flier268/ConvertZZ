@@ -154,22 +154,23 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition/>
                         <ColumnDefinition/>
                     </Grid.ColumnDefinitions>
                     <CheckBox Name="Checkbox_ID3v2" IsChecked="{Binding Enable_ID3v2}" Content="ID3v2" Margin="0 0 0 10" Grid.ColumnSpan="2"/>
-                    <Label Content="版本" Margin="20 0" Grid.Row="1"/>
-                    <ComboBox Name="Combobox_ID3v2_Version" IsEnabled="{Binding ElementName=Checkbox_ID3v2,Path=IsChecked}" SelectedIndex="0" SelectionChanged="ComboBox_ID3v2_Version_SelectionChanged" HorizontalContentAlignment="Center" Grid.Row="1" Grid.Column="1">
-                        <ComboBoxItem Content="2.3"/>
-                        <ComboBoxItem Content="2.4"/>
-                    </ComboBox>
-                    <Label Content="輸入編碼" Margin="20 0" Grid.Row="2"/>
-                    <ComboBox ItemsSource="{StaticResource Encoding_ID3v1}" SelectedValue="{Binding Encoding_Source_ID3v2}" IsEnabled="{Binding ElementName=Checkbox_ID3v2,Path=IsChecked}" HorizontalContentAlignment="Center" Grid.Row="2" Grid.Column="1" SelectedIndex="0"/>
-                    <Label Content="輸出編碼" Margin="20 0" Grid.Row="3"/>
-                    <ComboBox Name="Combobox_Encoding_ID3v2" SelectedValue="{Binding Encoding_Output_ID3v2}" IsEnabled="{Binding ElementName=Checkbox_ID3v2,Path=IsChecked}" HorizontalContentAlignment="Center" Grid.Row="3" Grid.Column="1"/>
+                    <DockPanel Grid.Column="1">
+                        <Label Content="版本" Margin="20 0"/>
+                        <ComboBox Name="Combobox_ID3v2_Version" IsEnabled="{Binding ElementName=Checkbox_ID3v2,Path=IsChecked}" SelectedIndex="0" SelectionChanged="ComboBox_ID3v2_Version_SelectionChanged" HorizontalContentAlignment="Center">
+                            <ComboBoxItem Content="2.3"/>
+                            <ComboBoxItem Content="2.4"/>
+                        </ComboBox>
+                    </DockPanel>
+                    <Label Content="輸入編碼" Margin="20 0" Grid.Row="1"/>
+                    <ComboBox ItemsSource="{StaticResource Encoding_ID3v1}" SelectedValue="{Binding Encoding_Source_ID3v2}" IsEnabled="{Binding ElementName=Checkbox_ID3v2,Path=IsChecked}" HorizontalContentAlignment="Center" Grid.Row="2" Grid.Column="0" SelectedIndex="0"/>
+                    <Label Content="輸出編碼" Margin="20 0" Grid.Row="1" Grid.Column="1"/>
+                    <ComboBox Name="Combobox_Encoding_ID3v2" SelectedValue="{Binding Encoding_Output_ID3v2}" IsEnabled="{Binding ElementName=Checkbox_ID3v2,Path=IsChecked}" HorizontalContentAlignment="Center" Grid.Row="2" Grid.Column="1"/>
                 </Grid>
                 <DockPanel IsEnabled="{Binding ElementName=Checkbox_ID3v2,Path=IsChecked}" Grid.Row="1" Grid.ColumnSpan="2" HorizontalAlignment="Right" Margin="0,0,5,0">
                     <Label Content="輸出模式:" VerticalAlignment="Center"/>

@@ -23,6 +23,14 @@
                 <sys:String>GBK</sys:String>
                 <sys:String>Shift-JIS</sys:String>
             </x:Array>
+            <x:Array x:Key="Encoding_ID3v1_Output" Type="sys:String">
+                <sys:String>Big5</sys:String>
+                <sys:String>GBK</sys:String>
+                <sys:String>Shift-JIS</sys:String>
+                <sys:String>Big5(不轉碼)</sys:String>
+                <sys:String>GBK(不轉碼)</sys:String>
+                <sys:String>Shift-JIS(不轉碼)</sys:String>
+            </x:Array>
         </ResourceDictionary>
 
     </Page.Resources>
@@ -116,7 +124,7 @@
                     <Label Content="來源編碼" Margin="20 0" Grid.Row="1"/>
                     <ComboBox ItemsSource="{StaticResource Encoding_Input}" IsEnabled="{Binding ElementName=Checkbox_ID3v1,Path=IsChecked}" SelectedIndex="1" SelectedValue="{Binding Encoding_Source_ID3v1}" HorizontalContentAlignment="Center" Margin="20 0" Grid.Row="2"/>
                     <Label Content="輸出編碼" Margin="20 0" Grid.Row="1" Grid.Column="1"/>
-                    <ComboBox ItemsSource="{StaticResource Encoding_Input}" IsEnabled="{Binding ElementName=Checkbox_ID3v1,Path=IsChecked}" SelectedIndex="0" SelectedValue="{Binding Encoding_Output_ID3v1}" HorizontalContentAlignment="Center" Margin="20 0" Grid.Row="2" Grid.Column="1"/>
+                    <ComboBox ItemsSource="{StaticResource Encoding_ID3v1_Output}" IsEnabled="{Binding ElementName=Checkbox_ID3v1,Path=IsChecked}" SelectedIndex="0" SelectedValue="{Binding Encoding_Output_ID3v1}" HorizontalContentAlignment="Center" Margin="20 0" Grid.Row="2" Grid.Column="1"/>
                 </Grid>
                 <DockPanel Grid.Row="1" Grid.ColumnSpan="2" IsEnabled="{Binding ElementName=Checkbox_ID3v1,Path=IsChecked}" HorizontalAlignment="Right" Margin="0,0,5,0">
                     <Label Content="輸出模式:" VerticalAlignment="Center"/>

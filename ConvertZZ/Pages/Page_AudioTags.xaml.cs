@@ -52,6 +52,8 @@ namespace ConvertZZ.Pages
         /// 輸出簡繁轉換：0:一般  1:繁體中文 2:簡體中文
         /// </summary>
         int ToChinese2 = 0;
+        private bool ConvertEncoding = true;
+
         string LastPath = "";
         private void Button_Convert_Click(object sender, RoutedEventArgs e)
         {
@@ -76,7 +78,7 @@ namespace ConvertZZ.Pages
                         GetAllStringProperties(t).ForEach(x =>
                         {
                             x.Value = StringToUnicode.TryToConvertLatin1ToUnicode(x.Value, encoding[0]);
-                            x.Value_Preview = ConvertHelper.Convert(x.Value, encoding, ToChinese1);                            
+                            x.Value_Preview = ConvertEncoding ? ConvertHelper.Convert(x.Value, encoding, ToChinese1) : ConvertHelper.Convert(x.Value, ToChinese1);
                             t.SetPropertiesValue(x.TagName, Encoding.GetEncoding("ISO-8859-1").GetString(encoding[1].GetBytes(x.Value_Preview)));
                         });
                     }
@@ -126,7 +128,7 @@ namespace ConvertZZ.Pages
                 GetAllStringProperties(t).ForEach(x =>
                 {
                     x.Value = StringToUnicode.TryToConvertLatin1ToUnicode(x.Value, encoding[0]);
-                    x.Value_Preview = ConvertHelper.Convert(x.Value, encoding, ToChinese1);
+                    x.Value_Preview = ConvertEncoding ? ConvertHelper.Convert(x.Value, encoding, ToChinese1) : ConvertHelper.Convert(x.Value, ToChinese1);
                     ID3v1_TagList.Add(x);
                 });
 
@@ -347,7 +349,18 @@ namespace ConvertZZ.Pages
         private string _Encoding_Output_ID3v1 = "Big5";
         private string _Encoding_Source_ID3v2 = "GBK";
         public string Encoding_Source_ID3v1 { get => _Encoding_Source_ID3v1; set { _Encoding_Source_ID3v1 = value; encoding[0] = Encoding.GetEncoding(value); Preview(LastPath); } }
-        public string Encoding_Output_ID3v1 { get => _Encoding_Output_ID3v1; set { _Encoding_Output_ID3v1 = value; encoding[1] = Encoding.GetEncoding(value); Preview(LastPath); } }
+        public string Encoding_Output_ID3v1
+        {
+            get => _Encoding_Output_ID3v1;
+            set
+            {
+                _Encoding_Output_ID3v1 = value;
+                var temp = value.Split(new char[] { '(' });
+                ConvertEncoding = temp.Length == 1;
+                encoding[1] = Encoding.GetEncoding(temp[0]);
+                Preview(LastPath);
+            }
+        }
         public string Encoding_Source_ID3v2 { get => _Encoding_Source_ID3v2; set { _Encoding_Source_ID3v2 = value; encoding2[0] = Encoding.GetEncoding(value); Preview(LastPath); } }
         public string Encoding_Output_ID3v2 { get; set; } = "UTF-16";
 

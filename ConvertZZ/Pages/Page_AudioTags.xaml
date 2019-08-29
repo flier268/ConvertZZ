@@ -18,7 +18,7 @@
                 <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.Shadows.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.ToggleButton.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <x:Array x:Key="Encoding_ID3v1" Type="sys:String">
+            <x:Array x:Key="Encoding_Input" Type="sys:String">
                 <sys:String>Big5</sys:String>
                 <sys:String>GBK</sys:String>
                 <sys:String>Shift-JIS</sys:String>
@@ -114,9 +114,9 @@
                     </Grid.ColumnDefinitions>
                     <CheckBox Name="Checkbox_ID3v1" IsChecked="{Binding Enable_ID3v1}" Content="ID3v1" Margin="0 0 0 10" Grid.ColumnSpan="2"/>
                     <Label Content="來源編碼" Margin="20 0" Grid.Row="1"/>
-                    <ComboBox ItemsSource="{StaticResource Encoding_ID3v1}" IsEnabled="{Binding ElementName=Checkbox_ID3v1,Path=IsChecked}" SelectedIndex="1" SelectedValue="{Binding Encoding_Source_ID3v1}" HorizontalContentAlignment="Center" Margin="20 0" Grid.Row="2"/>
+                    <ComboBox ItemsSource="{StaticResource Encoding_Input}" IsEnabled="{Binding ElementName=Checkbox_ID3v1,Path=IsChecked}" SelectedIndex="1" SelectedValue="{Binding Encoding_Source_ID3v1}" HorizontalContentAlignment="Center" Margin="20 0" Grid.Row="2"/>
                     <Label Content="輸出編碼" Margin="20 0" Grid.Row="1" Grid.Column="1"/>
-                    <ComboBox ItemsSource="{StaticResource Encoding_ID3v1}" IsEnabled="{Binding ElementName=Checkbox_ID3v1,Path=IsChecked}" SelectedIndex="0" SelectedValue="{Binding Encoding_Output_ID3v1}" HorizontalContentAlignment="Center" Margin="20 0" Grid.Row="2" Grid.Column="1"/>
+                    <ComboBox ItemsSource="{StaticResource Encoding_Input}" IsEnabled="{Binding ElementName=Checkbox_ID3v1,Path=IsChecked}" SelectedIndex="0" SelectedValue="{Binding Encoding_Output_ID3v1}" HorizontalContentAlignment="Center" Margin="20 0" Grid.Row="2" Grid.Column="1"/>
                 </Grid>
                 <DockPanel Grid.Row="1" Grid.ColumnSpan="2" IsEnabled="{Binding ElementName=Checkbox_ID3v1,Path=IsChecked}" HorizontalAlignment="Right" Margin="0,0,5,0">
                     <Label Content="輸出模式:" VerticalAlignment="Center"/>
@@ -168,7 +168,7 @@
                         </ComboBox>
                     </DockPanel>
                     <Label Content="輸入編碼" Margin="20 0" Grid.Row="1"/>
-                    <ComboBox ItemsSource="{StaticResource Encoding_ID3v1}" SelectedValue="{Binding Encoding_Source_ID3v2}" IsEnabled="{Binding ElementName=Checkbox_ID3v2,Path=IsChecked}" HorizontalContentAlignment="Center" Grid.Row="2" Grid.Column="0" SelectedIndex="0"/>
+                    <ComboBox ItemsSource="{StaticResource Encoding_Input}" SelectedValue="{Binding Encoding_Source_ID3v2}" IsEnabled="{Binding ElementName=Checkbox_ID3v2,Path=IsChecked}" HorizontalContentAlignment="Center" Grid.Row="2" Grid.Column="0" SelectedIndex="0"/>
                     <Label Content="輸出編碼" Margin="20 0" Grid.Row="1" Grid.Column="1"/>
                     <ComboBox Name="Combobox_Encoding_ID3v2" SelectedValue="{Binding Encoding_Output_ID3v2}" IsEnabled="{Binding ElementName=Checkbox_ID3v2,Path=IsChecked}" HorizontalContentAlignment="Center" Grid.Row="2" Grid.Column="1"/>
                 </Grid>

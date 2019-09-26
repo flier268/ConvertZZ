@@ -1,8 +1,12 @@
 ﻿using ConvertZZ.Moudle;
+using Microsoft.WindowsAPICodePack.Shell.Interop;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Pipes;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -16,6 +20,7 @@ namespace ConvertZZ
     public partial class MainWindow : Window
     {
         List<Moudle.HotKey> hotKeys = new List<Moudle.HotKey>();
+        CancellationTokenSource Cancellation = new CancellationTokenSource();
         public MainWindow()
         {
             InitializeComponent();
@@ -25,8 +30,35 @@ namespace ConvertZZ
             if (0 < App.Settings.PositionY && App.Settings.PositionY < SystemParameters.WorkArea.Height)
                 Top = App.Settings.PositionY;
             RegAllHotkey();
+            ServerThread();
         }
+        private async void ServerThread()
+        {
+            while (!Cancellation.IsCancellationRequested)
+            {
+                try
+                {
+                    using (NamedPipeServerStream pipeServer = new NamedPipeServerStream("ConvertZZ_Pipe", PipeDirection.InOut))
+                    {
+                        await pipeServer.WaitForConnectionAsync(Cancellation.Token);
+                        Console.WriteLine("Client connected.");
+                        StreamString ss = new StreamString(pipeServer);
+                        string[] Args = (await ss.ReadStringAsync()).Split('|');
 
+                        Window_DialogHost window_DialogHost = new Window_DialogHost(Args[0] == "/file" ? Enums.Enum_Mode.Mode.File_FileName : Enums.Enum_Mode.Mode.AutioTag, Args.Skip(1).ToArray());
+                        window_DialogHost.Show();
+                        
+                        await ss.WriteStringAsync("ACK");
+                        pipeServer.WaitForPipeDrain();
+                        pipeServer.Close();
+                    }
+                }
+                catch (IOException e)
+                {
+                    Console.WriteLine("ERROR: {0}", e.Message);
+                }
+            }
+        }
         private void NIcon_MouseClick(object sender, System.Windows.Forms.MouseEventArgs e)
         {
             if (e.Button == System.Windows.Forms.MouseButtons.Right)
@@ -521,6 +553,7 @@ namespace ConvertZZ
         }
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            Cancellation.Cancel();
             App.Settings.PositionX = Left;
             App.Settings.PositionY = Top;
             App.Save();

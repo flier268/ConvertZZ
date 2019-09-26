@@ -27,6 +27,13 @@ namespace ConvertZZ.Pages
             Combobox_Filter.ItemsSource = App.Settings.FileConvert.GetFilterList();
             Combobox_Filter.SelectedIndex = 0;
         }
+        public Page_AudioTags(Format format, string[] FileNames) : this(format)
+        {
+            if (FileNames == null)
+                return;
+            ImportFileNames(FileNames);
+            Combobox_Filter_SelectionChanged(Combobox_Filter, null);
+        }
         private void Page_Loaded(object sender, RoutedEventArgs e)
         {
         }
@@ -218,28 +225,32 @@ namespace ConvertZZ.Pages
             fileDialog.Filter = Combobox_Filter.SelectedValue.ToString();
             if (fileDialog.ShowDialog() == true)
             {
-                string ParentPath = Path.GetDirectoryName(fileDialog.FileNames.First());
-                foreach (string str in fileDialog.FileNames)
-                {
-                    if (Path.GetFileNameWithoutExtension(str) == "　" && System.IO.Directory.Exists(System.IO.Path.GetDirectoryName(str)))
-                    {
-                        string folderpath = System.IO.Path.GetDirectoryName(str);
-                        App.Settings.FileConvert.GetExtentionArray(Combobox_Filter.Text).ForEach(filter =>
-                        {
-                            List<string> childFileList = System.IO.Directory.GetFiles(folderpath, filter.Trim(), AccordingToChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).Where(x => App.Settings.FileConvert.CheckExtension(x, filter)).ToList();
-                            childFileList.ForEach(x =>
-                            {
-                                FileListTemp.Add(new FileList_Line() { IsChecked = true, IsFile = true, Name = System.IO.Path.GetFileName(x), ParentPath = ParentPath, Path = Path.GetDirectoryName(x) });
-                            });
-                        });
-                        FileListTemp = new ObservableCollection<FileList_Line>(FileListTemp.OrderBy(x => x.Name).Distinct().OrderBy(x => x.IsFile).OrderBy(x => x.Path));
-                    }
-                    else if (File.Exists(str))
-                    {
-                        FileListTemp.Add(new FileList_Line() { IsChecked = true, Name = Path.GetFileName(str), ParentPath = ParentPath, Path = Path.GetDirectoryName(str) });
-                    }
-                }
+                ImportFileNames(fileDialog.FileNames);
                 Combobox_Filter_SelectionChanged(Combobox_Filter, null);
+            }
+        }
+        private void ImportFileNames(string[] FileNames)
+        {
+            string ParentPath = Path.GetDirectoryName(FileNames.First());
+            foreach (string str in FileNames)
+            {
+                if ((Path.GetFileNameWithoutExtension(str) == "　" || Directory.Exists(str)) && System.IO.Directory.Exists(System.IO.Path.GetDirectoryName(str)))
+                {
+                    string folderpath = System.IO.Path.GetDirectoryName(str);
+                    App.Settings.FileConvert.GetExtentionArray(Combobox_Filter.Text).ForEach(filter =>
+                    {
+                        List<string> childFileList = System.IO.Directory.GetFiles(folderpath, filter.Trim(), AccordingToChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).Where(x => App.Settings.FileConvert.CheckExtension(x, filter)).ToList();
+                        childFileList.ForEach(x =>
+                        {
+                            FileListTemp.Add(new FileList_Line() { IsChecked = true, IsFile = true, Name = System.IO.Path.GetFileName(x), ParentPath = ParentPath, Path = Path.GetDirectoryName(x) });
+                        });
+                    });
+                    FileListTemp = new ObservableCollection<FileList_Line>(FileListTemp.OrderBy(x => x.Name).Distinct().OrderBy(x => x.IsFile).OrderBy(x => x.Path));
+                }
+                else if (File.Exists(str))
+                {
+                    FileListTemp.Add(new FileList_Line() { IsChecked = true, Name = Path.GetFileName(str), ParentPath = ParentPath, Path = Path.GetDirectoryName(str) });
+                }
             }
         }
         private void Button_Clear_Clicked(object sender, RoutedEventArgs e)

@@ -48,6 +48,9 @@
                         </DockPanel>
                     </materialDesign:ColorZone>
                     <DockPanel HorizontalAlignment="Right" VerticalAlignment="Top">
+                        <Button Click="Button_CreateShortCut" Visibility="{Binding CreateShortcutVisibility}" BorderBrush="Transparent" Background="Transparent">
+                            <materialDesign:PackIcon Kind="Share" />
+                        </Button>
                         <Button Click="Button_Minimize" BorderBrush="Transparent" Background="Transparent">
                             <materialDesign:PackIcon Kind="WindowMinimize" />
                         </Button>

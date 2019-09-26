@@ -33,6 +33,14 @@ namespace ConvertZZ.Pages
             Combobox_Filter.ItemsSource = App.Settings.FileConvert.GetFilterList();
             Combobox_Filter.SelectedIndex = 0;
         }
+        public Page_File(string[] FileNames) : this()
+        {
+            if (FileNames == null)
+                return;
+            OutputPath = Path.GetDirectoryName(FileNames.First());
+            ImportFileNames(FileNames);
+            Combobox_Filter_SelectionChanged(Combobox_Filter, null);
+        }
         /// <summary>
         /// 編碼轉換 [0]:來源編碼   [1]:輸出編碼
         /// </summary>
@@ -282,7 +290,6 @@ namespace ConvertZZ.Pages
                 fileDialog.Filter = Combobox_Filter.SelectedValue.ToString();
             if (fileDialog.ShowDialog() == true)
             {
-                string ParentPath = Path.GetDirectoryName(fileDialog.FileNames.First());
                 OutputPath = Path.GetDirectoryName(fileDialog.FileNames.First());
                 if (!FileMode)
                 {
@@ -292,28 +299,33 @@ namespace ConvertZZ.Pages
                 }
                 else
                 {
-                    foreach (string str in fileDialog.FileNames)
-                    {
-                        if (Path.GetFileNameWithoutExtension(str) == "　" && System.IO.Directory.Exists(System.IO.Path.GetDirectoryName(str)))
-                        {
-                            string folderpath = System.IO.Path.GetDirectoryName(str);
-                            App.Settings.FileConvert.GetExtentionArray(Combobox_Filter.Text).ForEach(filter =>
-                            {
-                                List<string> childFileList = System.IO.Directory.GetFiles(folderpath, filter.Trim(), AccordingToChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).Where(x => App.Settings.FileConvert.CheckExtension(x, filter)).ToList();
-                                childFileList.ForEach(x =>
-                                {
-                                    FileListTemp.Add(new FileList_Line() { IsChecked = true, IsFile = true, Name = System.IO.Path.GetFileName(x), ParentPath = ParentPath, Path = Path.GetDirectoryName(x) });
-                                });
-                            });
-                            FileListTemp = new ObservableCollection<FileList_Line>(FileListTemp.OrderBy(x => x.Name).Distinct().OrderBy(x => x.IsFile).OrderBy(x => x.Path));
-                        }
-                        else if (File.Exists(str))
-                        {
-                            FileListTemp.Add(new FileList_Line() { IsChecked = true, Name = Path.GetFileName(str), ParentPath = ParentPath, Path = Path.GetDirectoryName(str) });
-                        }
-                    }
+                    ImportFileNames(fileDialog.FileNames);
                 }
                 Combobox_Filter_SelectionChanged(Combobox_Filter, null);
+            }
+        }
+        private void ImportFileNames(string[] FileNames)
+        {
+            string ParentPath = Path.GetDirectoryName(FileNames.First());
+            foreach (string str in FileNames)
+            {
+                if ((Path.GetFileNameWithoutExtension(str) == "　" || Directory.Exists(str)) && System.IO.Directory.Exists(System.IO.Path.GetDirectoryName(str)))
+                {
+                    string folderpath = System.IO.Path.GetDirectoryName(str);
+                    App.Settings.FileConvert.GetExtentionArray(Combobox_Filter.Text).ForEach(filter =>
+                    {
+                        List<string> childFileList = System.IO.Directory.GetFiles(folderpath, filter.Trim(), AccordingToChild ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly).Where(x => App.Settings.FileConvert.CheckExtension(x, filter)).ToList();
+                        childFileList.ForEach(x =>
+                        {
+                            FileListTemp.Add(new FileList_Line() { IsChecked = true, IsFile = true, Name = System.IO.Path.GetFileName(x), ParentPath = ParentPath, Path = Path.GetDirectoryName(x) });
+                        });
+                    });
+                    FileListTemp = new ObservableCollection<FileList_Line>(FileListTemp.OrderBy(x => x.Name).Distinct().OrderBy(x => x.IsFile).OrderBy(x => x.Path));
+                }
+                else if (File.Exists(str))
+                {
+                    FileListTemp.Add(new FileList_Line() { IsChecked = true, Name = Path.GetFileName(str), ParentPath = ParentPath, Path = Path.GetDirectoryName(str) });
+                }
             }
         }
         private string _ClipBoard = "";

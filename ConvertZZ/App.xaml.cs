@@ -3,7 +3,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Pipes;
 using System.Linq;
+using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -25,12 +27,49 @@ namespace ConvertZZ
 
         public static ChineseConverter ChineseConverter { get; set; } = new ChineseConverter();
 
-        private void Application_Startup(object sender, StartupEventArgs e)
+        private async void Application_Startup(object sender, StartupEventArgs e)
         {
             App.Reload(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ConvertZZ.json"));
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             if (e.Args.Length > 0)
             {
+                if (e.Args[0] == "/file" || e.Args[0] == "/audio")
+                {
+                    var ps=Process.GetProcessesByName("ConvertZZ");
+                    IntPtr hwndTest = IntPtr.Zero;
+                    if (ps.Length > 1)
+                    {
+                        long mini = ps.ToList().Min(x => x.StartTime.Ticks);
+                        hwndTest=ps.Where(x => x.StartTime.Ticks == mini).First().Handle;
+                    }
+                    else
+                    {
+                        ShowUI();
+                        Window_DialogHost window_DialogHost = new Window_DialogHost(e.Args[0] == "/file" ? Enums.Enum_Mode.Mode.File_FileName : Enums.Enum_Mode.Mode.AutioTag, e.Args.Skip(1).ToArray());
+                        window_DialogHost.Show();
+                        return;
+                    }
+                    try
+                    {
+                        using (NamedPipeClientStream pipeClient = new NamedPipeClientStream(".", "ConvertZZ_Pipe", PipeDirection.InOut, PipeOptions.None, TokenImpersonationLevel.Impersonation))
+                        {
+                            Console.WriteLine("Connecting to server...\n");
+                            await pipeClient.ConnectAsync(1000);
+
+                            StreamString ss = new StreamString(pipeClient);
+                            // The client security token is sent with the first write.
+                            // Send the name of the file whose contents are returned
+                            // by the server.
+                            await ss.WriteStringAsync(string.Join("|", e.Args));
+                            pipeClient.WaitForPipeDrain();
+                            string returns = await ss.ReadStringAsync();
+                            pipeClient.Close();
+                        };
+                    }
+                    catch { }
+                    Shutdown(1);
+                    return;
+                }
                 Encoding[] encoding = new Encoding[2];
                 bool EncodingSetted = false;
                 int ToChinese = 0;
@@ -237,31 +276,35 @@ namespace ConvertZZ
                     Shutdown(1);
                     return;
                 }
-                new Thread(new ThreadStart(async () =>
-                {
-                    await ChineseConverter.Load(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dictionary.csv"));
-                    DicLoaded = true;
-                })).Start();
-                nIcon.Icon = ConvertZZ.Properties.Resources.icon;
-                nIcon.Visible = true;
-                if (Settings.CheckVersion)
-                {
-                    new Thread(new ThreadStart(() =>
-                    {
-                        var versionReport = UpdateChecker.ChecktVersion();
-                        if (versionReport != null && versionReport.HaveNew)
-                        {
-                            if (MessageBox.Show(String.Format("發現新版本{0}(目前版本：{1})\r\n前往官網下載更新？", versionReport.Newst.ToString(), versionReport.Current.ToString()), "發現更新", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
-                            {
-                                Process.Start("https://github.com/flier268/ConvertZZ/releases");
-                            }
-                        }
-                    })).Start();
-                }
-                MainWindow window = new MainWindow();
-                MainWindow = window;
-                window.Show();
+                ShowUI();
             }
+        }
+        private void ShowUI()
+        {
+            new Thread(new ThreadStart(async () =>
+            {
+                await ChineseConverter.Load(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dictionary.csv"));
+                DicLoaded = true;
+            })).Start();
+            nIcon.Icon = ConvertZZ.Properties.Resources.icon;
+            nIcon.Visible = true;
+            if (Settings.CheckVersion)
+            {
+                new Thread(new ThreadStart(() =>
+                {
+                    var versionReport = UpdateChecker.ChecktVersion();
+                    if (versionReport != null && versionReport.HaveNew)
+                    {
+                        if (MessageBox.Show(String.Format("發現新版本{0}(目前版本：{1})\r\n前往官網下載更新？", versionReport.Newst.ToString(), versionReport.Current.ToString()), "發現更新", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+                        {
+                            Process.Start("https://github.com/flier268/ConvertZZ/releases");
+                        }
+                    }
+                })).Start();
+            }
+            MainWindow window = new MainWindow();
+            MainWindow = window;
+            window.Show();
         }
     }
 }

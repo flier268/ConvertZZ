@@ -28,4 +28,5 @@
 * No,發現任何bug麻煩請回報給我，感謝
 
 ## Donate:
-* http://paypal.me/flier268
+* [Paypal](http://paypal.me/flier268)(台灣以外地區)
+* [街口支付](https://i.imgur.com/IKowON0.png)(台灣地區)

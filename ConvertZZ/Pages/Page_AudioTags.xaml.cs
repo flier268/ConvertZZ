@@ -1,5 +1,6 @@
 ﻿using ConvertZZ.Moudle;
 using Microsoft.Win32;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -11,6 +12,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using static Fanhuaji_API.Fanhuaji;
 
 namespace ConvertZZ.Pages
 {
@@ -62,13 +64,14 @@ namespace ConvertZZ.Pages
         private bool ConvertEncoding = true;
 
         string LastPath = "";
-        private void Button_Convert_Click(object sender, RoutedEventArgs e)
+        private async void Button_Convert_Click(object sender, RoutedEventArgs e)
         {
             ((Button)e.Source).IsEnabled = false;
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
 
             var temp = FileList.Where(x => x.IsChecked).ToList();
+            string ErrorMessage = null;
             foreach (var _temp in temp)
             {
                 Mouse.OverrideCursor = Cursors.Wait;
@@ -82,44 +85,50 @@ namespace ConvertZZ.Pages
                     SetID3v2Encoding(Encoding_Output_ID3v2);
                     if (t != null)
                     {
-                        GetAllStringProperties(t).ForEach(x =>
-                        {
-                            x.Value = StringToUnicode.TryToConvertLatin1ToUnicode(x.Value, encoding[0]);
-                            x.Value_Preview = ConvertEncoding ? ConvertHelper.Convert(x.Value, encoding, ToChinese1) : ConvertHelper.Convert(x.Value, ToChinese1);
-                            t.SetPropertiesValue(x.TagName, Encoding.GetEncoding("ISO-8859-1").GetString(encoding[1].GetBytes(x.Value_Preview)));
-                        });
+                        var TagList = GetAllStringProperties(t);
+                        var Dic = TagList.ToDictionary(x => x.TagName, x => StringToUnicode.TryToConvertLatin1ToUnicode(x.Value, encoding[0]));
+                        var resoult = ConvertEncoding ? await ConvertHelper.ConvertDictionary(Dic, encoding, ToChinese1) : await ConvertHelper.ConvertDictionary(Dic, ToChinese1);
+                        resoult.ToList().ForEach(x => t.SetPropertiesValue(x.Key, Encoding.GetEncoding("ISO-8859-1").GetString(encoding[1].GetBytes(x.Value))));
                     }
                     if (t2 != null)
                     {
-                        GetAllStringProperties(t2).ForEach(x =>
+                        var TagList = GetAllStringProperties(t2);
+                        var Dic = TagList.ToDictionary(x => x.TagName, x =>
                         {
                             if (tfile.TagTypesOnDisk.HasFlag(TagLib.TagTypes.Id3v2))
-                                x.Value = StringToUnicode.TryToConvertLatin1ToUnicode(x.Value, encoding2[0]);
+                                return StringToUnicode.TryToConvertLatin1ToUnicode(x.Value, encoding2[0]);
                             else
                             {
                                 var _ = ID3v1_TagList.Where(y => y.TagName == x.TagName).FirstOrDefault();
-                                x.Value = _ != null ? _.Value_Preview : "";
+                                return _ != null ? _.Value_Preview : "";
                             }
-                            x.Value_Preview = ConvertHelper.Convert(x.Value, ToChinese2);
-                            t2.SetPropertiesValue(x.TagName, x.Value_Preview);
                         });
+                        var resoult = await ConvertHelper.ConvertDictionary(Dic, ToChinese2);
+                        resoult.ToList().ForEach(x => t.SetPropertiesValue(x.Key, x.Value));
                         t2.Version = (Combobox_ID3v2_Version.Text == "2.3") ? (byte)3 : (byte)4;
                     }
                     tfile.Save();
                 }
-                catch (TagLib.UnsupportedFormatException) { MessageBox.Show(string.Format("轉換{0}時出現錯誤，該檔案並非音訊檔", _temp.Name)); }
-                catch { MessageBox.Show(string.Format("轉換{0}時出現未知錯誤", _temp.Name)); }                
+                catch (TagLib.UnsupportedFormatException) { ErrorMessage = string.Format("轉換{0}時出現錯誤，該檔案並非音訊檔", _temp.Name); }
+                catch (FanhuajiException val)
+                {
+                    ErrorMessage = ((Exception)val).Message;
+                    break;
+                }
+                catch { ErrorMessage = string.Format("轉換{0}時出現未知錯誤", _temp.Name); }
             }
             Mouse.OverrideCursor = null;
             stopwatch.Stop();
-            if (App.Settings.Prompt)
+            if (!string.IsNullOrEmpty(ErrorMessage))
+                Window_MessageBoxEx.ShowDialog(ErrorMessage, "轉換過程中出現錯誤", "我知道了");
+            else if (App.Settings.Prompt)
             {
                 new Toast(string.Format("轉換完成\r\n耗時：{0} ms", stopwatch.ElapsedMilliseconds)).Show();
             }
             ((Button)e.Source).IsEnabled = true;
             Listview_SelectionChanged(null, null);
         }
-        private void Preview(string path)
+        private async void Preview(string path)
         {
             if (!File.Exists(path))
                 return;
@@ -132,23 +141,32 @@ namespace ConvertZZ.Pages
                 ID3v1_TagList.Clear();
                 ID3v2_TagList.Clear();
 
-                GetAllStringProperties(t).ForEach(x =>
+                var TagList = GetAllStringProperties(t);
+                TagList.ForEach(x => x.Value = StringToUnicode.TryToConvertLatin1ToUnicode(x.Value, encoding[0]));
+                var Dic = TagList.ToDictionary(x => x.TagName, x => x.Value);
+                var resoult = ConvertEncoding ? await ConvertHelper.ConvertDictionary(Dic, encoding, ToChinese1) : await ConvertHelper.ConvertDictionary(Dic, ToChinese1);
+                TagList.ForEach(x =>
                 {
-                    x.Value = StringToUnicode.TryToConvertLatin1ToUnicode(x.Value, encoding[0]);
-                    x.Value_Preview = ConvertEncoding ? ConvertHelper.Convert(x.Value, encoding, ToChinese1) : ConvertHelper.Convert(x.Value, ToChinese1);
+                    x.Value_Preview = resoult[x.TagName];
                     ID3v1_TagList.Add(x);
                 });
 
-                GetAllStringProperties(t2).ForEach(x =>
+
+                TagList = GetAllStringProperties(t2);
+                Dic = TagList.ToDictionary(x => x.TagName, x =>
                 {
                     if (tfile.TagTypesOnDisk.HasFlag(TagLib.TagTypes.Id3v2))
-                        x.Value = StringToUnicode.TryToConvertLatin1ToUnicode(x.Value, encoding2[0]);
+                        return StringToUnicode.TryToConvertLatin1ToUnicode(x.Value, encoding2[0]);
                     else
-                    { 
+                    {
                         var _ = ID3v1_TagList.Where(y => y.TagName == x.TagName).FirstOrDefault();
-                        x.Value = _ != null ? _.Value_Preview : "";
+                        return _ != null ? _.Value_Preview : "";
                     }
-                    x.Value_Preview = ConvertHelper.Convert(x.Value, ToChinese2);
+                });
+                resoult = await ConvertHelper.ConvertDictionary(Dic, ToChinese2);
+                TagList.ForEach(x =>
+                {
+                    x.Value_Preview = resoult[x.TagName];
                     ID3v2_TagList.Add(x);
                 });
             }
@@ -158,6 +176,21 @@ namespace ConvertZZ.Pages
                 ID3v2_TagList.Clear();
                 ID3v1_TagList.Add(new TagList_Line() { TagName = "Error", Value = "非音訊檔" });
                 ID3v2_TagList.Add(new TagList_Line() { TagName = "Error", Value = "非音訊檔" });
+            }
+            catch (FanhuajiException val)
+            {
+                ID3v1_TagList.Clear();
+                ID3v2_TagList.Clear();
+                ID3v1_TagList.Add(new TagList_Line
+                {
+                    TagName = "Error",
+                    Value = val.Message
+                });
+                ID3v2_TagList.Add(new TagList_Line
+                {
+                    TagName = "Error",
+                    Value = val.Message
+                });
             }
             catch (System.Exception)
             {
@@ -409,7 +442,7 @@ namespace ConvertZZ.Pages
         private void Combobox_Filter_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             ObservableCollection<FileList_Line> temp = new ObservableCollection<FileList_Line>();
-            if((sender as ComboBox).SelectedValue==null)
+            if ((sender as ComboBox).SelectedValue == null)
             {
                 FileList = FileListTemp;
                 (sender as ComboBox).SelectedIndex = 0;

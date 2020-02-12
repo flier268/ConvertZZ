@@ -11,6 +11,25 @@
                 <ResourceDictionary Source="pack://application:,,,/MaterialDesignColors;component/Themes/Recommended/Primary/MaterialDesignColor.Blue.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/MaterialDesignColors;component/Themes/Recommended/Accent/MaterialDesignColor.Lime.xaml" />
             </ResourceDictionary.MergedDictionaries>
-        </ResourceDictionary>
+            <Style x:Key="Tab" TargetType="{x:Type TabItem}">
+                <Setter Property="Control.FontWeight" Value="Black" />
+                <Setter Property="Control.Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type TabItem}">
+                            <Grid>
+                                <ContentPresenter Name="Text" VerticalAlignment="Center" Margin="10" HorizontalAlignment="Center" ContentSource="Header" />
+                                <Border Name="Line" Height="2" VerticalAlignment="Bottom" />
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="TabItem.IsSelected" Value="True">
+                                    <Setter TargetName="Text" Value="{DynamicResource PrimaryHueMidBrush}" Property="TextElement.Foreground" />
+                                    <Setter TargetName="Line" Value="{DynamicResource PrimaryHueDarkBrush}" Property="Border.Background" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>        
     </Application.Resources>
 </Application>

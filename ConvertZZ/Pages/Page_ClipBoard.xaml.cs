@@ -3,9 +3,12 @@ using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using static Fanhuaji_API.Fanhuaji;
 
 namespace ConvertZZ.Pages
 {
@@ -39,7 +42,7 @@ namespace ConvertZZ.Pages
         /// 輸出簡繁轉換：0:一般  1:繁體中文 2:簡體中文
         /// </summary>
         int ToChinese = 0;
-        private void Encoding_Selected(object sender, RoutedEventArgs e)
+        private async void Encoding_Selected(object sender, RoutedEventArgs e)
         {
             RadioButton radiobutton = ((RadioButton)sender);
             switch (radiobutton.GroupName)
@@ -51,9 +54,9 @@ namespace ConvertZZ.Pages
                     encoding[1] = Encoding.GetEncoding(((string)radiobutton.Content).Trim());
                     break;
             }
-            Output = ConvertHelper.Convert(ClipBoard, encoding, ToChinese);
+            await Preview();
         }
-        private void Chinese_Click(object sender, RoutedEventArgs e)
+        private async void Chinese_Click(object sender, RoutedEventArgs e)
         {
             switch (((RadioButton)sender).Uid)
             {
@@ -67,14 +70,23 @@ namespace ConvertZZ.Pages
                     ToChinese = 2;
                     break;
             }
-            Output = ConvertHelper.Convert(ClipBoard, encoding, ToChinese);
+            await Preview();
         }
 
 
 
-
-
-
+        private async Task Preview()
+        {
+            try
+            {
+                Output = await ConvertHelper.ConvertAsync(ClipBoard, encoding, ToChinese);
+            }
+            catch (FanhuajiException val)
+            {
+                FanhuajiException fe = val;
+                Window_MessageBoxEx.ShowDialog(((Exception)fe).Message, "繁化姬API", "確定");
+            }
+        }
 
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
@@ -113,7 +125,10 @@ namespace ConvertZZ.Pages
                     if (Clipboard.ContainsText())
                     {
                         ClipBoard = ClipBoardHelper.GetClipBoard_UnicodeText();
-                        Output = ConvertHelper.Convert(ClipBoard, encoding, ToChinese);
+                        ((ThreadStart)async delegate
+                        {
+                            await Preview();
+                        })();
                     }
 
 
@@ -144,7 +159,7 @@ namespace ConvertZZ.Pages
 
         private void Button_CopyOutput_Click(object sender, RoutedEventArgs e)
         {
-            ClipBoardHelper.SetClipBoard_UnicodeText(ConvertHelper.Convert(ClipBoard, encoding, ToChinese));
+            ClipBoardHelper.SetClipBoard_UnicodeText(Output);
         }
     }
 }

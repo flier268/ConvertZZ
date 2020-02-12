@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" materialDesign:ShadowAssist.CacheMode="{x:Null}"
+        mc:Ignorable="d" materialDesign:ShadowAssist.CacheMode="{x:Null}" Closing="Window_Closing"
         Title="設定" MinWidth="800" FontFamily="Arial" SizeToContent="WidthAndHeight">
     <Grid>
         <Grid.RowDefinitions>
@@ -26,6 +26,7 @@
                         <RowDefinition/>
                         <RowDefinition/>
                         <RowDefinition/>
+                        <RowDefinition/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="auto"/>
@@ -33,22 +34,29 @@
                     </Grid.ColumnDefinitions>
                     <Label Content="懸浮球"/>
                     <ToggleButton IsChecked="{Binding AssistiveTouchEnable}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="就是那個寫'Z'的小圓球啦" Grid.Column="1"/>
-                    <DockPanel Grid.Row="1">
-                        <Label Content="簡繁轉換後進行詞彙修正" />
-                        <Button Click="Button_DictionaryEdit_Click" Style="{StaticResource MaterialDesignFlatButton}" Padding="0" Height="Auto">
+                    
+                        <Label Content="簡繁轉換後進行詞彙修正" Grid.Row="1"/>
+                    
+                    <ToggleButton IsChecked="{Binding VocabularyCorrenctionEnable}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="由於有時一個簡體對應到多個繁體字，開啟此功能將會自動修正此問題(但有時不盡人意)" Grid.Row="1" Grid.Column="1"  />
+                    <DockPanel Grid.Row="2" Grid.ColumnSpan="2" IsEnabled="{Binding VocabularyCorrenctionEnable}">
+                        <RadioButton Content="使用本地字典" IsChecked="{Binding UseLocalDic}"/>
+                        <Button Click="Button_DictionaryEdit_Click" Style="{StaticResource MaterialDesignFlatButton}" IsEnabled="{Binding UseLocalDic}" Padding="0" Height="Auto">
                             <materialDesign:PackIcon Kind="DatabaseEdit"/>
                         </Button>
+                        <RadioButton Content="使用繁化姬API(需要網路)" IsChecked="{Binding UseFanhuajiAPI}" Checked="RadioButton_Fanhuaji_Checked" Margin="13,0,0,0"/>
+                        <Button Style="{StaticResource MaterialDesignFlatButton}" IsEnabled="{Binding UseFanhuajiAPI}" Padding="0" Height="Auto" Click="Button_FanhuajiSetting_Click">
+                            <materialDesign:PackIcon Kind="SettingsOutline" />
+                        </Button>
                     </DockPanel>
-                    <ToggleButton IsChecked="{Binding VocabularyCorrenctionEnable}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="由於有時一個簡體對應到多個繁體字，開啟此功能將會自動修正此問題(但有時不盡人意)" Grid.Row="1" Grid.Column="1"  />
-                    <Label Content="轉換完成後提示" Grid.Row="2"/>
-                    <ToggleButton IsChecked="{Binding PromptEnable}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="轉換後顯示轉換所花費的毫秒數" Grid.Row="2" Grid.Column="1"  />
-                    <Label Content="自動判定編碼" Grid.Row="3"/>
-                    <ToggleButton IsChecked="{Binding RecognitionEncodingEnable}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="試圖自動判定編碼，如果選錯則出現提示(gbk跟big5)" Grid.Row="3" Grid.Column="1"  />
-                    <Label Content="檢查版本更新" Grid.Row="4"/>
-                    <ToggleButton IsChecked="{Binding CheckVersion}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="開啟程式時，自動檢查更新，如果有更新則出現提示" Grid.Row="4" Grid.Column="1"  />
-                    <Separator Style="{StaticResource MaterialDesignLightSeparator}" Grid.Row="4" Grid.ColumnSpan="2" />
-                    <Label Content="預覽最大長度(k)" Grid.Row="5" VerticalAlignment="Bottom"/>
-                    <TextBox Text="{Binding MaxPriviewLength}" materialDesign:HintAssist.Hint="預覽最大長度" Style="{StaticResource MaterialDesignFloatingHintTextBox}" Grid.Row="5" Grid.Column="1" HorizontalContentAlignment="Center" />
+                    <Label Content="轉換完成後提示" Grid.Row="3"/>
+                    <ToggleButton IsChecked="{Binding PromptEnable}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="轉換後顯示轉換所花費的毫秒數" Grid.Row="3" Grid.Column="1"  />
+                    <Label Content="自動判定編碼" Grid.Row="4"/>
+                    <ToggleButton IsChecked="{Binding RecognitionEncodingEnable}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="試圖自動判定編碼，如果選錯則出現提示(gbk跟big5)" Grid.Row="4" Grid.Column="1"  />
+                    <Label Content="檢查版本更新" Grid.Row="5"/>
+                    <ToggleButton IsChecked="{Binding CheckVersion}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="開啟程式時，自動檢查更新，如果有更新則出現提示" Grid.Row="5" Grid.Column="1"  />
+                    <Separator Style="{StaticResource MaterialDesignLightSeparator}" Grid.Row="5" Grid.ColumnSpan="2" />
+                    <Label Content="預覽最大長度(k)" Grid.Row="6" VerticalAlignment="Bottom"/>
+                    <TextBox Text="{Binding MaxPriviewLength}" materialDesign:HintAssist.Hint="預覽最大長度" Style="{StaticResource MaterialDesignFloatingHintTextBox}" Grid.Row="6" Grid.Column="1" HorizontalContentAlignment="Center" />
                 </Grid>
             </StackPanel>
         </materialDesign:Card>

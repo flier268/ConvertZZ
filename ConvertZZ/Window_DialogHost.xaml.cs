@@ -23,7 +23,7 @@ namespace ConvertZZ
         string[] FileNames;
         public Window_DialogHost(Mode mode, string[] FileNames, Pages.Page_AudioTags.Format AudioFormat = Pages.Page_AudioTags.Format.APE) : this(mode, AudioFormat)
         {
-            this.FileNames = FileNames;            
+            this.FileNames = FileNames;
         }
         public Window_DialogHost(Mode mode, Pages.Page_AudioTags.Format AudioFormat = Pages.Page_AudioTags.Format.APE)
         {

@@ -38,6 +38,9 @@
     <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Fanhuaji-API, Version=1.0.0.0, Culture=neutral, PublicKeyToken=801680f93d3b8d66, processorArchitecture=MSIL">
+      <HintPath>..\packages\Fanhuaji-API.1.0.0\lib\netstandard2.0\Fanhuaji-API.dll</HintPath>
+    </Reference>
     <Reference Include="Flier.Toolbox.Text, Version=1.0.1.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\Flier.Toolbox.Text.1.0.1\lib\netstandard2.0\Flier.Toolbox.Text.dll</HintPath>
     </Reference>
@@ -97,12 +100,15 @@
     <Compile Include="CheckboxTreeView.xaml.cs">
       <DependentUpon>CheckboxTreeView.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Class\Fanhuaji_Config.cs" />
+    <Compile Include="Enums\Enum_Engine.cs" />
     <Compile Include="Enums\Enum_Mode.cs" />
     <Compile Include="Moudle\ChineseConverter.cs" />
     <Compile Include="Moudle\ConvertString.cs" />
     <Compile Include="Moudle\DictionaryFile_Helper.cs" />
     <Compile Include="Moudle\EncodingAnalyzer.cs" />
     <Compile Include="Moudle\Extension_ID3.cs" />
+    <Compile Include="Moudle\Extentions.cs" />
     <Compile Include="Moudle\Hotkey.cs" />
     <Compile Include="Moudle\Shortcut.cs" />
     <Compile Include="Moudle\StreamString.cs" />
@@ -136,6 +142,9 @@
     </Compile>
     <Compile Include="Window_DictionaryEditor.xaml.cs">
       <DependentUpon>Window_DictionaryEditor.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Window_FanhuajiSetting.xaml.cs">
+      <DependentUpon>Window_FanhuajiSetting.xaml</DependentUpon>
     </Compile>
     <Compile Include="Window_Report.xaml.cs">
       <DependentUpon>Window_Report.xaml</DependentUpon>
@@ -194,6 +203,10 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Include="Window_FanhuajiSetting.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Window_Report.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -236,5 +249,6 @@
   <ItemGroup>
     <Resource Include="icon.ico" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

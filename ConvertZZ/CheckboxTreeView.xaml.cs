@@ -25,13 +25,13 @@ namespace ConvertZZ
 
         private IList<Node> _ItemSources;
         public IList<Node> ItemSources { get => _ItemSources; set { _ItemSources = value; OnPropertyChanged("ItemSources"); } }
-        
+
         private void CheckBox_Checked(object sender, System.Windows.RoutedEventArgs e)
         {
             CheckedChanged?.Invoke(sender as CheckBox);
         }
     }
-    public class Node : INotifyPropertyChanged
+    public class Node : INotifyPropertyChanged, ICloneable
     {
         public Node(Node Parent)
         {
@@ -41,15 +41,21 @@ namespace ConvertZZ
                 Generation = Parent.Generation + 1;
             this.Parent = Parent;
         }
+        public void RegistPropertyChangedEvent()
+        {
+            PropertyChanged += (sender, e) => Parent.PropertyChanged?.Invoke(sender, e);
+        }
         private string _DisplayName;
         public string DisplayName { get => _DisplayName; set { _DisplayName = value; OnPropertyChanged("DisplayName"); } }
         private bool _IsChecked;
         public bool IsChecked { get => _IsChecked; set { _IsChecked = value; OnPropertyChanged("IsChecked"); } }
         public bool IsFile { get; set; }
         private Node _Parent;
-        public Node Parent {
+        public Node Parent
+        {
             get => _Parent;
-            private set {
+            private set
+            {
                 if (value == null)
                     Generation = 1;
                 else
@@ -64,8 +70,9 @@ namespace ConvertZZ
             }
         }
         public int Generation { get; private set; }
-        private List<Node> _Nodes=new List<Node>();
-        public List<Node> Nodes {
+        private List<Node> _Nodes = new List<Node>();
+        public List<Node> Nodes
+        {
             get => _Nodes;
             set
             {
@@ -78,6 +85,19 @@ namespace ConvertZZ
         }
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        public object Clone()
+        {
+            var temp = this.MemberwiseClone() as Node;
+            temp.Nodes = Nodes.Select(x =>
+            {
+                Node node = x.Clone() as Node;
+                node._Parent = temp;
+                return node;
+            }
+            ).ToList();
+            return temp;
+        }
     }
     public class RelayCommand : ICommand
     {

@@ -1,4 +1,6 @@
-﻿using ConvertZZ.Moudle;
+﻿using ConvertZZ.Enums;
+using ConvertZZ.Moudle;
+using Fanhuaji_API;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -9,6 +11,7 @@ using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 
 namespace ConvertZZ
@@ -22,11 +25,11 @@ namespace ConvertZZ
         public static bool DicLoaded { get; set; } = false;
         public App()
         {
-            
+
         }
 
         public static ChineseConverter ChineseConverter { get; set; } = new ChineseConverter();
-
+        public static Fanhuaji Fanhuaji { get; set; }
         private async void Application_Startup(object sender, StartupEventArgs e)
         {
             App.Reload(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ConvertZZ.json"));
@@ -35,12 +38,12 @@ namespace ConvertZZ
             {
                 if (e.Args[0] == "/file" || e.Args[0] == "/audio")
                 {
-                    var ps=Process.GetProcessesByName("ConvertZZ");
+                    var ps = Process.GetProcessesByName("ConvertZZ");
                     IntPtr hwndTest = IntPtr.Zero;
                     if (ps.Length > 1)
                     {
                         long mini = ps.ToList().Min(x => x.StartTime.Ticks);
-                        hwndTest=ps.Where(x => x.StartTime.Ticks == mini).First().Handle;
+                        hwndTest = ps.Where(x => x.StartTime.Ticks == mini).First().Handle;
                     }
                     else
                     {
@@ -76,6 +79,7 @@ namespace ConvertZZ
                 string path1 = null, path2 = null;
                 Regex Regex_path1 = null;
                 int VocabularyCorrection = -1;
+                Enum_Engine Engine = App.Settings.Engine;
                 for (int i = 0; i < e.Args.Length; i++)
                 {
                     switch (e.Args[i])
@@ -133,11 +137,17 @@ namespace ConvertZZ
                         case "/d:s":
                             VocabularyCorrection = -1;
                             break;
+                        case "/e:l":
+                            Engine = Enum_Engine.Local;
+                            break;
+                        case "/e:f":
+                            Engine = Enum_Engine.Fanhuaji;
+                            break;
                         default:
                             if (path1 == null)
                             {
                                 path1 = e.Args[i];
-                                Regex_path1 = new Regex(Regex.Replace(path1.Replace("*", "(.*?)"),"[\\/]","[\\\\/]") + "$");
+                                Regex_path1 = new Regex($"{Regex.Replace(path1.Replace("*", "(.*?)").Replace("\\", "\\\\"), "[\\/]", "[\\\\/]")}$");
                             }
                             else
                             {
@@ -146,12 +156,10 @@ namespace ConvertZZ
                             break;
                     }
                 }
-                if(VocabularyCorrection==1 || (VocabularyCorrection==-1 && App.Settings.VocabularyCorrection))
-                    new Thread(new ThreadStart(async () =>
-                    {
-                        await ChineseConverter.Load(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dictionary.csv"));
-                        DicLoaded = true;
-                    })).Start();
+                if (VocabularyCorrection == 1 || (VocabularyCorrection == -1 && App.Settings.VocabularyCorrection))
+                {
+                    await LoadDictionary(Engine);
+                }
                 string s = "";
                 List<string> file = new List<string>();
                 bool ModeIsOneFile = true;
@@ -221,7 +229,15 @@ namespace ConvertZZ
                                 encoding[0] = Encoding.GetEncoding("GBK");
                                 break;
                         }
-                    s = ConvertHelper.FileConvert(s, encoding, ToChinese, VocabularyCorrection);
+                    try
+                    {
+                        s = await ConvertHelper.FileConvert(s, encoding, ToChinese, VocabularyCorrection);
+                    }
+                    catch (Fanhuaji.FanhuajiException ex)
+                    {
+                        Console.WriteLine($"[Error][{DateTime.Now.ToString()}][{ex.Message}] {f}");
+                        continue;
+                    }
                     if (ModeIsOneFile)
                     {
                         using (StreamWriter streamWriter = new StreamWriter(path2, false, encoding[1] == Encoding.UTF8 ? new UTF8Encoding(App.Settings.FileConvert.UnicodeAddBom) : encoding[1]))
@@ -233,7 +249,7 @@ namespace ConvertZZ
                     else
                     {
                         var m1 = Regex_path1.Match(f);
-                        if(m1.Success)
+                        if (m1.Success)
                         {
                             if (path2.Contains("*"))
                             {
@@ -279,13 +295,35 @@ namespace ConvertZZ
                 ShowUI();
             }
         }
-        private void ShowUI()
+        internal static void CleanDictionary()
         {
-            new Thread(new ThreadStart(async () =>
+            ChineseConverter.Lines.Clear();
+            ChineseConverter.Reload();
+            DicLoaded = false;
+        }
+        internal static async Task LoadDictionary(Enum_Engine Engine)
+        {
+            DicLoaded = false;
+            switch (Engine)
             {
-                await ChineseConverter.Load(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dictionary.csv"));
-                DicLoaded = true;
-            })).Start();
+                case Enum_Engine.Local:
+                    if (Settings.VocabularyCorrection)
+                        await ChineseConverter.Load(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dictionary.csv"));
+                    else
+                        CleanDictionary();
+                    break;
+                case Enum_Engine.Fanhuaji:
+                    if (Fanhuaji.CheckConnection())
+                    {
+                        Fanhuaji = new Fanhuaji(true, Fanhuaji_API.Fanhuaji.Terms_of_Service);
+                    }
+                    break;
+            }
+            DicLoaded = true;
+        }
+        private async void ShowUI()
+        {
+            await LoadDictionary(Settings.Engine);
             nIcon.Icon = ConvertZZ.Properties.Resources.icon;
             nIcon.Visible = true;
             if (Settings.CheckVersion)

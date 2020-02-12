@@ -12,37 +12,42 @@ namespace ConvertZZ.Moudle
     public partial class Window_MessageBoxEx : Window, INotifyPropertyChanged,IDisposable
     {
         MessageBoxExResult Resoult= MessageBoxExResult.NONE;
-        public Window_MessageBoxEx(string Text,string Caption,string button1_Text, string button2_Text, string button3_Text)
-        {
-            TextBlock_Text = Text;            
-            ButtonText1 = button1_Text;
-            ButtonText2 = button2_Text;
-            ButtonText3 = button3_Text;
-            DataContext = this;
-            InitializeComponent();
-            this.Title = Caption;
-        }
+     
         public Window_MessageBoxEx(string Text, string Caption, string button1_Text, string button2_Text, string button3_Text,string CheckBox_Text)
         {
             TextBlock_Text = Text;
             ButtonText1 = button1_Text;
-            ButtonText2 = button2_Text;
-            ButtonText3 = button3_Text;
-            this.CheckBox_Text = CheckBox_Text;
-            DataContext = this;
+            Button1_Width = new GridLength(1.0, GridUnitType.Star);
+            Button2_Width = new GridLength(1.0, GridUnitType.Star);
+            if (button2_Text == null)
+            {
+                Button2_Visibility = Visibility.Collapsed;
+                Button2_Width = new GridLength(1.0, GridUnitType.Auto);
+            }
+            else
+            {
+                ButtonText2 = button2_Text;
+            }
+            if (button3_Text == null)
+            {
+                Button3_Visibility = Visibility.Collapsed;
+                Button3_Width = new GridLength(1.0, GridUnitType.Auto);
+            }
+            else
+            {
+                ButtonText3 = button3_Text;
+            }
+            if (CheckBox_Text == null)
+            {
+                CheckBox_Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                this.CheckBox_Text = CheckBox_Text;
+            }
+            base.DataContext = this;
             InitializeComponent();
-            this.Title = Caption;
-        }
-        public Window_MessageBoxEx(string Text, string Caption, string button1_Text, string button2_Text)
-        {
-            TextBlock_Text = Text;
-            ButtonText1 = button1_Text;
-            ButtonText2 = button2_Text;
-            Button3_Visibility = Visibility.Collapsed;
-            Button3_Width = new GridLength(1, GridUnitType.Auto);
-            DataContext = this;
-            InitializeComponent();
-            this.Title = Caption;
+            Title = Caption;
         }
 
         public enum MessageBoxExResult
@@ -73,7 +78,11 @@ namespace ConvertZZ.Moudle
             /// </summary>
             CO = 8
         }
-       
+        public enum Type
+        {
+            WithoutCheckBox,
+            WithCheckBox
+        }
 
 
 
@@ -88,19 +97,19 @@ namespace ConvertZZ.Moudle
         public Visibility CheckBox_Visibility { get => _CheckBox_Visibility; set { _CheckBox_Visibility = value; OnPropertyChanged("CheckBox_Visibility"); } }
         public bool CheckBox_IsChecked { get => _CheckBox_IsChecked; set { _CheckBox_IsChecked = value; OnPropertyChanged("CheckBox_IsChecked"); } }
     
-        private void Button_Click(object sender, RoutedEventArgs e)
+        private void Button_Click_1(object sender, RoutedEventArgs e)
         {
             Resoult = (MessageBoxExResult)(1 * (CheckBox_IsChecked ? 2 : 1));
             this.Close();
         }
 
-        private void Button_Click_1(object sender, RoutedEventArgs e)
+        private void Button_Click_2(object sender, RoutedEventArgs e)
         {
             Resoult = (MessageBoxExResult)(3 * (CheckBox_IsChecked ? 2 : 1));
             this.Close();
         }
 
-        private void Button_Click_2(object sender, RoutedEventArgs e)
+        private void Button_Click_3(object sender, RoutedEventArgs e)
         {
             Resoult = (MessageBoxExResult)(4 * (CheckBox_IsChecked ? 2 : 1));
             this.Close();
@@ -108,10 +117,18 @@ namespace ConvertZZ.Moudle
             columnDefinition.Width = new GridLength(1, GridUnitType.Star);
     }
 
-        public string ButtonText3 { get => _ButtonText3; set { _ButtonText3 = value; OnPropertyChanged("ButtonText3"); } }
+        public string ButtonText3 { get => _ButtonText3; set { _ButtonText3 = value; OnPropertyChanged("ButtonText3"); } }        
+        private GridLength _Button1_Width = new GridLength();
+        private GridLength _Button2_Width = new GridLength(); 
         private GridLength _Button3_Width = new GridLength();
+        private Visibility _Button1_Visibility = Visibility.Visible;
+        private Visibility _Button2_Visibility = Visibility.Visible;
         private Visibility _Button3_Visibility = Visibility.Visible;
+        public Visibility Button1_Visibility { get => _Button1_Visibility; set { _Button1_Visibility = value; OnPropertyChanged(); } }
+        public Visibility Button2_Visibility { get => _Button2_Visibility; set { _Button2_Visibility = value; OnPropertyChanged(); } }
         public Visibility Button3_Visibility { get => _Button3_Visibility; set { _Button3_Visibility = value; OnPropertyChanged(); } }
+        public GridLength Button1_Width { get => _Button1_Width; set { _Button1_Width = value; OnPropertyChanged(); } }
+        public GridLength Button2_Width { get => _Button2_Width; set { _Button2_Width = value; OnPropertyChanged(); } }
         public GridLength Button3_Width { get => _Button3_Width; set { _Button3_Width = value; OnPropertyChanged(); } }
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -165,32 +182,26 @@ namespace ConvertZZ.Moudle
     }
     public partial class Window_MessageBoxEx
     {
-        public static MessageBoxExResult ShowDialog(string Text, string Caption, string button1_Text, string button2_Text, string button3_Text)
-        {
-            // using construct ensures the resources are freed when form is closed
-            using (var form = new Window_MessageBoxEx(Text, Caption, button1_Text, button2_Text, button3_Text))
-            {
-                form.ShowDialog();
-                return form.Resoult;
-            }
-        }
         public static MessageBoxExResult ShowDialog(string Text, string Caption, string button1_Text, string button2_Text, string button3_Text, string CheckBox_Text)
         {
             // using construct ensures the resources are freed when form is closed
-            using (var form = new Window_MessageBoxEx(Text, Caption, button1_Text, button2_Text, button3_Text, CheckBox_Text))
+            using (Window_MessageBoxEx window_MessageBoxEx = new Window_MessageBoxEx(Text, Caption, button1_Text, button2_Text, button3_Text, CheckBox_Text))
             {
-                form.ShowDialog();
-                return form.Resoult;
+                window_MessageBoxEx.ShowDialog();
+                return window_MessageBoxEx.Resoult;
             }
+        }
+        public static MessageBoxExResult ShowDialog(string Text, string Caption, string button1_Text, string button2_Text, string button3_Text)
+        {
+            return ShowDialog(Text, Caption, button1_Text, button2_Text, button3_Text, null);
         }
         public static MessageBoxExResult ShowDialog(string Text, string Caption, string button1_Text, string button2_Text)
         {
-            // using construct ensures the resources are freed when form is closed
-            using (var form = new Window_MessageBoxEx(Text, Caption, button1_Text, button2_Text))
-            {
-                form.ShowDialog();
-                return form.Resoult;
-            }
+            return ShowDialog(Text, Caption, button1_Text, button2_Text, null);
+        }
+        public static MessageBoxExResult ShowDialog(string Text, string Caption, string button1_Text)
+        {
+            return ShowDialog(Text, Caption, button1_Text, null);
         }
     }
 }

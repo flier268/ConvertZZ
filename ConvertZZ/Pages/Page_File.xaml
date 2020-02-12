@@ -54,7 +54,7 @@
                 </Grid.ColumnDefinitions>
                 <Grid Grid.ColumnSpan="2">
                     <Grid x:Name="Page1">
-                        <ConvertZZ:CheckboxTreeView x:Name="treeview" CheckedChanged="Treeview_CheckedChanged" />
+                        <ConvertZZ:CheckboxTreeView x:Name="treeview"/>
                     </Grid>
                     <Grid x:Name="Page2" Canvas.Top="600">
                         <Grid.RowDefinitions>

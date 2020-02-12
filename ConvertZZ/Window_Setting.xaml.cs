@@ -23,6 +23,8 @@ namespace ConvertZZ
         {
             _AssistiveTouchEnable = App.Settings.AssistiveTouch;
             _VocabularyCorrenctionEnable = App.Settings.VocabularyCorrection;
+            _UseLocalDic = App.Settings.Engine == Enums.Enum_Engine.Local;
+            _UseFanhuajiAPI = App.Settings.Engine == Enums.Enum_Engine.Fanhuaji;
             _PromptEnable = App.Settings.Prompt;
             _RecognitionEncodingEnable = App.Settings.RecognitionEncoding;
             _MaxPriviewLength = App.Settings.MaxLengthPreview.ToString();
@@ -69,6 +71,7 @@ namespace ConvertZZ
         {
             App.Settings.AssistiveTouch = AssistiveTouchEnable;
             App.Settings.VocabularyCorrection = VocabularyCorrenctionEnable;
+            App.Settings.Engine = UseLocalDic ? Enums.Enum_Engine.Local : Enums.Enum_Engine.Fanhuaji;
             App.Settings.Prompt = PromptEnable;
             App.Settings.RecognitionEncoding = RecognitionEncodingEnable;
             App.Settings.MaxLengthPreview = int.Parse(MaxPriviewLength);
@@ -150,6 +153,7 @@ namespace ConvertZZ
         private bool _UnicodeAddBom;
         private string _DefaultPath, _TypeFilter, _FixLabel;
         private bool _AutoCopy, _AutoPaste;
+        private bool _UseLocalDic, _UseFanhuajiAPI;
         private bool _ShortCut1_IsActived, _ShortCut2_IsActived, _ShortCut3_IsActived, _ShortCut4_IsActived;
         private KeyValuePair<string, string> _ShortCut1_Action, _ShortCut2_Action, _ShortCut3_Action, _ShortCut4_Action;
         private string _ShortCut1_Key, _ShortCut1_ModifyKey, _ShortCut2_Key, _ShortCut2_ModifyKey, _ShortCut3_Key, _ShortCut3_ModifyKey, _ShortCut4_Key, _ShortCut4_ModifyKey;
@@ -189,12 +193,36 @@ namespace ConvertZZ
             TypeFilter = App.Settings.FileConvert.TypeFilter;
         }
 
-        private void Button_DictionaryEdit_Click(object sender, RoutedEventArgs e)
+        private async void Button_DictionaryEdit_Click(object sender, RoutedEventArgs e)
         {
+            if (!App.DicLoaded)
+                await App.LoadDictionary(App.Settings.Engine);
             new Window_DictionaryEditor().ShowDialog();
         }
 
         public KeyValuePair<string, string> Quick_R2 { get => _Quick_R2; set { _Quick_R2 = value; OnPropertyChanged(); SaveSetting(); } }
+
+        private void Button_FanhuajiSetting_Click(object sender, RoutedEventArgs e)
+        {
+            new Window_FanhuajiSetting().ShowDialog();
+        }
+
+        private void RadioButton_Fanhuaji_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!this.IsLoaded)
+                return;
+            if (Moudle.Window_MessageBoxEx.ShowDialog(Fanhuaji_API.Fanhuaji.Terms_of_Service, "使用繁化姬API須接受以下條約", "我不同意", "我同意") != Moudle.Window_MessageBoxEx.MessageBoxExResult.B)
+                UseLocalDic = true;
+        }
+
+        private async void Window_Closing(object sender, CancelEventArgs e)
+        {
+            if (App.Settings.VocabularyCorrection)
+                await App.LoadDictionary(App.Settings.Engine);
+            else
+                App.CleanDictionary();
+        }
+
         public KeyValuePair<string, string> Quick_R3 { get => _Quick_R3; set { _Quick_R3 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_R4 { get => _Quick_R4; set { _Quick_R4 = value; OnPropertyChanged(); SaveSetting(); } }
         public KeyValuePair<string, string> Quick_R5 { get => _Quick_R5; set { _Quick_R5 = value; OnPropertyChanged(); SaveSetting(); } }
@@ -202,6 +230,8 @@ namespace ConvertZZ
         public string DefaultPath { get => _DefaultPath; set { _DefaultPath = value; OnPropertyChanged(); SaveSetting(); } }
         public string TypeFilter { get => _TypeFilter; set { _TypeFilter = value; OnPropertyChanged(); SaveSetting(); } }
         public string FixLabel { get => _FixLabel; set { _FixLabel = value; OnPropertyChanged(); SaveSetting(); } }
+        public bool UseLocalDic { get => _UseLocalDic; set { _UseLocalDic = value; OnPropertyChanged(); SaveSetting(); } }
+        public bool UseFanhuajiAPI { get => _UseFanhuajiAPI; set { _UseFanhuajiAPI = value; OnPropertyChanged(); SaveSetting(); } }
 
         public bool AutoCopy { get => _AutoCopy; set { _AutoCopy = value; OnPropertyChanged(); SaveSetting(); } }
         public bool AutoPaste { get => _AutoPaste; set { _AutoPaste = value; OnPropertyChanged(); SaveSetting(); } }

@@ -6,6 +6,8 @@
 
 namespace ConvertZZ
 {
+    using ConvertZZ.Class;
+    using ConvertZZ.Enums;
     using ConvertZZ.Moudle;
     using Newtonsoft.Json;
     using Newtonsoft.Json.Converters;
@@ -60,6 +62,8 @@ namespace ConvertZZ
             HotKey = new HotKey();
             FileConvert = new FileConvert();
             CheckVersion = true;
+            Engine = Enum_Engine.Local;
+            Fanhuaji_Setting = new Fanhuaji_Config();
         }
         /// <summary>
         /// 上次關閉時的X座標
@@ -92,6 +96,11 @@ namespace ConvertZZ
         [JsonProperty("Vocabulary correction")]
         public bool VocabularyCorrection { get; set; }
         /// <summary>
+        /// 詞彙修正引擎
+        /// </summary>
+        [JsonProperty("Engine")]
+        public Enum_Engine Engine { get; set; }
+        /// <summary>
         /// 啟用懸浮球
         /// </summary>
         [JsonProperty("AssistiveTouch")]
@@ -111,6 +120,11 @@ namespace ConvertZZ
         /// </summary>
         [JsonProperty("FileConvert")]
         public FileConvert FileConvert { get; set; }
+        /// <summary>
+        /// 繁化姬設定檔
+        /// </summary>
+        [JsonProperty("Fanhuaji_Setting")]
+        public Fanhuaji_Config Fanhuaji_Setting { get; set; }
         /// <summary>
         /// 啟動時檢查更新
         /// </summary>
@@ -343,6 +357,11 @@ namespace ConvertZZ
             Converters = {
                 new IsoDateTimeConverter { DateTimeStyles = DateTimeStyles.AssumeUniversal }
             },
+        };
+        public static readonly JsonSerializerSettings Config = new JsonSerializerSettings
+        {
+            MetadataPropertyHandling = MetadataPropertyHandling.Ignore,
+            DateParseHandling = DateParseHandling.None
         };
     }
 }

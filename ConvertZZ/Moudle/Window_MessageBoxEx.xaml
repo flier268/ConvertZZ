@@ -17,17 +17,19 @@
                 <RowDefinition Height="auto"/>
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition/>
-                <ColumnDefinition/>
+                <ColumnDefinition Width="{Binding Button1_Width}" />
+                <ColumnDefinition Width="{Binding Button2_Width}" />
                 <ColumnDefinition Width="{Binding Button3_Width}"/>
             </Grid.ColumnDefinitions>
             <TextBlock Text="{Binding ElementName=thisWindows,Path=Title}" Style="{StaticResource MaterialDesignTitleTextBlock}" Foreground="Black" Margin="12" Grid.ColumnSpan="3"/>
             <Separator VerticalAlignment="Bottom" Grid.ColumnSpan="3" Margin="10 0 10 3"/>
-            <TextBlock TextWrapping="Wrap" Text="{Binding TextBlock_Text}" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="12 12 12 30" Foreground="Black" Style="{StaticResource MaterialDesignSubheadingTextBlock}"/>
+            <ScrollViewer  Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="12 12 12 30">
+            <TextBlock TextWrapping="Wrap" Text="{Binding TextBlock_Text}" Foreground="Black" Style="{StaticResource MaterialDesignSubheadingTextBlock}"/>
+            </ScrollViewer>
             <CheckBox Content="{Binding CheckBox_Text,Mode=TwoWay}" IsChecked="{Binding CheckBox_IsChecked}" Visibility="{Binding CheckBox_Visibility}" Grid.Row="2" Grid.ColumnSpan="3" Foreground="Black" Margin="10"/>
-            <Button Content="{Binding ButtonText1,Mode=TwoWay}" Grid.Row="3" Grid.Column="0" Margin="10" Click="Button_Click"/>
-            <Button Content="{Binding ButtonText2,Mode=TwoWay}" Grid.Row="3" Grid.Column="1" Margin="10" Click="Button_Click_1"/>
-            <Button Content="{Binding ButtonText3,Mode=TwoWay}" Grid.Row="3" Grid.Column="2" Margin="10" Click="Button_Click_2" Visibility="{Binding Button3_Visibility}"/>
+            <Button Content="{Binding ButtonText1,Mode=TwoWay}" Grid.Row="3" Grid.Column="0" Margin="10" Click="Button_Click_1" Visibility="{Binding Button1_Visibility}"/>
+            <Button Content="{Binding ButtonText2,Mode=TwoWay}" Grid.Row="3" Grid.Column="1" Margin="10" Click="Button_Click_2" Visibility="{Binding Button2_Visibility}"/>
+            <Button Content="{Binding ButtonText3,Mode=TwoWay}" Grid.Row="3" Grid.Column="2" Margin="10" Click="Button_Click_3" Visibility="{Binding Button3_Visibility}"/>
         </Grid>
     </materialDesign:Card>
 </Window>

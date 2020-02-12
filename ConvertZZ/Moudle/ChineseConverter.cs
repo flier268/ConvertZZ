@@ -29,7 +29,7 @@ namespace ConvertZZ
         /// </summary> 
         [DllImport("kernel32", CharSet = CharSet.Auto, SetLastError = true)]
         internal static extern int LCMapStringEx(int Locale, int dwMapFlags, string lpSrcStr, int cchSrc, [Out] string lpDestStr, int cchDest, int lpVersionInformation = 0, int lpReserved = 0, int sortHandle = 0);
-       
+
         /// <summary> 
         /// 繁體轉簡體 
         /// </summary> 
@@ -64,12 +64,13 @@ namespace ConvertZZ
         FastReplace FR = null, FRRevert = null;
         Dictionary<string, string> ReservedWordTable = new Dictionary<string, string>();
         Dictionary<string, string> ReservedWordTable_Revert = new Dictionary<string, string>();
-        public FastReplace FR_Reserved = null, FRRevert_Reserved = null;
+        public FastReplace FR_Reserved = new FastReplace(new Dictionary<string, string>()), FRRevert_Reserved = new FastReplace(new Dictionary<string, string>());
         public ChineseConverter()
         {
         }
         public async Task Load(string fileName)
-        {   
+        {
+            Lines.Clear();
             Lines.AddRange(await DictionaryFile_Helper.Load(fileName));
             Reload();
         }

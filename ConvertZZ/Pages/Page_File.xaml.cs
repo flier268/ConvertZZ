@@ -58,6 +58,8 @@ namespace ConvertZZ.Pages
                 Mouse.OverrideCursor = null;
                 button.Content = "轉換";
                 Listview_SelectionChanged(null, null);
+                InputPreviewText = "";
+                OutputPreviewText = "";
             }), DispatcherPriority.SystemIdle);
         }
 
@@ -78,6 +80,7 @@ namespace ConvertZZ.Pages
                 ((Button)e.Source).Content = "停止";
             }
             Stopwatch stopwatch = new Stopwatch();
+            StringBuilder AppendLog = new StringBuilder();
             switch (FileMode)
             {
                 case true:
@@ -129,18 +132,19 @@ namespace ConvertZZ.Pages
                         {
                             if (cts.IsCancellationRequested) { ResetConvertButton((Button)e.Source); return; }
                             string TargetPath = Path.Combine(Path.Combine(OutputPath, _temp.Path.Substring(_temp.ParentPath.Length + (_temp.Path.Length == _temp.ParentPath.Length ? 0 : 1))), _temp.Name);
-                            await Task.Run(() =>
+
+                            string str = "";
+                            using (StreamReader sr = new StreamReader(Path.Combine(_temp.Path, _temp.Name), encoding[0], false))
                             {
-                                string str = "";
-                                using (StreamReader sr = new StreamReader(Path.Combine(_temp.Path, _temp.Name), encoding[0], false))
-                                {
-                                    str = sr.ReadToEnd();
-                                    sr.Close();
-                                }
-                                str = ConvertHelper.Convert(str, ToChinese);
+                                str = sr.ReadToEnd();
+                                sr.Close();
+                            }
+                            try
+                            {
+                                str = await ConvertHelper.ConvertAsync(str, ToChinese);
                                 if (!string.IsNullOrWhiteSpace(App.Settings.FileConvert.FixLabel))
                                 {
-                                    var list = App.Settings.FileConvert.FixLabel.Split('|').Select(x=>x.ToLower()).ToList();
+                                    var list = App.Settings.FileConvert.FixLabel.Split('|').Select(x => x.ToLower()).ToList();
                                     list.ForEach(x =>
                                     {
                                         if (Path.GetExtension(_temp.Name).ToLower() == x)
@@ -176,9 +180,16 @@ namespace ConvertZZ.Pages
                                     sw.Write(str);
                                     sw.Flush();
                                 }
-                            }, cts.Token);
-                            count_current++;
-                            DismissButtonProgress = count_current / count_total * 100.0;
+                            }
+                            catch (Exception ex)
+                            {
+                                AppendLog.AppendLine($"[Error][{ex.Message}] \"{Path.Combine(_temp.Path, _temp.Name)}\"");
+                            }
+                            finally
+                            {
+                                count_current++;
+                                DismissButtonProgress = count_current / count_total * 100.0;
+                            }
                         }
                         DismissButtonProgress = 0.0;
                         stopwatch.Stop();
@@ -188,40 +199,26 @@ namespace ConvertZZ.Pages
                 case false:
                     {
                         stopwatch.Start();
-                        treeview_nodes.ForEach(x =>
+
+                        try
                         {
-                            if (x.Nodes != null)
-                            {
-                                var childlist = GetAllChildNode(x);
-                                childlist.OrderByDescending(y => y.Generation).ToList().ForEach(y =>
-                                {
-                                    if (y.IsChecked)
-                                    {
-                                        string temp = "";
-                                        string path = GetParentSum(y, ref temp);
-                                        string newpath = Path.Combine(Path.GetDirectoryName(path), ConvertHelper.Convert(Path.GetFileName(path), encoding, ToChinese));
-                                        try
-                                        {
-                                            if (y.IsFile)
-                                                File.Move(path, newpath);
-                                            else
-                                                Directory.Move(path, newpath);
-                                        }
-                                        catch { }
-                                    }
-                                });
-                            }
-                        });
+                            ConvertFolderAndFileName(true);
+                        }
+                        catch (NullReferenceException ex)
+                        {
+                            AppendLog.AppendLine(ex.Message);
+                        }
                         stopwatch.Stop();
                     }
                     break;
             }
-            if (App.Settings.Prompt)
+            if (AppendLog.Length != 0)
+                Window_MessageBoxEx.ShowDialog(AppendLog.ToString(), "轉換過程中出現錯誤", "我知道了");
+            else if (App.Settings.Prompt)
             {
                 new Toast(string.Format("轉換完成\r\n耗時：{0} ms", stopwatch.ElapsedMilliseconds)).Show();
             }
-            ((Button)e.Source).Content = "轉換";
-            Listview_SelectionChanged(null, null);
+            ResetConvertButton((Button)e.Source);
         }
         private void Button_Clear_Clicked(object sender, RoutedEventArgs e)
         {
@@ -239,23 +236,34 @@ namespace ConvertZZ.Pages
             {
                 DisplayName = path
             };
-            var dir = Directory.GetDirectories(path);
-
-            dir.ToList().ForEach(x =>
+            List<string> dir;
+            try
             {
-                temp.Nodes.Add(new Node(temp)
+                dir = Directory.GetDirectories(path).ToList();
+                dir.ForEach(x =>
                 {
-                    DisplayName = Path.GetFileName(x),
-                    IsChecked = true,
-                    IsFile = false,
-                    Nodes = searchAll ? GetChildPath(Path.Combine(path, x), searchAll, filter).Nodes : new List<Node>()
+                    var y = new Node(temp)
+                    {
+                        DisplayName = Path.GetFileName(x),
+                        IsChecked = true,
+                        IsFile = false,
+                        Nodes = searchAll ? GetChildPath(Path.Combine(path, x), searchAll, filter).Nodes : new List<Node>()
+                    };
+                    y.RegistPropertyChangedEvent();
+                    temp.Nodes.Add(y);
                 });
-            });
-            dir = Directory.GetFiles(path);
-            dir.ToList().ForEach(x =>
+                dir = Directory.GetFiles(path).ToList();
+                dir.ForEach(x =>
+                {
+                    var y = new Node(temp) { DisplayName = Path.GetFileName(x), IsFile = true, IsChecked = true };
+                    y.RegistPropertyChangedEvent();
+                    temp.Nodes.Add(y);
+                });
+            }
+            catch
             {
-                temp.Nodes.Add(new Node(temp) { DisplayName = Path.GetFileName(x), IsFile = true, IsChecked = true });
-            });
+                throw;
+            }
             temp.Nodes = temp.Nodes.Distinct().ToList();
             return temp;
         }
@@ -266,6 +274,20 @@ namespace ConvertZZ.Pages
             else if (node.Generation == 1)
                 return node.DisplayName;
             return sum;
+        }
+        private void GetPathParts(Node node, ref Dictionary<string, string> sum)
+        {
+            string Key;
+            if (node.Generation == 1)
+            {
+                Key = Path.GetFileName(node.DisplayName);
+                sum[Key] = Key;
+            }
+            else
+            {
+                Key = node.DisplayName;
+                sum[node.DisplayName] = Key;
+            }
         }
         private List<Node> GetAllChildNode(Node node)
         {
@@ -281,7 +303,7 @@ namespace ConvertZZ.Pages
             }
             return temp;
         }
-        private void Button_SelectFile_Clicked(object sender, RoutedEventArgs e)
+        private async void Button_SelectFile_Clicked(object sender, RoutedEventArgs e)
         {
             OpenFileDialog fileDialog = new OpenFileDialog() { Multiselect = true, CheckFileExists = false, CheckPathExists = true, ValidateNames = false };
             fileDialog.InitialDirectory = App.Settings.FileConvert.DefaultPath;
@@ -293,9 +315,24 @@ namespace ConvertZZ.Pages
                 OutputPath = Path.GetDirectoryName(fileDialog.FileNames.First());
                 if (!FileMode)
                 {
-                    treeview_nodes = new List<Node>() { GetChildPath(OutputPath, AccordingToChild, Combobox_Filter.Text) };
+                    string a;
+                    try
+                    {
+                        treeview_nodes = new List<Node>() { GetChildPath(OutputPath, AccordingToChild, Combobox_Filter.Text) };
+                        a = await CreateDictionary();
+                    }
+                    catch (Exception ex)
+                    {
+                        a = $"[Error][{ex.Message}]StackTrace: {ex.StackTrace}";
+                    }
+                    if (!string.IsNullOrWhiteSpace(a))
+                    {
+                        PathParts = null;
+                        Window_MessageBoxEx.ShowDialog(a, "預覽轉換中出現錯誤", "我知道了");
+                    }
+                    treeview_nodes.ForEach(x => x.PropertyChanged += Treeview_CheckedChanged);
                     treeview.ItemSources = treeview_nodes;
-                    Treeview_CheckedChanged(null);
+                    Treeview_CheckedChanged(null, new PropertyChangedEventArgs(nameof(Node.IsChecked)));
                 }
                 else
                 {
@@ -304,6 +341,7 @@ namespace ConvertZZ.Pages
                 Combobox_Filter_SelectionChanged(Combobox_Filter, null);
             }
         }
+
         private void ImportFileNames(string[] FileNames)
         {
             string ParentPath = Path.GetDirectoryName(FileNames.First());
@@ -348,32 +386,144 @@ namespace ConvertZZ.Pages
 
 
         List<Node> treeview_nodes = new List<Node>();
-        private void Treeview_CheckedChanged(CheckBox sender)
+        Dictionary<string, string> PathParts = new Dictionary<string, string>();
+        private void Treeview_CheckedChanged(object sender, PropertyChangedEventArgs e)
         {
-            StringBuilder sb = new StringBuilder();
-            StringBuilder sb2 = new StringBuilder();
-            Dictionary<int, string[]> keyValuePairs = new Dictionary<int, string[]>();
-            treeview_nodes.ForEach(x =>
+            if (e.PropertyName != nameof(Node.IsChecked))
+                return;
+            var r = ConvertFolderAndFileName(false);
+            InputPreviewText = r[0];
+            OutputPreviewText = r[1];
+        }
+        private async Task<string> CreateDictionary()
+        {
+            PathParts = PathParts ?? new Dictionary<string, string>();
+            PathParts.Clear();
+            StringBuilder AppendLog = new StringBuilder();
+            foreach (var x in treeview_nodes)
             {
                 if (x.Nodes != null)
                 {
+                    GetPathParts(x, ref PathParts);
                     var childlist = GetAllChildNode(x);
-                    childlist.Where(y => y.IsChecked).Reverse().ToList().ForEach(y =>
+                    foreach (var y in childlist)
+                    {
+                        GetPathParts(y, ref PathParts);
+                    }
+                }
+            }
+            try
+            {
+                PathParts = await ConvertHelper.ConvertDictionary(PathParts, encoding, ToChinese);
+            }
+            catch (Fanhuaji_API.Fanhuaji.FanhuajiException ex)
+            {
+                AppendLog.AppendLine($"[Error][{ex.Message}]");
+                return AppendLog.ToString();
+            }
+            catch (Exception ex)
+            {
+                AppendLog.AppendLine($"[Error][{ex.Message}]StackTrace: {ex.StackTrace}");
+                return AppendLog.ToString();
+            }
+            return AppendLog.ToString();
+        }
+        private string[] ConvertFolderAndFileName(bool Rename)
+        {
+            string InputText, OutputText;
+            StringBuilder sb = new StringBuilder();
+            StringBuilder sb2 = new StringBuilder();
+            StringBuilder AppendLog = new StringBuilder();
+            foreach (var x in treeview_nodes)
+            {
+                if (x.Nodes != null)
+                {
+                    var temps = GetAllChildNode(x).Where(y => y.IsChecked).Reverse().ToList();
+                    foreach (var y in temps)
                     {
                         string temp = "";
                         string path = GetParentSum(y, ref temp);
-                        string newpath = Path.Combine(Path.GetDirectoryName(path), ConvertHelper.Convert(Path.GetFileName(path), encoding, ToChinese));
                         sb.AppendLine(path);
-                        if (y.Generation > 1 && keyValuePairs.ContainsKey(y.Generation - 1))
-                            newpath = newpath.Replace(keyValuePairs[y.Generation - 1][0], keyValuePairs[y.Generation - 1][1]);
-                        sb2.AppendLine(newpath);
-                        keyValuePairs[y.Generation] = new string[] { path, newpath };
-                    });
+                    }
                 }
-            });
-            InputPreviewText = sb.ToString();
-            OutputPreviewText = sb2.ToString();
+            }
+            InputText = sb.ToString();
+            if (PathParts == null)
+            {
+                OutputText = "轉換時出現錯誤，請檢查網路及設定";
+                if (Rename)
+                    throw new NullReferenceException(OutputText);
+                else
+                    return new string[] { InputText, OutputText };
+            }
+
+
+            var treeview_nodes_output = treeview_nodes.Select(x => x.Clone() as Node).ToList();
+            string RenameError = RenameFolderAndFileName(treeview_nodes_output, PathParts, Rename);
+            if (!string.IsNullOrWhiteSpace(RenameError))
+                AppendLog.AppendLine(RenameError);
+
+            foreach (var x in treeview_nodes_output)
+            {
+                if (x.Nodes != null)
+                {
+                    var temps = GetAllChildNode(x).Where(y => y.IsChecked).Reverse().ToList();
+                    foreach (var y in temps)
+                    {
+                        string temp = "";
+                        sb2.AppendLine(GetParentSum(y, ref temp));
+                    }
+                }
+            }
+
+
+            if (AppendLog.Length != 0)
+            {
+                Window_MessageBoxEx.ShowDialog(AppendLog.ToString(), "轉換過程中出現錯誤", "我知道了");
+                OutputText = "";
+            }
+            else
+                OutputText = sb2.ToString();
+            return new string[] { InputText, OutputText };
         }
+
+        private string RenameFolderAndFileName(List<Node> nodes, Dictionary<string, string> Dictionary, bool Rename)
+        {
+            StringBuilder @string = new StringBuilder();
+            nodes.ForEach(x =>
+            {
+                if (x.IsChecked)
+                {
+                    if (Rename)
+                    {
+                        string temp = "";
+                        string path = GetParentSum(x, ref temp);
+                        string newpath = Path.Combine(Path.GetDirectoryName(path), Dictionary[Path.GetFileName(path)]);
+                        try
+                        {
+                            if (path != newpath)
+                            {
+                                if (x.IsFile)
+                                    File.Move(path, newpath);
+                                else
+                                    Directory.Move(path, newpath);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            @string.AppendLine($"[Error][{ex.Message}]StackTrace: {ex.StackTrace}");
+                        }
+                    }
+                    if (x.Generation == 1)
+                        x.DisplayName = Path.Combine(Path.GetDirectoryName(x.DisplayName), Dictionary[Path.GetFileName(x.DisplayName)]);
+                    else
+                        x.DisplayName = Dictionary[x.DisplayName];
+                }
+                @string.AppendLine(RenameFolderAndFileName(x.Nodes, Dictionary, Rename));
+            });
+            return @string.ToString();
+        }
+
         public class FileList_Line
         {
             public int ID { get; set; }
@@ -405,7 +555,7 @@ namespace ConvertZZ.Pages
             }
             ModeChange(null, null);
         }
-        private void Listview_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private async void Listview_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             treeview_nodes.Clear();
             treeview.ItemSources = null;
@@ -427,7 +577,14 @@ namespace ConvertZZ.Pages
                             InputPreviewText = @string.ToString().TrimEnd('\0');
                         }
                     }
-                    OutputPreviewText = ConvertHelper.FileConvert(InputPreviewText, encoding, ToChinese);
+                    try
+                    {
+                        OutputPreviewText = await ConvertHelper.FileConvert(InputPreviewText, encoding, ToChinese);
+                    }
+                    catch (Fanhuaji_API.Fanhuaji.FanhuajiException ex)
+                    {
+                        OutputPreviewText = $"[Error][{ex.Message}] \"{path}\"";
+                    }
                 }
             }
         }
@@ -448,7 +605,7 @@ namespace ConvertZZ.Pages
             ModeChange(null, null);
         }
 
-        private void ModeChange(object sender, RoutedEventArgs e)
+        private async void ModeChange(object sender, RoutedEventArgs e)
         {
             if (FileMode)
             {
@@ -458,7 +615,13 @@ namespace ConvertZZ.Pages
             else
             {
                 SwitchPage(Page2, Page1);
-                Treeview_CheckedChanged(null);
+                var a = await CreateDictionary();
+                if (!string.IsNullOrWhiteSpace(a))
+                {
+                    PathParts = null;
+                    Window_MessageBoxEx.ShowDialog(a, "預覽轉換中出現錯誤", "我知道了");
+                }
+                Treeview_CheckedChanged(null, new PropertyChangedEventArgs(nameof(Node.IsChecked)));
             }
         }
         Grid g;

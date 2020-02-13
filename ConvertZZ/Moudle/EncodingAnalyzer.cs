@@ -5,7 +5,7 @@ using System.Text;
 namespace ConvertZZ.Moudle
 {
     class EncodingAnalyzer
-    {        
+    {
         /// <summary>
         /// 快速篩選string是BIG5或GBK
         /// </summary>

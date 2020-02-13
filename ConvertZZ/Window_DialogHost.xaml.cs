@@ -2,7 +2,6 @@
 using System;
 using System.ComponentModel;
 using System.IO;
-using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -117,13 +116,10 @@ namespace ConvertZZ
             this.Close();
         }
 
-        private Visibility _CreateShortcutVisibility;
-        public Visibility CreateShortcutVisibility { get => _CreateShortcutVisibility; set { _CreateShortcutVisibility = value; OnPropertyChanged(); } }
+        public Visibility CreateShortcutVisibility { get; set; }
 
         public event PropertyChangedEventHandler PropertyChanged;
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
+
+
     }
 }

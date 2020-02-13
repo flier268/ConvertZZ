@@ -8,7 +8,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -366,22 +365,22 @@ namespace ConvertZZ.Pages
                 }
             }
         }
-        private string _ClipBoard = "";
-        public string ClipBoard { get => _ClipBoard; set { _ClipBoard = value; OnPropertyChanged(); } }
-        private string _InputPreviewText = "";
-        public string InputPreviewText { get => _InputPreviewText; set { _InputPreviewText = value; OnPropertyChanged(); } }
-        private string _OutputPreviewText = "";
-        public string OutputPreviewText { get => _OutputPreviewText; set { _OutputPreviewText = value; OnPropertyChanged(); } }
-        private bool _FileMode = true;
-        public bool FileMode { get => _FileMode; set { _FileMode = value; OnPropertyChanged(); } }
-        private bool _AccordingToChild = true;
-        public bool AccordingToChild { get => _AccordingToChild; set { _AccordingToChild = value; OnPropertyChanged(); } }
-        private string _OutputPath = "";
-        public string OutputPath { get => _OutputPath; set { _OutputPath = value; OnPropertyChanged(); } }
-        private double _DismissButtonProgress;
-        public double DismissButtonProgress { get => _DismissButtonProgress; set { _DismissButtonProgress = value; OnPropertyChanged(); } }
-        private ObservableCollection<FileList_Line> _FileList = new ObservableCollection<FileList_Line>();
-        public ObservableCollection<FileList_Line> FileList { get => _FileList; set { _FileList = value; OnPropertyChanged(); } }
+
+        public string ClipBoard { get; set; } = "";
+
+        public string InputPreviewText { get; set; } = "";
+
+        public string OutputPreviewText { get; set; } = "";
+
+        public bool FileMode { get; set; } = true;
+
+        public bool AccordingToChild { get; set; } = true;
+
+        public string OutputPath { get; set; } = "";
+
+        public double DismissButtonProgress { get; set; }
+
+        public ObservableCollection<FileList_Line> FileList { get; set; } = new ObservableCollection<FileList_Line>();
         public bool UnicodeAddBom { get => App.Settings.FileConvert.UnicodeAddBom; set { App.Settings.FileConvert.UnicodeAddBom = value; App.Save(); } }
 
 
@@ -535,10 +534,8 @@ namespace ConvertZZ.Pages
             public bool IsReplace { get; set; }
         }
         public event PropertyChangedEventHandler PropertyChanged;
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
+
+
 
 
         private void Encoding_Selected(object sender, RoutedEventArgs e)

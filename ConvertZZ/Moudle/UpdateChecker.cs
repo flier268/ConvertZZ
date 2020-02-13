@@ -20,7 +20,7 @@ namespace ConvertZZ.Moudle
                         var responseContent = response.Content;
                         string responseString = responseContent.ReadAsStringAsync().Result;
                         string pattern = @"^\[assembly: AssemblyVersion\(""(.*?)""\)\]";
-                        var m = Regex.Match(responseString, pattern,RegexOptions.Multiline);
+                        var m = Regex.Match(responseString, pattern, RegexOptions.Multiline);
                         if (m.Success)
                         {
                             Version ver = new Version(m.Groups[1].ToString().ToString());
@@ -41,5 +41,5 @@ namespace ConvertZZ.Moudle
             public Version Newst { get; set; }
             public bool HaveNew { get; set; }
         }
-    }    
+    }
 }

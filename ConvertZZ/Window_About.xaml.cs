@@ -12,7 +12,7 @@ namespace ConvertZZ
         public Window_About()
         {
             InitializeComponent();
-            Version.Content= "v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString();
+            Version.Content = "v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString();
         }
 
         private void Label_MouseUp(object sender, MouseButtonEventArgs e)

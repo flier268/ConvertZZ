@@ -1,6 +1,5 @@
 ﻿using System;
 using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -37,14 +36,10 @@ namespace ConvertZZ.Moudle
         }
 
         int time_ms = 1000;
-        private string _Message;
-        public string Message { get => _Message; set { _Message = value; OnPropertyChanged(); } }
+
+        public string Message { get; set; }
 
 
         public event PropertyChangedEventHandler PropertyChanged;
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
     }
 }

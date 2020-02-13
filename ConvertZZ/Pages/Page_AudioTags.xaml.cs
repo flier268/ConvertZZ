@@ -7,7 +7,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -375,17 +374,15 @@ namespace ConvertZZ.Pages
             public string Value_Preview { get; set; }
         }
 
-        private bool _ID3Mode = true;
-        public bool ID3Mode { get => _ID3Mode; set { _ID3Mode = value; OnPropertyChanged(); } }
-        private bool _AccordingToChild = true;
-        public bool AccordingToChild { get => _AccordingToChild; set { _AccordingToChild = value; OnPropertyChanged(); } }
-        private ObservableCollection<FileList_Line> _FileList = new ObservableCollection<FileList_Line>();
-        public ObservableCollection<FileList_Line> FileList { get => _FileList; set { _FileList = value; OnPropertyChanged(); } }
+        public bool ID3Mode { get; set; } = true;
 
-        private ObservableCollection<TagList_Line> _ID3v1_TagList = new ObservableCollection<TagList_Line>();
-        public ObservableCollection<TagList_Line> ID3v1_TagList { get => _ID3v1_TagList; set { _ID3v1_TagList = value; OnPropertyChanged(); } }
+        public bool AccordingToChild { get; set; } = true;
+
+        public ObservableCollection<FileList_Line> FileList { get; set; } = new ObservableCollection<FileList_Line>();
+
+        public ObservableCollection<TagList_Line> ID3v1_TagList { get; set; } = new ObservableCollection<TagList_Line>();
         private ObservableCollection<TagList_Line> _ID3v2_TagList = new ObservableCollection<TagList_Line>();
-        public ObservableCollection<TagList_Line> ID3v2_TagList { get => _ID3v2_TagList; set { _ID3v2_TagList = value; OnPropertyChanged(); } }
+        public ObservableCollection<TagList_Line> ID3v2_TagList { get => _ID3v2_TagList; set { _ID3v2_TagList = value; } }
 
         public bool Enable_ID3v1 { get; set; } = true;
         public bool Enable_ID3v2 { get; set; } = true;
@@ -409,10 +406,8 @@ namespace ConvertZZ.Pages
         public string Encoding_Output_ID3v2 { get; set; } = "UTF-16";
 
         public event PropertyChangedEventHandler PropertyChanged;
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
+
+
 
         private void ComboBox_ID3v2_Version_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {

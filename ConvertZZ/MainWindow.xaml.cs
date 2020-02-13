@@ -1,12 +1,10 @@
 ﻿using ConvertZZ.Moudle;
-using Microsoft.WindowsAPICodePack.Shell.Interop;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
 using System.Text;
-using Fanhuaji_API;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -49,7 +47,7 @@ namespace ConvertZZ
 
                         Window_DialogHost window_DialogHost = new Window_DialogHost(Args[0] == "/file" ? Enums.Enum_Mode.Mode.File_FileName : Enums.Enum_Mode.Mode.AutioTag, Args.Skip(1).ToArray());
                         window_DialogHost.Show();
-                        
+
                         await ss.WriteStringAsync("ACK");
                         pipeServer.WaitForPipeDrain();
                         pipeServer.Close();
@@ -76,8 +74,8 @@ namespace ConvertZZ
             if (App.Settings.HotKey.AutoPaste) ClipBoardHelper.Paste();
         }
         void HotkeyAction2(Moudle.HotKey hotKey)
-        {            
-            if (App.Settings.HotKey.AutoCopy) ClipBoardHelper.Copy(hotKey.Key,hotKey.KeyModifiers);
+        {
+            if (App.Settings.HotKey.AutoCopy) ClipBoardHelper.Copy(hotKey.Key, hotKey.KeyModifiers);
             MenuItem_Click(new MenuItem { Uid = App.Settings.HotKey.Feature2.Action, Visibility = Visibility.Hidden }, null);
             if (App.Settings.HotKey.AutoPaste) ClipBoardHelper.Paste();
         }
@@ -106,13 +104,13 @@ namespace ConvertZZ
             RegHotkey(App.Settings.HotKey.Feature2, HotkeyAction2);
             RegHotkey(App.Settings.HotKey.Feature3, HotkeyAction3);
             RegHotkey(App.Settings.HotKey.Feature4, HotkeyAction4);
-        }       
+        }
         public void UnRegAllHotkey()
         {
             hotKeys.ForEach(x => x.Dispose());
             hotKeys.Clear();
         }
-        
+
         Point pointNow = new Point();
         bool leftDown = false;
         private void Window_MouseDown(object sender, MouseButtonEventArgs e)
@@ -149,7 +147,7 @@ namespace ConvertZZ
             App.nIcon.Visible = false;
             App.nIcon.Dispose();
             Environment.Exit(0);
-        }        
+        }
         private void Window_MouseUp(object sender, MouseButtonEventArgs e)
         {
             ContextMenu NotifyIconMenu = (ContextMenu)this.FindResource("NotifyIconMenu");
@@ -166,8 +164,8 @@ namespace ConvertZZ
                                 MenuItem_Click(GetByUid(NotifyIconMenu, App.Settings.QuickStart.LeftClick_Alt), null);
                             else if (Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift))
                                 MenuItem_Click(GetByUid(NotifyIconMenu, App.Settings.QuickStart.LeftClick_Shift), null);
-                            else                            
-                                e.Handled = false;                            
+                            else
+                                e.Handled = false;
                         }
                         else
                             e.Handled = false;
@@ -275,11 +273,11 @@ namespace ConvertZZ
             }
             else
             {
-                var g=e.Data.GetFormats(true);
-                foreach( var h in g)
+                var g = e.Data.GetFormats(true);
+                foreach (var h in g)
                 {
                     object ss = e.Data.GetData(h);
-                    if(ss!=null)
+                    if (ss != null)
                     {
 
                     }
@@ -548,13 +546,13 @@ namespace ConvertZZ
         {
             foreach (UIElement element in LogicalTreeHelper.GetChildren(rootElement).OfType<UIElement>())
             {
-                if(element as MenuItem !=null)                
+                if (element as MenuItem != null)
                     if ((element as MenuItem).Items.Count > 0)
                     {
-                        UIElement resoult= GetByUid(element, uid);
+                        UIElement resoult = GetByUid(element, uid);
                         if (resoult != null)
                             return resoult;
-                    }                       
+                    }
                 if (element.Uid == uid)
                     return element;
                 UIElement resultChildren = GetByUid(element, uid);

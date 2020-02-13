@@ -18,13 +18,12 @@ namespace ConvertZZ
             InitializeComponent();
         }
         public event PropertyChangedEventHandler PropertyChanged;
-        protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
 
         public delegate void CheckedChangedEventHandler(CheckBox sender);
         public event CheckedChangedEventHandler CheckedChanged;
 
-        private IList<Node> _ItemSources;
-        public IList<Node> ItemSources { get => _ItemSources; set { _ItemSources = value; OnPropertyChanged("ItemSources"); } }
+        public IList<Node> ItemSources { get; set; }
 
         private void CheckBox_Checked(object sender, System.Windows.RoutedEventArgs e)
         {
@@ -45,10 +44,10 @@ namespace ConvertZZ
         {
             PropertyChanged += (sender, e) => Parent.PropertyChanged?.Invoke(sender, e);
         }
-        private string _DisplayName;
-        public string DisplayName { get => _DisplayName; set { _DisplayName = value; OnPropertyChanged("DisplayName"); } }
-        private bool _IsChecked;
-        public bool IsChecked { get => _IsChecked; set { _IsChecked = value; OnPropertyChanged("IsChecked"); } }
+
+        public string DisplayName { get; set; }
+
+        public bool IsChecked { get; set; }
         public bool IsFile { get; set; }
         private Node _Parent;
         public Node Parent
@@ -66,7 +65,6 @@ namespace ConvertZZ
                             child.Parent = this;
                 }
                 _Parent = value;
-                OnPropertyChanged("Parent");
             }
         }
         public int Generation { get; private set; }
@@ -80,11 +78,10 @@ namespace ConvertZZ
                 if (value != null)
                     foreach (var child in _Nodes)
                         child.Parent = this;
-                OnPropertyChanged("Nodes");
             }
         }
         public event PropertyChangedEventHandler PropertyChanged;
-        protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
 
         public object Clone()
         {

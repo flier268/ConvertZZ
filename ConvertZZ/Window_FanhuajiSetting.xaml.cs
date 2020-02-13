@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -17,20 +16,7 @@ namespace ConvertZZ
 	{
 		private int replaceDicIndex = 0;
 
-		private List<KeyValue> _ReplaceList = new List<KeyValue>();
-
-		public List<KeyValue> ReplaceList
-		{
-			get
-			{
-				return _ReplaceList;
-			}
-			set
-			{
-				_ReplaceList = value;
-				OnPropertyChanged();
-			}
-		}
+		public List<KeyValue> ReplaceList { get; set; } = new List<KeyValue>();
 
 		public event PropertyChangedEventHandler PropertyChanged;
 
@@ -49,11 +35,6 @@ namespace ConvertZZ
 			}
 			base.DataContext = App.Settings.Fanhuaji_Setting;
 			DataGrid_ReplaceList.DataContext = this;
-		}
-
-		protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
-		{
-			this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 		}
 
 		private void DataGrid_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -111,7 +92,7 @@ namespace ConvertZZ
 					ReplaceList.AddRange(App.Settings.Fanhuaji_Setting.UserProtectReplace);
 					break;
 			}
-			OnPropertyChanged("ReplaceList");
+			PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("ReplaceList"));
 		}
 
 		private void Window_Closing(object sender, CancelEventArgs e)

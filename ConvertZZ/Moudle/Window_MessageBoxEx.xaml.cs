@@ -1,6 +1,5 @@
 ﻿using System;
 using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -9,11 +8,11 @@ namespace ConvertZZ.Moudle
     /// <summary>
     /// Window_MessageBoxEx.xaml 的互動邏輯
     /// </summary>
-    public partial class Window_MessageBoxEx : Window, INotifyPropertyChanged,IDisposable
+    public partial class Window_MessageBoxEx : Window, INotifyPropertyChanged, IDisposable
     {
-        MessageBoxExResult Resoult= MessageBoxExResult.NONE;
-     
-        public Window_MessageBoxEx(string Text, string Caption, string button1_Text, string button2_Text, string button3_Text,string CheckBox_Text)
+        MessageBoxExResult Resoult = MessageBoxExResult.NONE;
+
+        public Window_MessageBoxEx(string Text, string Caption, string button1_Text, string button2_Text, string button3_Text, string CheckBox_Text)
         {
             TextBlock_Text = Text;
             ButtonText1 = button1_Text;
@@ -87,16 +86,15 @@ namespace ConvertZZ.Moudle
 
 
 
-        private string _TextBlock_Text, _ButtonText1, _ButtonText2, _ButtonText3, _CheckBox_Text;
-        private Visibility _CheckBox_Visibility = Visibility.Collapsed;
+        private string _ButtonText3, _CheckBox_Text;
         private bool _CheckBox_IsChecked = false;
-        public string TextBlock_Text { get => _TextBlock_Text; set { _TextBlock_Text = value; OnPropertyChanged("TextBlock_Text"); } }
-        public string ButtonText1 { get => _ButtonText1; set { _ButtonText1 = value; OnPropertyChanged("ButtonText1"); } }
-        public string ButtonText2 { get => _ButtonText2; set { _ButtonText2 = value; OnPropertyChanged("ButtonText2"); } }
-        public string CheckBox_Text { get => _CheckBox_Text; set { _CheckBox_Text = value; CheckBox_Visibility = (String.IsNullOrEmpty(value) ? Visibility.Collapsed : Visibility.Visible); OnPropertyChanged("CheckBox_Text"); } }
-        public Visibility CheckBox_Visibility { get => _CheckBox_Visibility; set { _CheckBox_Visibility = value; OnPropertyChanged("CheckBox_Visibility"); } }
-        public bool CheckBox_IsChecked { get => _CheckBox_IsChecked; set { _CheckBox_IsChecked = value; OnPropertyChanged("CheckBox_IsChecked"); } }
-    
+        public string TextBlock_Text { get; set; }
+        public string ButtonText1 { get; set; }
+        public string ButtonText2 { get; set; }
+        public string CheckBox_Text { get => _CheckBox_Text; set { _CheckBox_Text = value; CheckBox_Visibility = (String.IsNullOrEmpty(value) ? Visibility.Collapsed : Visibility.Visible); } }
+        public Visibility CheckBox_Visibility { get; set; } = Visibility.Collapsed;
+        public bool CheckBox_IsChecked { get => _CheckBox_IsChecked; set { _CheckBox_IsChecked = value; } }
+
         private void Button_Click_1(object sender, RoutedEventArgs e)
         {
             Resoult = (MessageBoxExResult)(1 * (CheckBox_IsChecked ? 2 : 1));
@@ -115,21 +113,19 @@ namespace ConvertZZ.Moudle
             this.Close();
             ColumnDefinition columnDefinition = new ColumnDefinition();
             columnDefinition.Width = new GridLength(1, GridUnitType.Star);
-    }
+        }
 
-        public string ButtonText3 { get => _ButtonText3; set { _ButtonText3 = value; OnPropertyChanged("ButtonText3"); } }        
+        public string ButtonText3 { get => _ButtonText3; set { _ButtonText3 = value; } }
         private GridLength _Button1_Width = new GridLength();
-        private GridLength _Button2_Width = new GridLength(); 
+        private GridLength _Button2_Width = new GridLength();
         private GridLength _Button3_Width = new GridLength();
-        private Visibility _Button1_Visibility = Visibility.Visible;
-        private Visibility _Button2_Visibility = Visibility.Visible;
         private Visibility _Button3_Visibility = Visibility.Visible;
-        public Visibility Button1_Visibility { get => _Button1_Visibility; set { _Button1_Visibility = value; OnPropertyChanged(); } }
-        public Visibility Button2_Visibility { get => _Button2_Visibility; set { _Button2_Visibility = value; OnPropertyChanged(); } }
-        public Visibility Button3_Visibility { get => _Button3_Visibility; set { _Button3_Visibility = value; OnPropertyChanged(); } }
-        public GridLength Button1_Width { get => _Button1_Width; set { _Button1_Width = value; OnPropertyChanged(); } }
-        public GridLength Button2_Width { get => _Button2_Width; set { _Button2_Width = value; OnPropertyChanged(); } }
-        public GridLength Button3_Width { get => _Button3_Width; set { _Button3_Width = value; OnPropertyChanged(); } }
+        public Visibility Button1_Visibility { get; set; } = Visibility.Visible;
+        public Visibility Button2_Visibility { get; set; } = Visibility.Visible;
+        public Visibility Button3_Visibility { get => _Button3_Visibility; set { _Button3_Visibility = value; } }
+        public GridLength Button1_Width { get => _Button1_Width; set { _Button1_Width = value; } }
+        public GridLength Button2_Width { get => _Button2_Width; set { _Button2_Width = value; } }
+        public GridLength Button3_Width { get => _Button3_Width; set { _Button3_Width = value; } }
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -139,10 +135,8 @@ namespace ConvertZZ.Moudle
                 this.DragMove();
         }
 
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
+
+
 
         #region IDisposable Support
         private bool disposedValue = false; // 偵測多餘的呼叫

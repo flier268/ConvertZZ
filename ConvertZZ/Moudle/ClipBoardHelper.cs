@@ -53,7 +53,7 @@ namespace ConvertZZ
         }
 
         internal static void Copy()
-        {            
+        {
             keybd_event(VK_CONTROL, 0, 0, 0);
             keybd_event(VK_C, 0, 0, 0);
             keybd_event(VK_C, 0, KEYEVENTF_KEYUP, 0);

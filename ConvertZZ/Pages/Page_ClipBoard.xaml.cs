@@ -25,10 +25,9 @@ namespace ConvertZZ.Pages
             DataContext = this;
         }
 
-        private string _ClipBoard;
-        public string ClipBoard { get => _ClipBoard; set { _ClipBoard = value; OnPropertyChanged("ClipBoard"); } }
-        private string _Output;
-        public string Output { get => _Output; set { _Output = value; OnPropertyChanged("Output"); } }
+        public string ClipBoard { get; set; }
+
+        public string Output { get; set; }
 
 
 
@@ -89,7 +88,7 @@ namespace ConvertZZ.Pages
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
-        protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
         private void Page_Loaded(object sender, RoutedEventArgs e)
         {
             #region 註冊Hook並監聽剪貼簿            

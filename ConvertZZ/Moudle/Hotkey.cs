@@ -135,5 +135,5 @@ namespace ConvertZZ.Moudle
         NoRepeat = 0x4000,
         Shift = 0x0004,
         Win = 0x0008
-    } 
+    }
 }

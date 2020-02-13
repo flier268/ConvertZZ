@@ -30,7 +30,8 @@ namespace ConvertZZ.Moudle
             Button2_Action?.Invoke();
         }
 
-        public class Button {
+        public class Button
+        {
             public string Content { get; set; }
             public Action Action { get; set; }
         }
@@ -39,12 +40,12 @@ namespace ConvertZZ.Moudle
             public string Key { get; set; }
             public string Value { get; set; }
         }
-        ObservableCollection<KeyValueItem> _keyValueItems;
-        public ObservableCollection<KeyValueItem> KeyValueItems { get => _keyValueItems; set { _keyValueItems = value;OnPropertyChanged(); } }
-        string _button1_Content;
-        public string button1_Content { get => _button1_Content; set { _button1_Content = value; OnPropertyChanged(); } }
-        string _button2_Content;
-        public string button2_Content { get => _button2_Content; set { _button2_Content = value; OnPropertyChanged(); } }
+
+        public ObservableCollection<KeyValueItem> KeyValueItems { get; set; }
+
+        public string button1_Content { get; set; }
+
+        public string button2_Content { get; set; }
         public Action Button1_Action { get; set; }
         public Action Button2_Action { get; set; }
 

@@ -1,12 +1,10 @@
 ﻿using ConvertZZ.Moudle;
-using Flier.Toolbox.Text;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -36,11 +34,9 @@ namespace ConvertZZ
         }
         ChineseConverter ChineseConverter = new ChineseConverter();
         List<DictionaryFile_Helper.Line> DataGrid_ItemSource { get; set; }
-        private string _Input = "";
-        public string Input { get => _Input; set { _Input = value; OnPropertyChanged(); } }
+        public string Input { get; set; } = "";
 
-        private string _Output = "";
-        public string Output { get => _Output; set { _Output = value; OnPropertyChanged(); } }
+        public string Output { get; set; } = "";
         public bool C_to_T { get; set; } = true;
         void FastReplace_Reload()
         {
@@ -49,11 +45,11 @@ namespace ConvertZZ
         }
         void InputToOutput()
         {
-            _Output = ChineseConverter.Convert(Input, C_to_T);
+            Output = ChineseConverter.Convert(Input, C_to_T);
             if (C_to_T)
-                Output = ChineseConverter.ToTraditional(_Output);
+                Output = ChineseConverter.ToTraditional(Output);
             else
-                Output = ChineseConverter.ToSimplified(_Output);
+                Output = ChineseConverter.ToSimplified(Output);
         }
 
         private void DataGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
@@ -114,10 +110,8 @@ namespace ConvertZZ
         #endregion Filter
         #region Binding
         public event PropertyChangedEventHandler PropertyChanged;
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
+
+
         #endregion Binding
         private void AutoGeneratingColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)
         {
@@ -225,7 +219,7 @@ namespace ConvertZZ
         {
             if (ChineseConverter == null) return;
             string value = (e.Source as TextBox).Text;
-            _Input = value.Substring(0, Math.Min(500, value.Length));
+            Input = value.Substring(0, Math.Min(500, value.Length));
             InputToOutput();
         }
 

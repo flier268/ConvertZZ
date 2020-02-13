@@ -106,6 +106,8 @@ namespace ConvertZZ.Pages
                                         case Moudle.Window_MessageBoxEx.MessageBoxExResult.C:
                                         case Moudle.Window_MessageBoxEx.MessageBoxExResult.CO:
                                             DismissButtonProgress = 100.0;
+                                            ResetConvertButton((Button)e.Source);
+                                            listview.SelectedIndex = -1;                                            
                                             return;
                                         case Moudle.Window_MessageBoxEx.MessageBoxExResult.AO:
                                             replaceALL = true;

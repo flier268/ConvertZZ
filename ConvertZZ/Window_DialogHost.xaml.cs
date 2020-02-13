@@ -71,7 +71,7 @@ namespace ConvertZZ
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            DemoItemsListBox.SelectedItem = DemoItemsListBox.Items.GetItemAt((int)Mode.File_FileName);
+            DemoItemsListBox.SelectedItem = DemoItemsListBox.Items.GetItemAt((int)mode);
         }
 
         private void DragMove(object sender, MouseButtonEventArgs e)

@@ -20,8 +20,8 @@
                         </ContextMenu>
                     </DataGrid.ContextMenu>
                     <DataGrid.Columns>
-                        <materialDesign:MaterialDataGridTextColumn Binding="{Binding Key}" Header="Key" EditingElementStyle="{StaticResource MaterialDesignDataGridTextColumnPopupEditingStyle}"/>
-                        <materialDesign:MaterialDataGridTextColumn Binding="{Binding Value}" Header="Value" EditingElementStyle="{StaticResource MaterialDesignDataGridTextColumnPopupEditingStyle}"/>
+                        <materialDesign:DataGridTextColumn Binding="{Binding Key}" Header="Key" EditingElementStyle="{StaticResource MaterialDesignDataGridTextColumnPopupEditingStyle}"/>
+                        <materialDesign:DataGridTextColumn Binding="{Binding Value}" Header="Value" EditingElementStyle="{StaticResource MaterialDesignDataGridTextColumnPopupEditingStyle}"/>
                     </DataGrid.Columns>
                 </DataGrid>
                 <Grid Grid.Row="1" Margin="10 0">

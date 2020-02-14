@@ -21,10 +21,10 @@
                 <ColumnDefinition Width="{Binding Button2_Width}" />
                 <ColumnDefinition Width="{Binding Button3_Width}"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Text="{Binding ElementName=thisWindows,Path=Title}" Style="{StaticResource MaterialDesignTitleTextBlock}" Foreground="Black" Margin="12" Grid.ColumnSpan="3"/>
+            <TextBlock Text="{Binding ElementName=thisWindows,Path=Title}" Style="{StaticResource MaterialDesignHeadline6TextBlock}" Foreground="Black" Margin="12" Grid.ColumnSpan="3"/>
             <Separator VerticalAlignment="Bottom" Grid.ColumnSpan="3" Margin="10 0 10 3"/>
             <ScrollViewer  Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="12 12 12 30">
-            <TextBlock TextWrapping="Wrap" Text="{Binding TextBlock_Text}" Foreground="Black" Style="{StaticResource MaterialDesignSubheadingTextBlock}"/>
+            <TextBlock TextWrapping="Wrap" Text="{Binding TextBlock_Text}" Foreground="Black" Style="{StaticResource MaterialDesignSubtitle1TextBlock}"/>
             </ScrollViewer>
             <CheckBox Content="{Binding CheckBox_Text,Mode=TwoWay}" IsChecked="{Binding CheckBox_IsChecked}" Visibility="{Binding CheckBox_Visibility}" Grid.Row="2" Grid.ColumnSpan="3" Foreground="Black" Margin="10"/>
             <Button Content="{Binding ButtonText1,Mode=TwoWay}" Grid.Row="3" Grid.Column="0" Margin="10" Click="Button_Click_1" Visibility="{Binding Button1_Visibility}"/>

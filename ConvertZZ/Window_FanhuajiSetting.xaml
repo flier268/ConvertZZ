@@ -53,7 +53,7 @@
                             <ColumnDefinition />
                             <ColumnDefinition />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="轉換器" Style="{StaticResource MaterialDesignTitleTextBlock}" Margin="5 0" />
+                        <TextBlock Text="轉換器" Style="{StaticResource MaterialDesignHeadline6TextBlock}" Margin="5 0" />
                         <Border Background="{DynamicResource PrimaryHueMidBrush}" Opacity=".5" Height="1" Grid.ColumnSpan="2" Grid.Row="1" />
                         <Label Content="簡轉繁轉換器" Grid.Row="2" />
                         <Label Content="繁轉簡轉換器" Grid.Row="3" />
@@ -73,7 +73,7 @@
                             <ColumnDefinition MinWidth="150" />
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.ColumnSpan="2">
-                            <TextBlock Text="字幕樣式" Style="{StaticResource MaterialDesignTitleTextBlock}" Margin="5 0" />
+                            <TextBlock Text="字幕樣式" Style="{StaticResource MaterialDesignHeadline6TextBlock}" Margin="5 0" />
                             <Border Background="{DynamicResource PrimaryHueMidBrush}" Opacity=".5" Height="1" />
                         </StackPanel>
                         <Label Content="不希望被繁化姬處理的&quot;樣式&quot;" Grid.Row="1" />
@@ -97,7 +97,7 @@
                             <RowDefinition />
                         </Grid.RowDefinitions>
                         <StackPanel Grid.ColumnSpan="2">
-                            <TextBlock Text="文本整理" Style="{StaticResource MaterialDesignTitleTextBlock}" Margin="5 0" />
+                            <TextBlock Text="文本整理" Style="{StaticResource MaterialDesignHeadline6TextBlock}" Margin="5 0" />
                             <Border Background="{DynamicResource PrimaryHueMidBrush}" Opacity=".5" Height="1" />
                         </StackPanel>
                         <Label Content="根據所偵測到的文本格式做出對應的文本清理" Grid.Row="1" />
@@ -135,7 +135,7 @@
                             <ColumnDefinition MinWidth="150" Width="399*" />
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.ColumnSpan="2">
-                            <TextBlock Text="日文的處理策略" Style="{StaticResource MaterialDesignTitleTextBlock}" Margin="5 0" />
+                            <TextBlock Text="日文的處理策略" Style="{StaticResource MaterialDesignHeadline6TextBlock}" Margin="5 0" />
                             <Border Background="{DynamicResource PrimaryHueMidBrush}" Opacity=".5" Height="1" />
                         </StackPanel>
                         <Label Content="日文樣式該如何處理" Grid.Row="1" />
@@ -155,7 +155,7 @@
                             <RowDefinition />
                         </Grid.RowDefinitions>
                         <StackPanel Grid.ColumnSpan="2">
-                            <TextBlock Text="詞語模組" Style="{StaticResource MaterialDesignTitleTextBlock}" Margin="5 0" />
+                            <TextBlock Text="詞語模組" Style="{StaticResource MaterialDesignHeadline6TextBlock}" Margin="5 0" />
                             <Border Background="{DynamicResource PrimaryHueMidBrush}" Opacity=".5" Height="1" />
                         </StackPanel>
                         <DataGrid Margin="0 8 0 0" CanUserSortColumns="True" AutoGenerateColumns="False" EnableRowVirtualization="True" EnableColumnVirtualization="True" materialDesign:DataGridAssist.CellPadding="4 2 2 2" materialDesign:DataGridAssist.ColumnHeaderPadding="4 2 2 2" Grid.Row="1" ItemsSource="{Binding Modules}" MouseLeftButtonUp="DataGrid_MouseLeftButtonUp">
@@ -176,7 +176,7 @@
                             <RowDefinition />
                         </Grid.RowDefinitions>
                         <StackPanel>
-                            <TextBlock Text="自訂取代" Style="{StaticResource MaterialDesignTitleTextBlock}" Margin="5 0" />
+                            <TextBlock Text="自訂取代" Style="{StaticResource MaterialDesignHeadline6TextBlock}" Margin="5 0" />
                             <Border Background="{DynamicResource PrimaryHueMidBrush}" Opacity=".5" Height="1" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="2" Grid.Row="1">

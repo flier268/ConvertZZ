@@ -499,7 +499,7 @@ namespace ConvertZZ.Pages
                     {
                         string temp = "";
                         string path = GetParentSum(x, ref temp);
-                        string newpath = Path.Combine(Path.GetDirectoryName(path), Dictionary[Path.GetFileName(path)]);
+                        string newpath = Path.Combine(Path.GetDirectoryName(path), GetNewDisplayName(x.IsFile, Path.GetFileName(path)));
                         try
                         {
                             if (path != newpath)
@@ -515,10 +515,15 @@ namespace ConvertZZ.Pages
                             @string.AppendLine($"[Error][{ex.Message}]StackTrace: {ex.StackTrace}");
                         }
                     }
+
                     if (x.Generation == 1)
-                        x.DisplayName = Path.Combine(Path.GetDirectoryName(x.DisplayName), Dictionary[Path.GetFileName(x.DisplayName)]);
+                        x.DisplayName = Path.Combine(Path.GetDirectoryName(x.DisplayName), GetNewDisplayName(x.IsFile, Path.GetFileName(x.DisplayName)));
                     else
-                        x.DisplayName = Dictionary[x.DisplayName];
+                        x.DisplayName = GetNewDisplayName(x.IsFile, x.DisplayName);
+                    string GetNewDisplayName(bool IsFile, string FileName)
+                    {
+                        return IsFile ? MakeFilenameValid(Dictionary[FileName]) : MakeFoldernameValid(Dictionary[FileName]);
+                    }
                 }
                 @string.AppendLine(RenameFolderAndFileName(x.Nodes, Dictionary, Rename));
             });
@@ -678,5 +683,50 @@ namespace ConvertZZ.Pages
             App.Settings.FileConvert.CallFilterEditor();
             Combobox_Filter.ItemsSource = App.Settings.FileConvert.GetFilterList();
         }
+        #region
+        private static string MakeFilenameValid(string filename)
+        {
+            if (filename == null)
+                throw new ArgumentNullException();
+
+            if (filename.EndsWith("."))
+                filename = Regex.Replace(filename, @"\.+$", "");
+
+            if (filename.Length == 0)
+                throw new ArgumentException();
+
+            if (filename.Length > 245)
+                filename = filename.Take(245).ToString();
+
+            foreach (char c in System.IO.Path.GetInvalidFileNameChars())
+            {
+                filename = filename.Replace(c, '_');
+            }
+
+            return filename;
+        }
+
+        private static string MakeFoldernameValid(string foldername)
+        {
+            if (foldername == null)
+                throw new ArgumentNullException();
+
+            if (foldername.EndsWith("."))
+                foldername = Regex.Replace(foldername, @"\.+$", "");
+
+            if (foldername.Length == 0)
+                throw new ArgumentException();
+
+            if (foldername.Length > 245)
+                foldername = foldername.Take(245).ToString();
+
+            foreach (char c in System.IO.Path.GetInvalidPathChars())
+            {
+                foldername = foldername.Replace(c, '_');
+            }
+
+            return foldername;
+        }
+        #endregion
     }
 }

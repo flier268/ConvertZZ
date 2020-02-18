@@ -23,10 +23,12 @@ namespace ConvertZZ.Moudle
         public static async Task<string> ConvertAsync(string origin, int ToChinese, int VocabularyCorrection = -1)
         {
             if (String.IsNullOrWhiteSpace(origin)) return origin;
-            if (!App.DicLoaded)
+            if (App.Settings.Engine == Enum_Engine.Local && App.DictionaryStatus != Enum_DictionaryStatus.Loaded)
             {
-                System.Threading.SpinWait.SpinUntil(() => App.DicLoaded, 10000);
-                if (!App.DicLoaded)
+                if (App.DictionaryStatus == Enum_DictionaryStatus.NotLoad || App.DictionaryStatus == Enum_DictionaryStatus.Error)
+                    await App.LoadDictionary(Enum_Engine.Local);
+                System.Threading.SpinWait.SpinUntil(() => App.DictionaryStatus == Enum_DictionaryStatus.Loaded, 30000);
+                if (App.DictionaryStatus != Enum_DictionaryStatus.Loaded)
                     throw new Exception("詞彙修正的Dictionary載入失敗");
             }
             if ((App.Settings.VocabularyCorrection && VocabularyCorrection != 0) || VocabularyCorrection == 1)

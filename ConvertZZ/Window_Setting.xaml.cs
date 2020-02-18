@@ -194,7 +194,7 @@ namespace ConvertZZ
 
         private async void Button_DictionaryEdit_Click(object sender, RoutedEventArgs e)
         {
-            if (!App.DicLoaded)
+            if (App.Settings.Engine == Enums.Enum_Engine.Local && App.DictionaryStatus != Enums.Enum_DictionaryStatus.Loaded)
                 await App.LoadDictionary(App.Settings.Engine);
             new Window_DictionaryEditor().ShowDialog();
         }

@@ -22,7 +22,7 @@ namespace ConvertZZ
     public partial class App : Application
     {
         public static System.Windows.Forms.NotifyIcon nIcon = new System.Windows.Forms.NotifyIcon();
-        public static bool DicLoaded { get; set; } = false;
+        public static Enum_DictionaryStatus DictionaryStatus { get; set; } = Enum_DictionaryStatus.NotLoad;
         public App()
         {
 
@@ -299,18 +299,19 @@ namespace ConvertZZ
         {
             ChineseConverter.Lines.Clear();
             ChineseConverter.Reload();
-            DicLoaded = false;
+            DictionaryStatus = Enum_DictionaryStatus.NotLoad;
         }
         internal static async Task LoadDictionary(Enum_Engine Engine)
         {
-            DicLoaded = false;
             switch (Engine)
             {
                 case Enum_Engine.Local:
+                    DictionaryStatus = Enum_DictionaryStatus.Loading;
                     if (Settings.VocabularyCorrection)
                         await ChineseConverter.Load(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Dictionary.csv"));
                     else
                         CleanDictionary();
+                    DictionaryStatus = Enum_DictionaryStatus.Loaded;
                     break;
                 case Enum_Engine.Fanhuaji:
                     if (Fanhuaji.CheckConnection())
@@ -319,7 +320,6 @@ namespace ConvertZZ
                     }
                     break;
             }
-            DicLoaded = true;
         }
         private async void ShowUI()
         {

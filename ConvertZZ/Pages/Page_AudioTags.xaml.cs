@@ -1,6 +1,4 @@
-﻿using ConvertZZ.Moudle;
-using Microsoft.Win32;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -11,7 +9,11 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using ConvertZZ.Moudle;
+using Microsoft.Win32;
+using TagLib;
 using static Fanhuaji_API.Fanhuaji;
+using File = System.IO.File;
 
 namespace ConvertZZ.Pages
 {
@@ -77,7 +79,8 @@ namespace ConvertZZ.Pages
                 stopwatch.Start();
                 try
                 {
-                    var tfile = TagLib.File.Create(Path.Combine(_temp.Path, _temp.Name));
+                    FileStream fileStream = new(Path.Combine(_temp.Path, _temp.Name), FileMode.Open, FileAccess.ReadWrite);
+                    var tfile = TagLib.File.Create(new StreamFileAbstraction(Path.Combine(_temp.Path, _temp.Name), fileStream, fileStream));
                     tfile.RemoveTags((Enable_ID3v1 ? TagLib.TagTypes.None : TagLib.TagTypes.Id3v1) | (Enable_ID3v2 ? TagLib.TagTypes.None : TagLib.TagTypes.Id3v2));
                     TagLib.Id3v1.Tag t = (TagLib.Id3v1.Tag)tfile.GetTag(TagLib.TagTypes.Id3v1, Enable_ID3v1 ? true : false);
                     TagLib.Id3v2.Tag t2 = (TagLib.Id3v2.Tag)tfile.GetTag(TagLib.TagTypes.Id3v2, Enable_ID3v2 ? true : false);
@@ -133,7 +136,8 @@ namespace ConvertZZ.Pages
                 return;
             try
             {
-                var tfile = TagLib.File.Create(path, TagLib.ReadStyle.None);
+                FileStream fileStream = new(path, FileMode.Open, FileAccess.Read);
+                var tfile = TagLib.File.Create(new StreamFileAbstraction(path, fileStream, fileStream), TagLib.ReadStyle.None);
                 TagLib.Id3v1.Tag t = (TagLib.Id3v1.Tag)tfile.GetTag(TagLib.TagTypes.Id3v1);
                 TagLib.Id3v2.Tag t2 = (TagLib.Id3v2.Tag)tfile.GetTag(TagLib.TagTypes.Id3v2);
 

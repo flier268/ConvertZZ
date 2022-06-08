@@ -1,7 +1,4 @@
-﻿using ConvertZZ.Moudle;
-using Microsoft.Win32;
-using Microsoft.WindowsAPICodePack.Dialogs;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -16,6 +13,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using ConvertZZ.Moudle;
+using Microsoft.Win32;
+using Microsoft.WindowsAPICodePack.Dialogs;
 
 namespace ConvertZZ.Pages
 {
@@ -639,7 +639,7 @@ namespace ConvertZZ.Pages
             g.BringIntoView();
         }
         private void Button_OutputPath_Click(object sender, RoutedEventArgs e)
-        {
+        {            
             var dlg = new CommonOpenFileDialog
             {
                 Title = "Select Output folder",

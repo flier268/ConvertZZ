@@ -6,6 +6,7 @@ require (
 	github.com/eddy8/opencc v0.1.9
 	github.com/gin-gonic/gin v1.8.1
 	github.com/go-ego/gse v0.70.2
+	golang.org/x/text v0.3.7
 )
 
 require (
@@ -27,7 +28,6 @@ require (
 	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e // indirect
 	golang.org/x/net v0.0.0-20220607020251-c690dde0001d // indirect
 	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a // indirect
-	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/xerrors v0.0.0-20220517211312-f3a8303e98df // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect

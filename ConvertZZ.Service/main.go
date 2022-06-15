@@ -1,13 +1,32 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
+	"flag"
+	"fmt"
 	"net/http"
+	"os"
+
+	"github.com/gin-gonic/gin"
 )
 
 const version string = "1.0.0.0"
 
+func usage() {
+	fmt.Fprintf(os.Stderr, "Usage: ConvertZZ.Service [options]\n")
+	flag.PrintDefaults()
+}
+
 func main() {
+	var port int
+	flag.IntVar(&port, "p", 8080, "Set http port")
+	isPrintVersion := flag.Bool("v", false, "print version number")
+	flag.Usage = usage
+	flag.Parse()
+	if *isPrintVersion {
+		fmt.Println(version)
+		os.Exit(0)
+	}
+
 	textConverterInit()
 	r := gin.Default()
 	r.GET("/version", getVersion)
@@ -25,7 +44,7 @@ func main() {
 		}
 	}
 	r.RedirectFixedPath = true
-	r.Run(":8080")
+	r.Run(fmt.Sprintf(":%v", port))
 }
 
 func getVersion(context *gin.Context) {

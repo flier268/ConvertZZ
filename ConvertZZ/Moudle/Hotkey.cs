@@ -8,7 +8,7 @@ namespace ConvertZZ.Moudle
 {
     public class HotKey : IDisposable
     {
-        private static Dictionary<int, HotKey> _dictHotKeyToCalBackProc;
+        private static Dictionary<int, HotKey> _dictHotKeyToCalBackProc { get; set; } = new();
 
         [DllImport("user32.dll")]
         private static extern bool RegisterHotKey(IntPtr hWnd, int id, UInt32 fsModifiers, UInt32 vlc);
@@ -25,41 +25,31 @@ namespace ConvertZZ.Moudle
         public Action<HotKey> Action { get; private set; }
         private int Id { get; set; }
 
-        public HotKey(Key k, KeyModifier keyModifiers, Action<HotKey> action, bool register = true)
+        public HotKey(Key k, KeyModifier keyModifiers, Action<HotKey> action)
         {
             Key = k;
             KeyModifiers = keyModifiers;
             Action = action;
-            if (register)
-            {
-                Register();
-            }
+            ComponentDispatcher.ThreadFilterMessage += new ThreadMessageEventHandler(ComponentDispatcherThreadFilterMessage);
         }
 
-        public bool Register()
+        public HotKey Regist(out bool success)
         {
             int virtualKeyCode = KeyInterop.VirtualKeyFromKey(Key);
             Id = virtualKeyCode + ((int)KeyModifiers * 0x10000);
-            bool result = RegisterHotKey(IntPtr.Zero, Id, (UInt32)KeyModifiers, (UInt32)virtualKeyCode);
-
-            if (_dictHotKeyToCalBackProc == null)
-            {
-                _dictHotKeyToCalBackProc = new Dictionary<int, HotKey>();
-                ComponentDispatcher.ThreadFilterMessage += new ThreadMessageEventHandler(ComponentDispatcherThreadFilterMessage);
-            }
-
+            success = RegisterHotKey(IntPtr.Zero, Id, (UInt32)KeyModifiers, (UInt32)virtualKeyCode);
             _dictHotKeyToCalBackProc.Add(Id, this);
-            return result;
+            return this;
         }
 
-        public void Unregister()
+        public HotKey UnRegist(out bool success)
         {
-            HotKey hotKey;
-            if (_dictHotKeyToCalBackProc.TryGetValue(Id, out hotKey))
+            if (success = _dictHotKeyToCalBackProc.TryGetValue(Id, out _))
             {
-                UnregisterHotKey(IntPtr.Zero, Id);
+                success = UnregisterHotKey(IntPtr.Zero, Id);
                 _dictHotKeyToCalBackProc.Remove(Id);
             }
+            return this;
         }
 
         private static void ComponentDispatcherThreadFilterMessage(ref MSG msg, ref bool handled)
@@ -68,9 +58,7 @@ namespace ConvertZZ.Moudle
             {
                 if (msg.message == WmHotKey)
                 {
-                    HotKey hotKey;
-
-                    if (_dictHotKeyToCalBackProc.TryGetValue((int)msg.wParam, out hotKey))
+                    if (_dictHotKeyToCalBackProc.TryGetValue((int)msg.wParam, out HotKey? hotKey))
                     {
                         if (hotKey.Action != null)
                         {
@@ -81,10 +69,12 @@ namespace ConvertZZ.Moudle
                 }
             }
         }
+
         ~HotKey()
         {
             Dispose();
         }
+
         // ******************************************************************
         // Implement IDisposable.
         // Do not make this method virtual.
@@ -118,7 +108,7 @@ namespace ConvertZZ.Moudle
                 if (disposing)
                 {
                     // Dispose managed resources.
-                    Unregister();
+                    UnRegist(out _);
                 }
 
                 // Note disposing has been done.
@@ -126,6 +116,7 @@ namespace ConvertZZ.Moudle
             }
         }
     }
+
     [Flags]
     public enum KeyModifier
     {

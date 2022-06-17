@@ -14,7 +14,7 @@ namespace ConvertZZ
 
                 char[] targetEncodeChars = new char[targetEncode.GetCharCount(targetEncodeBytes, 0, targetEncodeBytes.Length)];
                 targetEncode.GetChars(targetEncodeBytes, 0, targetEncodeBytes.Length, targetEncodeChars, 0);
-                string targetEncodeString = new string(targetEncodeChars);
+                string targetEncodeString = new(targetEncodeChars);
                 return targetEncodeString;
             }
             catch

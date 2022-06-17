@@ -25,6 +25,7 @@ namespace ConvertZZ.Moudle
             ioStream.Read(inBuffer, 0, len);
             return streamEncoding.GetString(inBuffer);
         }
+
         public async Task<string> ReadStringAsync()
         {
             int len;
@@ -34,6 +35,7 @@ namespace ConvertZZ.Moudle
             await ioStream.ReadAsync(inBuffer, 0, len);
             return streamEncoding.GetString(inBuffer);
         }
+
         public int WriteString(string outString)
         {
             byte[] outBuffer = streamEncoding.GetBytes(outString);
@@ -48,6 +50,7 @@ namespace ConvertZZ.Moudle
             ioStream.Flush();
             return outBuffer.Length + 2;
         }
+
         public async Task<int> WriteStringAsync(string outString)
         {
             byte[] outBuffer = streamEncoding.GetBytes(outString);

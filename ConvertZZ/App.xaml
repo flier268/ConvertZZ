@@ -1,7 +1,6 @@
 ﻿<Application x:Class="ConvertZZ.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:ConvertZZ"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:converters="clr-namespace:ConvertZZ.Converters"
              Startup="Application_Startup">
     <Application.Resources>
         <ResourceDictionary>
@@ -11,6 +10,8 @@
                 <ResourceDictionary Source="pack://application:,,,/MaterialDesignColors;component/Themes/Recommended/Primary/MaterialDesignColor.Blue.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/MaterialDesignColors;component/Themes/Recommended/Accent/MaterialDesignColor.Lime.xaml" />
             </ResourceDictionary.MergedDictionaries>
+            <converters:ID3v2OutputConverter x:Key="ID3v2OutputConverter" />
+            <converters:RadioBoolETextConvertModeConverter x:Key="RadioBoolETextConvertModeConverter" />
             <Style x:Key="Tab" TargetType="{x:Type TabItem}">
                 <Setter Property="Control.FontWeight" Value="Black" />
                 <Setter Property="Control.Template">
@@ -30,6 +31,6 @@
                     </Setter.Value>
                 </Setter>
             </Style>
-        </ResourceDictionary>        
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -10,27 +10,27 @@
         <materialDesign:Card Margin="10" VerticalAlignment="Stretch" materialDesign:ShadowAssist.ShadowDepth="Depth4">
             <Grid Margin="10">
                 <Grid.RowDefinitions>
-                    <RowDefinition/>
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <DataGrid Name="DataGrid" Margin="0 8 0 0" ItemsSource="{Binding KeyValueItems}" AutoGenerateColumns="False" CanUserSortColumns="True" CanUserAddRows="True" materialDesign:DataGridAssist.CellPadding="10 5 8 5" materialDesign:DataGridAssist.ColumnHeaderPadding="10 5 8 5" >
+                <DataGrid Name="DataGrid" Margin="0 8 0 0" ItemsSource="{Binding KeyValueItems}" AutoGenerateColumns="False" CanUserSortColumns="True" CanUserAddRows="True" materialDesign:DataGridAssist.CellPadding="10 5 8 5" materialDesign:DataGridAssist.ColumnHeaderPadding="10 5 8 5">
                     <DataGrid.ContextMenu>
                         <ContextMenu>
-                            <MenuItem Header="Delete" Click="MenuItem_Click"/>
+                            <MenuItem Header="Delete" Click="MenuItem_Click" />
                         </ContextMenu>
                     </DataGrid.ContextMenu>
                     <DataGrid.Columns>
-                        <materialDesign:DataGridTextColumn Binding="{Binding Key}" Header="Key" EditingElementStyle="{StaticResource MaterialDesignDataGridTextColumnPopupEditingStyle}"/>
-                        <materialDesign:DataGridTextColumn Binding="{Binding Value}" Header="Value" EditingElementStyle="{StaticResource MaterialDesignDataGridTextColumnPopupEditingStyle}"/>
+                        <materialDesign:DataGridTextColumn Binding="{Binding Key}" Header="Key" EditingElementStyle="{StaticResource MaterialDesignDataGridTextColumnPopupEditingStyle}" />
+                        <materialDesign:DataGridTextColumn Binding="{Binding Value}" Header="Value" EditingElementStyle="{StaticResource MaterialDesignDataGridTextColumnPopupEditingStyle}" />
                     </DataGrid.Columns>
                 </DataGrid>
                 <Grid Grid.Row="1" Margin="10 0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition/>
-                        <ColumnDefinition/>
+                        <ColumnDefinition />
+                        <ColumnDefinition />
                     </Grid.ColumnDefinitions>
-                    <Button Content="{Binding button1_Content}" Click="Button1_Click" Margin="10"/>
-                    <Button Content="{Binding button2_Content}" Click="Button2_Click" Margin="10" Grid.Column="1"/>
+                    <Button Content="{Binding button1_Content}" Click="Button1_Click" Margin="10" />
+                    <Button Content="{Binding button2_Content}" Click="Button2_Click" Margin="10" Grid.Column="1" />
                 </Grid>
             </Grid>
         </materialDesign:Card>

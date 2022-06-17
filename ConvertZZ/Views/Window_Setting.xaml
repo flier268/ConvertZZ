@@ -1,0 +1,291 @@
+﻿<Window x:Class="ConvertZZ.Views.Window_Setting"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:viewmodel="clr-namespace:ConvertZZ.ViewModels"
+        mc:Ignorable="d" materialDesign:ShadowAssist.CacheMode="{x:Null}" Closing="Window_Closing"
+        Title="設定" MinWidth="800" FontFamily="Arial" SizeToContent="WidthAndHeight">
+    <Window.DataContext>
+        <viewmodel:SettingViewModel />
+    </Window.DataContext>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="1*" />
+            <RowDefinition Height="2*" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="2*" />
+        </Grid.ColumnDefinitions>
+        <materialDesign:Card Padding="8" Margin="30,20,10,10">
+            <StackPanel>
+                <TextBlock Margin="16 16 12 8" FontSize="16" Text="全域設定" />
+                <Grid Margin="26,0,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition />
+                        <RowDefinition />
+                        <RowDefinition />
+                        <RowDefinition />
+                        <RowDefinition />
+                        <RowDefinition />
+                        <RowDefinition />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="auto" />
+                        <ColumnDefinition />
+                    </Grid.ColumnDefinitions>
+                    <Label Content="懸浮球" />
+                    <ToggleButton IsChecked="{Binding AssistiveTouchEnable}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="就是那個寫'Z'的小圓球啦" Grid.Column="1" />
+
+                    <Label Content="簡繁轉換後進行詞彙修正" Grid.Row="1" />
+
+                    <ToggleButton IsChecked="{Binding VocabularyCorrenctionEnable}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="由於有時一個簡體對應到多個繁體字，開啟此功能將會自動修正此問題(但有時不盡人意)" Grid.Row="1" Grid.Column="1" />
+                    <DockPanel Grid.Row="2" Grid.ColumnSpan="2" IsEnabled="{Binding VocabularyCorrenctionEnable}">
+                        <RadioButton Content="使用本地字典" IsChecked="{Binding UseLocalDic}" />
+                        <Button Click="Button_DictionaryEdit_Click" Style="{StaticResource MaterialDesignFlatButton}" IsEnabled="{Binding UseLocalDic}" Padding="0" Height="Auto">
+                            <materialDesign:PackIcon Kind="DatabaseEdit" />
+                        </Button>
+                        <RadioButton Content="使用繁化姬API(需要網路)" IsChecked="{Binding UseFanhuajiAPI}" Checked="RadioButton_Fanhuaji_Checked" Margin="13,0,0,0" />
+                        <Button Style="{StaticResource MaterialDesignFlatButton}" IsEnabled="{Binding UseFanhuajiAPI}" Padding="0" Height="Auto" Click="Button_FanhuajiSetting_Click">
+                            <materialDesign:PackIcon Kind="SettingsOutline" />
+                        </Button>
+                    </DockPanel>
+                    <Label Content="轉換完成後提示" Grid.Row="3" />
+                    <ToggleButton IsChecked="{Binding PromptEnable}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="轉換後顯示轉換所花費的毫秒數" Grid.Row="3" Grid.Column="1" />
+                    <Label Content="自動判定編碼" Grid.Row="4" />
+                    <ToggleButton IsChecked="{Binding RecognitionEncodingEnable}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="試圖自動判定編碼，如果選錯則出現提示(gbk跟big5)" Grid.Row="4" Grid.Column="1" />
+                    <Label Content="檢查版本更新" Grid.Row="5" />
+                    <ToggleButton IsChecked="{Binding CheckVersion}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="開啟程式時，自動檢查更新，如果有更新則出現提示" Grid.Row="5" Grid.Column="1" />
+                    <Separator Style="{StaticResource MaterialDesignLightSeparator}" Grid.Row="5" Grid.ColumnSpan="2" />
+                    <Label Content="預覽最大長度(k)" Grid.Row="6" VerticalAlignment="Bottom" />
+                    <TextBox Text="{Binding MaxPriviewLength}" materialDesign:HintAssist.Hint="預覽最大長度" Style="{StaticResource MaterialDesignFloatingHintTextBox}" Grid.Row="6" Grid.Column="1" HorizontalContentAlignment="Center" />
+                </Grid>
+            </StackPanel>
+        </materialDesign:Card>
+        <materialDesign:Card Padding="8" Margin="30,10,10,30" Grid.Row="1" VerticalAlignment="Stretch">
+            <StackPanel Margin="0,0,5,0">
+                <TextBlock Margin="16 16 12 8" FontSize="16" Text="懸浮球快捷功能" />
+                <Grid Margin="26,0,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition />
+                        <RowDefinition />
+                        <RowDefinition />
+                        <RowDefinition />
+                        <RowDefinition />
+                        <RowDefinition />
+                        <RowDefinition />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition />
+                        <ColumnDefinition />
+                    </Grid.ColumnDefinitions>
+                    <Label Content="左鍵" HorizontalAlignment="Center" />
+                    <Label Content="右鍵" Grid.Column="1" HorizontalAlignment="Center" />
+                    <ComboBox Grid.Row="1" materialDesign:HintAssist.Hint="Ctrl+左鍵點擊" SelectedItem="{Binding Quick_L1}" ItemsSource="{Binding Action}" Style="{StaticResource MaterialDesignFloatingHintComboBox}" Margin="0,0,3,0">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Path=Key}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <ComboBox Grid.Row="2" materialDesign:HintAssist.Hint="Alt+左鍵點擊"  SelectedItem="{Binding Quick_L2}" ItemsSource="{Binding Action}" Style="{StaticResource MaterialDesignFloatingHintComboBox}" Margin="0,0,3,0">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Path=Key}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <ComboBox Grid.Row="3" materialDesign:HintAssist.Hint="Shift+左鍵點擊" SelectedItem="{Binding Quick_L3}" ItemsSource="{Binding Action}" Style="{StaticResource MaterialDesignFloatingHintComboBox}" Margin="0,0,3,0">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Path=Key}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <ComboBox Grid.Row="1" Grid.Column="1" materialDesign:HintAssist.Hint="Ctrl+右鍵點擊" SelectedItem="{Binding Quick_R1}" ItemsSource="{Binding Action}" Style="{StaticResource MaterialDesignFloatingHintComboBox}" Margin="3,0,0,0">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Path=Key}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <ComboBox Grid.Row="2" Grid.Column="1" materialDesign:HintAssist.Hint="Alt+右鍵點擊" SelectedItem="{Binding Quick_R2}" ItemsSource="{Binding Action}" Style="{StaticResource MaterialDesignFloatingHintComboBox}" Margin="3,0,0,0">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Path=Key}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <ComboBox Grid.Row="3" Grid.Column="1" materialDesign:HintAssist.Hint="Shift+右鍵點擊" SelectedItem="{Binding Quick_R3}" ItemsSource="{Binding Action}" Style="{StaticResource MaterialDesignFloatingHintComboBox}" Margin="3,0,0,0">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Path=Key}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <ComboBox Grid.Row="4" materialDesign:HintAssist.Hint="Ctrl+左鍵拖曳" SelectedItem="{Binding Quick_L4}" ItemsSource="{Binding Action}" Style="{StaticResource MaterialDesignFloatingHintComboBox}" Margin="0,0,3,0">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Path=Key}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <ComboBox Grid.Row="5" materialDesign:HintAssist.Hint="Alt+左鍵拖曳" SelectedItem="{Binding Quick_L5}" ItemsSource="{Binding Action}" Style="{StaticResource MaterialDesignFloatingHintComboBox}" Margin="0,0,3,0">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Path=Key}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <ComboBox Grid.Row="6" materialDesign:HintAssist.Hint="Shift+左鍵拖曳" SelectedItem="{Binding Quick_L6}" ItemsSource="{Binding Action}" Style="{StaticResource MaterialDesignFloatingHintComboBox}" Margin="0,0,3,0">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Path=Key}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <ComboBox Grid.Row="4" Grid.Column="1" materialDesign:HintAssist.Hint="Ctrl+右鍵拖曳" SelectedItem="{Binding Quick_R4}" ItemsSource="{Binding Action}" Style="{StaticResource MaterialDesignFloatingHintComboBox}" Margin="3,0,0,0">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Path=Key}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <ComboBox Grid.Row="5" Grid.Column="1" materialDesign:HintAssist.Hint="Alt+右鍵拖曳" SelectedItem="{Binding Quick_R5}" ItemsSource="{Binding Action}" Style="{StaticResource MaterialDesignFloatingHintComboBox}" Margin="3,0,0,0">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Path=Key}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <ComboBox Grid.Row="6" Grid.Column="1" materialDesign:HintAssist.Hint="Shift+右鍵拖曳" SelectedItem="{Binding Quick_R6}" ItemsSource="{Binding Action}" Style="{StaticResource MaterialDesignFloatingHintComboBox}" Margin="3,0,0,0">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Path=Key}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </Grid>
+            </StackPanel>
+        </materialDesign:Card>
+        <materialDesign:Card Padding="8" Margin="10,20,30,10" Grid.Column="1" VerticalAlignment="Stretch">
+            <StackPanel>
+                <TextBlock Margin="16 16 12 8" FontSize="16" Text="檔案編碼轉換" />
+                <Grid Margin="26,0,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition />
+                        <RowDefinition />
+                        <RowDefinition />
+                        <RowDefinition />
+                    </Grid.RowDefinitions>
+                    <TextBox Grid.Row="0" materialDesign:HintAssist.Hint="預設路徑" Text="{Binding DefaultPath}" Style="{StaticResource MaterialDesignFloatingHintTextBox}" />
+                    <DockPanel Grid.Row="1">
+                        <TextBox materialDesign:HintAssist.Hint="副檔名篩選器" Text="{Binding TypeFilter}" MaxWidth="600" IsEnabled="False" Style="{StaticResource MaterialDesignFloatingHintTextBox}" />
+                        <Button HorizontalAlignment="Right" Margin="10 0 0 0" Click="Button_FilterEditor_Click">
+                            <materialDesign:PackIcon Kind="FilterVariant" />
+                        </Button>
+                    </DockPanel>
+                    <TextBox Grid.Row="2" materialDesign:HintAssist.Hint="修正編碼標籤" Text="{Binding FixLabel}" Style="{StaticResource MaterialDesignFloatingHintTextBox}" />
+                    <DockPanel Grid.Row="3" Height="35">
+                        <Label Content="UTF8加入BOM檔首" VerticalAlignment="Bottom" />
+                        <ToggleButton IsChecked="{Binding UnicodeAddBom}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="Default ToggleButton Style" VerticalAlignment="Bottom" />
+                    </DockPanel>
+                </Grid>
+            </StackPanel>
+        </materialDesign:Card>
+        <materialDesign:Card Padding="8,8,17,8" Margin="10,10,30,30" Grid.Column="1" Grid.Row="1" VerticalAlignment="Stretch">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="auto" />
+                    <RowDefinition />
+                </Grid.RowDefinitions>
+
+                <TextBlock Margin="16 16 12 8" FontSize="16" Text="快捷鍵" Grid.Row="0" />
+                <Grid Margin="26,0,0,0" Grid.Row="1">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="auto" />
+                        <RowDefinition Height="auto" />
+                        <RowDefinition />
+                    </Grid.RowDefinitions>
+
+                    <DockPanel Grid.Row="0">
+                        <materialDesign:PackIcon Kind="ContentCopy" Height="23" />
+                        <Label Content="自動複製" VerticalAlignment="Bottom" />
+                        <ToggleButton IsChecked="{Binding AutoCopy}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="按下快捷鍵後，會自動複製選取的文字" VerticalAlignment="Bottom" />
+                    </DockPanel>
+                    <DockPanel Grid.Row="1">
+                        <materialDesign:PackIcon Kind="ContentPaste" Height="23" />
+                        <Label Content="自動貼上" VerticalAlignment="Bottom" />
+                        <ToggleButton IsChecked="{Binding AutoPaste}" Style="{StaticResource MaterialDesignSwitchToggleButton}" ToolTip="按下快捷鍵後，會在轉換後自動貼上" VerticalAlignment="Bottom" />
+                    </DockPanel>
+                    <Border Grid.Row="2" BorderBrush="#33000000" BorderThickness="0,1" Margin="0,10,0,0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition />
+                                <RowDefinition />
+                                <RowDefinition />
+                                <RowDefinition />
+                                <RowDefinition />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition />
+                                <ColumnDefinition />
+                                <ColumnDefinition />
+                                <ColumnDefinition />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="啟用" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <TextBlock Text="動作" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <TextBlock Text="按鍵" Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <TextBlock Text="輔助鍵" Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Border Grid.Row="1" Grid.ColumnSpan="4" Background="{StaticResource PrimaryHueMidBrush}" Height="1" VerticalAlignment="Top" />
+                            <CheckBox Grid.Row="1" IsChecked="{Binding ShortCut1_IsActived}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <ComboBox Grid.Row="1" Grid.Column="1" SelectedItem="{Binding ShortCut1_Action}" ItemsSource="{Binding Action}" Style="{StaticResource MaterialDesignFloatingHintComboBox}" Margin="5,0">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Path=Key}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBox Grid.Row="1" Grid.Column="2" Text="{Binding ShortCut1_Key}" PreviewKeyDown="TextBox_ShortCut_PreviewKeyDown" HorizontalContentAlignment="Center" Margin="5,0" />
+                            <TextBox Grid.Row="1" Grid.Column="3" Text="{Binding ShortCut1_ModifyKey}" PreviewKeyDown="TextBox_ShortCut_Modify_PreviewKeyDown" HorizontalContentAlignment="Center" Margin="5,0,0,0" />
+                            <CheckBox Grid.Row="2" IsChecked="{Binding ShortCut2_IsActived}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <ComboBox Grid.Row="2" Grid.Column="1" SelectedItem="{Binding ShortCut2_Action}" ItemsSource="{Binding Action}" Style="{StaticResource MaterialDesignFloatingHintComboBox}" Margin="5,0">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Path=Key}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBox Grid.Row="2" Grid.Column="2" Text="{Binding ShortCut2_Key}" PreviewKeyDown="TextBox_ShortCut_PreviewKeyDown" HorizontalContentAlignment="Center" Margin="5,0" />
+                            <TextBox Grid.Row="2" Grid.Column="3" Text="{Binding ShortCut2_ModifyKey}" PreviewKeyDown="TextBox_ShortCut_Modify_PreviewKeyDown" HorizontalContentAlignment="Center" Margin="5,0,0,0" />
+
+                            <CheckBox Grid.Row="3" IsChecked="{Binding ShortCut3_IsActived}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <ComboBox Grid.Row="3" Grid.Column="1" SelectedItem="{Binding ShortCut3_Action}" ItemsSource="{Binding Action}" Style="{StaticResource MaterialDesignFloatingHintComboBox}" Margin="5,0">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Path=Key}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBox Grid.Row="3" Grid.Column="2" Text="{Binding ShortCut3_Key}"  PreviewKeyDown="TextBox_ShortCut_PreviewKeyDown" HorizontalContentAlignment="Center" Margin="5,0" />
+                            <TextBox Grid.Row="3" Grid.Column="3" Text="{Binding ShortCut3_ModifyKey}"  PreviewKeyDown="TextBox_ShortCut_Modify_PreviewKeyDown" HorizontalContentAlignment="Center" Margin="5,0,0,0" />
+
+                            <CheckBox Grid.Row="4" IsChecked="{Binding ShortCut4_IsActived}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <ComboBox Grid.Row="4" Grid.Column="1" SelectedItem="{Binding ShortCut4_Action}" ItemsSource="{Binding Action}" Style="{StaticResource MaterialDesignFloatingHintComboBox}" Margin="5,0">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Path=Key}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBox Grid.Row="4" Grid.Column="2" Text="{Binding ShortCut4_Key}" PreviewKeyDown="TextBox_ShortCut_PreviewKeyDown" HorizontalContentAlignment="Center" Margin="5,0" />
+                            <TextBox Grid.Row="4" Grid.Column="3" Text="{Binding ShortCut4_ModifyKey}" PreviewKeyDown="TextBox_ShortCut_Modify_PreviewKeyDown" HorizontalContentAlignment="Center" Margin="5,0,0,0" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+        </materialDesign:Card>
+    </Grid>
+</Window>

@@ -21,10 +21,12 @@ namespace ConvertZZ.Moudle
             Button1_Action = button1.Action;
             Button2_Action = button2.Action;
         }
+
         private void Button1_Click(object sender, RoutedEventArgs e)
         {
             Button1_Action?.Invoke();
         }
+
         private void Button2_Click(object sender, RoutedEventArgs e)
         {
             Button2_Action?.Invoke();
@@ -35,6 +37,7 @@ namespace ConvertZZ.Moudle
             public string Content { get; set; }
             public Action Action { get; set; }
         }
+
         public class KeyValueItem
         {
             public string Key { get; set; }
@@ -50,6 +53,7 @@ namespace ConvertZZ.Moudle
         public Action Button2_Action { get; set; }
 
         public event PropertyChangedEventHandler PropertyChanged;
+
         protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

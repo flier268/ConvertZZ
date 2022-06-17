@@ -4,8 +4,26 @@ using System.Text;
 
 namespace ConvertZZ.Moudle
 {
-    class EncodingAnalyzer
+    internal class EncodingAnalyzer
     {
+        public enum EncodingType
+        {
+            Ascii = -1,
+            BIG5 = 0,
+
+            /// <summary>
+            /// BIG5格式的GBK，建議使用BIG5->GBK
+            /// </summary>
+            BIG5AsGBK = 1,
+
+            GBK = 2,
+
+            /// <summary>
+            /// GBK格式的BIG5，建議使用GBK->BIG5
+            /// </summary>
+            GBKAsBIG5 = 3
+        }
+
         /// <summary>
         /// 快速篩選string是BIG5或GBK
         /// </summary>
@@ -17,7 +35,7 @@ namespace ConvertZZ.Moudle
         /// 2: GBK
         /// 3: GBK格式的BIG5，建議使用GBK->BIG5
         /// </returns>
-        public static int Analyze(string String)
+        public static EncodingType Analyze(string String)
         {
             Encoding BIG5 = Encoding.GetEncoding("BIG5");
             Encoding GBK = Encoding.GetEncoding("GBK");
@@ -27,20 +45,21 @@ namespace ConvertZZ.Moudle
             report[2] = AnalyzeGBK(BIG5.GetBytes(String)).BadSmell;
             report[3] = AnalyzeGBK(GBK.GetBytes(String)).BadSmell;
             if (report.Sum() == 0)
-                return -1;
+                return EncodingType.Ascii;
             for (int i = 0; i < report.Length; i++)
                 if (report[i] == report.Min())
-                    return i;
-            return 0;
+                    return (EncodingType)i;
+            return EncodingType.BIG5;
         }
 
         /// <summary>
         /// 分析報告
         /// </summary>
-        class Report
+        private class Report
         {
             //統計解讀為ASCII、符號、常用字、次常用字及亂碼(非有效字元)字數
             public int Ascii, Symbol, Common, Rare, Unknow;
+
             /// <summary>
             /// 亂碼指標(數值愈大，不是該編碼的機率愈高)
             /// </summary>
@@ -54,9 +73,10 @@ namespace ConvertZZ.Moudle
                 }
             }
         }
+
         private static Report AnalyzeBig5(byte[] data)
         {
-            Report res = new Report();
+            Report res = new();
             bool isDblBytes = false;
             byte dblByteHi = 0;
             foreach (byte b in data)
@@ -89,9 +109,10 @@ namespace ConvertZZ.Moudle
             }
             return res;
         }
+
         private static Report AnalyzeGBK(byte[] data)
         {
-            Report res = new Report();
+            Report res = new();
             bool isDblBytes = false;
             byte dblByteHi = 0;
             foreach (byte b in data)

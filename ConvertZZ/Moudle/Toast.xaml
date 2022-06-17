@@ -8,7 +8,7 @@
         Title="Toast" MinHeight="100" MinWidth="200"  Background="Transparent" AllowsTransparency="True" WindowStartupLocation="CenterScreen" WindowStyle="None" Topmost="True" SizeToContent="WidthAndHeight" Foreground="#00000000" ResizeMode="NoResize">
     <materialDesign:Card materialDesign:ShadowAssist.ShadowDepth="Depth1" Margin="3"  VerticalAlignment="Stretch">
         <Grid>
-            <Label Content="{Binding Message,Mode=TwoWay}" FontWeight="Black" Margin="20" FontSize="13" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+            <Label Content="{Binding Message,Mode=TwoWay}" FontWeight="Black" Margin="20" FontSize="13" VerticalAlignment="Center" HorizontalAlignment="Center" />
         </Grid>
     </materialDesign:Card>
 </Window>

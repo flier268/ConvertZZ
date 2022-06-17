@@ -10,7 +10,7 @@ namespace ConvertZZ.Moudle
     /// </summary>
     public partial class Window_MessageBoxEx : Window, INotifyPropertyChanged, IDisposable
     {
-        MessageBoxExResult Resoult = MessageBoxExResult.NONE;
+        private MessageBoxExResult Resoult = MessageBoxExResult.NONE;
 
         public Window_MessageBoxEx(string Text, string Caption, string button1_Text, string button2_Text, string button3_Text, string CheckBox_Text)
         {
@@ -52,48 +52,57 @@ namespace ConvertZZ.Moudle
         public enum MessageBoxExResult
         {
             NONE = 0,
+
             /// <summary>
             /// 第一個按鈕
             /// </summary>
             A = 1,
+
             /// <summary>
             /// 第二個按鈕
             /// </summary>
             B = 3,
+
             /// <summary>
             /// 第三個按鈕
             /// </summary>
             C = 4,
+
             /// <summary>
             /// 第一個按鈕+打勾
             /// </summary>
             AO = 2,
+
             /// <summary>
             /// 第二個按鈕+打勾
             /// </summary>
             BO = 6,
+
             /// <summary>
             /// 第三個按鈕+打勾
             /// </summary>
             CO = 8
         }
+
         public enum Type
         {
             WithoutCheckBox,
             WithCheckBox
         }
 
-
-
-
         private string _ButtonText3, _CheckBox_Text;
         private bool _CheckBox_IsChecked = false;
         public string TextBlock_Text { get; set; }
         public string ButtonText1 { get; set; }
         public string ButtonText2 { get; set; }
-        public string CheckBox_Text { get => _CheckBox_Text; set { _CheckBox_Text = value; CheckBox_Visibility = (String.IsNullOrEmpty(value) ? Visibility.Collapsed : Visibility.Visible); } }
+
+        public string CheckBox_Text
+        { get => _CheckBox_Text; set { _CheckBox_Text = value; CheckBox_Visibility = (String.IsNullOrEmpty(value) ? Visibility.Collapsed : Visibility.Visible); } }
+
         public Visibility CheckBox_Visibility { get; set; } = Visibility.Collapsed;
-        public bool CheckBox_IsChecked { get => _CheckBox_IsChecked; set { _CheckBox_IsChecked = value; } }
+
+        public bool CheckBox_IsChecked
+        { get => _CheckBox_IsChecked; set { _CheckBox_IsChecked = value; } }
 
         private void Button_Click_1(object sender, RoutedEventArgs e)
         {
@@ -111,21 +120,31 @@ namespace ConvertZZ.Moudle
         {
             Resoult = (MessageBoxExResult)(4 * (CheckBox_IsChecked ? 2 : 1));
             this.Close();
-            ColumnDefinition columnDefinition = new ColumnDefinition();
+            ColumnDefinition columnDefinition = new();
             columnDefinition.Width = new GridLength(1, GridUnitType.Star);
         }
 
-        public string ButtonText3 { get => _ButtonText3; set { _ButtonText3 = value; } }
-        private GridLength _Button1_Width = new GridLength();
-        private GridLength _Button2_Width = new GridLength();
-        private GridLength _Button3_Width = new GridLength();
+        public string ButtonText3
+        { get => _ButtonText3; set { _ButtonText3 = value; } }
+
+        private GridLength _Button1_Width = new();
+        private GridLength _Button2_Width = new();
+        private GridLength _Button3_Width = new();
         private Visibility _Button3_Visibility = Visibility.Visible;
         public Visibility Button1_Visibility { get; set; } = Visibility.Visible;
         public Visibility Button2_Visibility { get; set; } = Visibility.Visible;
-        public Visibility Button3_Visibility { get => _Button3_Visibility; set { _Button3_Visibility = value; } }
-        public GridLength Button1_Width { get => _Button1_Width; set { _Button1_Width = value; } }
-        public GridLength Button2_Width { get => _Button2_Width; set { _Button2_Width = value; } }
-        public GridLength Button3_Width { get => _Button3_Width; set { _Button3_Width = value; } }
+
+        public Visibility Button3_Visibility
+        { get => _Button3_Visibility; set { _Button3_Visibility = value; } }
+
+        public GridLength Button1_Width
+        { get => _Button1_Width; set { _Button1_Width = value; } }
+
+        public GridLength Button2_Width
+        { get => _Button2_Width; set { _Button2_Width = value; } }
+
+        public GridLength Button3_Width
+        { get => _Button3_Width; set { _Button3_Width = value; } }
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -135,10 +154,8 @@ namespace ConvertZZ.Moudle
                 this.DragMove();
         }
 
-
-
-
         #region IDisposable Support
+
         private bool disposedValue = false; // 偵測多餘的呼叫
 
         protected virtual void Dispose(bool disposing)
@@ -171,28 +188,30 @@ namespace ConvertZZ.Moudle
             // TODO: 如果上方的完成項已被覆寫，即取消下行的註解狀態。
             // GC.SuppressFinalize(this);
         }
-        #endregion
 
+        #endregion IDisposable Support
     }
+
     public partial class Window_MessageBoxEx
     {
         public static MessageBoxExResult ShowDialog(string Text, string Caption, string button1_Text, string button2_Text, string button3_Text, string CheckBox_Text)
         {
             // using construct ensures the resources are freed when form is closed
-            using (Window_MessageBoxEx window_MessageBoxEx = new Window_MessageBoxEx(Text, Caption, button1_Text, button2_Text, button3_Text, CheckBox_Text))
-            {
-                window_MessageBoxEx.ShowDialog();
-                return window_MessageBoxEx.Resoult;
-            }
+            using Window_MessageBoxEx window_MessageBoxEx = new(Text, Caption, button1_Text, button2_Text, button3_Text, CheckBox_Text);
+            window_MessageBoxEx.ShowDialog();
+            return window_MessageBoxEx.Resoult;
         }
+
         public static MessageBoxExResult ShowDialog(string Text, string Caption, string button1_Text, string button2_Text, string button3_Text)
         {
             return ShowDialog(Text, Caption, button1_Text, button2_Text, button3_Text, null);
         }
+
         public static MessageBoxExResult ShowDialog(string Text, string Caption, string button1_Text, string button2_Text)
         {
             return ShowDialog(Text, Caption, button1_Text, button2_Text, null);
         }
+
         public static MessageBoxExResult ShowDialog(string Text, string Caption, string button1_Text)
         {
             return ShowDialog(Text, Caption, button1_Text, null);

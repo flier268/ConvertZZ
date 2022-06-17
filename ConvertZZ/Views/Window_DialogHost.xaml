@@ -1,0 +1,76 @@
+﻿<Window x:Class="ConvertZZ.Views.Window_DialogHost"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:viewmodels="clr-namespace:ConvertZZ.ViewModels"
+        mc:Ignorable="d" materialDesign:ShadowAssist.CacheMode="{x:Null}"
+        Title="Window_DialogHost" Height="700" Width="1200" Loaded="Window_Loaded" WindowStartupLocation="CenterScreen" ResizeMode="NoResize" WindowStyle="None">
+    <Window.DataContext>
+        <viewmodels:DialogHostViewModel />
+    </Window.DataContext>
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.Button.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.Shadows.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.ToggleButton.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- data template used for the dialogs example, defines a View for a ViewModel of type DateTime  -->
+        </ResourceDictionary>
+    </Window.Resources>
+    <Border BorderBrush="LightGray" BorderThickness="1,0,1,1">
+        <materialDesign:DialogHost Identifier="RootDialog" SnackbarMessageQueue="{Binding ElementName=MainSnackbar, Path=MessageQueue}">
+            <materialDesign:DrawerHost IsLeftDrawerOpen="{Binding ElementName=MenuToggleButton, Path=IsChecked}">
+                <materialDesign:DrawerHost.LeftDrawerContent>
+                    <DockPanel MinWidth="212">
+                        <ToggleButton Style="{StaticResource MaterialDesignHamburgerToggleButton}"
+                                    DockPanel.Dock="Top"
+                                    HorizontalAlignment="Right" Margin="16"
+                                    IsChecked="{Binding ElementName=MenuToggleButton, Path=IsChecked, Mode=TwoWay}" />
+                        <ListBox SelectedIndex="{Binding ListBoxItemSelectedIndex}" Margin="0 16 0 16"
+                             PreviewMouseLeftButtonUp="UIElement_OnPreviewMouseLeftButtonUp" SelectionChanged="DemoItemsListBox_SelectionChanged">
+                            <ListBoxItem Uid="Item_File_FileName_Convert" Content="文件/檔名轉換" />
+                            <ListBoxItem Uid="Item_Clipboard_Convert" Content="剪貼簿轉換" />
+                            <ListBoxItem Uid="Item_AudioTagConvert" Content="Audio標籤轉換" />
+                            <ListBoxItem Uid="Item_Exit" Content="結束" />
+                        </ListBox>
+                    </DockPanel>
+                </materialDesign:DrawerHost.LeftDrawerContent>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition />
+                    </Grid.RowDefinitions>
+                    <materialDesign:ColorZone Padding="16" materialDesign:ShadowAssist.ShadowDepth="Depth2" Mode="PrimaryMid" DockPanel.Dock="Top" MouseDown="DragMove">
+                        <DockPanel>
+                            <ToggleButton Style="{StaticResource MaterialDesignHamburgerToggleButton}" IsChecked="{Binding MenuToggleButtonIsChecked}" />
+                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="22">ConvertZZ</TextBlock>
+                        </DockPanel>
+                    </materialDesign:ColorZone>
+                    <DockPanel HorizontalAlignment="Right" VerticalAlignment="Top">
+                        <Button Click="Button_CreateShortCut" Visibility="{Binding CreateShortcutVisibility}" BorderBrush="Transparent" Background="Transparent">
+                            <materialDesign:PackIcon Kind="Share" />
+                        </Button>
+                        <Button Click="Button_Minimize" BorderBrush="Transparent" Background="Transparent">
+                            <materialDesign:PackIcon Kind="WindowMinimize" />
+                        </Button>
+                        <Button Click="Button_Close" BorderBrush="Transparent" Background="Transparent">
+                            <materialDesign:PackIcon Kind="CloseOutline" />
+                        </Button>
+                    </DockPanel>
+                    <Grid Grid.Row="1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Frame Content="{Binding Frame_Report}" NavigationUIVisibility="Hidden" Grid.Row="1" Margin="10" />
+                        <materialDesign:Snackbar MessageQueue="{materialDesign:MessageQueue}" x:Name="MainSnackbar" Grid.Row="1" />
+                    </Grid>
+                </Grid>
+            </materialDesign:DrawerHost>
+        </materialDesign:DialogHost>
+    </Border>
+</Window>

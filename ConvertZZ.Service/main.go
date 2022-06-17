@@ -44,7 +44,7 @@ func main() {
 		}
 	}
 	r.RedirectFixedPath = true
-	r.Run(fmt.Sprintf(":%v", port))
+	r.Run(fmt.Sprintf("127.0.0.1:%v", port))
 }
 
 func getVersion(context *gin.Context) {

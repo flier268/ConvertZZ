@@ -4,396 +4,377 @@
 //
 //    var settings = Settings.FromJson(jsonString);
 
-namespace ConvertZZ
+namespace ConvertZZ;
+
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using ConvertZZ.Class;
+using ConvertZZ.Core.Helpers;
+using ConvertZZ.Moudle;
+
+public partial class App
 {
-    using System.Collections.Generic;
-    using System.Collections.ObjectModel;
-    using System.Globalization;
-    using System.IO;
-    using System.Linq;
-    using System.Text;
-    using ConvertZZ.Class;
-    using ConvertZZ.Core.Helpers;
-    using ConvertZZ.Moudle;
-    using Newtonsoft.Json;
-    using Newtonsoft.Json.Converters;
+    private static string? _FilePath;
+    public static Settings Settings { get; set; } = new Settings();
 
-    public partial class App
+    public static void Reload(string FilePath)
     {
-        private static string? _FilePath;
-        public static Settings Settings { get; set; } = new Settings();
-
-        public static void Reload(string FilePath)
+        _FilePath = FilePath;
+        if (File.Exists(FilePath))
         {
-            _FilePath = FilePath;
-            if (File.Exists(FilePath))
-            {
-                using StreamReader streamReader = new(FilePath, Encoding.UTF8);
-                var temp = Settings.FromJson(streamReader.ReadToEnd());
-                if (!temp.FileConvert.TypeFilter.Contains('<'))
-                    temp.FileConvert.TypeFilter = new Settings().FileConvert.TypeFilter;
-                Settings = temp;
-            }
-        }
-
-        public static void Save()
-        {
-            using StreamWriter sw = new(_FilePath, false, Encoding.UTF8);
-            sw.Write(Settings.ToJson());
-            sw.Flush();
+            using StreamReader streamReader = new(FilePath, Encoding.UTF8);
+            var temp = Settings.FromJson(streamReader.ReadToEnd());
+            if (!temp.FileConvert.TypeFilter.Contains('<'))
+                temp.FileConvert.TypeFilter = new Settings().FileConvert.TypeFilter;
+            Settings = temp;
         }
     }
 
-    public partial class Settings
+    public static void Save()
     {
-        public Settings()
-        {
-            PositionX = -1;
-            PositionY = -1;
-            QuickStart = new QuickStart();
-            RecognitionEncoding = true;
-            Prompt = true;
-            MaxLengthPreview = 6;
-            VocabularyCorrection = true;
-            AssistiveTouch = true;
-            HotKey = new HotKey();
-            FileConvert = new FileConvert();
-            CheckVersion = true;
-            Engine = EEngine.Local;
-            Fanhuaji_Setting = new Fanhuaji_Config();
-        }
+        using StreamWriter sw = new(_FilePath, false, Encoding.UTF8);
+        sw.Write(Settings.ToJson());
+        sw.Flush();
+    }
+}
 
-        /// <summary>
-        /// 上次關閉時的X座標
-        /// </summary>
-        [JsonProperty("PositionX")]
-        public double PositionX { get; set; }
-
-        /// <summary>
-        /// 上次關閉時的Y座標
-        /// </summary>
-        [JsonProperty("PositionY")]
-        public double PositionY { get; set; }
-
-        /// <summary>
-        /// 試圖自動辨識編碼
-        /// </summary>
-        [JsonProperty("RecognitionEncoding")]
-        public bool RecognitionEncoding { get; set; }
-
-        /// <summary>
-        /// 轉換完成後做出提示
-        /// </summary>
-        [JsonProperty("Prompt")]
-        public bool Prompt { get; set; }
-
-        /// <summary>
-        /// 預覽的最大長度(kb)
-        /// </summary>
-        [JsonProperty("MaxLengthPreview")]
-        public int MaxLengthPreview { get; set; }
-
-        /// <summary>
-        /// 詞彙修正
-        /// </summary>
-        [JsonProperty("Vocabulary correction")]
-        public bool VocabularyCorrection { get; set; }
-
-        /// <summary>
-        /// 詞彙修正引擎
-        /// </summary>
-        [JsonProperty("Engine")]
-        public EEngine Engine { get; set; }
-
-        /// <summary>
-        /// 啟用懸浮球
-        /// </summary>
-        [JsonProperty("AssistiveTouch")]
-        public bool AssistiveTouch { get; set; }
-
-        /// <summary>
-        /// 快速動作設定(輔助鍵+點擊)
-        /// </summary>
-        [JsonProperty("QuickStart")]
-        public QuickStart QuickStart { get; set; }
-
-        /// <summary>
-        /// 快捷鍵
-        /// </summary>
-        [JsonProperty("HotKey")]
-        public HotKey HotKey { get; set; }
-
-        /// <summary>
-        /// 檔案轉換
-        /// </summary>
-        [JsonProperty("FileConvert")]
-        public FileConvert FileConvert { get; set; }
-
-        /// <summary>
-        /// 繁化姬設定檔
-        /// </summary>
-        [JsonProperty("Fanhuaji_Setting")]
-        public Fanhuaji_Config Fanhuaji_Setting { get; set; }
-
-        /// <summary>
-        /// 啟動時檢查更新
-        /// </summary>
-        [JsonProperty("CheckVersion")]
-        public bool CheckVersion { get; set; }
+public partial class Settings
+{
+    public Settings()
+    {
+        PositionX = -1;
+        PositionY = -1;
+        QuickStart = new QuickStart();
+        RecognitionEncoding = true;
+        Prompt = true;
+        MaxLengthPreview = 6;
+        VocabularyCorrection = true;
+        AssistiveTouch = true;
+        HotKey = new HotKey();
+        FileConvert = new FileConvert();
+        CheckVersion = true;
+        Engine = EEngine.Local;
+        Fanhuaji_Setting = new Fanhuaji_Config();
     }
 
-    public partial class FileConvert
+    /// <summary>
+    /// 上次關閉時的X座標
+    /// </summary>
+    [JsonPropertyName("PositionX")]
+    public double PositionX { get; set; }
+
+    /// <summary>
+    /// 上次關閉時的Y座標
+    /// </summary>
+    [JsonPropertyName("PositionY")]
+    public double PositionY { get; set; }
+
+    /// <summary>
+    /// 試圖自動辨識編碼
+    /// </summary>
+    [JsonPropertyName("RecognitionEncoding")]
+    public bool RecognitionEncoding { get; set; }
+
+    /// <summary>
+    /// 轉換完成後做出提示
+    /// </summary>
+    [JsonPropertyName("Prompt")]
+    public bool Prompt { get; set; }
+
+    /// <summary>
+    /// 預覽的最大長度(kb)
+    /// </summary>
+    [JsonPropertyName("MaxLengthPreview")]
+    public int MaxLengthPreview { get; set; }
+
+    /// <summary>
+    /// 詞彙修正
+    /// </summary>
+    [JsonPropertyName("Vocabulary correction")]
+    public bool VocabularyCorrection { get; set; }
+
+    /// <summary>
+    /// 詞彙修正引擎
+    /// </summary>
+    [JsonPropertyName("Engine")]
+    public EEngine Engine { get; set; }
+
+    /// <summary>
+    /// 啟用懸浮球
+    /// </summary>
+    [JsonPropertyName("AssistiveTouch")]
+    public bool AssistiveTouch { get; set; }
+
+    /// <summary>
+    /// 快速動作設定(輔助鍵+點擊)
+    /// </summary>
+    [JsonPropertyName("QuickStart")]
+    public QuickStart QuickStart { get; set; }
+
+    /// <summary>
+    /// 快捷鍵
+    /// </summary>
+    [JsonPropertyName("HotKey")]
+    public HotKey HotKey { get; set; }
+
+    /// <summary>
+    /// 檔案轉換
+    /// </summary>
+    [JsonPropertyName("FileConvert")]
+    public FileConvert FileConvert { get; set; }
+
+    /// <summary>
+    /// 繁化姬設定檔
+    /// </summary>
+    [JsonPropertyName("Fanhuaji_Setting")]
+    public Fanhuaji_Config Fanhuaji_Setting { get; set; }
+
+    /// <summary>
+    /// 啟動時檢查更新
+    /// </summary>
+    [JsonPropertyName("CheckVersion")]
+    public bool CheckVersion { get; set; }
+}
+
+public partial class FileConvert
+{
+    public FileConvert()
     {
-        public FileConvert()
+        UnicodeAddBom = false;
+        DefaultPath = "!";
+        TypeFilter = "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音頻文件|*.mp3>";
+        FixLabel = ".htm|.html|.shtm|.shtml|.asp|.apsx|.php";
+    }
+
+    /// <summary>
+    /// 預設路徑
+    /// </summary>
+    [JsonPropertyName("DefaultPath")]
+    public string DefaultPath { get; set; }
+
+    /// <summary>
+    /// 類型篩選器
+    /// </summary>
+    [JsonPropertyName("TypeFilter")]
+    public string TypeFilter { get; set; }
+
+    /// <summary>
+    /// 修正檔案內文的編碼標籤
+    /// </summary>
+    [JsonPropertyName("FixLabel")]
+    public string FixLabel { get; set; }
+
+    /// <summary>
+    /// 加入BOM到Unicode檔頭
+    /// </summary>
+    [JsonPropertyName("UnicodeAddBOM")]
+    public bool UnicodeAddBom { get; set; }
+
+    /// <summary>
+    /// 取得副檔名篩選器清單
+    /// </summary>
+    /// <returns></returns>
+    public List<string> GetFilterList(bool AddFixedItem = true)
+    {
+        List<string> filter = new();
+        if (AddFixedItem)
+            filter.Add("任意檔案(*.*)|*.*");
+        System.Text.RegularExpressions.Regex r_filter = new("<(.*?)>");
+        TypeFilter.Split('/').ToList().ForEach(x =>
         {
-            UnicodeAddBom = false;
-            DefaultPath = "!";
-            TypeFilter = "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音頻文件|*.mp3>";
-            FixLabel = ".htm|.html|.shtm|.shtml|.asp|.apsx|.php";
-        }
+            filter.Add(r_filter.Match(x).Groups[1].Value);
+        });
+        return filter;
+    }
 
-        /// <summary>
-        /// 預設路徑
-        /// </summary>
-        [JsonProperty("DefaultPath")]
-        public string DefaultPath { get; set; }
+    /// <summary>
+    /// 傳回(.*?)|(.*?)
+    /// </summary>
+    /// <param name="Filter"></param>
+    /// <returns></returns>
+    public string[] SplitFilterString(string Filter)
+    {
+        var r = System.Text.RegularExpressions.Regex.Match(Filter, @"(.*?)\|(.*?)$");
+        return new string[] { r.Groups[1].Value, r.Groups[2].Value };
+    }
 
-        /// <summary>
-        /// 類型篩選器
-        /// </summary>
-        [JsonProperty("TypeFilter")]
-        public string TypeFilter { get; set; }
+    /// <summary>
+    /// 傳回用';'分割的List
+    /// </summary>
+    /// <param name="str"></param>
+    /// <returns></returns>
+    public List<string> GetExtentionArray(string str)
+    {
+        return SplitFilterString(str)[1].Split(';').ToList();
+    }
 
-        /// <summary>
-        /// 修正檔案內文的編碼標籤
-        /// </summary>
-        [JsonProperty("FixLabel")]
-        public string FixLabel { get; set; }
+    /// <summary>
+    /// 檢查filename是否符合正則表達式extension
+    /// </summary>
+    /// <param name="filename"></param>
+    /// <param name="extension"></param>
+    /// <returns></returns>
+    public bool CheckExtension(string filename, string extension)
+    {
+        extension = extension.Trim().Replace(".", "||||||||").Replace("*", ".*?").Replace("||||||||", @"\.") + "$";
+        return System.Text.RegularExpressions.Regex.IsMatch(filename, extension);
+    }
 
-        /// <summary>
-        /// 加入BOM到Unicode檔頭
-        /// </summary>
-        [JsonProperty("UnicodeAddBOM")]
-        public bool UnicodeAddBom { get; set; }
-
-        /// <summary>
-        /// 取得副檔名篩選器清單
-        /// </summary>
-        /// <returns></returns>
-        public List<string> GetFilterList(bool AddFixedItem = true)
+    public void CallFilterEditor()
+    {
+        var temp = new ObservableCollection<Window_KeyValueEditor.KeyValueItem>();
+        App.Settings.FileConvert.GetFilterList(false).ForEach(x =>
         {
-            List<string> filter = new();
-            if (AddFixedItem)
-                filter.Add("任意檔案(*.*)|*.*");
-            System.Text.RegularExpressions.Regex r_filter = new("<(.*?)>");
-            TypeFilter.Split('/').ToList().ForEach(x =>
+            var _t = App.Settings.FileConvert.SplitFilterString(x);
+            temp.Add(new Window_KeyValueEditor.KeyValueItem() { Key = _t[0], Value = _t[1] });
+        });
+        Window_KeyValueEditor window_KeyValueEditor = new(
+            new Window_KeyValueEditor.Button() { Content = "Save" },
+            new Window_KeyValueEditor.Button() { Content = "Close" },
+            temp
+            );
+        window_KeyValueEditor.Button2_Action = new System.Action(() =>
+        {
+            window_KeyValueEditor.Close();
+        });
+        window_KeyValueEditor.Button1_Action = new System.Action(() =>
+        {
+            StringBuilder sb = new();
+            window_KeyValueEditor.KeyValueItems.ToList().ForEach(x =>
             {
-                filter.Add(r_filter.Match(x).Groups[1].Value);
+                if (sb.Length > 0)
+                    sb.Append("/");
+                sb.AppendFormat("<{0}|{1}>", x.Key, x.Value);
             });
-            return filter;
-        }
-
-        /// <summary>
-        /// 傳回(.*?)|(.*?)
-        /// </summary>
-        /// <param name="Filter"></param>
-        /// <returns></returns>
-        public string[] SplitFilterString(string Filter)
-        {
-            var r = System.Text.RegularExpressions.Regex.Match(Filter, @"(.*?)\|(.*?)$");
-            return new string[] { r.Groups[1].Value, r.Groups[2].Value };
-        }
-
-        /// <summary>
-        /// 傳回用';'分割的List
-        /// </summary>
-        /// <param name="str"></param>
-        /// <returns></returns>
-        public List<string> GetExtentionArray(string str)
-        {
-            return SplitFilterString(str)[1].Split(';').ToList();
-        }
-
-        /// <summary>
-        /// 檢查filename是否符合正則表達式extension
-        /// </summary>
-        /// <param name="filename"></param>
-        /// <param name="extension"></param>
-        /// <returns></returns>
-        public bool CheckExtension(string filename, string extension)
-        {
-            extension = extension.Trim().Replace(".", "||||||||").Replace("*", ".*?").Replace("||||||||", @"\.") + "$";
-            return System.Text.RegularExpressions.Regex.IsMatch(filename, extension);
-        }
-
-        public void CallFilterEditor()
-        {
-            var temp = new ObservableCollection<Window_KeyValueEditor.KeyValueItem>();
-            App.Settings.FileConvert.GetFilterList(false).ForEach(x =>
-            {
-                var _t = App.Settings.FileConvert.SplitFilterString(x);
-                temp.Add(new Window_KeyValueEditor.KeyValueItem() { Key = _t[0], Value = _t[1] });
-            });
-            Window_KeyValueEditor window_KeyValueEditor = new(
-                new Window_KeyValueEditor.Button() { Content = "Save" },
-                new Window_KeyValueEditor.Button() { Content = "Close" },
-                temp
-                );
-            window_KeyValueEditor.Button2_Action = new System.Action(() =>
-            {
-                window_KeyValueEditor.Close();
-            });
-            window_KeyValueEditor.Button1_Action = new System.Action(() =>
-            {
-                StringBuilder sb = new();
-                window_KeyValueEditor.KeyValueItems.ToList().ForEach(x =>
-                {
-                    if (sb.Length > 0)
-                        sb.Append("/");
-                    sb.AppendFormat("<{0}|{1}>", x.Key, x.Value);
-                });
-                TypeFilter = sb.ToString();
-                App.Save();
-                window_KeyValueEditor.Close();
-            });
-            window_KeyValueEditor.ShowDialog();
-        }
+            TypeFilter = sb.ToString();
+            App.Save();
+            window_KeyValueEditor.Close();
+        });
+        window_KeyValueEditor.ShowDialog();
     }
+}
 
-    public partial class HotKey
+public partial class HotKey
+{
+    public HotKey()
     {
-        public HotKey()
-        {
-            AutoCopy = true;
-            AutoPaste = true;
-            Feature1 = new Feature() { Command = new(EnumCommand.GbkToBig5Command), Enable = false, Key = "None", Modift = "None" };
-            Feature2 = new Feature() { Command = new(EnumCommand.Big5ToGbkCommand), Enable = false, Key = "None", Modift = "None" };
-            Feature3 = new Feature() { Command = new(EnumCommand.Unicode簡ToUnicode繁Command), Enable = false, Key = "None", Modift = "None" };
-            Feature4 = new Feature() { Command = new(EnumCommand.Unicode繁ToUnicode簡Command), Enable = false, Key = "None", Modift = "None" };
-        }
-
-        [JsonProperty("AutoCopy")]
-        public bool AutoCopy { get; set; }
-
-        [JsonProperty("AutoPaste")]
-        public bool AutoPaste { get; set; }
-
-        [JsonProperty("Feature1")]
-        public Feature Feature1 { get; set; }
-
-        [JsonProperty("Feature2")]
-        public Feature Feature2 { get; set; }
-
-        [JsonProperty("Feature3")]
-        public Feature Feature3 { get; set; }
-
-        [JsonProperty("Feature4")]
-        public Feature Feature4 { get; set; }
+        AutoCopy = true;
+        AutoPaste = true;
+        Feature1 = new Feature() { Command = new(EnumCommand.GbkToBig5Command), Enable = false, Key = "None", Modift = "None" };
+        Feature2 = new Feature() { Command = new(EnumCommand.Big5ToGbkCommand), Enable = false, Key = "None", Modift = "None" };
+        Feature3 = new Feature() { Command = new(EnumCommand.Unicode簡ToUnicode繁Command), Enable = false, Key = "None", Modift = "None" };
+        Feature4 = new Feature() { Command = new(EnumCommand.Unicode繁ToUnicode簡Command), Enable = false, Key = "None", Modift = "None" };
     }
 
-    public partial class Feature
+    [JsonPropertyName("AutoCopy")]
+    public bool AutoCopy { get; set; }
+
+    [JsonPropertyName("AutoPaste")]
+    public bool AutoPaste { get; set; }
+
+    [JsonPropertyName("Feature1")]
+    public Feature Feature1 { get; set; }
+
+    [JsonPropertyName("Feature2")]
+    public Feature Feature2 { get; set; }
+
+    [JsonPropertyName("Feature3")]
+    public Feature Feature3 { get; set; }
+
+    [JsonPropertyName("Feature4")]
+    public Feature Feature4 { get; set; }
+}
+
+public partial class Feature
+{
+    public Feature()
     {
-        public Feature()
-        {
-            Command = new();
-            Enable = false;
-            Key = "";
-            Modift = "";
-        }
-
-        [JsonProperty(nameof(Command))]
-        public CompleteCommand Command { get; set; }
-
-        [JsonProperty("Enable")]
-        public bool Enable { get; set; }
-
-        [JsonProperty("Key")]
-        public string Key { get; set; }
-
-        [JsonProperty("Modift")]
-        public string Modift { get; set; }
+        Command = new();
+        Enable = false;
+        Key = "";
+        Modift = "";
     }
 
-    public partial class QuickStart
+    [JsonPropertyName(nameof(Command))]
+    public CompleteCommand Command { get; set; }
+
+    [JsonPropertyName("Enable")]
+    public bool Enable { get; set; }
+
+    [JsonPropertyName("Key")]
+    public string Key { get; set; }
+
+    [JsonPropertyName("Modift")]
+    public string Modift { get; set; }
+}
+
+public partial class QuickStart
+{
+    [JsonPropertyName("LeftClick_Ctrl")]
+    public CompleteCommand LeftClick_Ctrl { get; set; } = new();
+
+    [JsonPropertyName("LeftClick_Alt")]
+    public CompleteCommand LeftClick_Alt { get; set; } = new();
+
+    [JsonPropertyName("LeftClick_Shift")]
+    public CompleteCommand LeftClick_Shift { get; set; } = new();
+
+    [JsonPropertyName("RightClick_Ctrl")]
+    public CompleteCommand RightClick_Ctrl { get; set; } = new();
+
+    [JsonPropertyName("RightClick_Alt")]
+    public CompleteCommand RightClick_Alt { get; set; } = new();
+
+    [JsonPropertyName("RightClick_Shift")]
+    public CompleteCommand RightClick_Shift { get; set; } = new();
+
+    [JsonPropertyName("LeftDrop_Ctrl")]
+    public CompleteCommand LeftDrop_Ctrl { get; set; } = new();
+
+    [JsonPropertyName("LeftDrop_Alt")]
+    public CompleteCommand LeftDrop_Alt { get; set; } = new();
+
+    [JsonPropertyName("LeftDrop_Shift")]
+    public CompleteCommand LeftDrop_Shift { get; set; } = new();
+
+    [JsonPropertyName("RightDrop_Ctrl")]
+    public CompleteCommand RightDrop_Ctrl { get; set; } = new();
+
+    [JsonPropertyName("RightDrop_Alt")]
+    public CompleteCommand RightDrop_Alt { get; set; } = new();
+
+    [JsonPropertyName("RightDrop_Shift")]
+    public CompleteCommand RightDrop_Shift { get; set; } = new();
+}
+
+public class CompleteCommand
+{
+    public CompleteCommand()
     {
-        [JsonProperty("LeftClick_Ctrl")]
-        public CompleteCommand LeftClick_Ctrl { get; set; } = new();
-
-        [JsonProperty("LeftClick_Alt")]
-        public CompleteCommand LeftClick_Alt { get; set; } = new();
-
-        [JsonProperty("LeftClick_Shift")]
-        public CompleteCommand LeftClick_Shift { get; set; } = new();
-
-        [JsonProperty("RightClick_Ctrl")]
-        public CompleteCommand RightClick_Ctrl { get; set; } = new();
-
-        [JsonProperty("RightClick_Alt")]
-        public CompleteCommand RightClick_Alt { get; set; } = new();
-
-        [JsonProperty("RightClick_Shift")]
-        public CompleteCommand RightClick_Shift { get; set; } = new();
-
-        [JsonProperty("LeftDrop_Ctrl")]
-        public CompleteCommand LeftDrop_Ctrl { get; set; } = new();
-
-        [JsonProperty("LeftDrop_Alt")]
-        public CompleteCommand LeftDrop_Alt { get; set; } = new();
-
-        [JsonProperty("LeftDrop_Shift")]
-        public CompleteCommand LeftDrop_Shift { get; set; } = new();
-
-        [JsonProperty("RightDrop_Ctrl")]
-        public CompleteCommand RightDrop_Ctrl { get; set; } = new();
-
-        [JsonProperty("RightDrop_Alt")]
-        public CompleteCommand RightDrop_Alt { get; set; } = new();
-
-        [JsonProperty("RightDrop_Shift")]
-        public CompleteCommand RightDrop_Shift { get; set; } = new();
     }
 
-    public class CompleteCommand
+    public CompleteCommand(EnumCommand command, string? commandParameter = null)
     {
-        public CompleteCommand()
-        {
-        }
-
-        public CompleteCommand(EnumCommand command, string? commandParameter = null)
-        {
-            Command = command;
-            CommandParameter = commandParameter;
-        }
-
-        public EnumCommand Command { get; set; }
-        public string? CommandParameter { get; set; }
+        Command = command;
+        CommandParameter = commandParameter;
     }
 
-    public partial class Settings
-    {
-        public static Settings FromJson(string json) => JsonConvert.DeserializeObject<Settings>(json, ConvertZZ.Converter.Settings);
-    }
+    public EnumCommand Command { get; set; }
+    public string? CommandParameter { get; set; }
+}
 
-    public static class Serialize
-    {
-        public static string ToJson(this Settings self) => JsonConvert.SerializeObject(self, Formatting.Indented, ConvertZZ.Converter.Settings);
-    }
+public partial class Settings
+{
+    public static Settings FromJson(string json) => JsonSerializer.Deserialize<Settings>(json) ?? new();
+}
 
-    internal class Converter
-    {
-        public static readonly JsonSerializerSettings Settings = new()
-        {
-            MetadataPropertyHandling = MetadataPropertyHandling.Ignore,
-            DateParseHandling = DateParseHandling.None,
-            Converters = {
-                new IsoDateTimeConverter { DateTimeStyles = DateTimeStyles.AssumeUniversal }
-            },
-        };
-
-        public static readonly JsonSerializerSettings Config = new()
-        {
-            MetadataPropertyHandling = MetadataPropertyHandling.Ignore,
-            DateParseHandling = DateParseHandling.None
-        };
-    }
+public static class Serialize
+{
+    public static string ToJson(this Settings self) => JsonSerializer.Serialize(self, new JsonSerializerOptions() { WriteIndented = true });
 }

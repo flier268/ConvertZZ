@@ -1,5 +1,6 @@
-﻿using Fanhuaji_API;
+﻿using System.Text.Json.Serialization;
 using Fanhuaji_API.Enum;
+using Fanhuaji_API.Models;
 using PropertyChanged;
 
 namespace ConvertZZ.Class
@@ -7,27 +8,25 @@ namespace ConvertZZ.Class
     [AddINotifyPropertyChangedInterface]
     public class Fanhuaji_Config : Config
     {
-        [ColumnName(Visible: false)]
+        [JsonIgnore]
         public int Converter_T_to_S_Index
         {
             get { return (int)Converter_T_to_S; }
             set { Converter_T_to_S = (Enum_Converter)value; }
         }
 
-        [ColumnName(Visible: false)]
+        [JsonIgnore]
         public int Converter_S_to_T_Index
         {
             get { return (int)Converter_S_to_T; }
             set { Converter_S_to_T = (Enum_Converter)value; }
         }
 
-        [ColumnName(Visible: false)]
         public Enum_Converter Converter_T_to_S { get; set; } = Enum_Converter.Simplified;
 
-        [ColumnName(Visible: false)]
-        public Enum_Converter Converter_S_to_T { get; set; } = Enum_Converter.Taiwan;
+        public Enum_Converter Converter_S_to_T { get; set; } = Enum_Converter.Traditional;
 
-        [ColumnName(Visible: false)]
+        [JsonIgnore]
         public int TranslateTabsToSpaces_Index
         {
             get
@@ -40,7 +39,7 @@ namespace ConvertZZ.Class
             }
         }
 
-        [ColumnName(Visible: false)]
+        [JsonIgnore]
         public int JpStyleConversionStrategy_Index
         {
             get
@@ -53,7 +52,7 @@ namespace ConvertZZ.Class
             }
         }
 
-        [ColumnName(Visible: false)]
+        [JsonIgnore]
         public int JpTextConversionStrategy_Index
         {
             get

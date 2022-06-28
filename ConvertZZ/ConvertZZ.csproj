@@ -25,7 +25,7 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="7.1.2" />
-    <PackageReference Include="Fanhuaji-API" Version="1.0.0" />
+    <PackageReference Include="Fanhuaji-API" Version="1.1.0" />
     <PackageReference Include="Flier.Toolbox.Text" Version="1.0.1" />
     <PackageReference Include="MaterialDesignThemes" Version="4.5.0" />
     <PackageReference Include="Microsoft-WindowsAPICodePack-Shell" Version="1.1.4" />

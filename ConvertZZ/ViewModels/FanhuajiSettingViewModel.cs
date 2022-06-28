@@ -1,5 +1,5 @@
 ﻿using System.Collections.ObjectModel;
-using Fanhuaji_API.Class;
+using Fanhuaji_API.Models;
 using PropertyChanged;
 
 namespace ConvertZZ.ViewModels

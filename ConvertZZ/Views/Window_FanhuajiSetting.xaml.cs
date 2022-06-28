@@ -5,8 +5,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using ConvertZZ.ViewModels;
-using Fanhuaji_API.Class;
 using Fanhuaji_API.Enum;
+using Fanhuaji_API.Models;
 
 namespace ConvertZZ.Views
 {

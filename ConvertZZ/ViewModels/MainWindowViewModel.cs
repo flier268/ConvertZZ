@@ -29,7 +29,7 @@ namespace ConvertZZ.ViewModels
 
             #endregion SetupConverter
 
-            ShowHideWindowCommand = MessengerHelper.RegistInvokeCommandMessage(this, () =>
+            ShowHideWindowCommand = MessengerHelper.RegistInvokeCommandMessageAndReturnCommand(this, () =>
             {
                 IsVisible = !IsVisible;
             }, EnumCommand.ShowHideWindowCommand);
@@ -73,7 +73,7 @@ namespace ConvertZZ.ViewModels
             });
             CommonEncodingConvertCommand = new AsyncRelayCommand<string>(async (p) =>
             {
-                long timeCost = await MessengerHelper.SendAsync<long>(EnumCommand.CommonEncodingConvertCommand, p);
+                long timeCost = await MessengerHelper.SendAsync<string, long>(EnumCommand.CommonEncodingConvertCommand, p);
                 ShowTimeCost(timeCost);
             });
             FullSizeSymbolToHalfSymbolCommand = new AsyncRelayCommand(async () =>

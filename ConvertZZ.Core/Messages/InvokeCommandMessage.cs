@@ -2,33 +2,30 @@
 
 namespace ConvertZZ.Core.Messages
 {
-    public class InvokeCommandMessage : AsyncRequestMessage<object?>
-    {
-        public InvokeCommandMessage(object? parameter = null)
-        {
-            Parameter = parameter;
-        }
+    //public class InvokeCommandMessage : AsyncRequestMessage<object?>
+    //{
+    //    public InvokeCommandMessage(object? parameter = null)
+    //    {
+    //        Parameter = parameter;
+    //    }
 
-        public object? Parameter { get; }
+    //    public object? Parameter { get; }
+    //}
+
+    public class AsyncInvokeCommandMessage<TOutput> : AsyncRequestMessage<TOutput>
+    {
+        public AsyncInvokeCommandMessage()
+        {
+        }
     }
 
-    public class InvokeCommandMessage<T> : AsyncRequestMessage<T>
+    public class AsyncInvokeCommandMessage<TInput, TOutput> : AsyncRequestMessage<TOutput>
     {
-        public InvokeCommandMessage(object? parameter = null)
+        public AsyncInvokeCommandMessage(TInput? parameter)
         {
             Parameter = parameter;
         }
 
-        public object? Parameter { get; }
-    }
-
-    public class AsyncInvokeCommandMessage<T> : AsyncRequestMessage<T>
-    {
-        public AsyncInvokeCommandMessage(object? parameter = null)
-        {
-            Parameter = parameter;
-        }
-
-        public object? Parameter { get; }
+        public TInput? Parameter { get; }
     }
 }

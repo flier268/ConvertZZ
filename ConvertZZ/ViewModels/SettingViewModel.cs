@@ -118,7 +118,7 @@ namespace ConvertZZ.ViewModels
 
         private void InverseMainWindowIsVisible()
         {
-            WeakReferenceMessenger.Default.Send(new InvokeCommandMessage(), new EnumAdapter<EnumCommand>(EnumCommand.ShowHideWindowCommand));
+            MessengerHelper.Send(EnumCommand.ShowHideWindowCommand);
         }
 
         public static Dictionary<string, CompleteCommand> Action { get; } = new()

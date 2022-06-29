@@ -7,14 +7,14 @@ namespace ConvertZZ.Core.Helpers
 {
     public partial class MessengerHelper
     {
-        public static ICommand RegistInvokeCommandMessage<TRecipient>(TRecipient recipient, Action action, EnumCommand enumCommand) where TRecipient : class
+        public static ICommand RegistInvokeCommandMessageAndReturnCommand<TRecipient>(TRecipient recipient, Action action, EnumCommand enumCommand) where TRecipient : class
         {
             RelayCommand relayCommand = new(action);
             var adapter = new EnumAdapter<EnumCommand>(enumCommand);
 
-            if (WeakReferenceMessenger.Default.IsRegistered<InvokeCommandMessage, EnumAdapter<EnumCommand>>(recipient, adapter) == false)
+            if (WeakReferenceMessenger.Default.IsRegistered<AsyncInvokeCommandMessage<object?>, EnumAdapter<EnumCommand>>(recipient, adapter) == false)
             {
-                WeakReferenceMessenger.Default.Register<InvokeCommandMessage, EnumAdapter<EnumCommand>>(recipient, adapter, (r, m) =>
+                WeakReferenceMessenger.Default.Register<AsyncInvokeCommandMessage<object?>, EnumAdapter<EnumCommand>>(recipient, adapter, (r, m) =>
                 {
                     relayCommand.Execute(null);
                     m.Reply(-1);
@@ -23,103 +23,106 @@ namespace ConvertZZ.Core.Helpers
             return relayCommand;
         }
 
-        public static void RegistInvokeCommandMessage<TRecipient, T>(TRecipient recipient, Func<T> action, EnumCommand enumCommand) where TRecipient : class
+        public static void RegistInvokeCommandMessage<TRecipient, TInput, TOutput>(TRecipient recipient, Func<TInput?, Task<TOutput>> action, EnumCommand enumCommand) where TRecipient : class
         {
             var adapter = new EnumAdapter<EnumCommand>(enumCommand);
 
-            if (WeakReferenceMessenger.Default.IsRegistered<InvokeCommandMessage<T>, EnumAdapter<EnumCommand>>(recipient, adapter) == false)
+            if (WeakReferenceMessenger.Default.IsRegistered<AsyncInvokeCommandMessage<TInput, TOutput>, EnumAdapter<EnumCommand>>(recipient, adapter) == false)
             {
-                WeakReferenceMessenger.Default.Register<InvokeCommandMessage<T>, EnumAdapter<EnumCommand>>(recipient, adapter, (r, m) =>
+                WeakReferenceMessenger.Default.Register<AsyncInvokeCommandMessage<TInput, TOutput>, EnumAdapter<EnumCommand>>(recipient, adapter, async (r, m) =>
                 {
-                    T timeCost = action();
-                    m.Reply(timeCost);
+                    var output = await action(m.Parameter);
+                    m.Reply(output);
                 });
             }
             return;
         }
 
-        public static void RegistInvokeCommandMessage<TRecipient, T>(TRecipient recipient, Func<Task<T>> action, EnumCommand enumCommand) where TRecipient : class
+        public static void RegistInvokeCommandMessage<TRecipient, TInput, TOutput>(TRecipient recipient, Func<TInput?, TOutput> action, EnumCommand enumCommand) where TRecipient : class
         {
             var adapter = new EnumAdapter<EnumCommand>(enumCommand);
 
-            if (WeakReferenceMessenger.Default.IsRegistered<InvokeCommandMessage<T>, EnumAdapter<EnumCommand>>(recipient, adapter) == false)
+            if (WeakReferenceMessenger.Default.IsRegistered<AsyncInvokeCommandMessage<TInput, TOutput>, EnumAdapter<EnumCommand>>(recipient, adapter) == false)
             {
-                WeakReferenceMessenger.Default.Register<InvokeCommandMessage<T>, EnumAdapter<EnumCommand>>(recipient, adapter, async (r, m) =>
+                WeakReferenceMessenger.Default.Register<AsyncInvokeCommandMessage<TInput, TOutput>, EnumAdapter<EnumCommand>>(recipient, adapter, (r, m) =>
                 {
-                    m.Reply(Task.Run(action));
+                    var output = action(m.Parameter);
+                    m.Reply(output);
                 });
             }
             return;
         }
 
-        public static void RegistInvokeCommandMessage<TRecipient, TParameter, T>(TRecipient recipient, Func<TParameter?, T> action, EnumCommand enumCommand) where TRecipient : class
+        public static void RegistInvokeCommandMessage<TRecipient, TOutput>(TRecipient recipient, Func<Task<TOutput>> action, EnumCommand enumCommand) where TRecipient : class
         {
             var adapter = new EnumAdapter<EnumCommand>(enumCommand);
 
-            if (WeakReferenceMessenger.Default.IsRegistered<InvokeCommandMessage<T>, EnumAdapter<EnumCommand>>(recipient, adapter) == false)
+            if (WeakReferenceMessenger.Default.IsRegistered<AsyncInvokeCommandMessage<TOutput>, EnumAdapter<EnumCommand>>(recipient, adapter) == false)
             {
-                WeakReferenceMessenger.Default.Register<InvokeCommandMessage<T>, EnumAdapter<EnumCommand>>(recipient, adapter, (r, m) =>
+                WeakReferenceMessenger.Default.Register<AsyncInvokeCommandMessage<TOutput>, EnumAdapter<EnumCommand>>(recipient, adapter, async (r, m) =>
                 {
-                    T timeCost = action((TParameter?)m.Parameter);
-                    m.Reply(timeCost);
+                    var output = await action();
+                    m.Reply(output);
                 });
             }
             return;
         }
 
-        //public static ICommand Regist<TRecipient>(TRecipient recipient, Func<long> action, EnumCommand enumCommand) where TRecipient : class
-        //{
-        //    //RelayCommand relayCommand = new(() => action());
-
-        //    RelayCommand relayCommand = new(() =>
-        //    {
-        //        WeakReferenceMessenger.Default.Send(new InvokeCommandMessage(), new EnumAdapter<EnumCommand>(enumCommand));
-        //    });
-
-        //    var adapter = new EnumAdapter<EnumCommand>(enumCommand);
-
-        //    if (WeakReferenceMessenger.Default.IsRegistered<InvokeCommandMessage, EnumAdapter<EnumCommand>>(recipient, adapter) == false)
-        //    {
-        //        WeakReferenceMessenger.Default.Register<InvokeCommandMessage, EnumAdapter<EnumCommand>>(recipient, adapter, (r, m) =>
-        //        {
-        //            long timeCost = action();
-        //            m.Reply(timeCost);
-        //        });
-        //    }
-        //    return relayCommand;
-        //}
-
-        public static ICommand Regist<TRecipient, T>(TRecipient recipient, Action<T?> action, EnumCommand enumCommand) where TRecipient : class
+        public static void RegistInvokeCommandMessage<TRecipient, TOutput>(TRecipient recipient, Func<TOutput> action, EnumCommand enumCommand) where TRecipient : class
         {
-            RelayCommand<T> relayCommand = new(action);
             var adapter = new EnumAdapter<EnumCommand>(enumCommand);
 
-            if (WeakReferenceMessenger.Default.IsRegistered<InvokeCommandMessage, EnumAdapter<EnumCommand>>(recipient, adapter) == false)
+            if (WeakReferenceMessenger.Default.IsRegistered<AsyncInvokeCommandMessage<TOutput>, EnumAdapter<EnumCommand>>(recipient, adapter) == false)
             {
-                WeakReferenceMessenger.Default.Register<InvokeCommandMessage, EnumAdapter<EnumCommand>>(recipient, adapter, (r, m) =>
+                WeakReferenceMessenger.Default.Register<AsyncInvokeCommandMessage<TOutput>, EnumAdapter<EnumCommand>>(recipient, adapter, (r, m) =>
                 {
-                    relayCommand.Execute(m.Parameter);
-                    m.Reply(-1);
+                    var output = action();
+                    m.Reply(output);
                 });
             }
-            return relayCommand;
+            return;
         }
 
-        public static void Send(EnumCommand enumCommand, object? parameter = null)
+        public static TOutput Send<TOutput>(EnumCommand enumCommand)
+        {
+            return SendAsync<TOutput>(enumCommand).Result;
+        }
+
+        public static TOutput Send<TInput, TOutput>(EnumCommand enumCommand, TInput? parameter)
+        {
+            return SendAsync<TInput, TOutput>(enumCommand, parameter).Result;
+        }
+
+        public static async Task<TOutput> SendAsync<TOutput>(EnumCommand enumCommand)
         {
             var adapter = new EnumAdapter<EnumCommand>(enumCommand);
-            WeakReferenceMessenger.Default.Send(new InvokeCommandMessage(parameter), adapter);
+            return await WeakReferenceMessenger.Default.Send(new AsyncInvokeCommandMessage<TOutput>(), adapter);
         }
 
-        public static T Send<T>(EnumCommand enumCommand, object? parameter = null)
-        {
-            return SendAsync<T>(enumCommand, parameter).Result;
-        }
-
-        public static async Task<T> SendAsync<T>(EnumCommand enumCommand, object? parameter = null)
+        public static async Task<TOutput> SendAsync<TInput, TOutput>(EnumCommand enumCommand, TInput? parameter)
         {
             var adapter = new EnumAdapter<EnumCommand>(enumCommand);
-            return await WeakReferenceMessenger.Default.Send(new InvokeCommandMessage<T>(parameter), adapter);
+            return await WeakReferenceMessenger.Default.Send(new AsyncInvokeCommandMessage<TInput, TOutput>(parameter), adapter);
+        }
+
+        public static void Send(EnumCommand enumCommand)
+        {
+            Send<object?>(enumCommand);
+        }
+
+        public static void Send<TInput>(EnumCommand enumCommand, TInput? parameter)
+        {
+            Send<TInput, object?>(enumCommand, parameter);
+        }
+
+        public static async Task SendAsync(EnumCommand enumCommand)
+        {
+            await SendAsync<object?>(enumCommand);
+        }
+
+        public static async Task SendAsync<TInput>(EnumCommand enumCommand, TInput? parameter)
+        {
+            await SendAsync<TInput, object?>(enumCommand, parameter);
         }
     }
 }

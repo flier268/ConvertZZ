@@ -160,38 +160,38 @@ namespace ConvertZZ.Services
                 return result.timeCost;
             }, EnumCommand.HalfSymbolToFullSizeSymbolCommand);
 
-            MessengerHelper.RegistInvokeCommandMessage(this, () =>
+            MessengerHelper.RegistInvokeCommandMessageAndReturnCommand(this, () =>
             {
                 WeakReferenceMessenger.Default.Send(new DialogHostMessage(EMode.File_FileName));
             }, EnumCommand.ShowFileFolderConvertDialogCommand);
 
-            MessengerHelper.RegistInvokeCommandMessage(this, () =>
+            MessengerHelper.RegistInvokeCommandMessageAndReturnCommand(this, () =>
             {
                 WeakReferenceMessenger.Default.Send(new DialogHostMessage(EMode.ClipBoard));
             }, EnumCommand.ShowClipboardConvertDialogCommand);
-            MessengerHelper.RegistInvokeCommandMessage(this, () =>
+            MessengerHelper.RegistInvokeCommandMessageAndReturnCommand(this, () =>
            {
                WeakReferenceMessenger.Default.Send(new DialogHostMessage(EMode.AutioTag, EAudioFormat.ID3));
            }, EnumCommand.ShowID3ConvertDialogCommand);
-            MessengerHelper.RegistInvokeCommandMessage(this, () =>
+            MessengerHelper.RegistInvokeCommandMessageAndReturnCommand(this, () =>
             {
                 WeakReferenceMessenger.Default.Send(new DialogHostMessage(EMode.AutioTag, EAudioFormat.APE));
             }, EnumCommand.ShowAPEConvertDialogCommand);
-            MessengerHelper.RegistInvokeCommandMessage(this, () =>
+            MessengerHelper.RegistInvokeCommandMessageAndReturnCommand(this, () =>
              {
                  WeakReferenceMessenger.Default.Send(new DialogHostMessage(EMode.AutioTag, EAudioFormat.OGG));
              }, EnumCommand.ShowOGGConvertDialogCommand);
-            MessengerHelper.RegistInvokeCommandMessage(this, () =>
+            MessengerHelper.RegistInvokeCommandMessageAndReturnCommand(this, () =>
            {
                WeakReferenceMessenger.Default.Send(new WindowShowMessage(new Window_About()));
            }, EnumCommand.ShowAboutCommand);
 
-            MessengerHelper.RegistInvokeCommandMessage(this, () =>
+            MessengerHelper.RegistInvokeCommandMessageAndReturnCommand(this, () =>
            {
                WeakReferenceMessenger.Default.Send(new WindowShowMessage(new Window_Report()));
            }, EnumCommand.ShowReportCommand);
 
-            MessengerHelper.RegistInvokeCommandMessage(this, () =>
+            MessengerHelper.RegistInvokeCommandMessageAndReturnCommand(this, () =>
             {
                 //Todo: hotkey
                 //UnRegAllHotkey();

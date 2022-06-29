@@ -101,7 +101,7 @@ namespace ConvertZZ.Views
                 {
                     if (App.Settings.HotKey.AutoCopy)
                         ClipBoardHelper.Copy(hotKey.Key, hotKey.KeyModifiers);
-                    WeakReferenceMessenger.Default.Send(new InvokeCommandMessage(feature.Command?.CommandParameter), new EnumAdapter<EnumCommand>(feature.Command.Command));
+                    MessengerHelper.Send(feature.Command.Command, feature.Command?.CommandParameter);
                     if (App.Settings.HotKey.AutoPaste)
                         ClipBoardHelper.Paste();
                 }).Regist(out _));
@@ -154,11 +154,11 @@ namespace ConvertZZ.Views
                         if (Left == pointNow.X && Top == pointNow.Y && leftDown)
                         {
                             if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
-                                WeakReferenceMessenger.Default.Send(new InvokeCommandMessage(), new EnumAdapter<EnumCommand>(App.Settings.QuickStart.LeftClick_Ctrl.Command));
+                                MessengerHelper.Send(App.Settings.QuickStart.LeftClick_Ctrl.Command);
                             else if (Keyboard.IsKeyDown(Key.LeftAlt) || Keyboard.IsKeyDown(Key.RightAlt))
-                                WeakReferenceMessenger.Default.Send(new InvokeCommandMessage(), new EnumAdapter<EnumCommand>(App.Settings.QuickStart.LeftClick_Alt.Command));
+                                MessengerHelper.Send(App.Settings.QuickStart.LeftClick_Alt.Command);
                             else if (Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift))
-                                WeakReferenceMessenger.Default.Send(new InvokeCommandMessage(), new EnumAdapter<EnumCommand>(App.Settings.QuickStart.LeftClick_Shift.Command));
+                                MessengerHelper.Send(App.Settings.QuickStart.LeftClick_Shift.Command);
                             else
                                 e.Handled = false;
                         }
@@ -170,11 +170,11 @@ namespace ConvertZZ.Views
                 case MouseButton.Right:
                     {
                         if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
-                            WeakReferenceMessenger.Default.Send(new InvokeCommandMessage(), new EnumAdapter<EnumCommand>(App.Settings.QuickStart.RightClick_Ctrl.Command));
+                            MessengerHelper.Send(App.Settings.QuickStart.RightClick_Ctrl.Command);
                         else if (Keyboard.IsKeyDown(Key.LeftAlt) || Keyboard.IsKeyDown(Key.RightAlt))
-                            WeakReferenceMessenger.Default.Send(new InvokeCommandMessage(), new EnumAdapter<EnumCommand>(App.Settings.QuickStart.RightClick_Alt.Command));
+                            MessengerHelper.Send(App.Settings.QuickStart.RightClick_Alt.Command);
                         else if (Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift))
-                            WeakReferenceMessenger.Default.Send(new InvokeCommandMessage(), new EnumAdapter<EnumCommand>(App.Settings.QuickStart.RightClick_Shift.Command));
+                            MessengerHelper.Send(App.Settings.QuickStart.RightClick_Shift.Command);
                         else
                             e.Handled = false;
                     }
@@ -249,15 +249,15 @@ namespace ConvertZZ.Views
                     switch (e.KeyStates)
                     {
                         case DragDropKeyStates.ControlKey:
-                            WeakReferenceMessenger.Default.Send(new InvokeCommandMessage(), new EnumAdapter<EnumCommand>(App.Settings.QuickStart.LeftDrop_Ctrl.Command));
+                            MessengerHelper.Send(App.Settings.QuickStart.LeftDrop_Ctrl.Command);
                             break;
 
                         case DragDropKeyStates.ShiftKey:
-                            WeakReferenceMessenger.Default.Send(new InvokeCommandMessage(), new EnumAdapter<EnumCommand>(App.Settings.QuickStart.LeftDrop_Shift.Command));
+                            MessengerHelper.Send(App.Settings.QuickStart.LeftDrop_Shift.Command);
                             break;
 
                         case DragDropKeyStates.AltKey:
-                            WeakReferenceMessenger.Default.Send(new InvokeCommandMessage(), new EnumAdapter<EnumCommand>(App.Settings.QuickStart.LeftDrop_Alt.Command));
+                            MessengerHelper.Send(App.Settings.QuickStart.LeftDrop_Alt.Command);
                             break;
                     }
                 }
@@ -266,15 +266,15 @@ namespace ConvertZZ.Views
                     switch (e.KeyStates)
                     {
                         case DragDropKeyStates.ControlKey:
-                            WeakReferenceMessenger.Default.Send(new InvokeCommandMessage(), new EnumAdapter<EnumCommand>(App.Settings.QuickStart.RightDrop_Ctrl.Command));
+                            MessengerHelper.Send(App.Settings.QuickStart.RightDrop_Ctrl.Command);
                             break;
 
                         case DragDropKeyStates.ShiftKey:
-                            WeakReferenceMessenger.Default.Send(new InvokeCommandMessage(), new EnumAdapter<EnumCommand>(App.Settings.QuickStart.RightDrop_Shift.Command));
+                            MessengerHelper.Send(App.Settings.QuickStart.RightDrop_Shift.Command);
                             break;
 
                         case DragDropKeyStates.AltKey:
-                            WeakReferenceMessenger.Default.Send(new InvokeCommandMessage(), new EnumAdapter<EnumCommand>(App.Settings.QuickStart.RightDrop_Alt.Command));
+                            MessengerHelper.Send(App.Settings.QuickStart.RightDrop_Alt.Command);
                             break;
                     }
                 }

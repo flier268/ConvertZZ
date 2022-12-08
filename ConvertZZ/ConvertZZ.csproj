@@ -25,7 +25,7 @@
     <PackageReference Include="Fanhuaji-API" Version="1.0.0" />
     <PackageReference Include="Flier.Toolbox.Text" Version="1.0.1" />
     <PackageReference Include="MaterialDesignThemes" Version="3.0.1" />
-    <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
     <PackageReference Include="PropertyChanged.Fody" Version="3.2.6" />
     <PackageReference Include="taglib" Version="2.1.0" />
     <PackageReference Include="WindowsAPICodePack" Version="1.1.1" />

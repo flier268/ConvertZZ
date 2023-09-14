@@ -4,7 +4,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/eddy8/opencc"
+	"github.com/rootwlg/opencc"
 	"github.com/go-ego/gse"
 )
 

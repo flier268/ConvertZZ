@@ -3,10 +3,9 @@ module github.com/flier268/ConvertZZ/ConvertZZ.Service
 go 1.18
 
 require (
-	github.com/eddy8/opencc v0.1.9
 	github.com/gin-gonic/gin v1.9.1
 	github.com/go-ego/gse v0.80.2
-	golang.org/x/text v0.13.0
+	github.com/rootwlg/opencc v0.0.0-20221209081256-7b2544a42f32
 )
 
 require (
@@ -21,6 +20,7 @@ require (
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.5 // indirect
+	github.com/knz/go-libedit v1.10.1 // indirect
 	github.com/leodido/go-urn v1.2.4 // indirect
 	github.com/liuzl/cedar-go v0.0.0-20170805034717-80a9c64b256d // indirect
 	github.com/liuzl/da v0.0.0-20180704015230-14771aad5b1d // indirect
@@ -35,7 +35,8 @@ require (
 	golang.org/x/crypto v0.13.0 // indirect
 	golang.org/x/net v0.15.0 // indirect
 	golang.org/x/sys v0.12.0 // indirect
-	golang.org/x/xerrors v0.0.0-20220517211312-f3a8303e98df // indirect
+	golang.org/x/text v0.13.0 // indirect
+	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

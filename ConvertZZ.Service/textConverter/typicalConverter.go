@@ -4,8 +4,8 @@ import (
 	"log"
 	"strings"
 
-	"github.com/rootwlg/opencc"
 	"github.com/go-ego/gse"
+	"github.com/rootwlg/opencc"
 )
 
 type typicalConverter struct {
@@ -79,15 +79,18 @@ func (converter *typicalConverter) justConvert(text string) (string, error) {
 }
 
 /* seg then convert */
-func (converter *typicalConverter) convert(text string) string {
+func (converter *typicalConverter) convert(text string) (string, error) {
 	if converter.segmenter == nil || converter.openCC_Converter == nil {
 		log.Fatal("Should run init() first!")
 		panic("Should run init() first!")
 	}
 	builder := new(strings.Builder)
 	for _, s := range converter.seg(text) {
-		t, _ := converter.justConvert(s)
+		t, err := converter.justConvert(s)
+		if err != nil {
+			return "", err
+		}
 		builder.WriteString(t)
 	}
-	return builder.String()
+	return builder.String(), nil
 }

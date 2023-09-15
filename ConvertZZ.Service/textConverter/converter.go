@@ -11,7 +11,7 @@ type IConverter interface {
 	Init(option Options, segmenter ...*gse.Segmenter)
 	seg(text string) []string
 	justConvert(text string) (string, error)
-	convert(text string) string
+	convert(text string) (string, error)
 }
 
 type Converter struct {
@@ -111,15 +111,13 @@ func (converter *Converter) caseConverter(option Options) *IConverter {
 	panic("Not implement this option")
 }
 
-func (converter *Converter) Convert(text string, option Options) string {
+func (converter *Converter) Convert(text string, option Options) (string, error) {
 	return (*converter.caseConverter(option)).convert(text)
 }
 
 func (converter *Converter) Seg(text string, option Options) []string {
-
 	return (*converter.caseConverter(option)).seg(text)
 }
 func (converter *Converter) JustConvert(text string, option Options) (string, error) {
-
 	return (*converter.caseConverter(option)).justConvert(text)
 }

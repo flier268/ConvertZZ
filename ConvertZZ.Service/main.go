@@ -38,9 +38,12 @@ func main() {
 			tc.GET("/convert", v1TextConverterHelp)
 			tc.GET("/seg", v1TextConverterHelp)
 			tc.GET("/justConvert", v1TextConverterHelp)
-			tc.GET("/convert/:option/*text", v1TextConvertConvert)
-			tc.GET("/seg/:option/*text", v1TextConvertSeg)
-			tc.GET("/justConvert/:option/*text", v1TextConvertJustConvert)
+			tc.GET("/convert/:option/*text", v1TextConverterConvert)
+			tc.GET("/seg/:option/*text", v1TextConverterSeg)
+			tc.GET("/justConvert/:option/*text", v1TextConverterJustConvert)
+			tc.POST("/convert/:option", v1PostTextConverterConvert)
+			tc.POST("/justConvert/:option", v1PostTextConverterJustConvert)
+			tc.POST("/seg/:option", v1PostTextConverterSeg)
 		}
 	}
 	r.RedirectFixedPath = true

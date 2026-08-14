@@ -27,6 +27,22 @@ html.floating-window, html.floating-window body, html.floating-window #app { bac
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #eab308; }
 .status-dot.online { background: #2dd4bf; box-shadow: 0 0 0 4px #2dd4bf18; }
 .content { overflow: auto; padding: 30px 34px 50px; }
+.settings-save-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 232px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 34px;
+  background: #102d2a;
+  color: #d8eeea;
+  box-shadow: 0 -10px 28px #001e1a40;
+}
+.page-stack:has(.settings-save-bar) { padding-bottom: 72px; }
 .page-stack { display: flex; flex-direction: column; gap: 18px; max-width: 1320px; margin: 0 auto; }
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
 .page-header h1 { margin: 1px 0 6px; color: #102d2a; font-size: 30px; line-height: 1.15; letter-spacing: -0.8px; }

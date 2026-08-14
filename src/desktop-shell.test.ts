@@ -89,6 +89,8 @@ describe("Tauri desktop shell", () => {
     const about = readProjectFile("src/pages/AboutPage.vue");
 
     expect(settings).not.toContain("匯入 ConvertZZ.json");
+    expect(settings).toContain("settings-save-bar");
+    expect(settings).not.toContain("header-actions");
     expect(loader).not.toContain("找到舊版 ConvertZZ.json");
     expect(tour).toContain("匯入舊版設定");
     expect(tour).toContain("importLegacySettings");

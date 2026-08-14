@@ -48,14 +48,19 @@ describe("Tauri desktop shell", () => {
     const styles = readProjectFile("src/styles.css");
     const component = readProjectFile("src/FloatingBall.vue");
     const config = readJson("src-tauri/tauri.conf.json") as {
-      app?: { windows?: Array<{ label?: string; transparent?: boolean; visible?: boolean }> };
+      app?: { windows?: Array<{ label?: string; transparent?: boolean; visible?: boolean; backgroundColor?: number[]; shadow?: boolean }> };
     };
     expect(config.app?.windows?.find((window) => window.label === "main")?.visible).toBe(false);
     expect(config.app?.windows?.find((window) => window.label === "floating")?.visible).toBe(false);
     expect(config.app?.windows?.find((window) => window.label === "floating")?.transparent).toBe(true);
+    expect(config.app?.windows?.find((window) => window.label === "floating")?.backgroundColor).toEqual([0, 0, 0, 0]);
     expect(styles).toContain("html.floating-window");
+    expect(styles).toContain("-webkit-user-select: none");
+    expect(styles).not.toContain("drop-shadow");
+    expect(config.app?.windows?.find((window) => window.label === "floating")?.shadow).toBe(false);
     expect(component).toContain("floating-z-large");
     expect(component).toContain("floating-z-small");
+    expect(component).toContain("@selectstart.prevent");
   });
 
   it("keeps the floating ball left and right click contract from the WPF design", () => {
@@ -94,6 +99,7 @@ describe("Tauri desktop shell", () => {
 
     expect(desktop).toContain("setPosition");
     expect(desktop).toContain("applyFloatingBallWindow");
+    expect(readProjectFile("src-tauri/src/lib.rs")).toContain("set_background_color");
     expect(app).toContain("revealFloating: false");
     expect(ball).toContain("applyFloatingBallWindow");
     expect(html).toContain("floating-window");

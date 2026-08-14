@@ -472,6 +472,14 @@ fn hide_startup_windows(app: &tauri::App) {
     }
 }
 
+fn clear_overlay_window_backgrounds(app: &tauri::App) {
+    for label in ["floating", "toast"] {
+        if let Some(window) = app.get_webview_window(label) {
+            let _ = window.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
+        }
+    }
+}
+
 fn keep_main_available_from_tray(app: &tauri::App) {
     if let Some(window) = app.get_webview_window("main") {
         let window_to_hide = window.clone();
@@ -570,6 +578,7 @@ pub fn run() {
             app.handle()
                 .plugin(tauri_plugin_global_shortcut::Builder::new().build())?;
             hide_startup_windows(app);
+            clear_overlay_window_backgrounds(app);
             keep_main_available_from_tray(app);
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| install_tray(app))) {
                 Err(error) => eprintln!("[convertzz-tray] 無法載入系統托盤：{error:?}"),

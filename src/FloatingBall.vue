@@ -125,13 +125,14 @@ async function handleDrop(event: DragEvent) {
     @mousedown="handlePointerDown"
     @mouseup="handlePointerUp"
     @contextmenu="handleContextMenu"
+    @selectstart.prevent
     @dragstart.prevent
     @dragover.prevent="trackDropButton"
     @drop.prevent="handleDrop"
   >
     <div class="floating-orb" :class="{ busy }" aria-label="ConvertZZ 浮動球">
-      <span class="floating-z-large">Z</span>
-      <span class="floating-z-small">Z</span>
+      <span class="floating-z-large" aria-hidden="true">Z</span>
+      <span class="floating-z-small" aria-hidden="true">Z</span>
     </div>
     <nav
       v-if="htmlMenu"

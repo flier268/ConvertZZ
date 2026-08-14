@@ -34,6 +34,7 @@
         "resizable": false,
         "decorations": false,
         "transparent": true,
+        "backgroundColor": [0, 0, 0, 0],
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "shadow": false,

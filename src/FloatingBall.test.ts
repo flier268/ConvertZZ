@@ -33,6 +33,15 @@ describe("浮動球左右鍵", () => {
     });
   });
 
+  it("文字不可選取", async () => {
+    const wrapper = mount(FloatingBall);
+    const event = new Event("selectstart", { cancelable: true });
+    wrapper.get(".floating-shell").element.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(wrapper.get(".floating-z-large").attributes("aria-hidden")).toBe("true");
+    expect(wrapper.get(".floating-z-small").attributes("aria-hidden")).toBe("true");
+  });
+
   it("左鍵沒有輔助鍵時不轉換也不開選單", async () => {
     const wrapper = mount(FloatingBall);
     await wrapper.get(".floating-shell").trigger("mousedown", { button: 0 });

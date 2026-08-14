@@ -11,7 +11,15 @@ html, body, #app { width: 100%; height: 100%; margin: 0; }
 body { overflow: hidden; }
 button, input, textarea { font: inherit; }
 html.floating-window, html.floating-window body, html.floating-window #app,
-html.toast-window, html.toast-window body, html.toast-window #app { background: transparent !important; }
+html.toast-window, html.toast-window body, html.toast-window #app {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+html.floating-window, html.floating-window * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-user-drag: none;
+}
 
 .app-shell { height: 100%; background: #f3f7f5; }
 .sidebar { display: flex; flex-direction: column; background: #0b2624; color: #d8eeea; padding: 20px 14px 14px; }
@@ -108,9 +116,10 @@ html.toast-window, html.toast-window body, html.toast-window #app { background: 
   text-align: center;
   white-space: pre-line;
 }
-.floating-shell { display: grid; place-items: center; width: 100%; height: 100%; background: transparent; cursor: grab; user-select: none; }
+.floating-shell { display: grid; place-items: center; width: 100%; height: 100%; background: transparent; cursor: grab; -webkit-user-select: none; user-select: none; }
 .floating-shell:active { cursor: grabbing; }
-.floating-orb { display: flex; align-items: center; justify-content: center; width: 64px; height: 64px; border: 0; border-radius: 50%; background: linear-gradient(145deg, #20b8aa, #087068); color: white; filter: drop-shadow(0 8px 10px #063f3970); font-weight: 850; }
+.floating-orb { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border: 0; border-radius: 50%; background: linear-gradient(145deg, #20b8aa, #087068); color: white; font-weight: 850; }
+.floating-z-large, .floating-z-small { pointer-events: none; -webkit-user-select: none; user-select: none; }
 .floating-z-large { font-size: 28px; line-height: 1; letter-spacing: -3px; }
 .floating-z-small { align-self: center; margin: 9px 0 0 1px; font-size: 17px; line-height: 1; }
 .floating-orb.busy { animation: pulse 0.8s infinite alternate; }

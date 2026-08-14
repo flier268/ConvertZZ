@@ -12,7 +12,14 @@
     </script>
     <style>
       html.floating-window, html.floating-window body,
-      html.toast-window, html.toast-window body { background: transparent; }
+      html.toast-window, html.toast-window body {
+        background: transparent !important;
+        background-color: transparent !important;
+      }
+      html.floating-window, html.floating-window * {
+        -webkit-user-select: none;
+        user-select: none;
+      }
     </style>
   </head>
   <body>

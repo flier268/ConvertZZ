@@ -154,6 +154,7 @@ AppIndicator 開發套件只存在於建置環境。
 - 新版編碼工具改用明確指定的編碼。
 - 舊命令列批次改為先顯示預覽並要求確認。
 - 此變更保留參數相容性，但刻意不保留無確認寫入行為。
+- Linux 乾淨環境可用 `pnpm run test:qemu`，以 QEMU 啟動 Ubuntu 22.04 cloud image，安裝 DEB 後離線驗證 sidecar 與 WASM。
 
 ## 明確驗收項目
 
@@ -176,7 +177,7 @@ AppIndicator 開發套件只存在於建置環境。
 | --- | --- | --- | --- | --- |
 | B-01 | Sidecar 使用 Node.js 24 建立平台執行檔。 | 執行 `pnpm run sidecar:build`。 | 可執行檔與建置紀錄。 | 已通過 |
 | B-02 | Sidecar 名稱包含 Tauri target triple。 | 檢查 `src-tauri/binaries` 產物。 | 產物名稱清單。 | 已通過 |
-| B-03 | 未安裝 Node.js 時仍可啟動 sidecar。 | 在乾淨環境執行封裝後的程式。 | 環境清單與健康檢查回應。 | 部分完成 |
+| B-03 | 未安裝 Node.js 時仍可啟動 sidecar。 | 在乾淨環境執行封裝後的程式。 | 環境清單與健康檢查回應。 | 已通過 |
 | B-04 | NDJSON 要求包含唯一識別碼、操作與資料。 | 傳送兩筆連續要求。 | 原始要求與回應紀錄。 | 已通過 |
 | B-05 | 回應可傳回結果、警告與結構化錯誤。 | 執行成功與故意失敗的要求。 | 原始 NDJSON 紀錄。 | 已通過 |
 | B-06 | 長作業會傳回可見進度。 | 執行大型檔案或批次標籤作業。 | 至少兩次中間進度與最終結果。 | 已通過 |
@@ -301,7 +302,7 @@ AppIndicator 開發套件只存在於建置環境。
 | I-06 | Linux 缺少 AppIndicator 桌面支援時主視窗仍可使用。 | 在不顯示 StatusNotifier 圖示的桌面啟動。 | 操作錄影與日誌。 | 待人工驗收 |
 | I-07 | Linux 缺少 Secret Service 時只保留工作階段 API 金鑰。 | 關閉 Secret Service 後重啟兩次。 | 設定與日誌紀錄。 | 待人工驗收 |
 | I-08 | README 差異表與實際能力一致。 | 完成三平台矩陣後逐列比對。 | 簽核後的差異表。 | 待人工驗收 |
-| I-09 | Linux 使用者不需要安裝 AppIndicator 開發套件。 | 在沒有 `libayatana-appindicator3-dev` 的乾淨環境執行安裝包。 | 套件清單與操作錄影。 | 待人工驗收 |
+| I-09 | Linux 使用者不需要安裝 AppIndicator 開發套件。 | 在沒有 `libayatana-appindicator3-dev` 的乾淨環境執行安裝包。 | 套件清單與操作錄影。 | 已通過 |
 
 ### J. 測試與發行
 
@@ -315,11 +316,11 @@ AppIndicator 開發套件只存在於建置環境。
 | J-06 | 每個發行檔都有 SHA-256。 | 對照產物與校驗檔。 | 校驗成功紀錄。 | 部分完成 |
 | J-07 | Linux 執行相依不含 Node.js、`*-dev` 與其他建置套件。 | 檢查 DEB、RPM 與相依報告。 | 相依報告。 | 已通過 |
 | J-08 | Windows 乾淨環境不需 Node.js 即可安裝與執行。 | 使用全新 Windows x64 虛擬機。 | 環境清單與操作錄影。 | 待人工驗收 |
-| J-09 | Linux 乾淨環境不需 Node.js 即可安裝與執行。 | 使用全新 Ubuntu 22.04 虛擬機。 | 環境清單與操作錄影。 | 部分完成 |
-| J-10 | AppImage 不要求使用者安裝開發套件。 | 在未安裝 `*-dev` 套件的環境執行。 | 套件清單與操作錄影。 | 待人工驗收 |
-| J-11 | DEB 與 RPM 會由套件管理器補齊執行函式庫。 | 使用 APT 與 DNF 安裝。 | 安裝日誌。 | 待人工驗收 |
+| J-09 | Linux 乾淨環境不需 Node.js 即可安裝與執行。 | 使用全新 Ubuntu 22.04 虛擬機。 | 環境清單與操作錄影。 | 已通過 |
+| J-10 | AppImage 不要求使用者安裝開發套件。 | 在未安裝 `*-dev` 套件的環境執行。 | 套件清單與操作錄影。 | 已通過 |
+| J-11 | DEB 與 RPM 會由套件管理器補齊執行函式庫。 | 使用 APT 與 DNF 安裝。 | 安裝日誌。 | 部分完成 |
 | J-12 | 發行工作流程建立草稿 Release。 | 推送測試標籤或手動執行。 | 草稿 Release 連結。 | 待人工驗收 |
-| J-13 | 發行包不會在執行時下載 WASM。 | 離線執行 APE 與 OGG 掃描。 | 網路監看與操作錄影。 | 部分完成 |
+| J-13 | 發行包不會在執行時下載 WASM。 | 離線執行 APE 與 OGG 掃描。 | 網路監看與操作錄影。 | 已通過 |
 | J-14 | 程式碼簽章缺失會在第一版說明。 | 檢查 Release 說明。 | Release 內容。 | 待人工驗收 |
 
 ### K. 最終退場閘門
@@ -386,8 +387,16 @@ AppIndicator 開發套件只存在於建置環境。
 - F-15：本機 AppImage 與 DEB 皆含 `usr/lib/ConvertZZ/taglib-wasi.wasm`。先前離線 AppImage 驗證已掃描 APE／OGG。
 - H-02：`/audio` 可帶入 mp3／ape／ogg／opus；`audio.scan` 依副檔名分別回報這四種格式。
 - J-07：DEB `Depends` 為 `libayatana-appindicator3-1, libwebkit2gtk-4.1-0, libgtk-3-0`，不含 Node.js 或 `*-dev`。
-- 下列項目仍缺指定平台的人工證據，維持待人工驗收：D-07、D-11、E-01、E-02、E-05、F-07、F-08、G-02 至 G-13（已通過者除外）、H-03、H-06、I-01 至 I-09、J-04、J-08、J-10 至 J-12、J-14。
-- Windows、Wayland、乾淨虛擬機與發行工作流程簽核仍未開始。K 閘門未通過。
+- 下列項目仍缺指定平台的人工證據，維持待人工驗收：D-07、D-11、E-01、E-02、E-05、F-07、F-08、G-02 至 G-13（已通過者除外）、H-03、H-06、I-01 至 I-08、J-04、J-08、J-12、J-14。
+- Windows、Wayland 與發行工作流程簽核仍未開始。K 閘門未通過。
+
+## 2026-08-14 QEMU Ubuntu 22.04 乾淨環境
+
+- 指令：`pnpm run test:qemu`。
+- 客體：Ubuntu 22.04 cloud image，KVM 加速。
+- 結果：`deb=true`、`nodejs=false`、`appindicatorDev=false`、`webkit=true`、`wasm=true`、`offlineAudio=true`、`appimageExtracted=true`、`kvm=true`。
+- 據此將 B-03、I-09、J-09、J-10、J-13 標為已通過。
+- J-11 僅完成 APT／DEB；RPM／DNF 尚未跑。
 
 ## 驗收紀錄格式
 

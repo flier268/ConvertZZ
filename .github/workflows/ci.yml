@@ -20,17 +20,9 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - name: 安裝音訊測試工具
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: 安裝相依套件
         run: pnpm install --frozen-lockfile
-      - name: 取得固定版本的 APE 測試樣本
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/taglib/taglib/3ace0483c0d7a2a4c1dbf9277274f0e733530504/tests/data/mac-399.ape -o /tmp/convertzz-test.ape
-          printf '%s  %s\n' '8c851b4f52bbbd822262040ae8961b8c27f8f702d1be3fa50cca283d009aadea' '/tmp/convertzz-test.ape' | sha256sum --check
       - name: 檢查前端與 sidecar
-        env:
-          CONVERTZZ_APE_FIXTURE: /tmp/convertzz-test.ape
         run: pnpm run check
       - name: 建立 Node.js 24 sidecar
         run: pnpm run sidecar:build
@@ -43,7 +35,7 @@ jobs:
           test -x "${binary:?}"
           response="$(printf '%s\n' '{"id":"ci","operation":"convert.preview","payload":{"text":"里面开发头发","direction":"s2t","engine":"segmented"}}' | "${binary:?}" --dictionary ConvertZZ/Dictionary.csv --wasm node_modules/taglib-wasm/dist/taglib-wasi.wasm)"
           test "$(printf '%s' "$response" | jq -r '.result.text')" = "裡面開發頭髮"
-          audio_response="$(printf '%s\n' '{"id":"audio","operation":"audio.scan","payload":{"paths":["/tmp/convertzz-test.ape"]}}' | "${binary:?}" --dictionary ConvertZZ/Dictionary.csv --wasm "$(pwd)/node_modules/taglib-wasm/dist/taglib-wasi.wasm")"
+          audio_response="$(printf '%s\n' '{"id":"audio","operation":"audio.scan","payload":{"paths":["tests/fixtures/mac-399.ape"]}}' | "${binary:?}" --dictionary ConvertZZ/Dictionary.csv --wasm "$(pwd)/node_modules/taglib-wasm/dist/taglib-wasi.wasm")"
           printf '%s\n' "$audio_response" | grep -F '"format":"ape"'
           if printf '%s\n' "$audio_response" | grep -Eq '"warning"|dynamic import callback'; then
             exit 1

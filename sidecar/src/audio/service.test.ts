@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { copyFileSync, existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -11,9 +12,13 @@ import { ConversionService } from "../conversion/engines.js";
 import { encodeText } from "../encoding/codecs.js";
 import { AudioService } from "./service.js";
 
+const require = createRequire(import.meta.url);
 const wasmPath = resolve("node_modules/taglib-wasm/dist/taglib-wasi.wasm");
-const ffmpegAvailable = commandWorks("ffmpeg", ["-version"]);
-const apeFixture = process.env.CONVERTZZ_APE_FIXTURE;
+const ffmpegPath = resolveFfmpeg();
+const bundledApe = resolve("tests/fixtures/mac-399.ape");
+const bundledOgg = resolve("tests/fixtures/test.ogg");
+const apeFixture = process.env.CONVERTZZ_APE_FIXTURE ?? (existsSync(bundledApe) ? bundledApe : undefined);
+const oggFixture = existsSync(bundledOgg) ? bundledOgg : undefined;
 const temporaryDirectories: string[] = [];
 
 afterAll(async () => {
@@ -153,19 +158,21 @@ describe("音訊標籤整合", () => {
     { extension: "mp3", codec: "libmp3lame", container: "id3v2" },
     { extension: "ape", fixture: apeFixture, container: "apev2" },
     { extension: "ogg", codec: "libvorbis", container: "vorbis-comment" },
+    { extension: "oga", fixture: oggFixture, container: "vorbis-comment" },
     { extension: "opus", codec: "libopus", container: "vorbis-comment" },
   ];
   let taglib: TagLib;
   let directory = "";
 
   beforeAll(async () => {
-    if (!ffmpegAvailable) return;
+    if (!ffmpegPath) return;
     directory = await temporaryDirectory("convertzz-audio-");
     taglib = await TagLib.initialize({ wasmUrl: wasmPath, forceWasmType: "wasi" });
   });
 
   for (const sample of samples) {
-    const available = ffmpegAvailable && (sample.extension !== "ape" || Boolean(sample.fixture && existsSync(sample.fixture)));
+    const needsFixture = sample.extension === "ape" || sample.extension === "oga";
+    const available = Boolean(ffmpegPath) && (!needsFixture || Boolean(sample.fixture && existsSync(sample.fixture)));
     it.runIf(available)(`轉換 .${sample.extension} 標籤並保持音訊與未選欄位`, async () => {
       const path = join(directory, `sample.${sample.extension}`);
       generateAudio(path, sample.codec, sample.fixture);
@@ -180,7 +187,7 @@ describe("音訊標籤整合", () => {
         audio.addPicture(coverPicture());
       });
 
-      const beforeAudio = decodedAudioHash(path);
+      const beforeAudio = await audioFingerprint(path, sample.extension);
       const before = await readTagSnapshot(taglib, path);
       const service = new AudioService(
         new ConversionService(resolve("ConvertZZ/Dictionary.csv")),
@@ -217,7 +224,7 @@ describe("音訊標籤整合", () => {
       expect(property(after.properties, "album")).toEqual(property(before.properties, "album"));
       expect(property(after.properties, "custom_text")).toEqual(property(before.properties, "custom_text"));
       expect(after.pictures).toEqual(before.pictures);
-      expect(decodedAudioHash(path)).toBe(beforeAudio);
+      expect(await audioFingerprint(path, sample.extension)).toBe(beforeAudio);
     }, 30_000);
   }
 });
@@ -290,13 +297,25 @@ function commandWorks(command: string, args: string[]): boolean {
   }
 }
 
+function resolveFfmpeg(): string | undefined {
+  if (process.env.FFMPEG_BIN && existsSync(process.env.FFMPEG_BIN)) return process.env.FFMPEG_BIN;
+  try {
+    const bundled = require("ffmpeg-static") as string | null;
+    if (bundled && existsSync(bundled)) return bundled;
+  } catch {
+    // 開發相依尚未安裝時改用系統 ffmpeg。
+  }
+  if (commandWorks("ffmpeg", ["-version"])) return "ffmpeg";
+  return undefined;
+}
+
 function generateAudio(path: string, codec?: string, fixture?: string): void {
   if (fixture) {
     copyFileSync(fixture, path);
     return;
   }
-  if (!codec) throw new Error("音訊測試缺少編碼器或樣本。");
-  execFileSync("ffmpeg", [
+  if (!codec || !ffmpegPath) throw new Error("音訊測試缺少編碼器或樣本。");
+  execFileSync(ffmpegPath, [
     "-hide_banner",
     "-loglevel",
     "error",
@@ -317,8 +336,14 @@ async function temporaryDirectory(prefix: string): Promise<string> {
   return path;
 }
 
+async function audioFingerprint(path: string, extension: string): Promise<string> {
+  if (extension === "mp3") return mp3AudioPayload(await readFile(path)).toString("hex");
+  return decodedAudioHash(path);
+}
+
 function decodedAudioHash(path: string): string {
-  return execFileSync("ffmpeg", [
+  if (!ffmpegPath) throw new Error("音訊測試缺少 ffmpeg。");
+  return execFileSync(ffmpegPath, [
     "-hide_banner",
     "-loglevel",
     "error",

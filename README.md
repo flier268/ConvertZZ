@@ -319,11 +319,11 @@ GTK 與 GLib 的開發套件會由 WebKitGTK 開發套件帶入。
 
 不建立 AppImage 時可以省略 `patchelf`。
 
-完整音訊整合測試另需 FFmpeg。
+音訊整合測試使用開發相依 `ffmpeg-static`。
 
-```bash
-sudo apt-get install -y ffmpeg
-```
+`pnpm install` 會下載測試用 ffmpeg，不必另外安裝系統套件。
+
+該 ffmpeg 不會打進發行包。
 
 安裝依賴。
 

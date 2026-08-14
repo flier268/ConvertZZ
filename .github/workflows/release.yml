@@ -56,14 +56,6 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm tauri build --bundles ${{ matrix.bundles }}
-      - name: 建立 Linux 發行驗證樣本
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/taglib/taglib/3ace0483c0d7a2a4c1dbf9277274f0e733530504/tests/data/mac-399.ape -o /tmp/convertzz-release-test.ape
-          printf '%s  %s\n' '8c851b4f52bbbd822262040ae8961b8c27f8f702d1be3fa50cca283d009aadea' '/tmp/convertzz-release-test.ape' | sha256sum --check
-          curl -fsSL https://raw.githubusercontent.com/taglib/taglib/3ace0483c0d7a2a4c1dbf9277274f0e733530504/tests/data/test.ogg -o /tmp/convertzz-release-test.ogg
-          printf '%s  %s\n' 'b064240a5cca0f9241b942b8d4680cedda555e5aab5f15c1d983767193a7f54d' '/tmp/convertzz-release-test.ogg' | sha256sum --check
       - name: 離線驗證 AppImage 內的 sidecar 與 WASM
         if: runner.os == 'Linux'
         shell: bash
@@ -74,8 +66,8 @@ jobs:
           unshare --user --map-root-user --net \
             node scripts/verify-linux-appimage.mjs \
             "${appimages[0]}" \
-            /tmp/convertzz-release-test.ape \
-            /tmp/convertzz-release-test.ogg
+            tests/fixtures/mac-399.ape \
+            tests/fixtures/test.ogg
       - name: 建立 Linux SHA-256
         if: runner.os == 'Linux'
         shell: bash

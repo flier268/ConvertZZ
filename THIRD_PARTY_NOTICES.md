@@ -36,8 +36,14 @@ ConvertZZ 未修改 TagLib WASM。
 
 對應原始碼可由 [taglib-wasm 專案](https://github.com/CharlesWiltgen/TagLib-Wasm) 取得。
 
-CI 音訊測試會下載 TagLib 專案的 `mac-399.ape` 樣本。
+音訊整合測試使用開發相依 `ffmpeg-static`（GPL-3.0-or-later）。
 
-該樣本只用於測試。
+該 ffmpeg 只存在於開發與 CI 環境。
 
-該樣本不會包含於發行包。
+發行包不會包含 ffmpeg。
+
+測試樣本 `tests/fixtures/mac-399.ape` 與 `tests/fixtures/test.ogg` 來自 TagLib 測試資料。
+
+這些樣本只用於測試。
+
+這些樣本不會包含於發行包。

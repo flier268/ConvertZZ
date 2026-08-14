@@ -22,6 +22,7 @@
         "minWidth": 960,
         "minHeight": 640,
         "center": true,
+        "focus": false,
         "visible": false
       },
       {
@@ -35,7 +36,24 @@
         "transparent": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
-        "visible": true
+        "shadow": false,
+        "focus": false,
+        "visible": false
+      },
+      {
+        "label": "toast",
+        "url": "index.html?window=toast",
+        "title": "ConvertZZ",
+        "width": 280,
+        "height": 140,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "focus": false,
+        "visible": false
       }
     ]
   },

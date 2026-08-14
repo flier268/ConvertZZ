@@ -28,8 +28,9 @@ import { setCliInvocation } from "./lib/cli";
 import type { ParsedCli } from "@shared/contracts";
 import { applyDesktopSettings, applyStartupWindowVisibility } from "./lib/desktop";
 import { executeLegacyAction } from "./lib/legacyActions";
+import { showAppToast } from "./lib/toast";
 import { checkLatestRelease } from "./lib/update";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessageBox } from "element-plus";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 const active = ref("quick");
@@ -61,7 +62,7 @@ provide("replayOnboarding", () => tour.value?.replay());
 onMounted(async () => {
   try {
     const settings = await loadSettings();
-    await applyDesktopSettings(settings);
+    await applyDesktopSettings(settings, { revealFloating: false });
     const args = await invoke<string[]>("startup_args");
     hasCliArgs.value = args.length > 0;
     await applyStartupWindowVisibility(settings, args.length > 0);
@@ -92,7 +93,7 @@ onMounted(async () => {
       try {
         await executeLegacyAction(payload, await loadSettings());
       } catch (error) {
-        ElMessage.error(error instanceof Error ? error.message : String(error));
+        await showAppToast(error instanceof Error ? error.message : String(error));
       }
     }));
     unlisten.push(await listen<string[]>("app://second-instance", async ({ payload }) => {

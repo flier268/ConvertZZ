@@ -21,6 +21,7 @@ describe("Tauri desktop shell", () => {
     expect(main.permissions).toEqual(expect.arrayContaining([
       "core:window:allow-hide",
       "core:window:allow-show",
+      "core:window:allow-set-position",
       "global-shortcut:allow-register",
       "global-shortcut:allow-unregister-all",
     ]));
@@ -50,6 +51,7 @@ describe("Tauri desktop shell", () => {
       app?: { windows?: Array<{ label?: string; transparent?: boolean; visible?: boolean }> };
     };
     expect(config.app?.windows?.find((window) => window.label === "main")?.visible).toBe(false);
+    expect(config.app?.windows?.find((window) => window.label === "floating")?.visible).toBe(false);
     expect(config.app?.windows?.find((window) => window.label === "floating")?.transparent).toBe(true);
     expect(styles).toContain("html.floating-window");
     expect(component).toContain("floating-z-large");
@@ -74,12 +76,44 @@ describe("Tauri desktop shell", () => {
     const app = readProjectFile("src/App.vue");
     const settings = readProjectFile("src/pages/SettingsPage.vue");
     const desktop = readProjectFile("src/lib/desktop.ts");
+    const rust = readProjectFile("src-tauri/src/lib.rs");
 
     expect(desktop).toContain("applyStartupWindowVisibility");
     expect(app).toContain("applyStartupWindowVisibility");
     expect(app).toContain("args.length > 0");
     expect(settings).toContain("showMainWindowOnStart");
     expect(settings).toContain("啟動時顯示主視窗");
+    expect(rust).toContain("fn hide_startup_windows");
+  });
+
+  it("positions the floating ball before showing it", () => {
+    const app = readProjectFile("src/App.vue");
+    const ball = readProjectFile("src/FloatingBall.vue");
+    const desktop = readProjectFile("src/lib/desktop.ts");
+    const html = readProjectFile("index.html");
+
+    expect(desktop).toContain("setPosition");
+    expect(desktop).toContain("applyFloatingBallWindow");
+    expect(app).toContain("revealFloating: false");
+    expect(ball).toContain("applyFloatingBallWindow");
+    expect(html).toContain("floating-window");
+  });
+
+  it("shows conversion prompts in a separate toast window", () => {
+    const config = readJson("src-tauri/tauri.conf.json") as {
+      app?: { windows?: Array<{ label?: string; visible?: boolean; decorations?: boolean }> };
+    };
+    const rust = readProjectFile("src-tauri/src/lib.rs");
+    const actions = readProjectFile("src/lib/legacyActions.ts");
+    const toast = readJson("src-tauri/capabilities/toast.json");
+
+    expect(config.app?.windows?.find((window) => window.label === "toast")?.visible).toBe(false);
+    expect(config.app?.windows?.find((window) => window.label === "toast")?.decorations).toBe(false);
+    expect(rust).toContain("fn show_toast");
+    expect(rust).toContain("place_toast_near_cursor");
+    expect(actions).toContain("showAppToast");
+    expect(actions).not.toContain("ElMessage.success");
+    expect(toast.windows).toEqual(["toast"]);
   });
 
   it("moves ConvertZZ.json import into the first-run tour", () => {

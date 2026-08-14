@@ -10,7 +10,8 @@
 html, body, #app { width: 100%; height: 100%; margin: 0; }
 body { overflow: hidden; }
 button, input, textarea { font: inherit; }
-html.floating-window, html.floating-window body, html.floating-window #app { background: transparent !important; }
+html.floating-window, html.floating-window body, html.floating-window #app,
+html.toast-window, html.toast-window body, html.toast-window #app { background: transparent !important; }
 
 .app-shell { height: 100%; background: #f3f7f5; }
 .sidebar { display: flex; flex-direction: column; background: #0b2624; color: #d8eeea; padding: 20px 14px 14px; }
@@ -84,6 +85,29 @@ html.floating-window, html.floating-window body, html.floating-window #app { bac
 .about-hero p { margin: 4px 0; color: #617672; }
 .capability-alert { margin-top: 16px; }
 .loading-state { display: grid; place-items: center; align-content: center; gap: 12px; min-height: 70vh; color: #63807b; }
+.toast-shell {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 12px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.toast-card {
+  width: 100%;
+  padding: 20px 24px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 28px #063f3928;
+  color: #17302d;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+  white-space: pre-line;
+}
 .floating-shell { display: grid; place-items: center; width: 100%; height: 100%; background: transparent; cursor: grab; user-select: none; }
 .floating-shell:active { cursor: grabbing; }
 .floating-orb { display: flex; align-items: center; justify-content: center; width: 64px; height: 64px; border: 0; border-radius: 50%; background: linear-gradient(145deg, #20b8aa, #087068); color: white; filter: drop-shadow(0 8px 10px #063f3970); font-weight: 850; }

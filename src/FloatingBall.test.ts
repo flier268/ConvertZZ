@@ -12,6 +12,8 @@ vi.mock("@tauri-apps/api/event", () => ({}));
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({}) }));
 vi.mock("./lib/appMenuPopup", () => ({ popupAppMenu: vi.fn() }));
 vi.mock("./lib/legacyActions", () => ({ executeLegacyAction: (...args: unknown[]) => executeLegacyAction(...args) }));
+vi.mock("./lib/desktop", () => ({ applyFloatingBallWindow: vi.fn() }));
+vi.mock("./lib/toast", () => ({ showAppToast: vi.fn() }));
 vi.mock("./lib/settings", () => ({
   loadSettings: (...args: unknown[]) => loadSettings(...args),
   saveSettings: vi.fn(),

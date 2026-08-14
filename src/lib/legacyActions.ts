@@ -8,7 +8,7 @@ import { convertText } from "./actions";
 import { resolveShellAction } from "./appMenu";
 import { sidecar } from "./sidecar";
 import { zhConvertOptions } from "./settings";
-import { ElMessage } from "element-plus";
+import { showAppToast } from "./toast";
 
 export const LEGACY_ACTIONS = [
   { label: "無", value: "0" },
@@ -114,7 +114,9 @@ export async function executeLegacyAction(
   await writeText(text);
   if (automation.paste && input === undefined) await invoke("simulate_copy_paste", { action: "paste" });
   const durationMs = Math.round(performance.now() - started);
-  if (settings.promptAfterConversion && !automation.copy && !automation.paste) ElMessage.success(`轉換完成。耗時 ${durationMs} ms。`);
+  if (settings.promptAfterConversion && !automation.copy && !automation.paste) {
+    await showAppToast(`轉換完成\n耗時：${durationMs} ms`);
+  }
   return { text, durationMs };
 }
 

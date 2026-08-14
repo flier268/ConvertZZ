@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { isTauri } from "@tauri-apps/api/core";
-import { LogicalPosition, type PhysicalPosition } from "@tauri-apps/api/dpi";
+import type { PhysicalPosition } from "@tauri-apps/api/dpi";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ElMessage } from "element-plus";
 import { FLOATING_CONTEXT_MENU } from "./lib/appMenu";
 import { popupAppMenu } from "./lib/appMenuPopup";
 import { executeLegacyAction } from "./lib/legacyActions";
@@ -15,7 +14,9 @@ import {
   pointerIntent,
   quickActionKey,
 } from "./lib/floatingGestures";
+import { applyFloatingBallWindow } from "./lib/desktop";
 import { loadSettings, saveSettings } from "./lib/settings";
+import { showAppToast } from "./lib/toast";
 
 const busy = ref(false);
 const htmlMenu = ref<{ x: number; y: number }>();
@@ -37,11 +38,7 @@ async function persistPosition(position: PhysicalPosition) {
 onMounted(async () => {
   if (!isTauri()) return;
   floatingWindow = getCurrentWindow();
-  const settings = await loadSettings();
-  const { x, y } = settings.floatingBall;
-  if (Number.isFinite(x) && Number.isFinite(y) && (x !== -1 || y !== -1)) {
-    await floatingWindow.setPosition(new LogicalPosition(x, y));
-  }
+  await applyFloatingBallWindow(await loadSettings());
   unlistenMoved = await floatingWindow.onMoved(({ payload }) => {
     if (savePositionTimer) clearTimeout(savePositionTimer);
     savePositionTimer = setTimeout(() => void persistPosition(payload), 180);
@@ -60,7 +57,7 @@ async function runAction(action: string, input?: string) {
   try {
     await executeLegacyAction(action, await loadSettings(), input);
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : String(error));
+    await showAppToast(error instanceof Error ? error.message : String(error));
   } finally {
     busy.value = false;
   }
@@ -78,7 +75,7 @@ async function handlePointerDown(event: MouseEvent) {
   try {
     await (floatingWindow ?? getCurrentWindow()).startDragging();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : String(error));
+    await showAppToast(error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -101,7 +98,7 @@ async function handleContextMenu(event: MouseEvent) {
     try {
       await popupAppMenu(FLOATING_CONTEXT_MENU, runAction);
     } catch (error) {
-      ElMessage.error(error instanceof Error ? error.message : String(error));
+      await showAppToast(error instanceof Error ? error.message : String(error));
     }
     return;
   }

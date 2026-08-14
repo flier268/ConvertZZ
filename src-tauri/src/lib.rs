@@ -1,11 +1,11 @@
-use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+use enigo::{Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use keyring::Entry;
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::{
     menu::{MenuBuilder, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, State, WindowEvent,
+    AppHandle, Emitter, Manager, PhysicalPosition, State, WindowEvent,
 };
 use tauri_plugin_shell::{
     process::{CommandChild, CommandEvent},
@@ -464,6 +464,14 @@ fn install_tray(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+fn hide_startup_windows(app: &tauri::App) {
+    for label in ["main", "floating", "toast"] {
+        if let Some(window) = app.get_webview_window(label) {
+            let _ = window.hide();
+        }
+    }
+}
+
 fn keep_main_available_from_tray(app: &tauri::App) {
     if let Some(window) = app.get_webview_window("main") {
         let window_to_hide = window.clone();
@@ -488,6 +496,59 @@ fn show_main_window(app: AppHandle) {
     show_main(&app);
 }
 
+const TOAST_OFFSET_PX: i32 = 16;
+const TOAST_WIDTH: i32 = 280;
+const TOAST_HEIGHT: i32 = 140;
+
+fn cursor_position() -> Option<(i32, i32)> {
+    Enigo::new(&Settings::default()).ok()?.location().ok()
+}
+
+fn clamp_to_monitor(app: &AppHandle, x: i32, y: i32, width: i32, height: i32) -> (i32, i32) {
+    let monitors = app.available_monitors().unwrap_or_default();
+    let monitor = monitors.iter().find(|monitor| {
+        let position = monitor.position();
+        let size = monitor.size();
+        x >= position.x
+            && y >= position.y
+            && x < position.x + size.width as i32
+            && y < position.y + size.height as i32
+    }).or_else(|| monitors.first());
+    let Some(monitor) = monitor else { return (x, y) };
+    let position = monitor.position();
+    let size = monitor.size();
+    let max_x = position.x + size.width as i32 - width;
+    let max_y = position.y + size.height as i32 - height;
+    (x.min(max_x).max(position.x), y.min(max_y).max(position.y))
+}
+
+fn place_toast_near_cursor(app: &AppHandle, window: &tauri::WebviewWindow) {
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let width = (f64::from(TOAST_WIDTH) * scale).round() as i32;
+    let height = (f64::from(TOAST_HEIGHT) * scale).round() as i32;
+    let offset = (f64::from(TOAST_OFFSET_PX) * scale).round() as i32;
+    let (x, y) = if let Some((cursor_x, cursor_y)) = cursor_position() {
+        (cursor_x + offset, cursor_y + offset)
+    } else if let Some(floating) = app.get_webview_window("floating") {
+        match floating.outer_position() {
+            Ok(position) => (position.x + offset, position.y + offset),
+            Err(_) => return,
+        }
+    } else {
+        return;
+    };
+    let (x, y) = clamp_to_monitor(app, x, y, width, height);
+    let _ = window.set_position(PhysicalPosition::new(x, y));
+}
+
+#[tauri::command]
+fn show_toast(app: AppHandle, message: String) {
+    if let Some(window) = app.get_webview_window("toast") {
+        place_toast_near_cursor(&app, &window);
+    }
+    let _ = app.emit("app://toast", message);
+}
+
 #[tauri::command]
 fn quit_app(app: AppHandle) {
     app.exit(0);
@@ -508,6 +569,7 @@ pub fn run() {
         .setup(|app| {
             app.handle()
                 .plugin(tauri_plugin_global_shortcut::Builder::new().build())?;
+            hide_startup_windows(app);
             keep_main_available_from_tray(app);
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| install_tray(app))) {
                 Err(error) => eprintln!("[convertzz-tray] 無法載入系統托盤：{error:?}"),
@@ -528,6 +590,7 @@ pub fn run() {
             load_zhconvert_api_key,
             set_send_to_shortcut,
             show_main_window,
+            show_toast,
             quit_app,
         ])
         .run(tauri::generate_context!())

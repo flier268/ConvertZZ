@@ -72,6 +72,43 @@ html.floating-window, html.floating-window body, html.floating-window #app { bac
 .floating-z-large { font-size: 28px; line-height: 1; letter-spacing: -3px; }
 .floating-z-small { align-self: center; margin: 9px 0 0 1px; font-size: 17px; line-height: 1; }
 .floating-orb.busy { animation: pulse 0.8s infinite alternate; }
+.floating-context-menu {
+  position: fixed;
+  z-index: 20;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid #d5e4e1;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 28px #063f3928;
+}
+.floating-context-menu button, .floating-context-submenu > button {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #17302d;
+  text-align: left;
+  cursor: pointer;
+}
+.floating-context-menu button:hover, .floating-context-submenu:hover > button { background: #e8f5f2; }
+.floating-context-menu hr { margin: 5px 6px; border: 0; border-top: 1px solid #e4eeec; }
+.floating-context-submenu { position: relative; }
+.floating-context-submenu-items {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 100%;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid #d5e4e1;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 28px #063f3928;
+}
+.floating-context-submenu:hover > .floating-context-submenu-items { display: block; }
 @keyframes pulse { to { transform: scale(0.92); opacity: 0.75; } }
 
 @media (max-width: 1100px) {

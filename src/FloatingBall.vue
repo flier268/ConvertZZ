@@ -5,15 +5,24 @@ import { LogicalPosition, type PhysicalPosition } from "@tauri-apps/api/dpi";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ElMessage } from "element-plus";
-import { convertClipboard } from "./lib/actions";
+import { FLOATING_CONTEXT_MENU } from "./lib/appMenu";
+import { popupAppMenu } from "./lib/appMenuPopup";
 import { executeLegacyAction } from "./lib/legacyActions";
-import { loadSettings, saveSettings, zhConvertOptions } from "./lib/settings";
+import {
+  clickModifier,
+  dropButton,
+  mouseSide,
+  pointerIntent,
+  quickActionKey,
+} from "./lib/floatingGestures";
+import { loadSettings, saveSettings } from "./lib/settings";
 
 const busy = ref(false);
+const htmlMenu = ref<{ x: number; y: number }>();
 let floatingWindow: ReturnType<typeof getCurrentWindow> | undefined;
 let unlistenMoved: UnlistenFn | undefined;
 let savePositionTimer: ReturnType<typeof setTimeout> | undefined;
-let lastDragButton: "left" | "right" = "left";
+let lastDropButton: "left" | "right" = "left";
 
 async function persistPosition(position: PhysicalPosition) {
   if (!floatingWindow) return;
@@ -44,13 +53,12 @@ onBeforeUnmount(() => {
   unlistenMoved?.();
 });
 
-async function run(direction: "s2t" | "t2s") {
-  if (busy.value) return;
+async function runAction(action: string, input?: string) {
+  if (busy.value || !action || action === "0") return;
   busy.value = true;
+  htmlMenu.value = undefined;
   try {
-    const settings = await loadSettings();
-    await convertClipboard(direction, settings.engine, undefined, settings.vocabularyCorrection, zhConvertOptions(settings, direction), settings.dictionaryPath);
-    ElMessage.success(direction === "s2t" ? "已轉為繁體" : "已轉為簡體");
+    await executeLegacyAction(action, await loadSettings(), input);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
@@ -58,8 +66,14 @@ async function run(direction: "s2t" | "t2s") {
   }
 }
 
-async function startDrag(event: MouseEvent) {
-  if (event.button !== 0 || event.ctrlKey || event.altKey || event.shiftKey || !isTauri()) return;
+async function handlePointerDown(event: MouseEvent) {
+  if (htmlMenu.value && !(event.target instanceof Element && event.target.closest(".floating-context-menu"))) {
+    htmlMenu.value = undefined;
+  }
+  const button = mouseSide(event.button);
+  if (!button) return;
+  const intent = pointerIntent(button, clickModifier(event), "down");
+  if (intent.type !== "drag" || !isTauri()) return;
   event.preventDefault();
   try {
     await (floatingWindow ?? getCurrentWindow()).startDragging();
@@ -68,59 +82,79 @@ async function startDrag(event: MouseEvent) {
   }
 }
 
-function modifier(event: MouseEvent | DragEvent): "Ctrl" | "Alt" | "Shift" | undefined {
-  if (event.ctrlKey) return "Ctrl";
-  if (event.altKey) return "Alt";
-  if (event.shiftKey) return "Shift";
-  return undefined;
-}
-
-async function runConfiguredClick(button: "left" | "right", event: MouseEvent) {
-  const key = modifier(event);
-  if (!key) return;
+async function handlePointerUp(event: MouseEvent) {
+  const button = mouseSide(event.button);
+  if (!button) return;
+  const intent = pointerIntent(button, clickModifier(event), "up");
+  if (intent.type !== "quick-action") return;
   event.preventDefault();
   event.stopPropagation();
   const settings = await loadSettings();
-  const action = settings.quickActions[`${button}Click${key}` as keyof typeof settings.quickActions];
-  try {
-    await executeLegacyAction(action, settings);
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : String(error));
-  }
-}
-
-function trackDragButton(event: DragEvent) {
-  if (event.buttons & 2) lastDragButton = "right";
-  else if (event.buttons & 1) lastDragButton = "left";
-}
-
-async function runConfiguredDrop(event: DragEvent) {
-  const key = modifier(event);
-  const text = event.dataTransfer?.getData("text/plain");
-  if (!key || !text) return;
-  const settings = await loadSettings();
-  const action = settings.quickActions[`${lastDragButton}Drop${key}` as keyof typeof settings.quickActions];
-  try {
-    await executeLegacyAction(action, settings, text);
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : String(error));
-  }
+  await runAction(settings.quickActions[quickActionKey(intent.button, "Click", intent.modifier)]);
 }
 
 async function handleContextMenu(event: MouseEvent) {
-  if (modifier(event)) await runConfiguredClick("right", event);
-  else {
-    event.preventDefault();
-    await run("t2s");
+  event.preventDefault();
+  if (clickModifier(event)) return;
+  htmlMenu.value = undefined;
+  if (isTauri()) {
+    try {
+      await popupAppMenu(FLOATING_CONTEXT_MENU, runAction);
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : String(error));
+    }
+    return;
   }
+  htmlMenu.value = { x: event.clientX, y: event.clientY };
+}
+
+function trackDropButton(event: DragEvent) {
+  lastDropButton = dropButton(event.buttons);
+}
+
+async function handleDrop(event: DragEvent) {
+  const modifier = clickModifier(event);
+  const text = event.dataTransfer?.getData("text/plain");
+  if (!modifier || !text) return;
+  const settings = await loadSettings();
+  await runAction(settings.quickActions[quickActionKey(lastDropButton, "Drop", modifier)], text);
 }
 </script>
 
 <template>
-  <div class="floating-shell" title="拖曳移動 · 雙擊轉繁體 · 右鍵轉簡體" @mousedown="startDrag" @click="runConfiguredClick('left', $event)" @dragstart.prevent @dragover.prevent="trackDragButton" @drop.prevent="runConfiguredDrop" @dblclick="run('s2t')" @contextmenu="handleContextMenu">
+  <div
+    class="floating-shell"
+    title="拖曳移動 · 右鍵開啟選單 · 輔助鍵加點擊執行設定動作"
+    @mousedown="handlePointerDown"
+    @mouseup="handlePointerUp"
+    @contextmenu="handleContextMenu"
+    @dragstart.prevent
+    @dragover.prevent="trackDropButton"
+    @drop.prevent="handleDrop"
+  >
     <div class="floating-orb" :class="{ busy }" aria-label="ConvertZZ 浮動球">
       <span class="floating-z-large">Z</span>
       <span class="floating-z-small">Z</span>
     </div>
+    <nav
+      v-if="htmlMenu"
+      class="floating-context-menu"
+      :style="{ left: `${htmlMenu.x}px`, top: `${htmlMenu.y}px` }"
+      @mousedown.stop
+    >
+      <template v-for="(node, index) in FLOATING_CONTEXT_MENU" :key="index">
+        <hr v-if="node.type === 'separator'">
+        <div v-else-if="node.type === 'submenu'" class="floating-context-submenu">
+          <button type="button">{{ node.label }}</button>
+          <div class="floating-context-submenu-items">
+            <template v-for="(child, childIndex) in node.items" :key="childIndex">
+              <hr v-if="child.type === 'separator'">
+              <button v-else-if="child.type === 'item'" type="button" @click="runAction(child.id)">{{ child.label }}</button>
+            </template>
+          </div>
+        </div>
+        <button v-else type="button" @click="runAction(node.id)">{{ node.label }}</button>
+      </template>
+    </nav>
   </div>
 </template>

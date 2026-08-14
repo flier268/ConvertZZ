@@ -441,6 +441,16 @@ fn show_main(app: &AppHandle) {
     }
 }
 
+#[tauri::command]
+fn show_main_window(app: AppHandle) {
+    show_main(&app);
+}
+
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -475,6 +485,8 @@ pub fn run() {
             save_zhconvert_api_key,
             load_zhconvert_api_key,
             set_send_to_shortcut,
+            show_main_window,
+            quit_app,
         ])
         .run(tauri::generate_context!())
         .expect("ConvertZZ failed to start");

@@ -26,6 +26,7 @@ describe("Tauri desktop shell", () => {
     ]));
     expect(floating.windows).toEqual(["floating"]);
     expect(floating.permissions).toEqual(expect.arrayContaining(required));
+    expect(floating.permissions).toEqual(expect.arrayContaining(["opener:default"]));
   });
 
   it("allows the floating window to move and persist its position", () => {
@@ -35,6 +36,8 @@ describe("Tauri desktop shell", () => {
     expect(floating.permissions).toEqual(expect.arrayContaining([
       "core:window:allow-set-position",
       "core:window:allow-start-dragging",
+      "core:window:allow-hide",
+      "core:window:allow-show",
     ]));
     expect(component).toContain("onMoved");
     expect(component).toContain("saveSettings");
@@ -51,6 +54,20 @@ describe("Tauri desktop shell", () => {
     expect(styles).toContain("html.floating-window");
     expect(component).toContain("floating-z-large");
     expect(component).toContain("floating-z-small");
+  });
+
+  it("keeps the floating ball left and right click contract from the WPF design", () => {
+    const component = readProjectFile("src/FloatingBall.vue");
+    const rust = readProjectFile("src-tauri/src/lib.rs");
+
+    expect(component).toContain("pointerIntent");
+    expect(component).toContain("popupAppMenu");
+    expect(component).toContain("FLOATING_CONTEXT_MENU");
+    expect(component).not.toContain("dblclick");
+    expect(component).not.toContain('run("s2t")');
+    expect(component).not.toContain('run("t2s")');
+    expect(rust).toContain("fn show_main_window");
+    expect(rust).toContain("fn quit_app");
   });
 
   it("assigns an icon and left-click behavior to the tray", () => {

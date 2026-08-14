@@ -1,8 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
 import { getAllWindows } from "@tauri-apps/api/window";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { SettingsV2, TextEncoding, UtilityConvertRequest } from "@shared/contracts";
 import { convertText } from "./actions";
+import { resolveShellAction } from "./appMenu";
 import { sidecar } from "./sidecar";
 import { zhConvertOptions } from "./settings";
 import { ElMessage } from "element-plus";
@@ -65,6 +68,19 @@ export async function executeLegacyAction(
     if (!floating) return { durationMs: Math.round(performance.now() - started) };
     if (await floating.isVisible()) await floating.hide();
     else await floating.show();
+    return { durationMs: Math.round(performance.now() - started) };
+  }
+
+  const shell = resolveShellAction(action);
+  if (shell) {
+    if (shell.type === "navigate") {
+      await invoke("show_main_window");
+      await emit("app://navigate", shell.page);
+    } else if (shell.type === "open-url") {
+      await openUrl(shell.url);
+    } else {
+      await invoke("quit_app");
+    }
     return { durationMs: Math.round(performance.now() - started) };
   }
 

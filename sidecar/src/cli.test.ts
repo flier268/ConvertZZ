@@ -10,6 +10,8 @@ describe("舊版命令列", () => {
   it("辨識音訊與舊版引擎", () => {
     expect(parseLegacyCli(["/audio", "/e:l", "song.ape"]))
       .toMatchObject({ mode: "audio", engine: "legacy", paths: ["song.ape"] });
+    expect(parseLegacyCli(["/audio", "a.mp3", "b.ape", "c.ogg", "d.opus"]).paths)
+      .toEqual(["a.mp3", "b.ape", "c.ogg", "d.opus"]);
   });
 
   it.each([

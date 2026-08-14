@@ -151,6 +151,17 @@ describe("MP3 容器選項", () => {
     const [repaired] = await service.scan({ paths: [path], id3v2SourceEncoding: "big5", id3v2RepairSourceEncoding: true });
     expect(repaired.fields.find((field) => field.container === "id3v2" && field.key === "title")?.values).toEqual(["裡面"]);
   });
+
+  it("ID3v1 可用 Big5 與 GBK 讀回損壞標題", async () => {
+    const directory = await temporaryDirectory("convertzz-audio-id3v1-");
+    const service = audioService();
+    for (const encoding of ["big5", "gbk"] as const) {
+      const path = join(directory, `${encoding}.mp3`);
+      await writeFile(path, id3v1OnlyMp3("裡面", encoding));
+      const [scanned] = await service.scan({ paths: [path], id3v1SourceEncoding: encoding });
+      expect(scanned.fields.find((field) => field.container === "id3v1" && field.key === "title")?.values).toEqual(["裡面"]);
+    }
+  });
 });
 
 describe("音訊標籤整合", () => {
@@ -227,6 +238,47 @@ describe("音訊標籤整合", () => {
       expect(await audioFingerprint(path, sample.extension)).toBe(beforeAudio);
     }, 30_000);
   }
+
+  it.runIf(Boolean(ffmpegPath) && Boolean(apeFixture) && Boolean(oggFixture))("依副檔名辨識 MP3、APE、OGG 與 Opus", async () => {
+    directory ||= await temporaryDirectory("convertzz-audio-");
+    const paths = {
+      mp3: join(directory, "identify.mp3"),
+      ape: join(directory, "identify.ape"),
+      ogg: join(directory, "identify.ogg"),
+      opus: join(directory, "identify.opus"),
+    };
+    generateAudio(paths.mp3, "libmp3lame");
+    generateAudio(paths.ape, undefined, apeFixture);
+    generateAudio(paths.ogg, "libvorbis");
+    generateAudio(paths.opus, "libopus");
+    const service = new AudioService(new ConversionService(resolve("ConvertZZ/Dictionary.csv")), wasmPath);
+    const scanned = await service.scan({ paths: Object.values(paths) });
+    expect(new Set(scanned.map((file) => file.format))).toEqual(new Set(["mp3", "ape", "ogg", "opus"]));
+    expect(scanned.every((file) => !file.warning)).toBe(true);
+  }, 30_000);
+
+  it.runIf(Boolean(ffmpegPath))("多值欄位會逐值轉換", async () => {
+    directory ||= await temporaryDirectory("convertzz-audio-");
+    const path = join(directory, "multivalue.ogg");
+    generateAudio(path, "libvorbis");
+    taglib ??= await TagLib.initialize({ wasmUrl: wasmPath, forceWasmType: "wasi" });
+    await taglib.edit(path, (audio) => {
+      audio.setProperties({ artist: ["头发", "皇后"] });
+    });
+    const service = new AudioService(new ConversionService(resolve("ConvertZZ/Dictionary.csv")), wasmPath);
+    const [scan] = await service.scan({ paths: [path] });
+    const artist = scan.fields.find((field) => field.key.toLowerCase() === "artist");
+    expect(artist?.values).toEqual(["头发", "皇后"]);
+    const plan = await service.plan({
+      ...basePlanRequest([path]),
+      selectedPaths: [path],
+      selectedFields: { [path]: [`vorbis-comment:${artist!.key}`] },
+    });
+    expect(plan.files[0].fields.find((field) => field.key.toLowerCase() === "artist")?.convertedValues).toEqual(["頭髮", "皇后"]);
+    await service.apply(plan.planId);
+    const after = await readTagSnapshot(taglib, path);
+    expect(property(after.properties, "artist")).toEqual(["頭髮", "皇后"]);
+  }, 30_000);
 });
 
 function audioService(): AudioService {
@@ -252,6 +304,15 @@ function basePlanRequest(paths: string[]): AudioTagPlanRequest {
     id3v2Version: 4,
     id3v2Encoding: "utf8",
   };
+}
+
+function id3v1OnlyMp3(title: string, encoding: "big5" | "gbk"): Buffer {
+  const audio = Buffer.from([0xff, 0xfb, 0x90, 0x64, 0, 0, 0, 0, 0, 0]);
+  const tag = Buffer.alloc(128);
+  tag.write("TAG", 0, "ascii");
+  encodeText(title, encoding).copy(tag, 3, 0, 30);
+  tag[127] = 255;
+  return Buffer.concat([audio, tag]);
 }
 
 async function writeTaggedMp3(path: string, id3v1Title: string, id3v2Title: string, withPicture = false): Promise<void> {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { backupLegacySettings, migrateSettings } from "./migrate.js";
@@ -64,6 +64,18 @@ describe("設定遷移", () => {
     expect(await readFile(first, "utf8")).toBe("{\"Prompt\":false}");
     expect(await readFile(second, "utf8")).toBe("{\"Prompt\":false}");
     expect((await readdir(directory)).filter((name) => name.startsWith("ConvertZZ.backup-"))).toHaveLength(2);
+  });
+
+  it("備份失敗時不寫入備份也不改變來源", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "convertzz-settings-ro-"));
+    temporary.push(directory);
+    const source = join(directory, "ConvertZZ.json");
+    await writeFile(source, "{\"Prompt\":false}", "utf8");
+    await chmod(directory, 0o555);
+    await expect(backupLegacySettings(source)).rejects.toBeTruthy();
+    await chmod(directory, 0o755);
+    expect(await readFile(source, "utf8")).toBe("{\"Prompt\":false}");
+    expect((await readdir(directory)).filter((name) => name.startsWith("ConvertZZ.backup-"))).toHaveLength(0);
   });
 
   it("舊版與缺少欄位的 2.0 設定預設不啟動主視窗", () => {

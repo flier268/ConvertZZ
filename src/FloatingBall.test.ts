@@ -42,8 +42,8 @@ describe("浮動球左右鍵", () => {
     expect(event.defaultPrevented).toBe(true);
     const mark = wrapper.get("svg.brand-mark-svg");
     expect(mark.attributes("aria-hidden")).toBe("true");
-    expect(mark.get(".brand-z").exists()).toBe(true);
-    expect(mark.get(".brand-two").exists()).toBe(true);
+    expect(mark.find(".brand-z").exists()).toBe(true);
+    expect(mark.find(".brand-two").exists()).toBe(true);
     expect(wrapper.find(".floating-z-large").exists()).toBe(false);
   });
 

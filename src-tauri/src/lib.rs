@@ -3,7 +3,7 @@ use keyring::Entry;
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{MenuBuilder, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, State, WindowEvent,
 };
@@ -381,13 +381,59 @@ mod linux_sidecar_tests {
 }
 
 fn install_tray(app: &tauri::App) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "開啟 ConvertZZ", true, None::<&str>)?;
-    let to_traditional =
-        MenuItem::with_id(app, "to-traditional", "剪貼簿簡轉繁", true, None::<&str>)?;
-    let to_simplified =
-        MenuItem::with_id(app, "to-simplified", "剪貼簿繁轉簡", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "結束", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &to_traditional, &to_simplified, &quit])?;
+    let audio = SubmenuBuilder::new(app, "Audio 標籤轉換")
+        .text("c1", "ID3")
+        .text("c2", "APE")
+        .text("c3", "OGG")
+        .build()?;
+    let others = SubmenuBuilder::new(app, "其他")
+        .text("za1", "Unicode → HTML 十進位")
+        .text("za2", "Unicode → HTML 十六進位")
+        .text("za3", "HTML → Unicode")
+        .separator()
+        .text("zb1", "Unicode → GBK")
+        .text("zb2", "Unicode → Big5")
+        .text("zb3", "Unicode → Shift-JIS")
+        .text("zb4", "GBK → Unicode")
+        .text("zb5", "Big5 → Unicode")
+        .text("zb6", "Shift-JIS → Unicode")
+        .separator()
+        .text("zc1", "Shift-JIS → GBK")
+        .text("zc2", "Shift-JIS → Big5")
+        .text("zc3", "GBK → Shift-JIS")
+        .text("zc4", "Big5 → Shift-JIS")
+        .separator()
+        .text("zd1", "HZ → GBK")
+        .text("zd2", "HZ → Big5")
+        .text("zd3", "GBK → HZ")
+        .text("zd4", "Big5 → HZ")
+        .separator()
+        .text("ze1", "半形 → 全形")
+        .text("ze2", "全形 → 半形")
+        .build()?;
+    let help = SubmenuBuilder::new(app, "說明")
+        .text("about", "關於 ConvertZZ")
+        .text("report", "回報問題")
+        .build()?;
+    let menu = MenuBuilder::new(app)
+        .text("show", "開啟 ConvertZZ")
+        .separator()
+        .text("a1", "GBK → Big5")
+        .text("a2", "Big5 → GBK")
+        .text("a3", "Unicode 簡 → Unicode 繁")
+        .text("a4", "Unicode 繁 → Unicode 簡")
+        .separator()
+        .text("b1", "文件/檔名轉換")
+        .text("b2", "剪貼簿轉換")
+        .separator()
+        .item(&audio)
+        .separator()
+        .item(&others)
+        .text("1", "隱藏或顯示浮動球")
+        .text("settings", "設定")
+        .item(&help)
+        .text("quit", "結束 ConvertZZ")
+        .build()?;
     let tray = TrayIconBuilder::with_id("main-tray")
         .tooltip("ConvertZZ 2.0")
         .menu(&menu)
@@ -395,13 +441,9 @@ fn install_tray(app: &tauri::App) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "quit" => app.exit(0),
             "show" => show_main(app),
-            "to-traditional" => {
-                let _ = app.emit("app://legacy-action", "a3");
+            id => {
+                let _ = app.emit("app://legacy-action", id);
             }
-            "to-simplified" => {
-                let _ = app.emit("app://legacy-action", "a4");
-            }
-            _ => {}
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {

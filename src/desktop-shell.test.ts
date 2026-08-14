@@ -77,6 +77,13 @@ describe("Tauri desktop shell", () => {
     expect(rust).toContain("default_window_icon");
     expect(rust).toContain("show_menu_on_left_click(false)");
     expect(rust).toContain("WindowEvent::CloseRequested");
+    expect(rust).toContain('app.emit("app://legacy-action", id)');
+    expect(rust).toContain(".text(\"a3\", \"Unicode 簡 → Unicode 繁\")");
+    expect(rust).toContain(".text(\"b1\", \"文件/檔名轉換\")");
+    expect(rust).toContain(".text(\"settings\", \"設定\")");
+    for (const actionId of ["a1", "a4", "b2", "c3", "za1", "ze2", "1", "about", "report", "quit"]) {
+      expect(rust).toContain(`.text("${actionId}"`);
+    }
     expect(config.bundle?.icon).toEqual(expect.arrayContaining(["icons/icon.png", "icons/icon.ico"]));
     expect(config.bundle?.icon).not.toContain("../ConvertZZ/Windows Logo.png");
   });
@@ -109,7 +116,8 @@ describe("Tauri desktop shell", () => {
 
     expect(workflow).toContain("unshare --user --map-root-user --net");
     expect(workflow).toContain("node scripts/verify-linux-appimage.mjs");
-    expect(verifier).toContain("AppImage 改寫了 sidecar");
+    expect(verifier).toContain("AppImage 內的 sidecar 資源不應具有執行權限");
+    expect(verifier).toContain("AppImage 解壓後的 sidecar 不符");
     expect(verifier).toContain('formats.join(",") !== "ape,ogg"');
     expect(verifier).toContain('operation: "convert.preview"');
   });

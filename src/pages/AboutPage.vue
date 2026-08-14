@@ -24,6 +24,12 @@ const differences = [
     x11: "需 AppIndicator；使用選單開啟",
     wayland: "需 AppIndicator；使用選單開啟",
   },
+  {
+    feature: "憑證庫",
+    windows: "Windows Credential Manager",
+    x11: "Secret Service",
+    wayland: "Secret Service",
+  },
 ];
 </script>
 

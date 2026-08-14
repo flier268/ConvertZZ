@@ -294,6 +294,11 @@ export class AudioService {
         if (key in tags) (tags as unknown as Record<string, unknown>)[key] = values[0] ?? "";
         else updateAdditionalId3v2TextField(tags.v2, key, values);
       }
+      const details = tags as { v2Details?: { version?: number[] } };
+      details.v2Details = {
+        ...details.v2Details,
+        version: [file.request.id3v2Version, 0],
+      };
       parser.tags = tags;
     }
 
@@ -312,6 +317,12 @@ export class AudioService {
         )
       : Buffer.from(stripId3v1(source));
     if (parser.error) throw new ConvertZZError("ID3_WRITE", parser.error);
+    if (writesId3v2 && id3v2HeaderVersion(output) !== file.request.id3v2Version) {
+      throw new ConvertZZError(
+        "ID3_WRITE",
+        `ID3v2 版本寫入為 ${id3v2HeaderVersion(output) ?? "未知"}，預期 ${file.request.id3v2Version}。`,
+      );
+    }
 
     const existingV1 = readId3v1(source, file.request.id3v1SourceEncoding ?? "gbk");
     if (writesId3v1) {
@@ -533,7 +544,27 @@ function repairId3v2Value(
 }
 
 function mp3AudioPayload(buffer: Buffer): Buffer {
-  return Buffer.from(new MP3Tag(buffer).getAudio(true) as ArrayBuffer);
+  // mp3tag getAudio 會把 UTF-16 標籤裡的 0xFF 當成 MPEG 同步位元。
+  const withoutV1 = stripId3v1(buffer);
+  let start = id3v2TagLength(withoutV1);
+  while (
+    start + 1 < withoutV1.length &&
+    !(withoutV1[start] === 0xff && withoutV1[start + 1] >= 0xf0)
+  ) {
+    start += 1;
+  }
+  return Buffer.from(withoutV1.subarray(start));
+}
+
+function id3v2TagLength(buffer: Buffer): number {
+  if (buffer.length < 10 || buffer.subarray(0, 3).toString("ascii") !== "ID3") return 0;
+  const size =
+    ((buffer[6] & 0x7f) << 21) |
+    ((buffer[7] & 0x7f) << 14) |
+    ((buffer[8] & 0x7f) << 7) |
+    (buffer[9] & 0x7f);
+  const footer = buffer[3] === 4 && (buffer[5] & 0x10) !== 0 ? 10 : 0;
+  return 10 + size + footer;
 }
 
 function pictureFingerprint(v2: unknown): string {
@@ -745,6 +776,12 @@ function stripId3v1(buffer: Buffer): Buffer {
     buffer.subarray(buffer.length - 128, buffer.length - 125).toString("ascii") === "TAG"
     ? buffer.subarray(0, buffer.length - 128)
     : buffer;
+}
+
+function id3v2HeaderVersion(buffer: Buffer): number | undefined {
+  return buffer.length >= 4 && buffer.subarray(0, 3).toString("ascii") === "ID3"
+    ? buffer[3]
+    : undefined;
 }
 
 async function commitTemporary(path: string, temporary: string): Promise<void> {

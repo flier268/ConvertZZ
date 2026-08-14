@@ -197,6 +197,38 @@ describe("MP3 容器選項", () => {
       ).toEqual(["裡面"]);
     }
   });
+
+  it("可把 ID3v2.4 寫成 2.3／2.4 並套用指定文字編碼", async () => {
+    const directory = await temporaryDirectory("convertzz-audio-id3v2-version-");
+    const service = audioService();
+    const cases = [
+      { version: 3 as const, encoding: "utf16" as const, encodingByte: 1 },
+      { version: 4 as const, encoding: "utf8" as const, encodingByte: 3 },
+      { version: 4 as const, encoding: "utf16" as const, encodingByte: 1 },
+    ];
+    for (const sample of cases) {
+      const path = join(directory, `v${sample.version}-${sample.encoding}.mp3`);
+      await writeTaggedMp3(path, "里面", "里面");
+      expect(id3v2HeaderVersion(await readFile(path))).toBe(4);
+      const plan = await service.plan({
+        ...basePlanRequest([path]),
+        selectedPaths: [path],
+        selectedFields: { [path]: ["id3v2:title"] },
+        id3v2Version: sample.version,
+        id3v2Encoding: sample.encoding,
+      });
+      const result = await service.apply(plan.planId);
+      expect(result.failed).toEqual([]);
+      const written = await readFile(path);
+      expect(id3v2HeaderVersion(written)).toBe(sample.version);
+      expect(id3v2FrameTextEncoding(written, "TIT2")).toBe(sample.encodingByte);
+      const [verified] = await service.scan({ paths: [path] });
+      expect(
+        verified.fields.find((field) => field.container === "id3v2" && field.key === "title")
+          ?.values,
+      ).toEqual(["裡面"]);
+    }
+  });
 });
 
 describe("音訊標籤整合", () => {
@@ -414,6 +446,38 @@ async function writeTaggedMp3(
 
 function mp3AudioPayload(buffer: Buffer): Buffer {
   return Buffer.from(new MP3Tag(buffer).getAudio(true) as ArrayBuffer);
+}
+
+function id3v2HeaderVersion(buffer: Buffer): number {
+  if (buffer.length < 4 || buffer.subarray(0, 3).toString("ascii") !== "ID3") {
+    throw new Error("缺少 ID3v2 標頭");
+  }
+  return buffer[3];
+}
+
+function id3v2FrameTextEncoding(buffer: Buffer, frameId: string): number {
+  const version = id3v2HeaderVersion(buffer);
+  const tagSize =
+    ((buffer[6] & 0x7f) << 21) |
+    ((buffer[7] & 0x7f) << 14) |
+    ((buffer[8] & 0x7f) << 7) |
+    (buffer[9] & 0x7f);
+  let offset = 10;
+  const end = Math.min(buffer.length, 10 + tagSize);
+  while (offset + 11 <= end) {
+    const id = buffer.subarray(offset, offset + 4).toString("ascii");
+    if (id === "\0\0\0\0") break;
+    const frameSize =
+      version === 4
+        ? ((buffer[offset + 4] & 0x7f) << 21) |
+          ((buffer[offset + 5] & 0x7f) << 14) |
+          ((buffer[offset + 6] & 0x7f) << 7) |
+          (buffer[offset + 7] & 0x7f)
+        : buffer.readUInt32BE(offset + 4);
+    if (id === frameId && frameSize > 0) return buffer[offset + 10];
+    offset += 10 + frameSize;
+  }
+  throw new Error(`找不到 ${frameId} 文字編碼`);
 }
 
 function mp3PictureData(buffer: Buffer): unknown {

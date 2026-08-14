@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { importStepIndex, ONBOARDING_STEPS, pageForOnboardingStep } from "./onboarding";
 
@@ -13,5 +15,15 @@ describe("第一次啟動導覽", () => {
     expect(pageForOnboardingStep(2)).toBe("files");
     expect(pageForOnboardingStep(4)).toBe("audio");
     expect(pageForOnboardingStep(99)).toBe("settings");
+  });
+
+  it("匯入失敗時會在導覽畫面顯示錯誤", () => {
+    const tour = readFileSync(
+      fileURLToPath(new URL("../OnboardingTour.vue", import.meta.url)),
+      "utf8",
+    );
+    expect(tour).toContain("importError");
+    expect(tour).toContain("onboarding-import-error");
+    expect(tour).toContain("importFailureMessage");
   });
 });

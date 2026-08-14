@@ -13,6 +13,34 @@ afterEach(async () =>
 );
 
 describe("檔案轉換", () => {
+  it("預覽上限與 Unicode BOM 會影響計畫", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "convertzz-preview-bom-"));
+    temporary.push(directory);
+    const path = join(directory, "note.txt");
+    const source = "里面".repeat(800);
+    await writeFile(path, source, "utf8");
+    const service = new FileService(new ConversionService(resolve("ConvertZZ/Dictionary.csv")));
+    const plan = await service.plan({
+      paths: [path],
+      mode: "content",
+      recursive: false,
+      inputEncoding: "utf8",
+      outputEncoding: "utf8",
+      addBom: true,
+      fixCharsetDeclaration: false,
+      previewMaxBytes: 1024,
+      conflictPolicy: "skip",
+      conversion: { direction: "s2t", engine: "segmented" },
+    });
+    expect(plan.items[0].sourcePreview).toBe(source.slice(0, 1024));
+    expect(plan.items[0].outputPreview.length).toBe(1024);
+    const result = await service.apply(plan.planId);
+    expect(result.failed).toEqual([]);
+    const written = await readFile(path);
+    expect(written.subarray(0, 3)).toEqual(Buffer.from([0xef, 0xbb, 0xbf]));
+    expect(written.subarray(3).toString("utf8")).toBe("裡面".repeat(800));
+  });
+
   it("先預覽再安全寫入並修正 charset", async () => {
     const directory = await mkdtemp(join(tmpdir(), "convertzz-files-"));
     temporary.push(directory);

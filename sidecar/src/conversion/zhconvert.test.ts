@@ -7,6 +7,7 @@ let baseUrl = "";
 let serviceInfoRequests = 0;
 let convertRequests = 0;
 let failConversion = false;
+let lastConvertBody: Record<string, string> = {};
 
 beforeAll(async () => {
   server = createServer(async (request, response) => {
@@ -25,7 +26,9 @@ beforeAll(async () => {
       }
       let body = "";
       for await (const chunk of request) body += chunk.toString();
-      const text = new URLSearchParams(body).get("text") ?? "";
+      const params = new URLSearchParams(body);
+      lastConvertBody = Object.fromEntries(params.entries());
+      const text = params.get("text") ?? "";
       response.setHeader("content-type", "application/json");
       response.end(JSON.stringify({ data: { text: text.replaceAll("里", "裡") } }));
       return;
@@ -43,6 +46,7 @@ afterEach(() => {
   serviceInfoRequests = 0;
   convertRequests = 0;
   failConversion = false;
+  lastConvertBody = {};
 });
 
 afterAll(async () => {
@@ -59,6 +63,42 @@ describe("ZhConvert 客戶端", () => {
     expect(await client.convert("里", "s2t")).toBe("裡");
     expect(serviceInfoRequests).toBe(1);
     expect(convertRequests).toBeGreaterThan(2);
+  });
+
+  it("會把設定中的 ZhConvert 選項送到官方 /convert", async () => {
+    const client = new ZhConvertClient(baseUrl);
+    await client.convert("里", "s2t", {
+      converter: "Hongkong",
+      modules: { TaiwanPhrase: 1 },
+      jpTextConversionStrategy: "fix",
+      jpStyleConversionStrategy: "none",
+      cleanUpText: true,
+      userPreReplace: "甲=乙",
+      userPostReplace: "丙=丁",
+      userProtectReplace: "戊",
+      ensureNewlineAtEof: true,
+      translateTabsToSpaces: 4,
+      trimTrailingWhiteSpaces: true,
+      unifyLeadingHyphen: true,
+      ignoreTextStyles: "code",
+      jpTextStyles: "jp",
+    });
+    expect(lastConvertBody).toMatchObject({
+      converter: "Hongkong",
+      modules: JSON.stringify({ TaiwanPhrase: 1 }),
+      jpTextConversionStrategy: "fix",
+      jpStyleConversionStrategy: "none",
+      cleanUpText: "true",
+      userPreReplace: "甲=乙",
+      userPostReplace: "丙=丁",
+      userProtectReplace: "戊",
+      ensureNewlineAtEof: "true",
+      translateTabsToSpaces: "4",
+      trimTrailingWhiteSpaces: "true",
+      unifyLeadingHyphen: "true",
+      ignoreTextStyles: "code",
+      jpTextStyles: "jp",
+    });
   });
 
   it("網路服務失敗時回報結構化錯誤", async () => {

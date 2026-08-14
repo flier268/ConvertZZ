@@ -90,14 +90,20 @@ fn platform_capabilities() -> PlatformCapabilities {
             tray: true,
             send_to_shortcut: false,
             credential_storage: std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some(),
-            limitations: if wayland {
-                vec![
-                    "Wayland 不允許一般應用程式注入鍵盤事件。",
-                    "本版停用 Wayland 全域快捷鍵。",
-                    "浮動球置頂能力取決於合成器。",
-                ]
-            } else {
-                vec!["系統托盤需要 AppIndicator 支援。"]
+            limitations: {
+                let mut items = if wayland {
+                    vec![
+                        "Wayland 不允許一般應用程式注入鍵盤事件。",
+                        "本版停用 Wayland 全域快捷鍵。",
+                        "浮動球置頂能力取決於合成器。",
+                    ]
+                } else {
+                    vec!["系統托盤需要 AppIndicator 支援。"]
+                };
+                if std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_none() {
+                    items.push("缺少 Secret Service 時 ZhConvert API 金鑰只保留於目前工作階段。");
+                }
+                items
             },
         };
     }

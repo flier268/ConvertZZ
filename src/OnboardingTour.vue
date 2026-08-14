@@ -12,6 +12,7 @@ import {
   loadSettings,
   markOnboardingComplete,
 } from "./lib/settings";
+import { importFailureMessage } from "./lib/settingsApply";
 
 const props = withDefaults(defineProps<{ autoStart?: boolean }>(), { autoStart: true });
 const emit = defineEmits<{ navigate: [page: OnboardingPage]; started: [] }>();
@@ -21,6 +22,7 @@ const current = ref(0);
 const legacyPath = ref<string>();
 const importing = ref(false);
 const importResult = ref("");
+const importError = ref("");
 
 const targets: Record<string, string | undefined> = {
   welcome: undefined,
@@ -37,6 +39,7 @@ const targets: Record<string, string | undefined> = {
 async function startTour(): Promise<void> {
   current.value = 0;
   importResult.value = "";
+  importError.value = "";
   legacyPath.value =
     (await invoke<string | null>("legacy_settings_path").catch(() => null)) ?? undefined;
   emit("navigate", "quick");
@@ -57,6 +60,7 @@ function onStepChange(index: number): void {
 
 async function importFrom(path: string): Promise<void> {
   importing.value = true;
+  importError.value = "";
   try {
     const imported = await importLegacySettings(path, { confirmReplace: false });
     if (!imported) return;
@@ -64,9 +68,8 @@ async function importFrom(path: string): Promise<void> {
     importResult.value = `已匯入，備份位於 ${imported.backupPath}`;
     ElMessage.success(importResult.value);
   } catch (error) {
-    ElMessage.error(
-      `備份失敗。設定未匯入。${error instanceof Error ? error.message : String(error)}`,
-    );
+    importError.value = importFailureMessage(error);
+    ElMessage.error(importError.value);
   } finally {
     importing.value = false;
   }
@@ -141,6 +144,14 @@ onMounted(async () => {
         <p>若你有 1.x 的 ConvertZZ.json，可先備份再匯入為 2.0 設定。</p>
         <p v-if="legacyPath" class="onboarding-path">已找到：{{ legacyPath }}</p>
         <p v-else>也可以稍後自行選擇檔案。</p>
+        <el-alert
+          v-if="importError"
+          class="onboarding-import-error"
+          :title="importError"
+          type="error"
+          :closable="false"
+          show-icon
+        />
         <p v-if="importResult" class="onboarding-result">{{ importResult }}</p>
         <div class="onboarding-import-actions">
           <el-button v-if="legacyPath" type="primary" :loading="importing" @click="importDetected"

@@ -12,6 +12,7 @@ afterEach(async () =>
 describe("設定遷移", () => {
   it("把舊版設定轉為 SettingsV2", () => {
     const result = migrateSettings({
+      Engine: 1,
       RecognitionEncoding: false,
       Prompt: false,
       MaxLengthPreview: 12,
@@ -43,7 +44,7 @@ describe("設定遷移", () => {
       },
     });
     expect(result.version).toBe(2);
-    expect(result.engine).toBe("segmented");
+    expect(result.engine).toBe("zhconvert");
     expect(result.showMainWindowOnStart).toBe(false);
     expect(result.recognizeEncoding).toBe(false);
     expect(result.floatingBall).toEqual({ enabled: false, x: 100, y: 200 });
@@ -95,6 +96,12 @@ describe("設定遷移", () => {
     expect(
       (await readdir(directory)).filter((name) => name.startsWith("ConvertZZ.backup-")),
     ).toHaveLength(0);
+  });
+
+  it("舊版 Local 引擎匯入為新式分詞，Fanhuaji 匯入為 ZhConvert", () => {
+    expect(migrateSettings({ Engine: 0 }).engine).toBe("segmented");
+    expect(migrateSettings({ Engine: "Local" }).engine).toBe("segmented");
+    expect(migrateSettings({ Engine: "Fanhuaji" }).engine).toBe("zhconvert");
   });
 
   it("舊版與缺少欄位的 2.0 設定預設不啟動主視窗", () => {

@@ -12,7 +12,7 @@ import type {
 import { sidecar } from "../lib/sidecar";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { cliInvocation } from "../lib/cli";
-import { parseLegacyFileFilters } from "../lib/fileFilters";
+import { fileConversionDefaults } from "../lib/settingsApply";
 
 const paths = ref<string[]>([]);
 const outputPath = ref<string>();
@@ -44,19 +44,17 @@ const options = reactive({
 });
 
 loadSettings().then((settings) => {
-  options.engine = settings.engine;
-  options.direction = settings.direction;
-  options.addBom = settings.files.unicodeAddBom;
-  options.vocabularyCorrection = settings.vocabularyCorrection;
-  options.inputEncoding = settings.recognizeEncoding ? "auto" : "utf8";
-  promptAfterConversion.value = settings.promptAfterConversion;
-  defaultPath.value =
-    settings.files.defaultPath && settings.files.defaultPath !== "!"
-      ? settings.files.defaultPath
-      : undefined;
-  fileFilters.value = parseLegacyFileFilters(settings.files.typeFilter);
-  previewMaxBytes.value = settings.previewMaxKb * 1024;
-  fixCharsetExtensions.value = settings.files.fixCharsetExtensions;
+  const defaults = fileConversionDefaults(settings);
+  options.engine = defaults.engine;
+  options.direction = defaults.direction;
+  options.addBom = defaults.addBom;
+  options.vocabularyCorrection = defaults.vocabularyCorrection;
+  options.inputEncoding = defaults.inputEncoding;
+  promptAfterConversion.value = defaults.promptAfterConversion;
+  defaultPath.value = defaults.defaultPath;
+  fileFilters.value = defaults.fileFilters.length ? defaults.fileFilters : fileFilters.value;
+  previewMaxBytes.value = defaults.previewMaxBytes;
+  fixCharsetExtensions.value = defaults.fixCharsetExtensions;
 });
 
 const encodings = [

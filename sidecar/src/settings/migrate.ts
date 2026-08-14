@@ -1,4 +1,4 @@
-import type { SettingsV2 } from "../../../shared/contracts.js";
+import type { EngineKind, SettingsV2 } from "../../../shared/contracts.js";
 import { randomUUID } from "node:crypto";
 import { COPYFILE_EXCL } from "node:constants";
 import { copyFile } from "node:fs/promises";
@@ -119,7 +119,7 @@ export function migrateSettings(input: unknown): SettingsV2 {
 
   return {
     ...defaults,
-    engine: "segmented",
+    engine: engineValue(legacy.Engine),
     vocabularyCorrection: booleanValue(legacy["Vocabulary correction"], true),
     promptAfterConversion: booleanValue(legacy.Prompt, true),
     recognizeEncoding: booleanValue(legacy.RecognitionEncoding, true),
@@ -246,6 +246,12 @@ function normalizeModifier(value: string): string {
     .map((part) => part.trim())
     .filter((part) => part && part !== "None")
     .join("+");
+}
+
+function engineValue(value: unknown): EngineKind {
+  if (value === 1 || value === "Fanhuaji" || value === "zhconvert") return "zhconvert";
+  if (value === "legacy") return "legacy";
+  return "segmented";
 }
 
 function converterValue(value: unknown, fallback: string): string {

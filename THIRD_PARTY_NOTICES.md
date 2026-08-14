@@ -9,6 +9,8 @@ ConvertZZ 2.0 包含第三方自由軟體。
 | Vue | 3.5.41 | MIT |
 | Element Plus | 2.14.4 | MIT |
 | Tauri | 2.11 | Apache-2.0 OR MIT |
+| tauri-plugin-updater | 2.10.1 | Apache-2.0 OR MIT |
+| tauri-plugin-process | 2.3.1 | Apache-2.0 OR MIT |
 | cjk-conv | 1.2.150 | ISC |
 | novel-segment | 2.7.121 | ISC |
 | taglib-wasm | 2.0.0 | MIT |

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { checkLatestRelease, compareVersions } from "./update";
+import { checkLatestRelease, compareVersions, resolveUpdate } from "./update";
 
 describe("版本檢查", () => {
   it("比較正式版本", () => {
@@ -24,5 +24,52 @@ describe("版本檢查", () => {
       updateAvailable: true,
     });
     expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it("有可安裝更新時優先就地安裝", async () => {
+    await expect(
+      resolveUpdate("2.0.0", {
+        checkInstallable: async () => ({ currentVersion: "2.0.0", version: "2.1.0" }),
+        checkRelease: async () => {
+          throw new Error("不應查詢 GitHub");
+        },
+      }),
+    ).resolves.toMatchObject({
+      kind: "install",
+      latestVersion: "2.1.0",
+    });
+  });
+
+  it("簽署通道失敗時改開啟 GitHub Release", async () => {
+    await expect(
+      resolveUpdate("2.0.0", {
+        checkInstallable: async () => {
+          throw new Error("latest.json 不存在");
+        },
+        checkRelease: async () => ({
+          currentVersion: "2.0.0",
+          latestVersion: "2.1.0",
+          updateAvailable: true,
+          url: "https://github.com/flier268/ConvertZZ/releases/tag/v2.1.0",
+        }),
+      }),
+    ).resolves.toMatchObject({
+      kind: "open",
+      latestVersion: "2.1.0",
+    });
+  });
+
+  it("沒有新版本時回傳 none", async () => {
+    await expect(
+      resolveUpdate("2.0.0", {
+        checkInstallable: async () => null,
+        checkRelease: async () => ({
+          currentVersion: "2.0.0",
+          latestVersion: "2.0.0",
+          updateAvailable: false,
+          url: "https://github.com/flier268/ConvertZZ/releases",
+        }),
+      }),
+    ).resolves.toMatchObject({ kind: "none", latestVersion: "2.0.0" });
   });
 });

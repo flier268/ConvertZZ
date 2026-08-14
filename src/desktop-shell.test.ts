@@ -25,6 +25,8 @@ describe("Tauri desktop shell", () => {
         "core:window:allow-set-position",
         "global-shortcut:allow-register",
         "global-shortcut:allow-unregister-all",
+        "process:allow-restart",
+        "updater:default",
       ]),
     );
     expect(floating.windows).toEqual(["floating"]);
@@ -127,6 +129,31 @@ describe("Tauri desktop shell", () => {
     expect(app).toContain("revealFloating: false");
     expect(ball).toContain("applyFloatingBallWindow");
     expect(html).toContain("floating-window");
+  });
+
+  it("configures signed in-app updates for the main window", () => {
+    const config = readJson("src-tauri/tauri.conf.json") as {
+      plugins?: { updater?: { pubkey?: string; endpoints?: string[] } };
+    };
+    const updaterConfig = readJson("src-tauri/tauri.updater.conf.json") as {
+      bundle?: { createUpdaterArtifacts?: boolean };
+    };
+    const about = readProjectFile("src/pages/AboutPage.vue");
+    const app = readProjectFile("src/App.vue");
+    const rust = readProjectFile("src-tauri/src/lib.rs");
+
+    expect(config.plugins?.updater?.pubkey).toContain(
+      "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6",
+    );
+    expect(config.plugins?.updater?.endpoints).toEqual([
+      "https://github.com/flier268/ConvertZZ/releases/latest/download/latest.json",
+    ]);
+    expect(updaterConfig.bundle?.createUpdaterArtifacts).toBe(true);
+    expect(rust).toContain("tauri_plugin_updater::Builder");
+    expect(rust).toContain("tauri_plugin_process::init");
+    expect(app).toContain("promptForAppUpdate");
+    expect(about).toContain("promptForAppUpdate");
+    expect(about).not.toContain("github.com/flier268/ConvertZZ/releases");
   });
 
   it("shows conversion prompts in a separate toast window", () => {

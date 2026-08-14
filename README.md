@@ -393,9 +393,17 @@ GitHub Actions 會建立草稿 Release。
 
 每個發行檔會附帶 SHA-256。
 
-第一版安裝包不含程式碼簽章。
+第一版安裝包不含作業系統程式碼簽章。
 
-工作流程保留後續簽章位置。
+Windows 安裝程式與 Linux AppImage 支援應用程式內自動更新。
+
+更新檔會以 minisign 公鑰驗證。
+
+DEB 與 RPM 不會自動覆寫，程式會改開啟 GitHub Releases。
+
+發行工作流程會簽署更新產物並上傳 `latest.json`。
+
+請在 GitHub Secrets 設定 `TAURI_SIGNING_PRIVATE_KEY` 與 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。
 
 第三方授權請見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 

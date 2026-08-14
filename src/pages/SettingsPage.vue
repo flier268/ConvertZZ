@@ -145,7 +145,7 @@ async function saveApiKey() {
         ><el-checkbox v-model="settings.promptAfterConversion">完成後提示</el-checkbox
         ><el-checkbox v-model="settings.floatingBall.enabled">顯示浮動球</el-checkbox
         ><el-checkbox v-model="settings.showMainWindowOnStart">啟動時顯示主視窗</el-checkbox
-        ><el-checkbox v-model="settings.checkVersionOnStart">啟動時檢查版本</el-checkbox>
+        ><el-checkbox v-model="settings.checkVersionOnStart">啟動時檢查更新</el-checkbox>
       </div></el-card
     >
     <el-card shadow="never"

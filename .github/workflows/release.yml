@@ -46,6 +46,15 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential file libayatana-appindicator3-dev libdbus-1-dev \
             librsvg2-dev libwebkit2gtk-4.1-dev patchelf pkg-config rpm
+      - name: 確認更新私鑰
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY}" ]; then
+            echo "請設定 GitHub Secret TAURI_SIGNING_PRIVATE_KEY"
+            exit 1
+          fi
       - name: 安裝相依套件
         run: pnpm install --frozen-lockfile
       - name: 執行測試
@@ -54,7 +63,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: pnpm tauri build --bundles ${{ matrix.bundles }}
+        run: pnpm tauri build --bundles ${{ matrix.bundles }} --config src-tauri/tauri.updater.conf.json
       - name: 離線驗證 AppImage 內的 sidecar 與 WASM
         if: runner.os == 'Linux'
         shell: bash
@@ -118,6 +127,7 @@ jobs:
             src-tauri/target/release/bundle/**/*.rpm
             src-tauri/target/release/bundle/**/*.exe
             src-tauri/target/release/bundle/**/*.msi
+            src-tauri/target/release/bundle/**/*.sig
             SHA256SUMS-*.txt
             RUNTIME-DEPENDENCIES-*.txt
           if-no-files-found: error
@@ -126,10 +136,18 @@ jobs:
     needs: build
     runs-on: ubuntu-22.04
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
+      - name: 建立 latest.json
+        run: |
+          node scripts/write-latest-json.mjs \
+            --dir artifacts \
+            --tag "${{ env.RELEASE_TAG }}" \
+            --repo "${{ github.repository }}" \
+            --out artifacts/latest.json
       - name: 建立草稿 Release
         uses: softprops/action-gh-release@v2
         with:
@@ -139,7 +157,13 @@ jobs:
           prerelease: false
           generate_release_notes: true
           body: |
-            此版本預設未提供程式碼簽章。
+            此版本預設未提供作業系統程式碼簽章。
 
-            Windows 與 Linux 使用者可使用隨附的 SHA-256 檔案驗證下載內容。
+            Windows 安裝程式與 Linux AppImage 可用應用程式內自動更新。
+
+            自動更新會驗證 latest.json 與安裝包簽章。
+
+            DEB 與 RPM 請改從本頁下載。
+
+            所有發行檔仍可用隨附的 SHA-256 檔案驗證。
           files: artifacts/**/*

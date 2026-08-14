@@ -30,9 +30,7 @@ import type { ParsedCli } from "@shared/contracts";
 import { applyDesktopSettings, applyStartupWindowVisibility } from "./lib/desktop";
 import { executeLegacyAction } from "./lib/legacyActions";
 import { showAppToast } from "./lib/toast";
-import { checkLatestRelease } from "./lib/update";
-import { ElMessageBox } from "element-plus";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { promptForAppUpdate } from "./lib/appUpdate";
 
 const active = ref("quick");
 const ready = ref(false);
@@ -72,22 +70,7 @@ onMounted(async () => {
     const currentHealth = await sidecar.request<{ node: string; version: string }>("health", {});
     health.value = currentHealth;
     if (settings.checkVersionOnStart) {
-      void checkLatestRelease(currentHealth.version)
-        .then(async (update) => {
-          if (!update.updateAvailable) return;
-          await invoke("show_main_window");
-          try {
-            await ElMessageBox.confirm(
-              `發現新版本 ${update.latestVersion}。目前版本為 ${update.currentVersion}。是否開啟下載頁面？`,
-              "發現更新",
-              { type: "info" },
-            );
-            await openUrl(update.url);
-          } catch {
-            // 使用者取消或網路失敗時維持目前版本。
-          }
-        })
-        .catch(() => undefined);
+      void promptForAppUpdate({ silentWhenCurrent: true }).catch(() => undefined);
     }
     if (args.length) {
       const parsed = await sidecar.request<ParsedCli>("cli.parse", {

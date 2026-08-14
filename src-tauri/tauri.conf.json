@@ -80,5 +80,13 @@
         "bundleMediaFramework": false
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgwNzdCNjhFNDQ5QkY3RTgKUldUbzk1dEVqclozZ0NZOXM4SCt3MGN3TFg1dnRKRWd2N2IrRWNaTlAwRG16YUlXSUxjcTNWZkYK",
+      "endpoints": [
+        "https://github.com/flier268/ConvertZZ/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

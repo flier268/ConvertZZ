@@ -95,6 +95,7 @@ Vitest 涵蓋 `sidecar/src/**/*.test.ts`、`src/**/*.test.ts` 與 `tests/**/*.te
 - `Dictionary.csv` 維持 UTF-8 BOM 六欄格式。
 - 命令列保持舊參數語意，但檔案作業仍要先預覽。不要恢復無確認寫入。
 - Linux sidecar 以 target triple 檔名建立，發行包用 gzip 資源加 SHA-256 解壓。不要改回會被 AppImage 破壞的內嵌資料配置。
+- 自動更新只簽署 Windows 安裝程式與 Linux AppImage。公鑰放在 `tauri.conf.json`，私鑰只存在 GitHub Secrets `TAURI_SIGNING_PRIVATE_KEY`。
 - 授權維持 GPL-3.0-only。第三方與 WASM 授權聲明必須同步更新。
 
 ## 代理程式注意事項

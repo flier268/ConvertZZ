@@ -1,15 +1,31 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { ElMessage } from "element-plus";
 import { inject, onMounted, ref } from "vue";
 import type { PlatformCapabilities } from "@shared/contracts";
 import BrandMark from "../BrandMark.vue";
+import { isDialogCancelled, promptForAppUpdate } from "../lib/appUpdate";
 
 const capabilities = ref<PlatformCapabilities>();
+const checkingUpdate = ref(false);
 const replayOnboarding = inject<() => void>("replayOnboarding");
 onMounted(async () => {
   capabilities.value = await invoke("platform_capabilities");
 });
+
+async function checkForUpdates(): Promise<void> {
+  checkingUpdate.value = true;
+  try {
+    await promptForAppUpdate();
+  } catch (error) {
+    if (!isDialogCancelled(error)) {
+      ElMessage.error(error instanceof Error ? error.message : String(error));
+    }
+  } finally {
+    checkingUpdate.value = false;
+  }
+}
 
 const differences = [
   { feature: "文字、檔案與檔名轉換", windows: "完整", x11: "完整", wayland: "完整" },
@@ -30,6 +46,12 @@ const differences = [
     x11: "Secret Service",
     wayland: "Secret Service",
   },
+  {
+    feature: "自動更新",
+    windows: "安裝程式可下載安裝",
+    x11: "AppImage 可下載安裝；DEB／RPM 開啟下載頁",
+    wayland: "AppImage 可下載安裝；DEB／RPM 開啟下載頁",
+  },
 ];
 </script>
 
@@ -43,8 +65,7 @@ const differences = [
       </div>
       <div class="header-actions">
         <el-button @click="replayOnboarding?.()">重看系統導覽</el-button
-        ><el-button @click="openUrl('https://github.com/flier268/ConvertZZ/releases')"
-          >檢查更新</el-button
+        ><el-button :loading="checkingUpdate" @click="checkForUpdates">檢查更新</el-button
         ><el-button type="primary" @click="openUrl('https://github.com/flier268/ConvertZZ/issues')"
           >回報問題</el-button
         >

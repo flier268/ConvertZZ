@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { backupLegacySettings, migrateSettings } from "./migrate.js";
 
 const temporary: string[] = [];
-afterEach(async () => Promise.all(temporary.splice(0).map((path) => rm(path, { recursive: true, force: true }))));
+afterEach(async () =>
+  Promise.all(temporary.splice(0).map((path) => rm(path, { recursive: true, force: true }))),
+);
 
 describe("設定遷移", () => {
   it("把舊版設定轉為 SettingsV2", () => {
@@ -16,9 +18,18 @@ describe("設定遷移", () => {
       AssistiveTouch: false,
       PositionX: 100,
       PositionY: 200,
-      HotKey: { AutoCopy: false, AutoPaste: true, Feature1: { Enable: true, Modift: "Control, Shift", Key: "F8", Action: "a1" } },
+      HotKey: {
+        AutoCopy: false,
+        AutoPaste: true,
+        Feature1: { Enable: true, Modift: "Control, Shift", Key: "F8", Action: "a1" },
+      },
       QuickStart: { LeftClick_Ctrl: "a3", RightDrop_Shift: "ze2" },
-      FileConvert: { DefaultPath: "D:\\Text", TypeFilter: "<文字|*.txt>", FixLabel: ".html|.php", UnicodeAddBOM: true },
+      FileConvert: {
+        DefaultPath: "D:\\Text",
+        TypeFilter: "<文字|*.txt>",
+        FixLabel: ".html|.php",
+        UnicodeAddBOM: true,
+      },
       Fanhuaji_Setting: {
         Converter_S_to_T: 4,
         Converter_T_to_S: "Simplified",
@@ -36,7 +47,11 @@ describe("設定遷移", () => {
     expect(result.showMainWindowOnStart).toBe(false);
     expect(result.recognizeEncoding).toBe(false);
     expect(result.floatingBall).toEqual({ enabled: false, x: 100, y: 200 });
-    expect(result.hotkeys.shortcuts[0]).toMatchObject({ enabled: true, accelerator: "Control+Shift+F8", action: "a1" });
+    expect(result.hotkeys.shortcuts[0]).toMatchObject({
+      enabled: true,
+      accelerator: "Control+Shift+F8",
+      action: "a1",
+    });
     expect(result.quickActions.leftClickCtrl).toBe("a3");
     expect(result.quickActions.rightDropShift).toBe("ze2");
     expect(result.files.unicodeAddBom).toBe(true);
@@ -57,30 +72,36 @@ describe("設定遷移", () => {
     const directory = await mkdtemp(join(tmpdir(), "convertzz-settings-"));
     temporary.push(directory);
     const source = join(directory, "ConvertZZ.json");
-    await writeFile(source, "{\"Prompt\":false}", "utf8");
+    await writeFile(source, '{"Prompt":false}', "utf8");
     const first = await backupLegacySettings(source);
     const second = await backupLegacySettings(source);
     expect(first).not.toBe(second);
-    expect(await readFile(first, "utf8")).toBe("{\"Prompt\":false}");
-    expect(await readFile(second, "utf8")).toBe("{\"Prompt\":false}");
-    expect((await readdir(directory)).filter((name) => name.startsWith("ConvertZZ.backup-"))).toHaveLength(2);
+    expect(await readFile(first, "utf8")).toBe('{"Prompt":false}');
+    expect(await readFile(second, "utf8")).toBe('{"Prompt":false}');
+    expect(
+      (await readdir(directory)).filter((name) => name.startsWith("ConvertZZ.backup-")),
+    ).toHaveLength(2);
   });
 
   it("備份失敗時不寫入備份也不改變來源", async () => {
     const directory = await mkdtemp(join(tmpdir(), "convertzz-settings-ro-"));
     temporary.push(directory);
     const source = join(directory, "ConvertZZ.json");
-    await writeFile(source, "{\"Prompt\":false}", "utf8");
+    await writeFile(source, '{"Prompt":false}', "utf8");
     await chmod(directory, 0o555);
     await expect(backupLegacySettings(source)).rejects.toBeTruthy();
     await chmod(directory, 0o755);
-    expect(await readFile(source, "utf8")).toBe("{\"Prompt\":false}");
-    expect((await readdir(directory)).filter((name) => name.startsWith("ConvertZZ.backup-"))).toHaveLength(0);
+    expect(await readFile(source, "utf8")).toBe('{"Prompt":false}');
+    expect(
+      (await readdir(directory)).filter((name) => name.startsWith("ConvertZZ.backup-")),
+    ).toHaveLength(0);
   });
 
   it("舊版與缺少欄位的 2.0 設定預設不啟動主視窗", () => {
     expect(migrateSettings(undefined).showMainWindowOnStart).toBe(false);
     expect(migrateSettings({ version: 2, engine: "legacy" }).showMainWindowOnStart).toBe(false);
-    expect(migrateSettings({ version: 2, showMainWindowOnStart: true }).showMainWindowOnStart).toBe(true);
+    expect(migrateSettings({ version: 2, showMainWindowOnStart: true }).showMainWindowOnStart).toBe(
+      true,
+    );
   });
 });

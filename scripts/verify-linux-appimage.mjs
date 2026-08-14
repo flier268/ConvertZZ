@@ -18,7 +18,9 @@ import { createGunzip } from "node:zlib";
 
 const [appImageArgument, apeArgument, oggArgument] = process.argv.slice(2);
 if (!appImageArgument || !apeArgument || !oggArgument) {
-  throw new Error("Usage: node scripts/verify-linux-appimage.mjs <AppImage> <APE fixture> <OGG fixture>");
+  throw new Error(
+    "Usage: node scripts/verify-linux-appimage.mjs <AppImage> <APE fixture> <OGG fixture>",
+  );
 }
 
 const appImage = resolve(appImageArgument);
@@ -61,7 +63,11 @@ try {
     operation: "health",
     payload: {},
   });
-  if (!health.ok || typeof health.result?.node !== "string" || !health.result.node.startsWith("24.")) {
+  if (
+    !health.ok ||
+    typeof health.result?.node !== "string" ||
+    !health.result.node.startsWith("24.")
+  ) {
     throw new Error(`AppImage sidecar 健康檢查失敗：${JSON.stringify(health)}`);
   }
 
@@ -85,13 +91,19 @@ try {
     throw new Error(`AppImage 離線音訊掃描失敗：${JSON.stringify(audio)}`);
   }
 
-  process.stdout.write(`${JSON.stringify({
-    appImage,
-    sidecarSha256: runtimeHash,
-    node: health.result.node,
-    convertedText: conversion.result.text,
-    audioFormats: formats,
-  }, null, 2)}\n`);
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        appImage,
+        sidecarSha256: runtimeHash,
+        node: health.result.node,
+        convertedText: conversion.result.text,
+        audioFormats: formats,
+      },
+      null,
+      2,
+    )}\n`,
+  );
 } finally {
   removeOwnedTemporaryDirectory(extractionDirectory);
 }
@@ -103,13 +115,17 @@ function request(executable, args, body) {
     maxBuffer: 16 * 1024 * 1024,
   });
   if (result.status !== 0) {
-    throw new Error(`sidecar 結束碼 ${result.status ?? "unknown"}：${result.stderr || result.stdout}`);
+    throw new Error(
+      `sidecar 結束碼 ${result.status ?? "unknown"}：${result.stderr || result.stdout}`,
+    );
   }
   const messages = result.stdout
     .split(/\r?\n/u)
     .filter(Boolean)
     .map((line) => JSON.parse(line));
-  const response = messages.findLast((message) => message.id === body.id && message.type === "response");
+  const response = messages.findLast(
+    (message) => message.id === body.id && message.type === "response",
+  );
   if (!response) throw new Error(`sidecar 沒有回傳 ${body.id} 的完成回應。`);
   return response;
 }
@@ -135,7 +151,10 @@ function removeOwnedTemporaryDirectory(path) {
   const resolvedPath = realpathSync(path);
   const entry = lstatSync(resolvedPath);
   if (!entry.isDirectory() || entry.isSymbolicLink()) throw new Error("拒絕清除非一般暫存目錄。");
-  if (dirname(resolvedPath) !== resolvedRoot || !basename(resolvedPath).startsWith("convertzz-appimage-")) {
+  if (
+    dirname(resolvedPath) !== resolvedRoot ||
+    !basename(resolvedPath).startsWith("convertzz-appimage-")
+  ) {
     throw new Error(`拒絕清除非 ConvertZZ 暫存目錄：${resolvedPath}`);
   }
   rmSync(resolvedPath, { recursive: true });

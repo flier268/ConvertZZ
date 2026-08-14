@@ -15,12 +15,15 @@ export async function checkLatestRelease(
     headers: { Accept: "application/vnd.github+json" },
   });
   if (!response.ok) throw new Error(`GitHub Release 檢查失敗：HTTP ${response.status}`);
-  const payload = await response.json() as { tag_name?: unknown; html_url?: unknown };
-  const latestVersion = normalizeVersion(typeof payload.tag_name === "string" ? payload.tag_name : "");
+  const payload = (await response.json()) as { tag_name?: unknown; html_url?: unknown };
+  const latestVersion = normalizeVersion(
+    typeof payload.tag_name === "string" ? payload.tag_name : "",
+  );
   if (!latestVersion) throw new Error("GitHub Release 未提供有效版本號。");
-  const url = typeof payload.html_url === "string" && payload.html_url.startsWith("https://github.com/")
-    ? payload.html_url
-    : "https://github.com/flier268/ConvertZZ/releases";
+  const url =
+    typeof payload.html_url === "string" && payload.html_url.startsWith("https://github.com/")
+      ? payload.html_url
+      : "https://github.com/flier268/ConvertZZ/releases";
   return {
     currentVersion: normalizeVersion(currentVersion),
     latestVersion,
@@ -44,5 +47,7 @@ function normalizeVersion(value: string): string {
 }
 
 function versionParts(value: string): number[] {
-  return normalizeVersion(value).split(".").map((part) => Number.parseInt(part, 10) || 0);
+  return normalizeVersion(value)
+    .split(".")
+    .map((part) => Number.parseInt(part, 10) || 0);
 }

@@ -38,18 +38,23 @@ input.on("line", async (line) => {
       id: "invalid-json",
       type: "response",
       ok: false,
-      error: { code: "INVALID_JSON", message: error instanceof Error ? error.message : String(error) },
+      error: {
+        code: "INVALID_JSON",
+        message: error instanceof Error ? error.message : String(error),
+      },
     });
     return;
   }
 
   try {
-    const result = await dispatch(request, (progress) => send({
-      id: request.id,
-      type: "progress",
-      ok: true,
-      progress,
-    }));
+    const result = await dispatch(request, (progress) =>
+      send({
+        id: request.id,
+        type: "progress",
+        ok: true,
+        progress,
+      }),
+    );
     send({ id: request.id, type: "response", ok: true, result });
   } catch (error) {
     send({ id: request.id, type: "response", ok: false, error: toErrorPayload(error) });
@@ -84,7 +89,9 @@ async function dispatch(
     case "audio.cancel":
       return audio.cancel((request.payload as { planId: string }).planId);
     case "dictionary.read":
-      return dictionary.read(request.payload as { path?: string; query?: string; offset?: number; limit?: number });
+      return dictionary.read(
+        request.payload as { path?: string; query?: string; offset?: number; limit?: number },
+      );
     case "dictionary.update":
       return dictionary.update(request.payload as Parameters<DictionaryService["update"]>[0]);
     case "dictionary.preview":
@@ -104,7 +111,9 @@ async function dispatch(
       conversion.zhconvert.configure((request.payload as { apiKey: string }).apiKey);
       return { configured: true };
     case "zhconvert.serviceInfo":
-      return conversion.zhconvert.serviceInfo(Boolean((request.payload as { force?: boolean }).force));
+      return conversion.zhconvert.serviceInfo(
+        Boolean((request.payload as { force?: boolean }).force),
+      );
     case "utility.convert":
       return { text: convertUtility(request.payload as UtilityConvertRequest) };
     case "cli.parse":

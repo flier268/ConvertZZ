@@ -37,7 +37,8 @@ const targets: Record<string, string | undefined> = {
 async function startTour(): Promise<void> {
   current.value = 0;
   importResult.value = "";
-  legacyPath.value = await invoke<string | null>("legacy_settings_path").catch(() => null) ?? undefined;
+  legacyPath.value =
+    (await invoke<string | null>("legacy_settings_path").catch(() => null)) ?? undefined;
   emit("navigate", "quick");
   await invoke("show_main_window").catch(() => undefined);
   emit("started");
@@ -63,7 +64,9 @@ async function importFrom(path: string): Promise<void> {
     importResult.value = `已匯入，備份位於 ${imported.backupPath}`;
     ElMessage.success(importResult.value);
   } catch (error) {
-    ElMessage.error(`備份失敗。設定未匯入。${error instanceof Error ? error.message : String(error)}`);
+    ElMessage.error(
+      `備份失敗。設定未匯入。${error instanceof Error ? error.message : String(error)}`,
+    );
   } finally {
     importing.value = false;
   }
@@ -74,7 +77,10 @@ async function importDetected(): Promise<void> {
 }
 
 async function importPicked(): Promise<void> {
-  const path = await openFile({ multiple: false, filters: [{ name: "ConvertZZ 舊版設定", extensions: ["json"] }] });
+  const path = await openFile({
+    multiple: false,
+    filters: [{ name: "ConvertZZ 舊版設定", extensions: ["json"] }],
+  });
   if (path) await importFrom(path as string);
 }
 
@@ -88,7 +94,7 @@ defineExpose({
 
 onMounted(async () => {
   await loadSettings();
-  if (props.autoStart && !await isOnboardingComplete()) await startTour();
+  if (props.autoStart && !(await isOnboardingComplete())) await startTour();
 });
 </script>
 
@@ -127,7 +133,9 @@ onMounted(async () => {
         <p>HTML 實體、全半形與 Unicode 跳脫等舊版文字工具都在這裡。</p>
       </template>
       <template v-else-if="step.id === 'desktop'">
-        <p>程式預設留在托盤與浮動球。右鍵浮動球可開啟與舊版相同的轉換選單。托盤也可隨時打開主視窗。</p>
+        <p>
+          程式預設留在托盤與浮動球。右鍵浮動球可開啟與舊版相同的轉換選單。托盤也可隨時打開主視窗。
+        </p>
       </template>
       <template v-else-if="step.id === 'import'">
         <p>若你有 1.x 的 ConvertZZ.json，可先備份再匯入為 2.0 設定。</p>
@@ -135,7 +143,9 @@ onMounted(async () => {
         <p v-else>也可以稍後自行選擇檔案。</p>
         <p v-if="importResult" class="onboarding-result">{{ importResult }}</p>
         <div class="onboarding-import-actions">
-          <el-button v-if="legacyPath" type="primary" :loading="importing" @click="importDetected">匯入找到的設定</el-button>
+          <el-button v-if="legacyPath" type="primary" :loading="importing" @click="importDetected"
+            >匯入找到的設定</el-button
+          >
           <el-button :loading="importing" @click="importPicked">選擇檔案</el-button>
         </div>
       </template>

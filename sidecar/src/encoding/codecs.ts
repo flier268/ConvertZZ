@@ -26,10 +26,13 @@ const aliases: Record<string, TextEncoding> = {
 };
 
 export function detectEncoding(buffer: Buffer): TextEncoding {
-  if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) return "utf8-bom";
+  if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf)
+    return "utf8-bom";
   if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) return "utf16le";
   if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) return "utf16be";
-  const declaration = buffer.subarray(0, Math.min(buffer.length, 16 * 1024)).toString("latin1")
+  const declaration = buffer
+    .subarray(0, Math.min(buffer.length, 16 * 1024))
+    .toString("latin1")
     .match(/(?:charset\s*=\s*["']?|@charset\s+["'])([a-z\d_-]+)/i)?.[1];
   if (declaration) {
     const declared = aliases[declaration.toUpperCase().replaceAll("_", "-")];
@@ -41,20 +44,29 @@ export function detectEncoding(buffer: Buffer): TextEncoding {
   return aliases[detected.toUpperCase().replaceAll("_", "-")] ?? "utf8";
 }
 
-export function decodeText(buffer: Buffer, requested: TextEncoding): { text: string; encoding: TextEncoding } {
+export function decodeText(
+  buffer: Buffer,
+  requested: TextEncoding,
+): { text: string; encoding: TextEncoding } {
   const encoding = requested === "auto" ? detectEncoding(buffer) : requested;
   const withoutBom = stripBom(buffer, encoding);
 
   if (encoding === "hz-gb-2312") return { text: decodeHz(withoutBom), encoding };
   if (encoding === "iso-2022-jp" || encoding === "euc-jp") {
     const from = encoding === "iso-2022-jp" ? "JIS" : "EUCJP";
-    return { text: String(EncodingJapanese.convert(Array.from(withoutBom), { from, to: "UNICODE", type: "string" })), encoding };
+    return {
+      text: String(
+        EncodingJapanese.convert(Array.from(withoutBom), { from, to: "UNICODE", type: "string" }),
+      ),
+      encoding,
+    };
   }
   return { text: iconv.decode(withoutBom, iconvName(encoding)), encoding };
 }
 
 export function encodeText(text: string, encoding: TextEncoding, addBom = false): Buffer {
-  if (encoding === "auto") throw new ConvertZZError("ENCODING_AUTO_OUTPUT", "輸出編碼不能使用自動偵測。");
+  if (encoding === "auto")
+    throw new ConvertZZError("ENCODING_AUTO_OUTPUT", "輸出編碼不能使用自動偵測。");
   if (encoding === "hz-gb-2312") return encodeHz(text);
   if (encoding === "iso-2022-jp" || encoding === "euc-jp") {
     const to = encoding === "iso-2022-jp" ? "JIS" : "EUCJP";
@@ -67,11 +79,14 @@ export function encodeText(text: string, encoding: TextEncoding, addBom = false)
 }
 
 export function reinterpretText(text: string, source: TextEncoding, target: TextEncoding): string {
-  if (source === "auto" || target === "auto") throw new ConvertZZError("ENCODING_REQUIRED", "重新解讀文字時必須指定來源與目標編碼。");
+  if (source === "auto" || target === "auto")
+    throw new ConvertZZError("ENCODING_REQUIRED", "重新解讀文字時必須指定來源與目標編碼。");
   return decodeText(encodeText(text, source), target).text;
 }
 
-function iconvName(encoding: TextEncoding): "utf8" | "utf16-le" | "utf16-be" | "big5" | "gbk" | "shift_jis" {
+function iconvName(
+  encoding: TextEncoding,
+): "utf8" | "utf16-le" | "utf16-be" | "big5" | "gbk" | "shift_jis" {
   switch (encoding) {
     case "utf8":
     case "utf8-bom":
@@ -92,9 +107,15 @@ function iconvName(encoding: TextEncoding): "utf8" | "utf16-le" | "utf16-be" | "
 }
 
 function stripBom(buffer: Buffer, encoding: TextEncoding): Buffer {
-  if ((encoding === "utf8" || encoding === "utf8-bom") && buffer.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]))) return buffer.subarray(3);
-  if (encoding === "utf16le" && buffer.subarray(0, 2).equals(Buffer.from([0xff, 0xfe]))) return buffer.subarray(2);
-  if (encoding === "utf16be" && buffer.subarray(0, 2).equals(Buffer.from([0xfe, 0xff]))) return buffer.subarray(2);
+  if (
+    (encoding === "utf8" || encoding === "utf8-bom") &&
+    buffer.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]))
+  )
+    return buffer.subarray(3);
+  if (encoding === "utf16le" && buffer.subarray(0, 2).equals(Buffer.from([0xff, 0xfe])))
+    return buffer.subarray(2);
+  if (encoding === "utf16be" && buffer.subarray(0, 2).equals(Buffer.from([0xfe, 0xff])))
+    return buffer.subarray(2);
   return buffer;
 }
 
@@ -159,7 +180,8 @@ function encodeHz(text: string): Buffer {
       output += character === "~" ? "~~" : character;
       continue;
     }
-    if (encoded.length !== 2) throw new ConvertZZError("HZ_CHARACTER", `字元「${character}」無法使用 HZ-GB-2312 表示。`);
+    if (encoded.length !== 2)
+      throw new ConvertZZError("HZ_CHARACTER", `字元「${character}」無法使用 HZ-GB-2312 表示。`);
     if (!chinese) {
       output += "~{";
       chinese = true;

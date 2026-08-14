@@ -72,37 +72,58 @@ onMounted(async () => {
     const currentHealth = await sidecar.request<{ node: string; version: string }>("health", {});
     health.value = currentHealth;
     if (settings.checkVersionOnStart) {
-      void checkLatestRelease(currentHealth.version).then(async (update) => {
-        if (!update.updateAvailable) return;
-        await invoke("show_main_window");
-        try {
-          await ElMessageBox.confirm(`發現新版本 ${update.latestVersion}。目前版本為 ${update.currentVersion}。是否開啟下載頁面？`, "發現更新", { type: "info" });
-          await openUrl(update.url);
-        } catch {
-          // 使用者取消或網路失敗時維持目前版本。
-        }
-      }).catch(() => undefined);
+      void checkLatestRelease(currentHealth.version)
+        .then(async (update) => {
+          if (!update.updateAvailable) return;
+          await invoke("show_main_window");
+          try {
+            await ElMessageBox.confirm(
+              `發現新版本 ${update.latestVersion}。目前版本為 ${update.currentVersion}。是否開啟下載頁面？`,
+              "發現更新",
+              { type: "info" },
+            );
+            await openUrl(update.url);
+          } catch {
+            // 使用者取消或網路失敗時維持目前版本。
+          }
+        })
+        .catch(() => undefined);
     }
     if (args.length) {
-      const parsed = await sidecar.request<ParsedCli>("cli.parse", { args, defaultEngine: settings.engine });
+      const parsed = await sidecar.request<ParsedCli>("cli.parse", {
+        args,
+        defaultEngine: settings.engine,
+      });
       setCliInvocation(parsed);
       if (parsed.mode === "audio") active.value = "audio";
       else if (parsed.mode === "file") active.value = "files";
     }
-    unlisten.push(await listen<string>("app://navigate", ({ payload }) => { active.value = payload; }));
-    unlisten.push(await listen<string>("app://legacy-action", async ({ payload }) => {
-      try {
-        await executeLegacyAction(payload, await loadSettings());
-      } catch (error) {
-        await showAppToast(error instanceof Error ? error.message : String(error));
-      }
-    }));
-    unlisten.push(await listen<string[]>("app://second-instance", async ({ payload }) => {
-      const currentSettings = await loadSettings();
-      const parsed = await sidecar.request<ParsedCli>("cli.parse", { args: payload.slice(1), defaultEngine: currentSettings.engine });
-      setCliInvocation(parsed);
-      active.value = parsed.mode === "audio" ? "audio" : parsed.mode === "file" ? "files" : "quick";
-    }));
+    unlisten.push(
+      await listen<string>("app://navigate", ({ payload }) => {
+        active.value = payload;
+      }),
+    );
+    unlisten.push(
+      await listen<string>("app://legacy-action", async ({ payload }) => {
+        try {
+          await executeLegacyAction(payload, await loadSettings());
+        } catch (error) {
+          await showAppToast(error instanceof Error ? error.message : String(error));
+        }
+      }),
+    );
+    unlisten.push(
+      await listen<string[]>("app://second-instance", async ({ payload }) => {
+        const currentSettings = await loadSettings();
+        const parsed = await sidecar.request<ParsedCli>("cli.parse", {
+          args: payload.slice(1),
+          defaultEngine: currentSettings.engine,
+        });
+        setCliInvocation(parsed);
+        active.value =
+          parsed.mode === "audio" ? "audio" : parsed.mode === "file" ? "files" : "quick";
+      }),
+    );
     ready.value = true;
   } catch (error) {
     startupError.value = error instanceof Error ? error.message : String(error);
@@ -123,14 +144,30 @@ onBeforeUnmount(() => unlisten.forEach((dispose) => dispose()));
         </div>
       </div>
       <el-menu :default-active="active" @select="active = $event">
-        <el-menu-item id="tour-quick" index="quick"><el-icon><Switch /></el-icon><span>快速轉換</span></el-menu-item>
-        <el-menu-item id="tour-files" index="files"><el-icon><Files /></el-icon><span>檔案與檔名</span></el-menu-item>
-        <el-menu-item id="tour-clipboard" index="clipboard"><el-icon><Memo /></el-icon><span>剪貼簿</span></el-menu-item>
-        <el-menu-item id="tour-audio" index="audio"><el-icon><Headset /></el-icon><span>音訊標籤</span></el-menu-item>
-        <el-menu-item id="tour-tools" index="tools"><el-icon><Operation /></el-icon><span>文字工具</span></el-menu-item>
-        <el-menu-item id="tour-dictionary" index="dictionary"><el-icon><Collection /></el-icon><span>舊版字典</span></el-menu-item>
-        <el-menu-item id="tour-settings" index="settings"><el-icon><Setting /></el-icon><span>設定</span></el-menu-item>
-        <el-menu-item id="tour-about" index="about"><el-icon><InfoFilled /></el-icon><span>關於與差異</span></el-menu-item>
+        <el-menu-item id="tour-quick" index="quick"
+          ><el-icon><Switch /></el-icon><span>快速轉換</span></el-menu-item
+        >
+        <el-menu-item id="tour-files" index="files"
+          ><el-icon><Files /></el-icon><span>檔案與檔名</span></el-menu-item
+        >
+        <el-menu-item id="tour-clipboard" index="clipboard"
+          ><el-icon><Memo /></el-icon><span>剪貼簿</span></el-menu-item
+        >
+        <el-menu-item id="tour-audio" index="audio"
+          ><el-icon><Headset /></el-icon><span>音訊標籤</span></el-menu-item
+        >
+        <el-menu-item id="tour-tools" index="tools"
+          ><el-icon><Operation /></el-icon><span>文字工具</span></el-menu-item
+        >
+        <el-menu-item id="tour-dictionary" index="dictionary"
+          ><el-icon><Collection /></el-icon><span>舊版字典</span></el-menu-item
+        >
+        <el-menu-item id="tour-settings" index="settings"
+          ><el-icon><Setting /></el-icon><span>設定</span></el-menu-item
+        >
+        <el-menu-item id="tour-about" index="about"
+          ><el-icon><InfoFilled /></el-icon><span>關於與差異</span></el-menu-item
+        >
       </el-menu>
       <div class="runtime-status">
         <span class="status-dot" :class="{ online: health }"></span>
@@ -140,9 +177,24 @@ onBeforeUnmount(() => unlisten.forEach((dispose) => dispose()));
     </el-aside>
     <el-main class="content">
       <component :is="currentPage" v-if="ready" />
-      <el-alert v-else-if="startupError" title="ConvertZZ 無法啟動" :description="startupError" type="error" :closable="false" show-icon />
-      <div v-else class="loading-state"><el-icon class="is-loading"><Document /></el-icon><span>正在載入轉換核心</span></div>
+      <el-alert
+        v-else-if="startupError"
+        title="ConvertZZ 無法啟動"
+        :description="startupError"
+        type="error"
+        :closable="false"
+        show-icon
+      />
+      <div v-else class="loading-state">
+        <el-icon class="is-loading"><Document /></el-icon><span>正在載入轉換核心</span>
+      </div>
     </el-main>
-    <OnboardingTour v-if="ready" ref="tour" :auto-start="!hasCliArgs" @navigate="active = $event" @started="onTourStarted" />
+    <OnboardingTour
+      v-if="ready"
+      ref="tour"
+      :auto-start="!hasCliArgs"
+      @navigate="active = $event"
+      @started="onTourStarted"
+    />
   </el-container>
 </template>

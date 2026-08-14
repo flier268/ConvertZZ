@@ -517,15 +517,20 @@ fn cursor_position() -> Option<(i32, i32)> {
 
 fn clamp_to_monitor(app: &AppHandle, x: i32, y: i32, width: i32, height: i32) -> (i32, i32) {
     let monitors = app.available_monitors().unwrap_or_default();
-    let monitor = monitors.iter().find(|monitor| {
-        let position = monitor.position();
-        let size = monitor.size();
-        x >= position.x
-            && y >= position.y
-            && x < position.x + size.width as i32
-            && y < position.y + size.height as i32
-    }).or_else(|| monitors.first());
-    let Some(monitor) = monitor else { return (x, y) };
+    let monitor = monitors
+        .iter()
+        .find(|monitor| {
+            let position = monitor.position();
+            let size = monitor.size();
+            x >= position.x
+                && y >= position.y
+                && x < position.x + size.width as i32
+                && y < position.y + size.height as i32
+        })
+        .or_else(|| monitors.first());
+    let Some(monitor) = monitor else {
+        return (x, y);
+    };
     let position = monitor.position();
     let size = monitor.size();
     let max_x = position.x + size.width as i32 - width;

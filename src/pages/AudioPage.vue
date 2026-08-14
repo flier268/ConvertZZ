@@ -2,7 +2,14 @@
 import { computed, reactive, ref, watch } from "vue";
 import { open, confirm } from "@tauri-apps/plugin-dialog";
 import { ElMessage } from "element-plus";
-import type { AudioTagFile, AudioTagPlan, AudioTagPlanRequest, Direction, EngineKind, TextEncoding } from "@shared/contracts";
+import type {
+  AudioTagFile,
+  AudioTagPlan,
+  AudioTagPlanRequest,
+  Direction,
+  EngineKind,
+  TextEncoding,
+} from "@shared/contracts";
 import { sidecar } from "../lib/sidecar";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { cliInvocation } from "../lib/cli";
@@ -39,12 +46,21 @@ loadSettings().then((settings) => {
   promptAfterConversion.value = settings.promptAfterConversion;
 });
 const hasMp3 = computed(() => files.value.some((file) => file.format === "mp3"));
-const selectedFileCount = computed(() => files.value.filter((file) =>
-  file.selected && !file.warning && file.fields.some((field) => field.selected && fieldEnabled(file, field.container)),
-).length);
+const selectedFileCount = computed(
+  () =>
+    files.value.filter(
+      (file) =>
+        file.selected &&
+        !file.warning &&
+        file.fields.some((field) => field.selected && fieldEnabled(file, field.container)),
+    ).length,
+);
 
 async function choose() {
-  const selected = await open({ multiple: true, filters: [{ name: "音訊標籤", extensions: ["mp3", "ape", "ogg", "oga", "opus"] }] });
+  const selected = await open({
+    multiple: true,
+    filters: [{ name: "音訊標籤", extensions: ["mp3", "ape", "ogg", "oga", "opus"] }],
+  });
   if (!selected) return;
   paths.value = Array.isArray(selected) ? selected : [selected];
   await scan();
@@ -61,13 +77,20 @@ async function scan() {
   busy.value = true;
   progress.value = undefined;
   try {
-    files.value = await sidecar.request<AudioTagFile[]>("audio.scan", {
-      paths: paths.value,
-      recursive: options.recursive,
-      id3v1SourceEncoding: options.id3v1SourceEncoding,
-      id3v2SourceEncoding: options.id3v2SourceEncoding,
-      id3v2RepairSourceEncoding: options.id3v2RepairSourceEncoding,
-    }, 300_000, (value) => { progress.value = value; });
+    files.value = await sidecar.request<AudioTagFile[]>(
+      "audio.scan",
+      {
+        paths: paths.value,
+        recursive: options.recursive,
+        id3v1SourceEncoding: options.id3v1SourceEncoding,
+        id3v2SourceEncoding: options.id3v2SourceEncoding,
+        id3v2RepairSourceEncoding: options.id3v2RepairSourceEncoding,
+      },
+      300_000,
+      (value) => {
+        progress.value = value;
+      },
+    );
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
@@ -76,32 +99,54 @@ async function scan() {
 }
 
 async function createPlan() {
-  const selectedFields = Object.fromEntries(files.value.map((file) => [file.path, file.fields.filter((field) => field.selected).map((field) => `${field.container}:${field.key}`)]));
-  const selectedPaths = files.value.filter((file) => file.selected && !file.warning).map((file) => file.path);
+  const selectedFields = Object.fromEntries(
+    files.value.map((file) => [
+      file.path,
+      file.fields
+        .filter((field) => field.selected)
+        .map((field) => `${field.container}:${field.key}`),
+    ]),
+  );
+  const selectedPaths = files.value
+    .filter((file) => file.selected && !file.warning)
+    .map((file) => file.path);
   busy.value = true;
   progress.value = undefined;
   try {
     const settings = await loadSettings();
-    plan.value = await sidecar.request<AudioTagPlan>("audio.plan", {
-      paths: paths.value,
-      recursive: options.recursive,
-      selectedPaths,
-      selectedFields,
-      conversion: { direction: options.direction, engine: options.engine, vocabularyCorrection: options.vocabularyCorrection, zhconvert: zhConvertOptions(settings, options.direction), dictionaryPath: settings.dictionaryPath },
-      conflictPolicy: "overwrite",
-      id3v1Enabled: options.id3v1Enabled,
-      id3v1Direction: options.id3v1Direction,
-      id3v1Zhconvert: zhConvertOptions(settings, options.id3v1Direction),
-      id3v1SourceEncoding: options.id3v1SourceEncoding,
-      id3v1OutputEncoding: options.id3v1OutputEncoding,
-      id3v2Enabled: options.id3v2Enabled,
-      id3v2Direction: options.id3v2Direction,
-      id3v2Zhconvert: zhConvertOptions(settings, options.id3v2Direction),
-      id3v2SourceEncoding: options.id3v2SourceEncoding,
-      id3v2RepairSourceEncoding: options.id3v2RepairSourceEncoding,
-      id3v2Version: options.id3v2Version,
-      id3v2Encoding: options.id3v2Encoding,
-    } satisfies AudioTagPlanRequest, 600_000, (value) => { progress.value = value; });
+    plan.value = await sidecar.request<AudioTagPlan>(
+      "audio.plan",
+      {
+        paths: paths.value,
+        recursive: options.recursive,
+        selectedPaths,
+        selectedFields,
+        conversion: {
+          direction: options.direction,
+          engine: options.engine,
+          vocabularyCorrection: options.vocabularyCorrection,
+          zhconvert: zhConvertOptions(settings, options.direction),
+          dictionaryPath: settings.dictionaryPath,
+        },
+        conflictPolicy: "overwrite",
+        id3v1Enabled: options.id3v1Enabled,
+        id3v1Direction: options.id3v1Direction,
+        id3v1Zhconvert: zhConvertOptions(settings, options.id3v1Direction),
+        id3v1SourceEncoding: options.id3v1SourceEncoding,
+        id3v1OutputEncoding: options.id3v1OutputEncoding,
+        id3v2Enabled: options.id3v2Enabled,
+        id3v2Direction: options.id3v2Direction,
+        id3v2Zhconvert: zhConvertOptions(settings, options.id3v2Direction),
+        id3v2SourceEncoding: options.id3v2SourceEncoding,
+        id3v2RepairSourceEncoding: options.id3v2RepairSourceEncoding,
+        id3v2Version: options.id3v2Version,
+        id3v2Encoding: options.id3v2Encoding,
+      } satisfies AudioTagPlanRequest,
+      600_000,
+      (value) => {
+        progress.value = value;
+      },
+    );
     files.value = plan.value.files;
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : String(error));
@@ -112,12 +157,26 @@ async function createPlan() {
 
 async function applyPlan() {
   if (!plan.value) return;
-  if (!await confirm(`將寫入 ${selectedFileCount.value} 個音訊檔案的已選標籤。`, { title: "確認標籤轉換", kind: "warning" })) return;
+  if (
+    !(await confirm(`將寫入 ${selectedFileCount.value} 個音訊檔案的已選標籤。`, {
+      title: "確認標籤轉換",
+      kind: "warning",
+    }))
+  )
+    return;
   busy.value = true;
   progress.value = undefined;
   try {
-    const result = await sidecar.request<{ succeeded: string[]; failed: unknown[] }>("audio.apply", { planId: plan.value.planId }, 900_000, (value) => { progress.value = value; });
-    if (promptAfterConversion.value) ElMessage.success(`已完成 ${result.succeeded.length} 個音訊檔案。`);
+    const result = await sidecar.request<{ succeeded: string[]; failed: unknown[] }>(
+      "audio.apply",
+      { planId: plan.value.planId },
+      900_000,
+      (value) => {
+        progress.value = value;
+      },
+    );
+    if (promptAfterConversion.value)
+      ElMessage.success(`已完成 ${result.succeeded.length} 個音訊檔案。`);
     if (result.failed.length) ElMessage.warning(`${result.failed.length} 個檔案失敗。`);
     plan.value = undefined;
     await scan();
@@ -133,20 +192,28 @@ async function cancelPlan() {
   await scan();
 }
 
-watch(cliInvocation, async (invocation) => {
-  if (invocation?.options.mode !== "audio") return;
-  paths.value = invocation.options.paths;
-  if (invocation.options.direction !== "none") {
-    options.direction = invocation.options.direction;
-    options.id3v1Direction = invocation.options.direction;
-    options.id3v2Direction = invocation.options.direction;
-  }
-  options.engine = invocation.options.engine;
-  if (invocation.options.vocabularyCorrection !== "settings") options.vocabularyCorrection = invocation.options.vocabularyCorrection === "enabled";
-  if (paths.value.length) await scan();
-}, { immediate: true });
+watch(
+  cliInvocation,
+  async (invocation) => {
+    if (invocation?.options.mode !== "audio") return;
+    paths.value = invocation.options.paths;
+    if (invocation.options.direction !== "none") {
+      options.direction = invocation.options.direction;
+      options.id3v1Direction = invocation.options.direction;
+      options.id3v2Direction = invocation.options.direction;
+    }
+    options.engine = invocation.options.engine;
+    if (invocation.options.vocabularyCorrection !== "settings")
+      options.vocabularyCorrection = invocation.options.vocabularyCorrection === "enabled";
+    if (paths.value.length) await scan();
+  },
+  { immediate: true },
+);
 
-function fieldEnabled(file: AudioTagFile, container: AudioTagFile["fields"][number]["container"]): boolean {
+function fieldEnabled(
+  file: AudioTagFile,
+  container: AudioTagFile["fields"][number]["container"],
+): boolean {
   if (!file.selected) return false;
   if (container === "id3v1") return options.id3v1Enabled;
   if (container === "id3v2") return options.id3v2Enabled;
@@ -163,12 +230,20 @@ function fieldEnabled(file: AudioTagFile, container: AudioTagFile["fields"][numb
         <p>ID3、APEv2 與 Vorbis Comment 都會保留未選欄位與封面。</p>
       </div>
       <div class="card-actions">
-        <el-button :disabled="Boolean(plan)" :loading="busy" @click="chooseFolder">選取資料夾</el-button>
-        <el-button type="primary" :disabled="Boolean(plan)" :loading="busy" @click="choose">選取音訊檔案</el-button>
+        <el-button :disabled="Boolean(plan)" :loading="busy" @click="chooseFolder"
+          >選取資料夾</el-button
+        >
+        <el-button type="primary" :disabled="Boolean(plan)" :loading="busy" @click="choose"
+          >選取音訊檔案</el-button
+        >
       </div>
     </header>
     <el-card shadow="never">
-      <el-form label-position="top" class="option-grid audio-options" :disabled="busy || Boolean(plan)">
+      <el-form
+        label-position="top"
+        class="option-grid audio-options"
+        :disabled="busy || Boolean(plan)"
+      >
         <el-form-item label="APEv2／Vorbis 方向">
           <el-select v-model="options.direction">
             <el-option label="不轉換" value="none" />
@@ -183,8 +258,12 @@ function fieldEnabled(file: AudioTagFile, container: AudioTagFile["fields"][numb
             <el-option label="ZhConvert" value="zhconvert" />
           </el-select>
         </el-form-item>
-        <el-form-item label="詞彙修正"><el-switch v-model="options.vocabularyCorrection" /></el-form-item>
-        <el-form-item label="資料夾掃描"><el-checkbox v-model="options.recursive">包含子資料夾</el-checkbox></el-form-item>
+        <el-form-item label="詞彙修正"
+          ><el-switch v-model="options.vocabularyCorrection"
+        /></el-form-item>
+        <el-form-item label="資料夾掃描"
+          ><el-checkbox v-model="options.recursive">包含子資料夾</el-checkbox></el-form-item
+        >
         <template v-if="hasMp3">
           <el-form-item label="ID3v1">
             <el-switch v-model="options.id3v1Enabled" active-text="啟用轉換" />
@@ -223,10 +302,17 @@ function fieldEnabled(file: AudioTagFile, container: AudioTagFile["fields"][numb
             </el-select>
           </el-form-item>
           <el-form-item label="ID3v2 來源錯碼">
-            <el-switch v-model="options.id3v2RepairSourceEncoding" :disabled="!options.id3v2Enabled" active-text="嘗試修復" />
+            <el-switch
+              v-model="options.id3v2RepairSourceEncoding"
+              :disabled="!options.id3v2Enabled"
+              active-text="嘗試修復"
+            />
           </el-form-item>
           <el-form-item label="ID3v2 錯碼來源編碼">
-            <el-select v-model="options.id3v2SourceEncoding" :disabled="!options.id3v2Enabled || !options.id3v2RepairSourceEncoding">
+            <el-select
+              v-model="options.id3v2SourceEncoding"
+              :disabled="!options.id3v2Enabled || !options.id3v2RepairSourceEncoding"
+            >
               <el-option label="GBK" value="gbk" />
               <el-option label="Big5" value="big5" />
               <el-option label="Shift-JIS" value="shift-jis" />
@@ -250,29 +336,59 @@ function fieldEnabled(file: AudioTagFile, container: AudioTagFile["fields"][numb
         </template>
       </el-form>
       <div class="card-actions">
-        <el-button :disabled="!paths.length || Boolean(plan)" :loading="busy" @click="scan">重新掃描</el-button>
-        <el-button :disabled="!selectedFileCount || Boolean(plan)" :loading="busy" @click="createPlan">建立標籤預覽</el-button>
+        <el-button :disabled="!paths.length || Boolean(plan)" :loading="busy" @click="scan"
+          >重新掃描</el-button
+        >
+        <el-button
+          :disabled="!selectedFileCount || Boolean(plan)"
+          :loading="busy"
+          @click="createPlan"
+          >建立標籤預覽</el-button
+        >
         <el-button v-if="plan" :disabled="busy" @click="cancelPlan">取消計畫</el-button>
-        <el-button v-if="plan" type="primary" :loading="busy" @click="applyPlan">確認寫入</el-button>
+        <el-button v-if="plan" type="primary" :loading="busy" @click="applyPlan"
+          >確認寫入</el-button
+        >
       </div>
-      <el-progress v-if="busy && progress" :percentage="Math.round(progress.current / Math.max(1, progress.total) * 100)" :format="() => progress?.message ?? ''" />
+      <el-progress
+        v-if="busy && progress"
+        :percentage="Math.round((progress.current / Math.max(1, progress.total)) * 100)"
+        :format="() => progress?.message ?? ''"
+      />
     </el-card>
     <el-empty v-if="!files.length" description="請選取 MP3、APE、OGG 或 Opus 檔案" />
     <el-card v-for="file in files" :key="file.path" shadow="never" class="audio-file-card">
       <template #header>
         <div class="card-title">
           <el-checkbox v-model="file.selected" :disabled="Boolean(file.warning) || Boolean(plan)">
-            <div><strong>{{ file.path.split(/[\\/]/).at(-1) }}</strong><small>{{ file.format.toUpperCase() }} · {{ file.hasCoverArt ? '含封面' : '無封面' }}</small></div>
+            <div>
+              <strong>{{ file.path.split(/[\\/]/).at(-1) }}</strong
+              ><small
+                >{{ file.format.toUpperCase() }} ·
+                {{ file.hasCoverArt ? "含封面" : "無封面" }}</small
+              >
+            </div>
           </el-checkbox>
           <el-tag v-if="file.warning" type="danger">{{ file.warning }}</el-tag>
         </div>
       </template>
       <el-table :data="file.fields" max-height="300">
-        <el-table-column label="轉換" width="70"><template #default="scope"><el-checkbox v-model="scope.row.selected" :disabled="Boolean(plan) || !fieldEnabled(file, scope.row.container)" /></template></el-table-column>
+        <el-table-column label="轉換" width="70"
+          ><template #default="scope"
+            ><el-checkbox
+              v-model="scope.row.selected"
+              :disabled="Boolean(plan) || !fieldEnabled(file, scope.row.container)" /></template
+        ></el-table-column>
         <el-table-column prop="container" label="標籤" width="150" />
         <el-table-column prop="label" label="欄位" width="160" />
-        <el-table-column label="目前內容" min-width="240"><template #default="scope">{{ scope.row.values.join(' / ') }}</template></el-table-column>
-        <el-table-column v-if="plan" label="轉換預覽" min-width="240"><template #default="scope">{{ scope.row.convertedValues?.join(' / ') }}</template></el-table-column>
+        <el-table-column label="目前內容" min-width="240"
+          ><template #default="scope">{{ scope.row.values.join(" / ") }}</template></el-table-column
+        >
+        <el-table-column v-if="plan" label="轉換預覽" min-width="240"
+          ><template #default="scope">{{
+            scope.row.convertedValues?.join(" / ")
+          }}</template></el-table-column
+        >
       </el-table>
     </el-card>
   </section>

@@ -57,10 +57,14 @@ export async function importLegacySettings(
   path: string,
   options: { confirmReplace?: boolean } = {},
 ): Promise<{ settings: SettingsV2; backupPath: string } | undefined> {
-  if (options.confirmReplace !== false && !await confirm(
-    "匯入會取代目前的 2.0 設定。是否先備份舊版設定，再繼續？",
-    { title: "確認匯入", kind: "warning" },
-  )) return undefined;
+  if (
+    options.confirmReplace !== false &&
+    !(await confirm("匯入會取代目前的 2.0 設定。是否先備份舊版設定，再繼續？", {
+      title: "確認匯入",
+      kind: "warning",
+    }))
+  )
+    return undefined;
   const backup = await sidecar.request<{ backupPath: string }>("settings.backup", { path });
   const migrated = await sidecar.request<SettingsV2>("settings.migrate", { path });
   return { settings: await replaceSettings(migrated), backupPath: backup.backupPath };
@@ -72,7 +76,8 @@ export function useSettingsState() {
 
 export function zhConvertOptions(settings: SettingsV2, direction: Direction): ZhConvertOptions {
   return {
-    converter: direction === "t2s" ? settings.zhconvert.converterT2S : settings.zhconvert.converterS2T,
+    converter:
+      direction === "t2s" ? settings.zhconvert.converterT2S : settings.zhconvert.converterS2T,
     modules: settings.zhconvert.modules,
     jpTextConversionStrategy: settings.zhconvert.jpTextConversionStrategy,
     jpStyleConversionStrategy: settings.zhconvert.jpStyleConversionStrategy,

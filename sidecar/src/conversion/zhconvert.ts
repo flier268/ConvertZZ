@@ -29,14 +29,21 @@ export class ZhConvertClient {
       headers: this.apiKey ? { "X-API-Key": this.apiKey } : undefined,
     });
     if (!response.ok) {
-      throw new ConvertZZError("ZHCONVERT_SERVICE_INFO", `ZhConvert 服務資訊讀取失敗。HTTP ${response.status}`);
+      throw new ConvertZZError(
+        "ZHCONVERT_SERVICE_INFO",
+        `ZhConvert 服務資訊讀取失敗。HTTP ${response.status}`,
+      );
     }
     const value = (await response.json()) as ServiceInfo;
     this.serviceInfoCache = { expiresAt: Date.now() + 86_400_000, value };
     return value;
   }
 
-  async convert(text: string, direction: Direction, options: ZhConvertOptions = {}): Promise<string> {
+  async convert(
+    text: string,
+    direction: Direction,
+    options: ZhConvertOptions = {},
+  ): Promise<string> {
     if (direction === "none" || !text) return text;
     const info = await this.serviceInfo();
     const maximum = Math.max(1024, Number(info.data?.maxPostBodyBytes ?? 50_000) - 2048);
@@ -57,16 +64,22 @@ export class ZhConvertClient {
           : options.modules;
         if (Object.keys(modules).length) body.set("modules", JSON.stringify(modules));
       }
-      if (options.jpTextConversionStrategy) body.set("jpTextConversionStrategy", options.jpTextConversionStrategy);
-      if (options.jpStyleConversionStrategy) body.set("jpStyleConversionStrategy", options.jpStyleConversionStrategy);
+      if (options.jpTextConversionStrategy)
+        body.set("jpTextConversionStrategy", options.jpTextConversionStrategy);
+      if (options.jpStyleConversionStrategy)
+        body.set("jpStyleConversionStrategy", options.jpStyleConversionStrategy);
       if (options.cleanUpText !== undefined) body.set("cleanUpText", String(options.cleanUpText));
       if (options.userPreReplace) body.set("userPreReplace", options.userPreReplace);
       if (options.userPostReplace) body.set("userPostReplace", options.userPostReplace);
       if (options.userProtectReplace) body.set("userProtectReplace", options.userProtectReplace);
-      if (options.ensureNewlineAtEof !== undefined) body.set("ensureNewlineAtEof", String(options.ensureNewlineAtEof));
-      if (options.translateTabsToSpaces !== undefined) body.set("translateTabsToSpaces", String(options.translateTabsToSpaces));
-      if (options.trimTrailingWhiteSpaces !== undefined) body.set("trimTrailingWhiteSpaces", String(options.trimTrailingWhiteSpaces));
-      if (options.unifyLeadingHyphen !== undefined) body.set("unifyLeadingHyphen", String(options.unifyLeadingHyphen));
+      if (options.ensureNewlineAtEof !== undefined)
+        body.set("ensureNewlineAtEof", String(options.ensureNewlineAtEof));
+      if (options.translateTabsToSpaces !== undefined)
+        body.set("translateTabsToSpaces", String(options.translateTabsToSpaces));
+      if (options.trimTrailingWhiteSpaces !== undefined)
+        body.set("trimTrailingWhiteSpaces", String(options.trimTrailingWhiteSpaces));
+      if (options.unifyLeadingHyphen !== undefined)
+        body.set("unifyLeadingHyphen", String(options.unifyLeadingHyphen));
       if (options.ignoreTextStyles) body.set("ignoreTextStyles", options.ignoreTextStyles);
       if (options.jpTextStyles) body.set("jpTextStyles", options.jpTextStyles);
 
@@ -77,10 +90,18 @@ export class ZhConvertClient {
       });
       if (!response.ok) {
         const detail = await response.text();
-        throw new ConvertZZError("ZHCONVERT_CONVERT", `ZhConvert 轉換失敗。HTTP ${response.status}`, detail);
+        throw new ConvertZZError(
+          "ZHCONVERT_CONVERT",
+          `ZhConvert 轉換失敗。HTTP ${response.status}`,
+          detail,
+        );
       }
-      const payload = (await response.json()) as { data?: { text?: string } | string; text?: string };
-      const output = typeof payload.data === "string" ? payload.data : payload.data?.text ?? payload.text;
+      const payload = (await response.json()) as {
+        data?: { text?: string } | string;
+        text?: string;
+      };
+      const output =
+        typeof payload.data === "string" ? payload.data : (payload.data?.text ?? payload.text);
       if (typeof output !== "string") {
         throw new ConvertZZError("ZHCONVERT_RESPONSE", "ZhConvert 回應不含文字結果。", payload);
       }

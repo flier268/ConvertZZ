@@ -15,7 +15,9 @@ export const ONBOARDING_STEPS = [
 export type OnboardingPage = (typeof ONBOARDING_STEPS)[number]["page"];
 
 export function pageForOnboardingStep(index: number): OnboardingPage {
-  return ONBOARDING_STEPS[Math.min(Math.max(index, 0), ONBOARDING_STEPS.length - 1)]?.page ?? "quick";
+  return (
+    ONBOARDING_STEPS[Math.min(Math.max(index, 0), ONBOARDING_STEPS.length - 1)]?.page ?? "quick"
+  );
 }
 
 export function importStepIndex(): number {

@@ -1,4 +1,13 @@
-const MODIFIER_KEYS = new Set(["Control", "Shift", "Alt", "Meta", "OS", "Super", "Hyper", "AltGraph"]);
+const MODIFIER_KEYS = new Set([
+  "Control",
+  "Shift",
+  "Alt",
+  "Meta",
+  "OS",
+  "Super",
+  "Hyper",
+  "AltGraph",
+]);
 
 export function acceleratorFromKeyboardEvent(event: {
   key: string;
@@ -8,7 +17,13 @@ export function acceleratorFromKeyboardEvent(event: {
   altKey: boolean;
   shiftKey: boolean;
 }): string | "clear" | undefined {
-  if ((event.key === "Backspace" || event.key === "Delete") && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+  if (
+    (event.key === "Backspace" || event.key === "Delete") &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey &&
+    !event.shiftKey
+  ) {
     return "clear";
   }
   if (MODIFIER_KEYS.has(event.key)) return undefined;

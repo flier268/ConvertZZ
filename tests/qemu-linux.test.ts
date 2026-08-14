@@ -28,14 +28,16 @@ describe("QEMU Linux 乾淨環境驗收", () => {
     expect(script).toContain("unshare --net");
     expect(script).toContain("mac-399.ape");
     expect(script).toContain("--appimage-extract");
-    expect(script).toContain("cp \"${appimages[0]}\" \"$EXTRACT/ConvertZZ.AppImage\"");
-    expect(script).not.toContain("chmod +x \"${appimages[0]}\"");
+    expect(script).toContain('cp "${appimages[0]}" "$EXTRACT/ConvertZZ.AppImage"');
+    expect(script).not.toContain('chmod +x "${appimages[0]}"');
     expect(script).toContain(QEMU_PASS);
     expect(cloudInitUserData()).toContain("/mnt/share/guest.sh");
   });
 
   it("解析序列埠通過與失敗輸出", () => {
-    expect(parseQemuSerial(`boot\n${QEMU_RESULT} {"deb":true,"wasm":true}\n${QEMU_PASS}\n`)).toMatchObject({
+    expect(
+      parseQemuSerial(`boot\n${QEMU_RESULT} {"deb":true,"wasm":true}\n${QEMU_PASS}\n`),
+    ).toMatchObject({
       pass: true,
       result: { deb: true, wasm: true },
     });

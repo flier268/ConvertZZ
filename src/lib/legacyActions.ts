@@ -88,17 +88,44 @@ export async function executeLegacyAction(
     await invoke("simulate_copy_paste", { action: "copy" });
     await new Promise((resolve) => setTimeout(resolve, 120));
   }
-  let text = input ?? await readText();
+  let text = input ?? (await readText());
 
   if (action === "a1") {
     text = await utility(text, "encoding", "big5", "gbk");
-    text = (await convertText(text, "s2t", settings.engine, settings.vocabularyCorrection, zhConvertOptions(settings, "s2t"), settings.dictionaryPath)).text;
+    text = (
+      await convertText(
+        text,
+        "s2t",
+        settings.engine,
+        settings.vocabularyCorrection,
+        zhConvertOptions(settings, "s2t"),
+        settings.dictionaryPath,
+      )
+    ).text;
   } else if (action === "a2") {
-    text = (await convertText(text, "t2s", settings.engine, settings.vocabularyCorrection, zhConvertOptions(settings, "t2s"), settings.dictionaryPath)).text;
+    text = (
+      await convertText(
+        text,
+        "t2s",
+        settings.engine,
+        settings.vocabularyCorrection,
+        zhConvertOptions(settings, "t2s"),
+        settings.dictionaryPath,
+      )
+    ).text;
     text = await utility(text, "encoding", "gbk", "big5");
   } else if (action === "a3" || action === "a4") {
     const direction = action === "a3" ? "s2t" : "t2s";
-    text = (await convertText(text, direction, settings.engine, settings.vocabularyCorrection, zhConvertOptions(settings, direction), settings.dictionaryPath)).text;
+    text = (
+      await convertText(
+        text,
+        direction,
+        settings.engine,
+        settings.vocabularyCorrection,
+        zhConvertOptions(settings, direction),
+        settings.dictionaryPath,
+      )
+    ).text;
   } else if (action === "za1") text = await utility(text, "html-decimal-encode");
   else if (action === "za2") text = await utility(text, "html-hex-encode");
   else if (action === "za3") text = await utility(text, "html-decimal-decode");
@@ -112,7 +139,8 @@ export async function executeLegacyAction(
   }
 
   await writeText(text);
-  if (automation.paste && input === undefined) await invoke("simulate_copy_paste", { action: "paste" });
+  if (automation.paste && input === undefined)
+    await invoke("simulate_copy_paste", { action: "paste" });
   const durationMs = Math.round(performance.now() - started);
   if (settings.promptAfterConversion && !automation.copy && !automation.paste) {
     await showAppToast(`轉換完成\n耗時：${durationMs} ms`);
@@ -126,6 +154,11 @@ async function utility(
   sourceEncoding?: TextEncoding,
   targetEncoding?: TextEncoding,
 ): Promise<string> {
-  const result = await sidecar.request<{ text: string }>("utility.convert", { text, kind, sourceEncoding, targetEncoding } satisfies UtilityConvertRequest);
+  const result = await sidecar.request<{ text: string }>("utility.convert", {
+    text,
+    kind,
+    sourceEncoding,
+    targetEncoding,
+  } satisfies UtilityConvertRequest);
   return result.text;
 }

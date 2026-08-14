@@ -8,7 +8,11 @@ export type FloatingPointerIntent =
   | { type: "context-menu" }
   | { type: "ignore" };
 
-export function clickModifier(keys: { ctrlKey: boolean; altKey: boolean; shiftKey: boolean }): ModifierKey | undefined {
+export function clickModifier(keys: {
+  ctrlKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+}): ModifierKey | undefined {
   if (keys.ctrlKey) return "Ctrl";
   if (keys.altKey) return "Alt";
   if (keys.shiftKey) return "Shift";

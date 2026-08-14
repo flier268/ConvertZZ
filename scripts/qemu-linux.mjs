@@ -26,7 +26,12 @@ export const CLOUD_IMAGE_SUMS_URL = "https://cloud-images.ubuntu.com/jammy/curre
 export function cloudImageSources() {
   const custom = process.env.CONVERTZZ_QEMU_IMAGE_URL;
   const sources = [];
-  if (custom) sources.push({ name: "CONVERTZZ_QEMU_IMAGE_URL", image: custom, sums: process.env.CONVERTZZ_QEMU_IMAGE_SUMS_URL });
+  if (custom)
+    sources.push({
+      name: "CONVERTZZ_QEMU_IMAGE_URL",
+      image: custom,
+      sums: process.env.CONVERTZZ_QEMU_IMAGE_SUMS_URL,
+    });
   sources.push(
     {
       name: "twds",
@@ -62,58 +67,58 @@ export function guestScript() {
     "  fi",
     "  sleep 2",
     "done",
-    "test -f /mnt/share/guest.sh || fail \"無法掛載主機分享目錄\"",
-    "command -v node >/dev/null && fail \"乾淨映像不應已有 node\"",
-    "command -v npm >/dev/null && fail \"乾淨映像不應已有 npm\"",
-    "dpkg -s nodejs >/dev/null 2>&1 && fail \"乾淨映像不應已安裝 nodejs\"",
+    'test -f /mnt/share/guest.sh || fail "無法掛載主機分享目錄"',
+    'command -v node >/dev/null && fail "乾淨映像不應已有 node"',
+    'command -v npm >/dev/null && fail "乾淨映像不應已有 npm"',
+    'dpkg -s nodejs >/dev/null 2>&1 && fail "乾淨映像不應已安裝 nodejs"',
     "export DEBIAN_FRONTEND=noninteractive",
     "apt-get update",
     "shopt -s nullglob",
     "debs=(/mnt/share/*.deb)",
-    "test \"${#debs[@]}\" -eq 1 || fail \"分享目錄應恰好有一個 DEB\"",
-    "apt-get install -y \"${debs[0]}\"",
-    "command -v node >/dev/null && fail \"安裝後不應出現 node\"",
-    "dpkg -s nodejs >/dev/null 2>&1 && fail \"安裝後不應出現 nodejs\"",
-    "dpkg -s libayatana-appindicator3-dev >/dev/null 2>&1 && fail \"不應安裝 AppIndicator 開發套件\"",
-    "dpkg -s convert-zz >/dev/null || fail \"convert-zz 未安裝\"",
-    "dpkg -s libwebkit2gtk-4.1-0 >/dev/null || fail \"APT 未補齊 WebKitGTK\"",
-    "dpkg -s libayatana-appindicator3-1 >/dev/null || fail \"APT 未補齊 AppIndicator\"",
-    "dpkg -s libgtk-3-0 >/dev/null || fail \"APT 未補齊 GTK\"",
-    "test -x /usr/bin/convertzz || fail \"缺少主程式\"",
-    "test -f /usr/lib/ConvertZZ/taglib-wasi.wasm || fail \"缺少 taglib-wasi.wasm\"",
-    "test -f /usr/lib/ConvertZZ/convertzz-sidecar.gz || fail \"缺少 sidecar 資源\"",
-    "test -f /usr/lib/ConvertZZ/Dictionary.csv || fail \"缺少字典\"",
-    "WORKDIR=\"$(mktemp -d)\"",
-    "gzip -dc /usr/lib/ConvertZZ/convertzz-sidecar.gz > \"$WORKDIR/sidecar\"",
-    "chmod 755 \"$WORKDIR/sidecar\"",
-    "HASH=\"$(sha256sum \"$WORKDIR/sidecar\" | awk '{print $1}')\"",
+    'test "${#debs[@]}" -eq 1 || fail "分享目錄應恰好有一個 DEB"',
+    'apt-get install -y "${debs[0]}"',
+    'command -v node >/dev/null && fail "安裝後不應出現 node"',
+    'dpkg -s nodejs >/dev/null 2>&1 && fail "安裝後不應出現 nodejs"',
+    'dpkg -s libayatana-appindicator3-dev >/dev/null 2>&1 && fail "不應安裝 AppIndicator 開發套件"',
+    'dpkg -s convert-zz >/dev/null || fail "convert-zz 未安裝"',
+    'dpkg -s libwebkit2gtk-4.1-0 >/dev/null || fail "APT 未補齊 WebKitGTK"',
+    'dpkg -s libayatana-appindicator3-1 >/dev/null || fail "APT 未補齊 AppIndicator"',
+    'dpkg -s libgtk-3-0 >/dev/null || fail "APT 未補齊 GTK"',
+    'test -x /usr/bin/convertzz || fail "缺少主程式"',
+    'test -f /usr/lib/ConvertZZ/taglib-wasi.wasm || fail "缺少 taglib-wasi.wasm"',
+    'test -f /usr/lib/ConvertZZ/convertzz-sidecar.gz || fail "缺少 sidecar 資源"',
+    'test -f /usr/lib/ConvertZZ/Dictionary.csv || fail "缺少字典"',
+    'WORKDIR="$(mktemp -d)"',
+    'gzip -dc /usr/lib/ConvertZZ/convertzz-sidecar.gz > "$WORKDIR/sidecar"',
+    'chmod 755 "$WORKDIR/sidecar"',
+    'HASH="$(sha256sum "$WORKDIR/sidecar" | awk \'{print $1}\')"',
     "EXPECT=\"$(tr -d '[:space:]' < /usr/lib/ConvertZZ/convertzz-sidecar.sha256 | tr 'A-F' 'a-f')\"",
-    "test \"$HASH\" = \"$EXPECT\" || fail \"sidecar 雜湊不符\"",
-    "SIDECAR=(\"$WORKDIR/sidecar\" --dictionary /usr/lib/ConvertZZ/Dictionary.csv --wasm /usr/lib/ConvertZZ/taglib-wasi.wasm)",
-    "HEALTH=\"$(printf '%s\\n' '{\"id\":\"qemu-health\",\"operation\":\"health\",\"payload\":{}}' | \"${SIDECAR[@]}\")\"",
-    "printf '%s\\n' \"$HEALTH\" | grep -F '\"ok\":true' >/dev/null || fail \"健康檢查失敗\"",
-    "printf '%s\\n' \"$HEALTH\" | grep -E '\"node\":\"24\\.' >/dev/null || fail \"sidecar 不是 Node.js 24\"",
-    "CONVERT=\"$(printf '%s\\n' '{\"id\":\"qemu-convert\",\"operation\":\"convert.preview\",\"payload\":{\"text\":\"里面开发头发\",\"direction\":\"s2t\",\"engine\":\"segmented\"}}' | \"${SIDECAR[@]}\")\"",
+    'test "$HASH" = "$EXPECT" || fail "sidecar 雜湊不符"',
+    'SIDECAR=("$WORKDIR/sidecar" --dictionary /usr/lib/ConvertZZ/Dictionary.csv --wasm /usr/lib/ConvertZZ/taglib-wasi.wasm)',
+    'HEALTH="$(printf \'%s\\n\' \'{"id":"qemu-health","operation":"health","payload":{}}\' | "${SIDECAR[@]}")"',
+    'printf \'%s\\n\' "$HEALTH" | grep -F \'"ok":true\' >/dev/null || fail "健康檢查失敗"',
+    'printf \'%s\\n\' "$HEALTH" | grep -E \'"node":"24\\.\' >/dev/null || fail "sidecar 不是 Node.js 24"',
+    'CONVERT="$(printf \'%s\\n\' \'{"id":"qemu-convert","operation":"convert.preview","payload":{"text":"里面开发头发","direction":"s2t","engine":"segmented"}}\' | "${SIDECAR[@]}")"',
     "printf '%s\\n' \"$CONVERT\" | grep -F '裡面開發頭髮' >/dev/null || fail \"文字轉換失敗\"",
-    "printf '%s\\n' '{\"id\":\"qemu-audio\",\"operation\":\"audio.scan\",\"payload\":{\"paths\":[\"/mnt/share/mac-399.ape\",\"/mnt/share/test.ogg\"]}}' > \"$WORKDIR/audio.json\"",
-    "AUDIO=\"$(\"${SIDECAR[@]}\" < \"$WORKDIR/audio.json\")\"",
-    "printf '%s\\n' \"$AUDIO\" | grep -F '\"format\":\"ape\"' >/dev/null || fail \"APE 掃描失敗\"",
-    "printf '%s\\n' \"$AUDIO\" | grep -F '\"format\":\"ogg\"' >/dev/null || fail \"OGG 掃描失敗\"",
-    "printf '%s\\n' \"$AUDIO\" | grep -Eq '\"warning\"|dynamic import callback' && fail \"音訊掃描含警告\"",
+    'printf \'%s\\n\' \'{"id":"qemu-audio","operation":"audio.scan","payload":{"paths":["/mnt/share/mac-399.ape","/mnt/share/test.ogg"]}}\' > "$WORKDIR/audio.json"',
+    'AUDIO="$("${SIDECAR[@]}" < "$WORKDIR/audio.json")"',
+    'printf \'%s\\n\' "$AUDIO" | grep -F \'"format":"ape"\' >/dev/null || fail "APE 掃描失敗"',
+    'printf \'%s\\n\' "$AUDIO" | grep -F \'"format":"ogg"\' >/dev/null || fail "OGG 掃描失敗"',
+    'printf \'%s\\n\' "$AUDIO" | grep -Eq \'"warning"|dynamic import callback\' && fail "音訊掃描含警告"',
     "if command -v unshare >/dev/null; then",
-    "  OFFLINE=\"$(unshare --net -- \"${SIDECAR[@]}\" < \"$WORKDIR/audio.json\")\"",
-    "  printf '%s\\n' \"$OFFLINE\" | grep -F '\"format\":\"ape\"' >/dev/null || fail \"離線 APE 掃描失敗\"",
-    "  printf '%s\\n' \"$OFFLINE\" | grep -F '\"format\":\"ogg\"' >/dev/null || fail \"離線 OGG 掃描失敗\"",
+    '  OFFLINE="$(unshare --net -- "${SIDECAR[@]}" < "$WORKDIR/audio.json")"',
+    '  printf \'%s\\n\' "$OFFLINE" | grep -F \'"format":"ape"\' >/dev/null || fail "離線 APE 掃描失敗"',
+    '  printf \'%s\\n\' "$OFFLINE" | grep -F \'"format":"ogg"\' >/dev/null || fail "離線 OGG 掃描失敗"',
     "fi",
     "APPIMAGE=false",
     "appimages=(/mnt/share/*.AppImage)",
-    "if test \"${#appimages[@]}\" -eq 1; then",
-    "  EXTRACT=\"$WORKDIR/appimage\"",
-    "  mkdir -p \"$EXTRACT\"",
-    "  cp \"${appimages[0]}\" \"$EXTRACT/ConvertZZ.AppImage\"",
-    "  chmod +x \"$EXTRACT/ConvertZZ.AppImage\"",
-    "  (cd \"$EXTRACT\" && ./ConvertZZ.AppImage --appimage-extract >/dev/null)",
-    "  test -f \"$EXTRACT/squashfs-root/usr/lib/ConvertZZ/taglib-wasi.wasm\" || fail \"AppImage 缺少 WASM\"",
+    'if test "${#appimages[@]}" -eq 1; then',
+    '  EXTRACT="$WORKDIR/appimage"',
+    '  mkdir -p "$EXTRACT"',
+    '  cp "${appimages[0]}" "$EXTRACT/ConvertZZ.AppImage"',
+    '  chmod +x "$EXTRACT/ConvertZZ.AppImage"',
+    '  (cd "$EXTRACT" && ./ConvertZZ.AppImage --appimage-extract >/dev/null)',
+    '  test -f "$EXTRACT/squashfs-root/usr/lib/ConvertZZ/taglib-wasi.wasm" || fail "AppImage 缺少 WASM"',
     "  APPIMAGE=true",
     "fi",
     `printf '%s %s\\n' "${QEMU_RESULT}" "{\\"deb\\":true,\\"nodejs\\":false,\\"appindicatorDev\\":false,\\"webkit\\":true,\\"wasm\\":true,\\"offlineAudio\\":true,\\"appimageExtracted\\":$APPIMAGE}"`,
@@ -159,10 +164,14 @@ export function findLinuxArtifacts(projectRoot) {
   const debDirectory = join(root, "src-tauri/target/release/bundle/deb");
   const appImageDirectory = join(root, "src-tauri/target/release/bundle/appimage");
   const deb = existsSync(debDirectory)
-    ? readdirSync(debDirectory).filter((name) => name.endsWith(".deb")).map((name) => join(debDirectory, name))
+    ? readdirSync(debDirectory)
+        .filter((name) => name.endsWith(".deb"))
+        .map((name) => join(debDirectory, name))
     : [];
   const appImage = existsSync(appImageDirectory)
-    ? readdirSync(appImageDirectory).filter((name) => name.endsWith(".AppImage")).map((name) => join(appImageDirectory, name))
+    ? readdirSync(appImageDirectory)
+        .filter((name) => name.endsWith(".AppImage"))
+        .map((name) => join(appImageDirectory, name))
     : [];
   return {
     deb: deb[0],
@@ -228,20 +237,24 @@ export async function downloadCloudImage(cacheDirectory) {
       errors.push(`${source.name}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  throw new Error([
-    "無法下載 Ubuntu 22.04 cloud image。",
-    ...errors.map((entry) => `- ${entry}`),
-    "可改把映像放到 tests/.cache/qemu/jammy-server-cloudimg-amd64.img，",
-    "或設定 CONVERTZZ_QEMU_IMAGE=/path/to/jammy-server-cloudimg-amd64.img。",
-  ].join("\n"));
+  throw new Error(
+    [
+      "無法下載 Ubuntu 22.04 cloud image。",
+      ...errors.map((entry) => `- ${entry}`),
+      "可改把映像放到 tests/.cache/qemu/jammy-server-cloudimg-amd64.img，",
+      "或設定 CONVERTZZ_QEMU_IMAGE=/path/to/jammy-server-cloudimg-amd64.img。",
+    ].join("\n"),
+  );
 }
 
 export async function runLinuxQemuVerification(options = {}) {
   const projectRoot = resolve(options.projectRoot ?? process.cwd());
-  if (!qemuAvailable()) throw new Error("本機沒有 qemu-system-x86_64、qemu-img 與 genisoimage／xorriso。");
+  if (!qemuAvailable())
+    throw new Error("本機沒有 qemu-system-x86_64、qemu-img 與 genisoimage／xorriso。");
   const artifacts = findLinuxArtifacts(projectRoot);
   if (!artifacts.deb) throw new Error("找不到 DEB。請先執行 pnpm tauri build --bundles deb。");
-  if (!existsSync(artifacts.ape) || !existsSync(artifacts.ogg)) throw new Error("找不到 tests/fixtures 音訊樣本。");
+  if (!existsSync(artifacts.ape) || !existsSync(artifacts.ogg))
+    throw new Error("找不到 tests/fixtures 音訊樣本。");
 
   const cacheDirectory = join(projectRoot, "tests/.cache/qemu");
   const imagePath = await downloadCloudImage(cacheDirectory);
@@ -300,13 +313,17 @@ export async function runLinuxQemuVerification(options = {}) {
     timeout: timeoutMs,
     maxBuffer: 16 * 1024 * 1024,
   });
-  const serial = existsSync(serialLog) ? readFileSync(serialLog, "utf8") : `${qemu.stdout}\n${qemu.stderr}`;
+  const serial = existsSync(serialLog)
+    ? readFileSync(serialLog, "utf8")
+    : `${qemu.stdout}\n${qemu.stderr}`;
   const parsed = parseQemuSerial(serial);
   if (!options.keepWorkDirectory) {
     rmSync(workDirectory, { recursive: true, force: true });
   }
   if (!parsed.pass) {
-    throw new Error(parsed.fail || `QEMU 驗收失敗。結束碼 ${qemu.status}。\n${serial.slice(-4000)}`);
+    throw new Error(
+      parsed.fail || `QEMU 驗收失敗。結束碼 ${qemu.status}。\n${serial.slice(-4000)}`,
+    );
   }
   return { ...parsed.result, kvm };
 }
@@ -314,10 +331,29 @@ export async function runLinuxQemuVerification(options = {}) {
 function createSeedIso(directory, destination) {
   const tool = isoTool();
   if (basename(tool) === "xorriso") {
-    runCommand(tool, ["-as", "mkisofs", "-output", destination, "-volid", "cidata", "-joliet", "-rock", "user-data", "meta-data"], directory);
+    runCommand(
+      tool,
+      [
+        "-as",
+        "mkisofs",
+        "-output",
+        destination,
+        "-volid",
+        "cidata",
+        "-joliet",
+        "-rock",
+        "user-data",
+        "meta-data",
+      ],
+      directory,
+    );
     return;
   }
-  runCommand(tool, ["-output", destination, "-volid", "cidata", "-joliet", "-rock", "user-data", "meta-data"], directory);
+  runCommand(
+    tool,
+    ["-output", destination, "-volid", "cidata", "-joliet", "-rock", "user-data", "meta-data"],
+    directory,
+  );
 }
 
 function runCommand(command, args, cwd) {
@@ -333,10 +369,14 @@ function sha256File(path) {
 
 function downloadText(url) {
   if (commandPath("curl")) {
-    const result = spawnSync("curl", ["-fsSL", "--connect-timeout", "15", "--retry", "2", "--retry-all-errors", url], {
-      encoding: "utf8",
-      timeout: 60_000,
-    });
+    const result = spawnSync(
+      "curl",
+      ["-fsSL", "--connect-timeout", "15", "--retry", "2", "--retry-all-errors", url],
+      {
+        encoding: "utf8",
+        timeout: 60_000,
+      },
+    );
     if (result.status === 0) return Promise.resolve(result.stdout);
     return Promise.reject(new Error(result.stderr || `curl 結束碼 ${result.status}`));
   }
@@ -345,13 +385,29 @@ function downloadText(url) {
 
 function downloadFile(url, destination) {
   if (commandPath("curl")) {
-    const result = spawnSync("curl", ["-fsSL", "--connect-timeout", "15", "--retry", "2", "--retry-all-errors", "-o", destination, url], {
-      encoding: "utf8",
-      timeout: 10 * 60 * 1000,
-    });
+    const result = spawnSync(
+      "curl",
+      [
+        "-fsSL",
+        "--connect-timeout",
+        "15",
+        "--retry",
+        "2",
+        "--retry-all-errors",
+        "-o",
+        destination,
+        url,
+      ],
+      {
+        encoding: "utf8",
+        timeout: 10 * 60 * 1000,
+      },
+    );
     if (result.status === 0 && existsSync(destination)) return Promise.resolve();
     rmSync(destination, { force: true });
-    return Promise.reject(new Error(result.stderr || result.stdout || `curl 結束碼 ${result.status}`));
+    return Promise.reject(
+      new Error(result.stderr || result.stdout || `curl 結束碼 ${result.status}`),
+    );
   }
   return downloadBuffer(url).then((buffer) => {
     writeFileSync(destination, buffer);
@@ -362,7 +418,12 @@ function downloadBuffer(url, redirects = 0) {
   if (redirects > 5) return Promise.reject(new Error(`重新導向次數過多：${url}`));
   return new Promise((resolvePromise, reject) => {
     const request = get(url, { family: 4, timeout: 15_000 }, (response) => {
-      if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+      if (
+        response.statusCode &&
+        response.statusCode >= 300 &&
+        response.statusCode < 400 &&
+        response.headers.location
+      ) {
         downloadBuffer(response.headers.location, redirects + 1).then(resolvePromise, reject);
         return;
       }

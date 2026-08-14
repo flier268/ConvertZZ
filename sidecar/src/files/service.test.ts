@@ -8,7 +8,9 @@ import { FileService } from "./service.js";
 import { encodeText } from "../encoding/codecs.js";
 
 const temporary: string[] = [];
-afterEach(async () => Promise.all(temporary.splice(0).map((path) => rm(path, { recursive: true, force: true }))));
+afterEach(async () =>
+  Promise.all(temporary.splice(0).map((path) => rm(path, { recursive: true, force: true }))),
+);
 
 describe("檔案轉換", () => {
   it("先預覽再安全寫入並修正 charset", async () => {
@@ -111,18 +113,20 @@ describe("檔案轉換", () => {
     const directory = await mkdtemp(join(tmpdir(), "convertzz-wildcard-error-"));
     temporary.push(directory);
     const service = new FileService(new ConversionService(resolve("ConvertZZ/Dictionary.csv")));
-    await expect(service.plan({
-      paths: [join(directory, "*.txt")],
-      outputPath: join(directory, "*.*.txt"),
-      mode: "content",
-      recursive: false,
-      inputEncoding: "utf8",
-      outputEncoding: "utf8",
-      addBom: false,
-      fixCharsetDeclaration: false,
-      conflictPolicy: "skip",
-      conversion: { direction: "s2t", engine: "segmented" },
-    })).rejects.toMatchObject({ code: "CLI_WILDCARD" });
+    await expect(
+      service.plan({
+        paths: [join(directory, "*.txt")],
+        outputPath: join(directory, "*.*.txt"),
+        mode: "content",
+        recursive: false,
+        inputEncoding: "utf8",
+        outputEncoding: "utf8",
+        addBom: false,
+        fixCharsetDeclaration: false,
+        conflictPolicy: "skip",
+        conversion: { direction: "s2t", engine: "segmented" },
+      }),
+    ).rejects.toMatchObject({ code: "CLI_WILDCARD" });
   });
 
   it("遞迴轉換時會重新命名資料夾並保留其中檔案", async () => {
@@ -139,10 +143,20 @@ describe("檔案轉換", () => {
       allowedExtensions: ["txt"],
     });
 
-    expect(plan.items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ sourcePath: sourceDirectory, outputPath: join(directory, "裡面資料"), kind: "directory" }),
-      expect.objectContaining({ sourcePath: sourceFile, outputPath: join(sourceDirectory, "開發.txt"), kind: "file" }),
-    ]));
+    expect(plan.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourcePath: sourceDirectory,
+          outputPath: join(directory, "裡面資料"),
+          kind: "directory",
+        }),
+        expect.objectContaining({
+          sourcePath: sourceFile,
+          outputPath: join(sourceDirectory, "開發.txt"),
+          kind: "file",
+        }),
+      ]),
+    );
 
     const result = await service.apply(plan.planId);
     expect(result.failed).toEqual([]);
@@ -177,10 +191,9 @@ describe("檔案轉換", () => {
       conversion: { direction: "none", engine: "segmented" },
     });
 
-    expect(plan.items.map((item) => item.sourcePath)).toEqual([
-      join(directory, "one.txt"),
-      join(nested, "three.TXT"),
-    ].sort());
+    expect(plan.items.map((item) => item.sourcePath)).toEqual(
+      [join(directory, "one.txt"), join(nested, "three.TXT")].sort(),
+    );
   });
 
   it.runIf(process.platform !== "win32")("遞迴處理不跟隨符號連結", async () => {
@@ -217,7 +230,9 @@ describe("檔案轉換", () => {
 
     const result = await service.apply(plan.planId, (progress) => {
       if (removedRemainingStage || !progress.message.startsWith("正在寫入：")) return;
-      const remainingStage = readdirSync(directory).find((name) => name.startsWith(".convertzz-stage-"));
+      const remainingStage = readdirSync(directory).find((name) =>
+        name.startsWith(".convertzz-stage-"),
+      );
       if (!remainingStage) return;
       rmSync(join(directory, remainingStage));
       removedRemainingStage = true;
@@ -228,7 +243,9 @@ describe("檔案轉換", () => {
     expect(await readFile(sources[0], "utf8")).toBe("來源一");
     expect(await readFile(sources[1], "utf8")).toBe("來源二");
     expect(await readdir(directory)).toEqual(["里面一.txt", "里面二.txt"]);
-    expect(outputs.every((path) => !readdirSync(directory).includes(path.split(/[\\/]/u).at(-1) ?? ""))).toBe(true);
+    expect(
+      outputs.every((path) => !readdirSync(directory).includes(path.split(/[\\/]/u).at(-1) ?? "")),
+    ).toBe(true);
   });
 
   it("名稱互換時以兩階段重新命名保留兩份內容", async () => {
@@ -240,7 +257,7 @@ describe("檔案轉換", () => {
     await writeFile(second, "乙的內容");
     const service = new FileService({
       convert: async (request) => ({
-        text: ({ "甲.txt": "乙.txt", "乙.txt": "甲.txt" }[request.text] ?? request.text),
+        text: { "甲.txt": "乙.txt", "乙.txt": "甲.txt" }[request.text] ?? request.text,
         engine: request.engine,
         direction: request.direction,
         warnings: [],
@@ -264,13 +281,17 @@ describe("檔案轉換", () => {
     await writeFile(source, "來源內容");
     const service = new FileService(
       new ConversionService(resolve("ConvertZZ/Dictionary.csv")),
-      async () => { throw new Error("受控驗證失敗"); },
+      async () => {
+        throw new Error("受控驗證失敗");
+      },
     );
     const plan = await service.plan(fileNameRequest(source, "overwrite"));
 
     const result = await service.apply(plan.planId);
 
-    expect(result.failed).toEqual([expect.objectContaining({ path: "批次作業", message: "受控驗證失敗" })]);
+    expect(result.failed).toEqual([
+      expect.objectContaining({ path: "批次作業", message: "受控驗證失敗" }),
+    ]);
     expect(await readFile(source, "utf8")).toBe("來源內容");
     expect((await readdir(directory)).filter((name) => name.startsWith(".convertzz-"))).toEqual([]);
   });
@@ -285,7 +306,9 @@ describe("檔案轉換", () => {
 
     const plan = await service.plan(fileNameRequest(source, "overwrite"));
 
-    expect(plan.items).toEqual([expect.objectContaining({ status: "error", warning: "來源檔案為唯讀，無法安全取代。" })]);
+    expect(plan.items).toEqual([
+      expect.objectContaining({ status: "error", warning: "來源檔案為唯讀，無法安全取代。" }),
+    ]);
     expect(await readFile(source, "utf8")).toBe("來源");
   });
 
@@ -299,7 +322,9 @@ describe("檔案轉換", () => {
     await chmod(source, 0o444);
     try {
       const result = await service.apply(plan.planId);
-      expect(result.failed).toEqual([expect.objectContaining({ path: "批次作業", message: "來源檔案為唯讀，無法安全取代。" })]);
+      expect(result.failed).toEqual([
+        expect.objectContaining({ path: "批次作業", message: "來源檔案為唯讀，無法安全取代。" }),
+      ]);
       expect(await readFile(source, "utf8")).toBe("來源");
       expect(await readdir(directory)).toEqual(["里面.txt"]);
     } finally {

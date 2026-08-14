@@ -2,14 +2,42 @@ import type { UtilityConvertRequest } from "../../shared/contracts.js";
 import { reinterpretText } from "./encoding/codecs.js";
 
 const SYMBOL_TABLE = new Map<string, string>([
-  [",", "，"], ["~", "～"], ["!", "！"], ["#", "＃"], ["$", "＄"], ["%", "％"],
-  ["^", "︿"], ["&", "＆"], ["*", "＊"], ["-", "－"], ["+", "＋"], ["{", "｛"],
-  ["}", "｝"], [";", "；"], ["|", "｜"], ["?", "？"], ["(", "（"], [")", "）"],
-  ["“", "「"], ["”", "」"], ["‘", "『"], ["’", "』"], ["[", "［"], ["]", "］"],
-  [" ", "　"], [":", "："], [".", "。"], ["\"", "、"], ["@", "＠"], ["<", "＜"],
-  [">", "＞"], ["=", "＝"],
+  [",", "，"],
+  ["~", "～"],
+  ["!", "！"],
+  ["#", "＃"],
+  ["$", "＄"],
+  ["%", "％"],
+  ["^", "︿"],
+  ["&", "＆"],
+  ["*", "＊"],
+  ["-", "－"],
+  ["+", "＋"],
+  ["{", "｛"],
+  ["}", "｝"],
+  [";", "；"],
+  ["|", "｜"],
+  ["?", "？"],
+  ["(", "（"],
+  [")", "）"],
+  ["“", "「"],
+  ["”", "」"],
+  ["‘", "『"],
+  ["’", "』"],
+  ["[", "［"],
+  ["]", "］"],
+  [" ", "　"],
+  [":", "："],
+  [".", "。"],
+  ['"', "、"],
+  ["@", "＠"],
+  ["<", "＜"],
+  [">", "＞"],
+  ["=", "＝"],
 ]);
-const REVERSE_SYMBOL_TABLE = new Map(Array.from(SYMBOL_TABLE, ([source, target]) => [target, source]));
+const REVERSE_SYMBOL_TABLE = new Map(
+  Array.from(SYMBOL_TABLE, ([source, target]) => [target, source]),
+);
 
 export function convertUtility(request: UtilityConvertRequest): string {
   switch (request.kind) {
@@ -26,7 +54,11 @@ export function convertUtility(request: UtilityConvertRequest): string {
     case "unicode-escape-decode":
       return unicodeEscapeDecode(request.text);
     case "encoding":
-      return reinterpretText(request.text, request.sourceEncoding ?? "utf8", request.targetEncoding ?? "utf8");
+      return reinterpretText(
+        request.text,
+        request.sourceEncoding ?? "utf8",
+        request.targetEncoding ?? "utf8",
+      );
     case "fullwidth":
       return replaceSymbols(request.text, SYMBOL_TABLE);
     case "halfwidth":
@@ -40,7 +72,8 @@ function htmlEncode(text: string, radix: 10 | 16): string {
     if (character === "<") return "&lt;";
     if (character === ">") return "&gt;";
     const codePoint = character.codePointAt(0) ?? 0;
-    if ((codePoint >= 0x20 && codePoint <= 0x7e) || character === "\r" || character === "\n") return character;
+    if ((codePoint >= 0x20 && codePoint <= 0x7e) || character === "\r" || character === "\n")
+      return character;
     return radix === 10 ? `&#${codePoint};` : `&#x${codePoint.toString(16).toUpperCase()};`;
   }).join("");
 }
@@ -76,7 +109,8 @@ function unicodeEscapeDecode(text: string): string {
   return text
     .replace(/\\u\{([\da-f]{1,6})\}/giu, (match, value: string) => safeCodePoint(match, value, 16))
     .replace(/(?:\\u[\da-f]{4})+/giu, (sequence) => {
-      const units = sequence.match(/[\da-f]{4}/giu)?.map((value) => Number.parseInt(value, 16)) ?? [];
+      const units =
+        sequence.match(/[\da-f]{4}/giu)?.map((value) => Number.parseInt(value, 16)) ?? [];
       return String.fromCharCode(...units);
     });
 }

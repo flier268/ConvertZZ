@@ -6,7 +6,9 @@ import { ConversionService } from "../conversion/engines.js";
 import { DictionaryService } from "./service.js";
 
 const temporary: string[] = [];
-afterEach(async () => Promise.all(temporary.splice(0).map((path) => rm(path, { recursive: true, force: true }))));
+afterEach(async () =>
+  Promise.all(temporary.splice(0).map((path) => rm(path, { recursive: true, force: true }))),
+);
 
 describe("字典管理", () => {
   it("連續儲存會各自建立不覆蓋的備份", async () => {
@@ -17,35 +19,41 @@ describe("字典管理", () => {
     await writeFile(path, original);
     const service = new DictionaryService(path);
     const conversion = new ConversionService(path);
-    expect((await conversion.convert({ text: "里面", direction: "s2t", engine: "legacy" })).text).toBe("裡面");
+    expect(
+      (await conversion.convert({ text: "里面", direction: "s2t", engine: "legacy" })).text,
+    ).toBe("裡面");
     const first = await service.update({
       path,
-      updates: [{
-        index: 0,
-        entry: {
-          enabled: true,
-          type: "一般",
-          simplified: "里面",
-          simplifiedPriority: 2,
-          traditional: "內部",
-          traditionalPriority: 2,
+      updates: [
+        {
+          index: 0,
+          entry: {
+            enabled: true,
+            type: "一般",
+            simplified: "里面",
+            simplifiedPriority: 2,
+            traditional: "內部",
+            traditionalPriority: 2,
+          },
         },
-      }],
+      ],
     });
     const afterFirstUpdate = await readFile(path, "utf8");
     const second = await service.update({
       path,
-      updates: [{
-        index: 0,
-        entry: {
-          enabled: true,
-          type: "一般",
-          simplified: "里面",
-          simplifiedPriority: 3,
-          traditional: "裏邊",
-          traditionalPriority: 3,
+      updates: [
+        {
+          index: 0,
+          entry: {
+            enabled: true,
+            type: "一般",
+            simplified: "里面",
+            simplifiedPriority: 3,
+            traditional: "裏邊",
+            traditionalPriority: 3,
+          },
         },
-      }],
+      ],
     });
 
     expect(first.backupPath).not.toBe(second.backupPath);
@@ -53,7 +61,9 @@ describe("字典管理", () => {
     expect(await readFile(second.backupPath, "utf8")).toBe(afterFirstUpdate);
     expect((await readdir(directory)).filter((name) => name.includes(".backup-"))).toHaveLength(2);
     expect(await readFile(path, "utf8")).toContain("\t3\t裏邊\t3");
-    expect((await conversion.convert({ text: "里面", direction: "s2t", engine: "legacy" })).text).toBe("裏邊");
+    expect(
+      (await conversion.convert({ text: "里面", direction: "s2t", engine: "legacy" })).text,
+    ).toBe("裏邊");
     expect((await readdir(directory)).filter((name) => name.startsWith(".convertzz-"))).toEqual([]);
   });
 
@@ -61,10 +71,10 @@ describe("字典管理", () => {
     const directory = await mkdtemp(join(tmpdir(), "convertzz-dictionary-changes-"));
     temporary.push(directory);
     const path = join(directory, "Dictionary.csv");
-    await writeFile(path, [
-      "\uFEFFtrue\t一般\t专案\t10\t舊專案\t10",
-      "true\t一般\t开发\t20\t舊開發\t20",
-    ].join("\n"));
+    await writeFile(
+      path,
+      ["\uFEFFtrue\t一般\t专案\t10\t舊專案\t10", "true\t一般\t开发\t20\t舊開發\t20"].join("\n"),
+    );
     const service = new DictionaryService(path);
     const inserted = {
       enabled: true,
@@ -104,17 +114,19 @@ describe("字典管理", () => {
 
     await service.update({
       path,
-      updates: [{
-        index: 2,
-        entry: {
-          enabled: true,
-          type: "一般",
-          simplified: "二",
-          simplifiedPriority: 3,
-          traditional: "兩",
-          traditionalPriority: 3,
+      updates: [
+        {
+          index: 2,
+          entry: {
+            enabled: true,
+            type: "一般",
+            simplified: "二",
+            simplifiedPriority: 3,
+            traditional: "兩",
+            traditionalPriority: 3,
+          },
         },
-      }],
+      ],
     });
     const lines = (await readFile(path, "utf8")).replace(/^\uFEFF/u, "").split("\n");
     expect(lines[1]).toBe("");

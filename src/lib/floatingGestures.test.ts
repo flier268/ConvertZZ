@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { clickModifier, dropButton, mouseSide, pointerIntent, quickActionKey } from "./floatingGestures";
+import {
+  clickModifier,
+  dropButton,
+  mouseSide,
+  pointerIntent,
+  quickActionKey,
+} from "./floatingGestures";
 
 describe("浮動球左右鍵意圖", () => {
   it("左鍵按下且沒有輔助鍵時只拖曳", () => {
@@ -15,8 +21,16 @@ describe("浮動球左右鍵意圖", () => {
   });
 
   it("輔助鍵加左鍵或右鍵會對應設定中的快速動作", () => {
-    expect(pointerIntent("left", "Ctrl", "up")).toEqual({ type: "quick-action", button: "left", modifier: "Ctrl" });
-    expect(pointerIntent("right", "Shift", "up")).toEqual({ type: "quick-action", button: "right", modifier: "Shift" });
+    expect(pointerIntent("left", "Ctrl", "up")).toEqual({
+      type: "quick-action",
+      button: "left",
+      modifier: "Ctrl",
+    });
+    expect(pointerIntent("right", "Shift", "up")).toEqual({
+      type: "quick-action",
+      button: "right",
+      modifier: "Shift",
+    });
     expect(quickActionKey("left", "Click", "Ctrl")).toBe("leftClickCtrl");
     expect(quickActionKey("right", "Drop", "Alt")).toBe("rightDropAlt");
   });

@@ -10,7 +10,10 @@ export async function backupLegacySettings(inputPath: string): Promise<string> {
   const sourcePath = resolve(inputPath);
   const extension = extname(sourcePath) || ".json";
   const stem = basename(sourcePath, extname(sourcePath));
-  const timestamp = new Date().toISOString().replace(/[^0-9]/gu, "").slice(0, 14);
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/[^0-9]/gu, "")
+    .slice(0, 14);
   const backupPath = join(
     dirname(sourcePath),
     `${stem}.backup-${timestamp}-${randomUUID().slice(0, 8)}${extension}`,
@@ -32,7 +35,11 @@ export function defaultSettings(): SettingsV2 {
     hotkeys: {
       autoCopy: true,
       autoPaste: true,
-      shortcuts: Array.from({ length: 4 }, (_, index) => ({ enabled: false, accelerator: "", action: `a${index + 1}` })),
+      shortcuts: Array.from({ length: 4 }, (_, index) => ({
+        enabled: false,
+        accelerator: "",
+        action: `a${index + 1}`,
+      })),
     },
     quickActions: {
       leftClickCtrl: "0",
@@ -50,7 +57,8 @@ export function defaultSettings(): SettingsV2 {
     },
     files: {
       defaultPath: "!",
-      typeFilter: "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音訊文件|*.mp3;*.ape;*.ogg;*.oga;*.opus>",
+      typeFilter:
+        "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音訊文件|*.mp3;*.ape;*.ogg;*.oga;*.opus>",
       fixCharsetExtensions: [".htm", ".html", ".shtm", ".shtml", ".asp", ".aspx", ".php", ".css"],
       unicodeAddBom: false,
     },
@@ -102,7 +110,9 @@ export function migrateSettings(input: unknown): SettingsV2 {
     const key = stringValue(feature.Key);
     return {
       enabled: booleanValue(feature.Enable, false),
-      accelerator: [normalizeModifier(modifier), key === "None" ? "" : key].filter(Boolean).join("+"),
+      accelerator: [normalizeModifier(modifier), key === "None" ? "" : key]
+        .filter(Boolean)
+        .join("+"),
       action: stringValue(feature.Action) || `a${index + 1}`,
     };
   });
@@ -141,7 +151,9 @@ export function migrateSettings(input: unknown): SettingsV2 {
     files: {
       defaultPath: stringValue(fileConvert.DefaultPath) || defaults.files.defaultPath,
       typeFilter: stringValue(fileConvert.TypeFilter) || defaults.files.typeFilter,
-      fixCharsetExtensions: (stringValue(fileConvert.FixLabel) || defaults.files.fixCharsetExtensions.join("|"))
+      fixCharsetExtensions: (
+        stringValue(fileConvert.FixLabel) || defaults.files.fixCharsetExtensions.join("|")
+      )
         .split("|")
         .filter(Boolean),
       unicodeAddBom: booleanValue(fileConvert.UnicodeAddBOM, false),
@@ -169,11 +181,13 @@ export function migrateSettings(input: unknown): SettingsV2 {
 }
 
 function isSettingsV2(value: unknown): value is SettingsV2 {
-  return Boolean(value && typeof value === "object" && (value as { version?: unknown }).version === 2);
+  return Boolean(
+    value && typeof value === "object" && (value as { version?: unknown }).version === 2,
+  );
 }
 
 function objectValue(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
 
 function stringValue(value: unknown): string {
@@ -190,50 +204,82 @@ function numberValue(value: unknown, fallback: number): number {
 
 function replacementLines(value: unknown): string {
   if (!Array.isArray(value)) return "";
-  return value.flatMap((item) => {
-    const entry = objectValue(item);
-    const key = stringValue(entry.Key);
-    return key ? [`${key}=${stringValue(entry.Value)}`] : [];
-  }).join("\n");
+  return value
+    .flatMap((item) => {
+      const entry = objectValue(item);
+      const key = stringValue(entry.Key);
+      return key ? [`${key}=${stringValue(entry.Value)}`] : [];
+    })
+    .join("\n");
 }
 
 function protectionLines(value: unknown): string {
   if (!Array.isArray(value)) return "";
-  return value.flatMap((item) => {
-    const entry = objectValue(item);
-    const key = stringValue(entry.Key) || stringValue(entry.Value);
-    return key ? [key] : [];
-  }).join("\n");
+  return value
+    .flatMap((item) => {
+      const entry = objectValue(item);
+      const key = stringValue(entry.Key) || stringValue(entry.Value);
+      return key ? [key] : [];
+    })
+    .join("\n");
 }
 
 function strategyValue(value: unknown): "none" | "protect" | "protectOnlySameOrigin" | "fix" {
-  if (typeof value === "string" && ["none", "protect", "protectOnlySameOrigin", "fix"].includes(value)) {
+  if (
+    typeof value === "string" &&
+    ["none", "protect", "protectOnlySameOrigin", "fix"].includes(value)
+  ) {
     return value as "none" | "protect" | "protectOnlySameOrigin" | "fix";
   }
-  if (typeof value === "number") return (["protectOnlySameOrigin", "none", "protect", "fix"] as const)[value] ?? "protectOnlySameOrigin";
+  if (typeof value === "number")
+    return (
+      (["protectOnlySameOrigin", "none", "protect", "fix"] as const)[value] ??
+      "protectOnlySameOrigin"
+    );
   return "protectOnlySameOrigin";
 }
 
 function normalizeModifier(value: string): string {
   if (!value || value === "None") return "";
-  return value.split(/[,+]/u).map((part) => part.trim()).filter((part) => part && part !== "None").join("+");
+  return value
+    .split(/[,+]/u)
+    .map((part) => part.trim())
+    .filter((part) => part && part !== "None")
+    .join("+");
 }
 
 function converterValue(value: unknown, fallback: string): string {
   if (typeof value === "string" && value) return value;
   if (typeof value === "number") {
-    return (["Simplified", "Traditional", "China", "Hongkong", "Taiwan", "Pinyin", "Bopomofo", "Mars", "WikiSimplified", "WikiTraditional"] as const)[value] ?? fallback;
+    return (
+      (
+        [
+          "Simplified",
+          "Traditional",
+          "China",
+          "Hongkong",
+          "Taiwan",
+          "Pinyin",
+          "Bopomofo",
+          "Mars",
+          "WikiSimplified",
+          "WikiTraditional",
+        ] as const
+      )[value] ?? fallback
+    );
   }
   return fallback;
 }
 
 function moduleValues(value: unknown): Record<string, -1 | 0 | 1> {
   if (!Array.isArray(value)) return {};
-  return Object.fromEntries(value.flatMap((item) => {
-    const module = objectValue(item);
-    const name = stringValue(module.ModuleName);
-    if (!name) return [];
-    const enabled = module.Enable;
-    return [[name, enabled === true ? 1 : enabled === false ? 0 : -1] as const];
-  }));
+  return Object.fromEntries(
+    value.flatMap((item) => {
+      const module = objectValue(item);
+      const name = stringValue(module.ModuleName);
+      if (!name) return [];
+      const enabled = module.Enable;
+      return [[name, enabled === true ? 1 : enabled === false ? 0 : -1] as const];
+    }),
+  );
 }

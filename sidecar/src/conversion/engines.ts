@@ -11,7 +11,10 @@ const MAX_CHUNK_CHARACTERS = 8_192;
 
 export class ConversionService {
   private readonly segmenter: InstanceType<typeof Segment>;
-  private readonly dictionaries = new Map<string, { mtimeMs: number; value: Promise<LegacyDictionary> }>();
+  private readonly dictionaries = new Map<
+    string,
+    { mtimeMs: number; value: Promise<LegacyDictionary> }
+  >();
 
   constructor(
     private readonly defaultDictionaryPath: string | undefined,
@@ -36,7 +39,9 @@ export class ConversionService {
         const dictionaryPath = request.dictionaryPath ?? this.defaultDictionaryPath;
         if (!dictionaryPath) throw new ConvertZZError("DICTIONARY_MISSING", "找不到舊版字典。");
         const dictionary = await this.getDictionary(dictionaryPath);
-        text = dictionary.replace(text, request.direction, (value) => baseConvert(value, request.direction));
+        text = dictionary.replace(text, request.direction, (value) =>
+          baseConvert(value, request.direction),
+        );
         warnings.push("未命中字元使用跨平台 cjk-conv，結果可能與舊版 Windows 映射略有差異。");
       } else {
         text = await this.zhconvert.convert(text, request.direction, request.zhconvert);
@@ -53,27 +58,33 @@ export class ConversionService {
   }
 
   private segmentedConvert(text: string, direction: Direction): string {
-    return splitText(text).map((chunk) => {
-      const source = direction === "s2t"
-        ? this.segmenter.doSegment(chunk, {
+    return splitText(text)
+      .map((chunk) => {
+        const source =
+          direction === "s2t"
+            ? this.segmenter
+                .doSegment(chunk, {
+                  simple: true,
+                  stripPunctuation: false,
+                  stripStopword: false,
+                  stripSpace: false,
+                  convertSynonym: false,
+                })
+                .map((word) => cjk2zht(word))
+                .join("")
+            : chunk;
+        const words = this.segmenter.doSegment(source, {
           simple: true,
           stripPunctuation: false,
           stripStopword: false,
           stripSpace: false,
-          convertSynonym: false,
-        }).map((word) => cjk2zht(word)).join("")
-        : chunk;
-      const words = this.segmenter.doSegment(source, {
-        simple: true,
-        stripPunctuation: false,
-        stripStopword: false,
-        stripSpace: false,
-        convertSynonym: direction === "s2t",
-      });
-      const segmented = words.join("");
-      if (direction === "s2t") return cjk2zht(segmented);
-      return baseConvert(segmented, direction);
-    }).join("");
+          convertSynonym: direction === "s2t",
+        });
+        const segmented = words.join("");
+        if (direction === "s2t") return cjk2zht(segmented);
+        return baseConvert(segmented, direction);
+      })
+      .join("");
   }
 
   private async getDictionary(path: string): Promise<LegacyDictionary> {

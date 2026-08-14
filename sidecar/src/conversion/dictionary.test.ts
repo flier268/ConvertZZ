@@ -6,22 +6,18 @@ import { LegacyDictionary, readDictionaryEntries } from "./dictionary.js";
 
 const temporary: string[] = [];
 
-afterEach(async () => Promise.all(temporary.splice(0).map((path) => rm(path, { recursive: true, force: true }))));
+afterEach(async () =>
+  Promise.all(temporary.splice(0).map((path) => rm(path, { recursive: true, force: true }))),
+);
 
 describe("舊版字典規則", () => {
   it("同優先權使用長詞", async () => {
-    const dictionary = await load([
-      row("开发", 10, "短詞", 10),
-      row("开发者", 10, "長詞", 10),
-    ]);
+    const dictionary = await load([row("开发", 10, "短詞", 10), row("开发者", 10, "長詞", 10)]);
     expect(dictionary.replace("开发者", "s2t", (value) => value)).toBe("長詞");
   });
 
   it("較高優先權先於較長詞", async () => {
-    const dictionary = await load([
-      row("开发", 100, "優先", 100),
-      row("开发者", 10, "長詞", 10),
-    ]);
+    const dictionary = await load([row("开发", 100, "優先", 100), row("开发者", 10, "長詞", 10)]);
     expect(dictionary.replace("开发者", "s2t", (value) => value)).toBe("優先者");
   });
 
@@ -54,6 +50,12 @@ async function load(rows: string[]): Promise<LegacyDictionary> {
   return LegacyDictionary.load(path);
 }
 
-function row(simplified: string, simplifiedPriority: number, traditional: string, traditionalPriority: number, enabled = true): string {
+function row(
+  simplified: string,
+  simplifiedPriority: number,
+  traditional: string,
+  traditionalPriority: number,
+  enabled = true,
+): string {
   return `${enabled ? "True" : "False"}\tTest\t${simplified}\t${simplifiedPriority}\t${traditional}\t${traditionalPriority}`;
 }

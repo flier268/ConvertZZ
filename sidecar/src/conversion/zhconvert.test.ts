@@ -46,7 +46,9 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  await new Promise<void>((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
 });
 
 describe("ZhConvert 客戶端", () => {
@@ -62,6 +64,8 @@ describe("ZhConvert 客戶端", () => {
   it("網路服務失敗時回報結構化錯誤", async () => {
     const client = new ZhConvertClient(baseUrl);
     failConversion = true;
-    await expect(client.convert("里面", "s2t")).rejects.toMatchObject({ code: "ZHCONVERT_CONVERT" });
+    await expect(client.convert("里面", "s2t")).rejects.toMatchObject({
+      code: "ZHCONVERT_CONVERT",
+    });
   });
 });

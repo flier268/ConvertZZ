@@ -11,17 +11,22 @@
       if (windowKind === "toast") document.documentElement.classList.add("toast-window");
     </script>
     <style>
-      html.floating-window, html.floating-window body,
-      html.toast-window, html.toast-window body {
+      html.floating-window,
+      html.floating-window body,
+      html.toast-window,
+      html.toast-window body {
         background: transparent !important;
         background-color: transparent !important;
       }
-      html.floating-window, html.floating-window body, html.floating-window #app {
+      html.floating-window,
+      html.floating-window body,
+      html.floating-window #app {
         width: 72px;
         height: 72px;
         overflow: hidden;
       }
-      html.floating-window, html.floating-window * {
+      html.floating-window,
+      html.floating-window * {
         -webkit-user-select: none;
         user-select: none;
       }

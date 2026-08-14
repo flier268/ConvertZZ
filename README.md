@@ -343,6 +343,12 @@ pnpm run dev
 pnpm run check
 ```
 
+格式化 Rust、Vue 與 Node.js。編輯器存檔與 commit 前也會自動執行。
+
+```bash
+pnpm fmt
+```
+
 用 QEMU 在乾淨的 Ubuntu 22.04 虛擬機安裝 DEB，確認沒有 Node.js 與 `*-dev`，並離線掃描 APE／OGG。
 
 需要本機的 `qemu-system-x86_64`、`qemu-img`、`genisoimage` 或 `xorriso`，以及先建立好的 Linux 發行檔。

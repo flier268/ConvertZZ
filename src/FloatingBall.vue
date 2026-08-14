@@ -65,7 +65,10 @@ async function runAction(action: string, input?: string) {
 }
 
 async function handlePointerDown(event: MouseEvent) {
-  if (htmlMenu.value && !(event.target instanceof Element && event.target.closest(".floating-context-menu"))) {
+  if (
+    htmlMenu.value &&
+    !(event.target instanceof Element && event.target.closest(".floating-context-menu"))
+  ) {
     htmlMenu.value = undefined;
   }
   const button = mouseSide(event.button);
@@ -141,13 +144,15 @@ async function handleDrop(event: DragEvent) {
       @mousedown.stop
     >
       <template v-for="(node, index) in FLOATING_CONTEXT_MENU" :key="index">
-        <hr v-if="node.type === 'separator'">
+        <hr v-if="node.type === 'separator'" />
         <div v-else-if="node.type === 'submenu'" class="floating-context-submenu">
           <button type="button">{{ node.label }}</button>
           <div class="floating-context-submenu-items">
             <template v-for="(child, childIndex) in node.items" :key="childIndex">
-              <hr v-if="child.type === 'separator'">
-              <button v-else-if="child.type === 'item'" type="button" @click="runAction(child.id)">{{ child.label }}</button>
+              <hr v-if="child.type === 'separator'" />
+              <button v-else-if="child.type === 'item'" type="button" @click="runAction(child.id)">
+                {{ child.label }}
+              </button>
             </template>
           </div>
         </div>

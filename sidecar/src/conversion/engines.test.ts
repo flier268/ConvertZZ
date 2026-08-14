@@ -37,7 +37,11 @@ describe("ConversionService", () => {
   });
 
   it("保留標點與不可辨識片段", async () => {
-    const result = await service.convert({ text: "里面  😀\n《A》", direction: "s2t", engine: "segmented" });
+    const result = await service.convert({
+      text: "里面  😀\n《A》",
+      direction: "s2t",
+      engine: "segmented",
+    });
     expect(result.text).toBe("裡面  😀\n《A》");
   });
 
@@ -49,13 +53,22 @@ describe("ConversionService", () => {
   }, 15_000);
 
   it("沿用舊版字典", async () => {
-    const result = await service.convert({ text: "软件和头发", direction: "s2t", engine: "legacy" });
+    const result = await service.convert({
+      text: "软件和头发",
+      direction: "s2t",
+      engine: "legacy",
+    });
     expect(result.text).toContain("軟體");
     expect(result.text).toContain("頭髮");
   });
 
   it("停用詞彙修正時只執行字形轉換", async () => {
-    const result = await service.convert({ text: "里面", direction: "s2t", engine: "segmented", vocabularyCorrection: false });
+    const result = await service.convert({
+      text: "里面",
+      direction: "s2t",
+      engine: "segmented",
+      vocabularyCorrection: false,
+    });
     expect(result.text).toBe("里麵");
     expect(result.warnings[0]).toContain("詞彙修正已停用");
   });

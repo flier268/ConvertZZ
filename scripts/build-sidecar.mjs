@@ -9,24 +9,43 @@ const triple = process.env.TAURI_ENV_TARGET_TRIPLE || hostTriple();
 const target = pkgTarget(triple);
 const extension = triple.includes("windows") ? ".exe" : "";
 const output = resolve(root, "src-tauri", "binaries", `convertzz-sidecar-${triple}${extension}`);
-const executable = resolve(root, "node_modules", ".bin", process.platform === "win32" ? "pkg.cmd" : "pkg");
+const executable = resolve(
+  root,
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "pkg.cmd" : "pkg",
+);
 
 mkdirSync(dirname(output), { recursive: true });
 if (existsSync(output)) rmSync(output);
 
-const result = spawnSync(executable, ["package.json", "--targets", target, "--output", output, "--compress", "GZip"], {
-  cwd: root,
-  stdio: "inherit",
-  shell: process.platform === "win32",
-});
+const result = spawnSync(
+  executable,
+  ["package.json", "--targets", target, "--output", output, "--compress", "GZip"],
+  {
+    cwd: root,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  },
+);
 
 if (result.status !== 0) process.exit(result.status ?? 1);
 console.log(`Sidecar ready: ${output}`);
 
 if (triple.includes("linux")) {
-  const staleResource = resolve(root, "src-tauri", "binaries", "convertzz-sidecar-linux-resource.bin");
+  const staleResource = resolve(
+    root,
+    "src-tauri",
+    "binaries",
+    "convertzz-sidecar-linux-resource.bin",
+  );
   const resource = resolve(root, "src-tauri", "binaries", "convertzz-sidecar-linux-resource.gz");
-  const checksum = resolve(root, "src-tauri", "binaries", "convertzz-sidecar-linux-resource.sha256");
+  const checksum = resolve(
+    root,
+    "src-tauri",
+    "binaries",
+    "convertzz-sidecar-linux-resource.sha256",
+  );
   const sidecar = readFileSync(output);
   if (existsSync(staleResource)) rmSync(staleResource);
   writeFileSync(resource, gzipSync(sidecar, { level: 9 }));

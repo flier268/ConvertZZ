@@ -29,8 +29,15 @@ class SidecarClient {
           this.pending.delete(requestId);
           reject(new Error(`Sidecar 要求逾時：${operation}`));
         }, timeoutMs);
-        this.pending.set(requestId, { resolve: resolve as (value: unknown) => void, reject, timer, onProgress });
-        await invoke("sidecar_send", { request: JSON.stringify({ id: requestId, operation, payload }) });
+        this.pending.set(requestId, {
+          resolve: resolve as (value: unknown) => void,
+          reject,
+          timer,
+          onProgress,
+        });
+        await invoke("sidecar_send", {
+          request: JSON.stringify({ id: requestId, operation, payload }),
+        });
       } catch (error) {
         if (id) {
           const pending = this.pending.get(id);
@@ -47,7 +54,9 @@ class SidecarClient {
       this.initialized = Promise.all([
         listen<string>("sidecar://message", ({ payload }) => this.receive(payload)),
         listen<string>("sidecar://error", ({ payload }) => console.error("Sidecar:", payload)),
-        listen<number | null>("sidecar://terminated", ({ payload }) => this.failAll(`Sidecar 已終止。結束碼：${payload ?? "未知"}`)),
+        listen<number | null>("sidecar://terminated", ({ payload }) =>
+          this.failAll(`Sidecar 已終止。結束碼：${payload ?? "未知"}`),
+        ),
       ]).then(() => undefined);
     }
     return this.initialized;
@@ -70,7 +79,13 @@ class SidecarClient {
     clearTimeout(pending.timer);
     this.pending.delete(response.id);
     if (response.ok) pending.resolve(response.result);
-    else pending.reject(Object.assign(new Error(response.error?.message ?? "Sidecar 操作失敗。"), { code: response.error?.code, details: response.error?.details }));
+    else
+      pending.reject(
+        Object.assign(new Error(response.error?.message ?? "Sidecar 操作失敗。"), {
+          code: response.error?.code,
+          details: response.error?.details,
+        }),
+      );
   }
 
   private failAll(message: string): void {

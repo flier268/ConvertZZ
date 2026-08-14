@@ -17,7 +17,8 @@ const wasmPath = resolve("node_modules/taglib-wasm/dist/taglib-wasi.wasm");
 const ffmpegPath = resolveFfmpeg();
 const bundledApe = resolve("tests/fixtures/mac-399.ape");
 const bundledOgg = resolve("tests/fixtures/test.ogg");
-const apeFixture = process.env.CONVERTZZ_APE_FIXTURE ?? (existsSync(bundledApe) ? bundledApe : undefined);
+const apeFixture =
+  process.env.CONVERTZZ_APE_FIXTURE ?? (existsSync(bundledApe) ? bundledApe : undefined);
 const oggFixture = existsSync(bundledOgg) ? bundledOgg : undefined;
 const temporaryDirectories: string[] = [];
 
@@ -69,7 +70,9 @@ describe("音訊批次選取", () => {
     await writeTaggedMp3(skippedPath, "里面", "裡面");
     const service = audioService();
     const scanned = await service.scan({ paths: [directory], recursive: false });
-    const selectedTitle = scanned.find((file) => file.path === selectedPath)!.fields.find((field) => field.container === "id3v1" && field.key === "title")!;
+    const selectedTitle = scanned
+      .find((file) => file.path === selectedPath)!
+      .fields.find((field) => field.container === "id3v1" && field.key === "title")!;
     const skippedBefore = await readFile(skippedPath);
 
     const plan = await service.plan({
@@ -107,14 +110,24 @@ describe("MP3 容器選項", () => {
       id3v2Direction: "t2s",
     });
     const preview = plan.files[0];
-    expect(preview.fields.find((field) => field.container === "id3v1" && field.key === "title")?.convertedValues).toEqual(["裡面"]);
-    expect(preview.fields.find((field) => field.container === "id3v2" && field.key === "title")?.convertedValues).toEqual(["里面"]);
+    expect(
+      preview.fields.find((field) => field.container === "id3v1" && field.key === "title")
+        ?.convertedValues,
+    ).toEqual(["裡面"]);
+    expect(
+      preview.fields.find((field) => field.container === "id3v2" && field.key === "title")
+        ?.convertedValues,
+    ).toEqual(["里面"]);
 
     const result = await service.apply(plan.planId);
     expect(result.failed).toEqual([]);
     const [verified] = await service.scan({ paths: [path], id3v1SourceEncoding: "big5" });
-    expect(verified.fields.find((field) => field.container === "id3v1" && field.key === "title")?.values).toEqual(["裡面"]);
-    expect(verified.fields.find((field) => field.container === "id3v2" && field.key === "title")?.values).toEqual(["里面"]);
+    expect(
+      verified.fields.find((field) => field.container === "id3v1" && field.key === "title")?.values,
+    ).toEqual(["裡面"]);
+    expect(
+      verified.fields.find((field) => field.container === "id3v2" && field.key === "title")?.values,
+    ).toEqual(["里面"]);
     expect(mp3AudioPayload(await readFile(path))).toEqual(beforeAudio);
     expect(mp3PictureData(await readFile(path))).toEqual(beforePicture);
   });
@@ -130,12 +143,19 @@ describe("MP3 容器選項", () => {
       selectedFields: { [path]: ["id3v1:title", "id3v2:title"] },
       id3v2Enabled: false,
     });
-    expect(plan.files[0].fields.find((field) => field.container === "id3v2" && field.key === "title")?.selected).toBe(false);
+    expect(
+      plan.files[0].fields.find((field) => field.container === "id3v2" && field.key === "title")
+        ?.selected,
+    ).toBe(false);
 
     await service.apply(plan.planId);
     const [verified] = await service.scan({ paths: [path], id3v1SourceEncoding: "big5" });
-    expect(verified.fields.find((field) => field.container === "id3v1" && field.key === "title")?.values).toEqual(["裡面"]);
-    expect(verified.fields.find((field) => field.container === "id3v2" && field.key === "title")?.values).toEqual(["里面"]);
+    expect(
+      verified.fields.find((field) => field.container === "id3v1" && field.key === "title")?.values,
+    ).toEqual(["裡面"]);
+    expect(
+      verified.fields.find((field) => field.container === "id3v2" && field.key === "title")?.values,
+    ).toEqual(["里面"]);
   });
 
   it("依舊版比例規則修復 ID3v2 來源錯碼", async () => {
@@ -145,11 +165,23 @@ describe("MP3 容器選項", () => {
     await writeTaggedMp3(path, "里面", mojibake);
     const service = audioService();
 
-    const [raw] = await service.scan({ paths: [path], id3v2SourceEncoding: "big5", id3v2RepairSourceEncoding: false });
-    expect(raw.fields.find((field) => field.container === "id3v2" && field.key === "title")?.values).toEqual([mojibake]);
+    const [raw] = await service.scan({
+      paths: [path],
+      id3v2SourceEncoding: "big5",
+      id3v2RepairSourceEncoding: false,
+    });
+    expect(
+      raw.fields.find((field) => field.container === "id3v2" && field.key === "title")?.values,
+    ).toEqual([mojibake]);
 
-    const [repaired] = await service.scan({ paths: [path], id3v2SourceEncoding: "big5", id3v2RepairSourceEncoding: true });
-    expect(repaired.fields.find((field) => field.container === "id3v2" && field.key === "title")?.values).toEqual(["裡面"]);
+    const [repaired] = await service.scan({
+      paths: [path],
+      id3v2SourceEncoding: "big5",
+      id3v2RepairSourceEncoding: true,
+    });
+    expect(
+      repaired.fields.find((field) => field.container === "id3v2" && field.key === "title")?.values,
+    ).toEqual(["裡面"]);
   });
 
   it("ID3v1 可用 Big5 與 GBK 讀回損壞標題", async () => {
@@ -159,13 +191,21 @@ describe("MP3 容器選項", () => {
       const path = join(directory, `${encoding}.mp3`);
       await writeFile(path, id3v1OnlyMp3("裡面", encoding));
       const [scanned] = await service.scan({ paths: [path], id3v1SourceEncoding: encoding });
-      expect(scanned.fields.find((field) => field.container === "id3v1" && field.key === "title")?.values).toEqual(["裡面"]);
+      expect(
+        scanned.fields.find((field) => field.container === "id3v1" && field.key === "title")
+          ?.values,
+      ).toEqual(["裡面"]);
     }
   });
 });
 
 describe("音訊標籤整合", () => {
-  const samples: Array<{ extension: string; codec?: string; container: AudioContainer; fixture?: string }> = [
+  const samples: Array<{
+    extension: string;
+    codec?: string;
+    container: AudioContainer;
+    fixture?: string;
+  }> = [
     { extension: "mp3", codec: "libmp3lame", container: "id3v2" },
     { extension: "ape", fixture: apeFixture, container: "apev2" },
     { extension: "ogg", codec: "libvorbis", container: "vorbis-comment" },
@@ -183,109 +223,134 @@ describe("音訊標籤整合", () => {
 
   for (const sample of samples) {
     const needsFixture = sample.extension === "ape" || sample.extension === "oga";
-    const available = Boolean(ffmpegPath) && (!needsFixture || Boolean(sample.fixture && existsSync(sample.fixture)));
-    it.runIf(available)(`轉換 .${sample.extension} 標籤並保持音訊與未選欄位`, async () => {
-      const path = join(directory, `sample.${sample.extension}`);
-      generateAudio(path, sample.codec, sample.fixture);
-      await taglib.edit(path, (audio) => {
-        const properties: PropertyMap = {
-          title: ["里面开发"],
-          artist: ["头发", "皇后"],
-          album: ["未选择里面"],
-          CUSTOM_TEXT: ["自订里面"],
-        };
-        audio.setProperties(properties);
-        audio.addPicture(coverPicture());
-      });
+    const available =
+      Boolean(ffmpegPath) &&
+      (!needsFixture || Boolean(sample.fixture && existsSync(sample.fixture)));
+    it.runIf(available)(
+      `轉換 .${sample.extension} 標籤並保持音訊與未選欄位`,
+      async () => {
+        const path = join(directory, `sample.${sample.extension}`);
+        generateAudio(path, sample.codec, sample.fixture);
+        await taglib.edit(path, (audio) => {
+          const properties: PropertyMap = {
+            title: ["里面开发"],
+            artist: ["头发", "皇后"],
+            album: ["未选择里面"],
+            CUSTOM_TEXT: ["自订里面"],
+          };
+          audio.setProperties(properties);
+          audio.addPicture(coverPicture());
+        });
 
-      const beforeAudio = await audioFingerprint(path, sample.extension);
-      const before = await readTagSnapshot(taglib, path);
+        const beforeAudio = await audioFingerprint(path, sample.extension);
+        const before = await readTagSnapshot(taglib, path);
+        const service = new AudioService(
+          new ConversionService(resolve("ConvertZZ/Dictionary.csv")),
+          wasmPath,
+        );
+        const [scan] = await service.scan({ paths: [path], id3v1SourceEncoding: "gbk" });
+        expect(scan.warning).toBeUndefined();
+        expect(scan.hasCoverArt).toBe(true);
+        const title = scan.fields.find(
+          (field) => field.container === sample.container && field.key.toLowerCase() === "title",
+        );
+        expect(title).toBeDefined();
+
+        const plan = await service.plan({
+          paths: [path],
+          selectedPaths: [path],
+          selectedFields: { [path]: [`${sample.container}:${title!.key}`] },
+          conversion: { direction: "s2t", engine: "segmented" },
+          conflictPolicy: "skip",
+          id3v1Enabled: true,
+          id3v1Direction: "s2t",
+          id3v1SourceEncoding: "gbk",
+          id3v1OutputEncoding: "big5",
+          id3v2Enabled: true,
+          id3v2Direction: "s2t",
+          id3v2Version: 4,
+          id3v2Encoding: "utf8",
+        });
+        const result = await service.apply(plan.planId);
+        expect(result.failed).toEqual([]);
+        expect(result.succeeded).toEqual([path]);
+
+        const after = await readTagSnapshot(taglib, path);
+        expect(property(after.properties, "title")).toEqual(["裡面開發"]);
+        expect(property(after.properties, "artist")).toEqual(property(before.properties, "artist"));
+        expect(property(after.properties, "album")).toEqual(property(before.properties, "album"));
+        expect(property(after.properties, "custom_text")).toEqual(
+          property(before.properties, "custom_text"),
+        );
+        expect(after.pictures).toEqual(before.pictures);
+        expect(await audioFingerprint(path, sample.extension)).toBe(beforeAudio);
+      },
+      30_000,
+    );
+  }
+
+  it.runIf(Boolean(ffmpegPath) && Boolean(apeFixture) && Boolean(oggFixture))(
+    "依副檔名辨識 MP3、APE、OGG 與 Opus",
+    async () => {
+      directory ||= await temporaryDirectory("convertzz-audio-");
+      const paths = {
+        mp3: join(directory, "identify.mp3"),
+        ape: join(directory, "identify.ape"),
+        ogg: join(directory, "identify.ogg"),
+        opus: join(directory, "identify.opus"),
+      };
+      generateAudio(paths.mp3, "libmp3lame");
+      generateAudio(paths.ape, undefined, apeFixture);
+      generateAudio(paths.ogg, "libvorbis");
+      generateAudio(paths.opus, "libopus");
       const service = new AudioService(
         new ConversionService(resolve("ConvertZZ/Dictionary.csv")),
         wasmPath,
       );
-      const [scan] = await service.scan({ paths: [path], id3v1SourceEncoding: "gbk" });
-      expect(scan.warning).toBeUndefined();
-      expect(scan.hasCoverArt).toBe(true);
-      const title = scan.fields.find((field) => field.container === sample.container && field.key.toLowerCase() === "title");
-      expect(title).toBeDefined();
+      const scanned = await service.scan({ paths: Object.values(paths) });
+      expect(new Set(scanned.map((file) => file.format))).toEqual(
+        new Set(["mp3", "ape", "ogg", "opus"]),
+      );
+      expect(scanned.every((file) => !file.warning)).toBe(true);
+    },
+    30_000,
+  );
 
-      const plan = await service.plan({
-        paths: [path],
-        selectedPaths: [path],
-        selectedFields: { [path]: [`${sample.container}:${title!.key}`] },
-        conversion: { direction: "s2t", engine: "segmented" },
-        conflictPolicy: "skip",
-        id3v1Enabled: true,
-        id3v1Direction: "s2t",
-        id3v1SourceEncoding: "gbk",
-        id3v1OutputEncoding: "big5",
-        id3v2Enabled: true,
-        id3v2Direction: "s2t",
-        id3v2Version: 4,
-        id3v2Encoding: "utf8",
+  it.runIf(Boolean(ffmpegPath))(
+    "多值欄位會逐值轉換",
+    async () => {
+      directory ||= await temporaryDirectory("convertzz-audio-");
+      const path = join(directory, "multivalue.ogg");
+      generateAudio(path, "libvorbis");
+      taglib ??= await TagLib.initialize({ wasmUrl: wasmPath, forceWasmType: "wasi" });
+      await taglib.edit(path, (audio) => {
+        audio.setProperties({ artist: ["头发", "皇后"] });
       });
-      const result = await service.apply(plan.planId);
-      expect(result.failed).toEqual([]);
-      expect(result.succeeded).toEqual([path]);
-
+      const service = new AudioService(
+        new ConversionService(resolve("ConvertZZ/Dictionary.csv")),
+        wasmPath,
+      );
+      const [scan] = await service.scan({ paths: [path] });
+      const artist = scan.fields.find((field) => field.key.toLowerCase() === "artist");
+      expect(artist?.values).toEqual(["头发", "皇后"]);
+      const plan = await service.plan({
+        ...basePlanRequest([path]),
+        selectedPaths: [path],
+        selectedFields: { [path]: [`vorbis-comment:${artist!.key}`] },
+      });
+      expect(
+        plan.files[0].fields.find((field) => field.key.toLowerCase() === "artist")?.convertedValues,
+      ).toEqual(["頭髮", "皇后"]);
+      await service.apply(plan.planId);
       const after = await readTagSnapshot(taglib, path);
-      expect(property(after.properties, "title")).toEqual(["裡面開發"]);
-      expect(property(after.properties, "artist")).toEqual(property(before.properties, "artist"));
-      expect(property(after.properties, "album")).toEqual(property(before.properties, "album"));
-      expect(property(after.properties, "custom_text")).toEqual(property(before.properties, "custom_text"));
-      expect(after.pictures).toEqual(before.pictures);
-      expect(await audioFingerprint(path, sample.extension)).toBe(beforeAudio);
-    }, 30_000);
-  }
-
-  it.runIf(Boolean(ffmpegPath) && Boolean(apeFixture) && Boolean(oggFixture))("依副檔名辨識 MP3、APE、OGG 與 Opus", async () => {
-    directory ||= await temporaryDirectory("convertzz-audio-");
-    const paths = {
-      mp3: join(directory, "identify.mp3"),
-      ape: join(directory, "identify.ape"),
-      ogg: join(directory, "identify.ogg"),
-      opus: join(directory, "identify.opus"),
-    };
-    generateAudio(paths.mp3, "libmp3lame");
-    generateAudio(paths.ape, undefined, apeFixture);
-    generateAudio(paths.ogg, "libvorbis");
-    generateAudio(paths.opus, "libopus");
-    const service = new AudioService(new ConversionService(resolve("ConvertZZ/Dictionary.csv")), wasmPath);
-    const scanned = await service.scan({ paths: Object.values(paths) });
-    expect(new Set(scanned.map((file) => file.format))).toEqual(new Set(["mp3", "ape", "ogg", "opus"]));
-    expect(scanned.every((file) => !file.warning)).toBe(true);
-  }, 30_000);
-
-  it.runIf(Boolean(ffmpegPath))("多值欄位會逐值轉換", async () => {
-    directory ||= await temporaryDirectory("convertzz-audio-");
-    const path = join(directory, "multivalue.ogg");
-    generateAudio(path, "libvorbis");
-    taglib ??= await TagLib.initialize({ wasmUrl: wasmPath, forceWasmType: "wasi" });
-    await taglib.edit(path, (audio) => {
-      audio.setProperties({ artist: ["头发", "皇后"] });
-    });
-    const service = new AudioService(new ConversionService(resolve("ConvertZZ/Dictionary.csv")), wasmPath);
-    const [scan] = await service.scan({ paths: [path] });
-    const artist = scan.fields.find((field) => field.key.toLowerCase() === "artist");
-    expect(artist?.values).toEqual(["头发", "皇后"]);
-    const plan = await service.plan({
-      ...basePlanRequest([path]),
-      selectedPaths: [path],
-      selectedFields: { [path]: [`vorbis-comment:${artist!.key}`] },
-    });
-    expect(plan.files[0].fields.find((field) => field.key.toLowerCase() === "artist")?.convertedValues).toEqual(["頭髮", "皇后"]);
-    await service.apply(plan.planId);
-    const after = await readTagSnapshot(taglib, path);
-    expect(property(after.properties, "artist")).toEqual(["頭髮", "皇后"]);
-  }, 30_000);
+      expect(property(after.properties, "artist")).toEqual(["頭髮", "皇后"]);
+    },
+    30_000,
+  );
 });
 
 function audioService(): AudioService {
-  return new AudioService(
-    new ConversionService(resolve("ConvertZZ/Dictionary.csv")),
-    wasmPath,
-  );
+  return new AudioService(new ConversionService(resolve("ConvertZZ/Dictionary.csv")), wasmPath);
 }
 
 function basePlanRequest(paths: string[]): AudioTagPlanRequest {
@@ -315,21 +380,30 @@ function id3v1OnlyMp3(title: string, encoding: "big5" | "gbk"): Buffer {
   return Buffer.concat([audio, tag]);
 }
 
-async function writeTaggedMp3(path: string, id3v1Title: string, id3v2Title: string, withPicture = false): Promise<void> {
+async function writeTaggedMp3(
+  path: string,
+  id3v1Title: string,
+  id3v2Title: string,
+  withPicture = false,
+): Promise<void> {
   const audio = Buffer.from([0xff, 0xfb, 0x90, 0x64, 0, 0, 0, 0, 0, 0]);
   const parser = new MP3Tag(audio);
   parser.tags = {
     v2: {
       TIT2: id3v2Title,
-      ...(withPicture ? { APIC: [{ format: "image/png", type: 3, description: "cover", data: [1, 2, 3, 4] }] } : {}),
+      ...(withPicture
+        ? { APIC: [{ format: "image/png", type: 3, description: "cover", data: [1, 2, 3, 4] }] }
+        : {}),
     },
     v2Details: { version: [4, 0] },
   };
-  const id3v2 = Buffer.from(parser.save({
-    strict: false,
-    id3v1: { include: false },
-    id3v2: { include: true, version: 4, encoding: "utf8", unsupported: true },
-  }) as ArrayBuffer);
+  const id3v2 = Buffer.from(
+    parser.save({
+      strict: false,
+      id3v1: { include: false },
+      id3v2: { include: true, version: 4, encoding: "utf8", unsupported: true },
+    }) as ArrayBuffer,
+  );
   if (parser.error) throw new Error(parser.error);
   const id3v1 = Buffer.alloc(128);
   id3v1.write("TAG", 0, "ascii");
@@ -404,33 +478,31 @@ async function audioFingerprint(path: string, extension: string): Promise<string
 
 function decodedAudioHash(path: string): string {
   if (!ffmpegPath) throw new Error("音訊測試缺少 ffmpeg。");
-  return execFileSync(ffmpegPath, [
-    "-hide_banner",
-    "-loglevel",
-    "error",
-    "-i",
-    path,
-    "-map",
-    "0:a:0",
-    "-f",
-    "framemd5",
-    "-",
-  ], { encoding: "utf8" });
+  return execFileSync(
+    ffmpegPath,
+    ["-hide_banner", "-loglevel", "error", "-i", path, "-map", "0:a:0", "-f", "framemd5", "-"],
+    { encoding: "utf8" },
+  );
 }
 
 function coverPicture(): Picture {
   return {
     mimeType: "image/png",
-    data: Uint8Array.from(Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nH0AAAAASUVORK5CYII=",
-      "base64",
-    )),
+    data: Uint8Array.from(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nH0AAAAASUVORK5CYII=",
+        "base64",
+      ),
+    ),
     type: "FrontCover",
     description: "ConvertZZ test cover",
   };
 }
 
-async function readTagSnapshot(taglib: TagLib, path: string): Promise<{ properties: PropertyMap; pictures: number[][] }> {
+async function readTagSnapshot(
+  taglib: TagLib,
+  path: string,
+): Promise<{ properties: PropertyMap; pictures: number[][] }> {
   const file = await taglib.open(path);
   try {
     return {
@@ -443,6 +515,8 @@ async function readTagSnapshot(taglib: TagLib, path: string): Promise<{ properti
 }
 
 function property(properties: PropertyMap, key: string): string[] | undefined {
-  const match = Object.entries(properties).find(([candidate]) => candidate.toLowerCase() === key.toLowerCase());
+  const match = Object.entries(properties).find(
+    ([candidate]) => candidate.toLowerCase() === key.toLowerCase(),
+  );
   return match?.[1];
 }

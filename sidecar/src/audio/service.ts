@@ -1,5 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { chmod, copyFile, lstat, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  lstat,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import MP3Tag from "mp3tag.js";
 import { TagLib, type PropertyMap } from "taglib-wasm";
@@ -82,7 +92,11 @@ export class AudioService {
           warning: error instanceof Error ? error.message : String(error),
         });
       }
-      report?.({ current: index + 1, total: paths.length, message: `正在掃描：${path.split(/[\\/]/u).at(-1) ?? path}` });
+      report?.({
+        current: index + 1,
+        total: paths.length,
+        message: `正在掃描：${path.split(/[\\/]/u).at(-1) ?? path}`,
+      });
     }
     return files;
   }
@@ -97,8 +111,14 @@ export class AudioService {
       file.selected = selectedPaths.has(file.path);
       if (file.warning) continue;
       if (!file.selected) {
-        file.fields.forEach((field) => { field.selected = false; });
-        report?.({ current: index + 1, total: scanned.length, message: `已略過未選檔案：${file.path.split(/[\\/]/u).at(-1) ?? file.path}` });
+        file.fields.forEach((field) => {
+          field.selected = false;
+        });
+        report?.({
+          current: index + 1,
+          total: scanned.length,
+          message: `已略過未選檔案：${file.path.split(/[\\/]/u).at(-1) ?? file.path}`,
+        });
         continue;
       }
       const selected = new Set(request.selectedFields[file.path] ?? []);
@@ -111,7 +131,10 @@ export class AudioService {
         if (!field.selected) continue;
         const convertedValues: string[] = [];
         for (const value of field.values) {
-          const result = await this.conversion.convert({ text: value, ...conversionForContainer(request, field.container) });
+          const result = await this.conversion.convert({
+            text: value,
+            ...conversionForContainer(request, field.container),
+          });
           convertedValues.push(result.text);
           warnings.push(...result.warnings);
         }
@@ -128,7 +151,11 @@ export class AudioService {
         request,
         originalPictureCount: file.hasCoverArt ? await this.pictureCount(file.path) : 0,
       });
-      report?.({ current: index + 1, total: scanned.length, message: `正在建立標籤預覽：${file.path.split(/[\\/]/u).at(-1) ?? file.path}` });
+      report?.({
+        current: index + 1,
+        total: scanned.length,
+        message: `正在建立標籤預覽：${file.path.split(/[\\/]/u).at(-1) ?? file.path}`,
+      });
     }
 
     const planId = randomUUID();
@@ -158,9 +185,16 @@ export class AudioService {
         else await this.applyTagLib(file);
         result.succeeded.push(file.path);
       } catch (error) {
-        result.failed.push({ path: file.path, message: error instanceof Error ? error.message : String(error) });
+        result.failed.push({
+          path: file.path,
+          message: error instanceof Error ? error.message : String(error),
+        });
       }
-      report?.({ current: index + 1, total: plan.files.length, message: `正在寫入標籤：${file.path.split(/[\\/]/u).at(-1) ?? file.path}` });
+      report?.({
+        current: index + 1,
+        total: plan.files.length,
+        message: `正在寫入標籤：${file.path.split(/[\\/]/u).at(-1) ?? file.path}`,
+      });
     }
 
     this.plans.delete(planId);
@@ -184,7 +218,9 @@ export class AudioService {
       if (!file.isValid()) throw new ConvertZZError("AUDIO_INVALID", "音訊檔案無法解析。");
       const container: AudioContainer = format === "ape" ? "apev2" : "vorbis-comment";
       const fields = Object.entries(file.properties()).flatMap(([key, values]) =>
-        values?.every((value) => typeof value === "string") ? [makeField(container, key, values)] : [],
+        values?.every((value) => typeof value === "string")
+          ? [makeField(container, key, values)]
+          : [],
       );
       const properties = file.audioProperties();
       return {
@@ -213,17 +249,31 @@ export class AudioService {
     const fields: AudioTagField[] = [];
     const v1 = readId3v1(buffer, id3v1Encoding);
     if (v1) {
-      for (const [key, value] of Object.entries(v1.values)) fields.push(makeField("id3v1", key, [value]));
+      for (const [key, value] of Object.entries(v1.values))
+        fields.push(makeField("id3v1", key, [value]));
     }
     if (tags.v2) {
-      for (const key of ["title", "artist", "album", "year", "track", "comment", "genre"] as const) {
+      for (const key of [
+        "title",
+        "artist",
+        "album",
+        "year",
+        "track",
+        "comment",
+        "genre",
+      ] as const) {
         const value = tags[key];
-        if (typeof value === "string") fields.push(makeField("id3v2", key, [repairId3v2Value(value, id3v2Encoding, repairId3v2)]));
+        if (typeof value === "string")
+          fields.push(
+            makeField("id3v2", key, [repairId3v2Value(value, id3v2Encoding, repairId3v2)]),
+          );
       }
-      fields.push(...readAdditionalId3v2TextFields(tags.v2).map((field) => ({
-        ...field,
-        values: field.values.map((value) => repairId3v2Value(value, id3v2Encoding, repairId3v2)),
-      })));
+      fields.push(
+        ...readAdditionalId3v2TextFields(tags.v2).map((field) => ({
+          ...field,
+          values: field.values.map((value) => repairId3v2Value(value, id3v2Encoding, repairId3v2)),
+        })),
+      );
     }
     const pictures = tags.v2?.APIC ?? tags.v2?.PIC ?? [];
     return { path, format: "mp3", selected: true, fields, hasCoverArt: pictures.length > 0 };
@@ -248,16 +298,18 @@ export class AudioService {
     }
 
     let output: Buffer<ArrayBufferLike> = writesId3v2
-      ? Buffer.from(parser.save({
-        strict: false,
-        id3v1: { include: false },
-        id3v2: {
-          include: true,
-          version: file.request.id3v2Version,
-          encoding: file.request.id3v2Encoding,
-          unsupported: true,
-        },
-      }) as ArrayBuffer)
+      ? Buffer.from(
+          parser.save({
+            strict: false,
+            id3v1: { include: false },
+            id3v2: {
+              include: true,
+              version: file.request.id3v2Version,
+              encoding: file.request.id3v2Encoding,
+              unsupported: true,
+            },
+          }) as ArrayBuffer,
+        )
       : Buffer.from(stripId3v1(source));
     if (parser.error) throw new ConvertZZError("ID3_WRITE", parser.error);
 
@@ -266,16 +318,26 @@ export class AudioService {
       const values = existingV1?.values ?? emptyId3v1();
       for (const [identifier, converted] of Object.entries(file.updates)) {
         const [container, key] = splitFieldId(identifier);
-        if (container === "id3v1" && key in values) values[key as keyof typeof values] = converted[0] ?? "";
+        if (container === "id3v1" && key in values)
+          values[key as keyof typeof values] = converted[0] ?? "";
       }
-      output = appendId3v1(stripId3v1(output), values, existingV1?.genreCode ?? 255, file.request.id3v1OutputEncoding);
+      output = appendId3v1(
+        stripId3v1(output),
+        values,
+        existingV1?.genreCode ?? 255,
+        file.request.id3v1OutputEncoding,
+      );
     } else if (existingV1) {
       output = Buffer.concat([stripId3v1(output), source.subarray(source.length - 128)]);
     }
     await this.replaceMp3Atomically(file, source, output);
   }
 
-  private async replaceMp3Atomically(file: PreparedAudio, source: Buffer, content: Buffer): Promise<void> {
+  private async replaceMp3Atomically(
+    file: PreparedAudio,
+    source: Buffer,
+    content: Buffer,
+  ): Promise<void> {
     const temporary = temporaryPath(file.path);
     try {
       await writeFile(temporary, content, { flag: "wx" });
@@ -285,7 +347,11 @@ export class AudioService {
       const staged = await readFile(temporary);
       const verifiedParser = new MP3Tag(staged);
       const verifiedTags = verifiedParser.read({ id3v1: true, id3v2: true, unsupported: true });
-      if (verifiedParser.error) throw new ConvertZZError("AUDIO_VERIFY", `MP3 標籤寫入後無法重新解析：${verifiedParser.error}`);
+      if (verifiedParser.error)
+        throw new ConvertZZError(
+          "AUDIO_VERIFY",
+          `MP3 標籤寫入後無法重新解析：${verifiedParser.error}`,
+        );
 
       if (!mp3AudioPayload(source).equals(mp3AudioPayload(staged))) {
         throw new ConvertZZError("AUDIO_VERIFY", "MP3 標籤寫入改變了音訊資料。");
@@ -300,17 +366,22 @@ export class AudioService {
 
       const verified = await this.scanMp3(
         temporary,
-        file.selectedContainers.has("id3v1") ? file.request.id3v1OutputEncoding : file.request.id3v1SourceEncoding ?? "gbk",
+        file.selectedContainers.has("id3v1")
+          ? file.request.id3v1OutputEncoding
+          : (file.request.id3v1SourceEncoding ?? "gbk"),
         "utf8",
         false,
       );
       const expectedV1 = readId3v1(content, file.request.id3v1OutputEncoding)?.values;
       for (const [identifier, expected] of Object.entries(file.updates)) {
         const [container, key] = splitFieldId(identifier);
-        const field = verified.fields.find((candidate) => candidate.container === container && candidate.key === key);
-        const expectedValues = container === "id3v1" && expectedV1 && key in expectedV1
-          ? [expectedV1[key as keyof Id3v1Values]]
-          : expected;
+        const field = verified.fields.find(
+          (candidate) => candidate.container === container && candidate.key === key,
+        );
+        const expectedValues =
+          container === "id3v1" && expectedV1 && key in expectedV1
+            ? [expectedV1[key as keyof Id3v1Values]]
+            : expected;
         if (!field || !sameValues(field.values, expectedValues)) {
           throw new ConvertZZError("AUDIO_VERIFY", `MP3 標籤欄位 ${identifier} 寫入後驗證失敗。`);
         }
@@ -338,7 +409,8 @@ export class AudioService {
       });
       const verification = await taglib.open(temporary);
       try {
-        if (!verification.isValid()) throw new ConvertZZError("AUDIO_VERIFY", "標籤寫入後的音訊檔案無法驗證。");
+        if (!verification.isValid())
+          throw new ConvertZZError("AUDIO_VERIFY", "標籤寫入後的音訊檔案無法驗證。");
         if (verification.getPictures().length !== file.originalPictureCount) {
           throw new ConvertZZError("AUDIO_PICTURE", "標籤寫入造成封面圖片數量改變。");
         }
@@ -373,7 +445,8 @@ export class AudioService {
   }
 
   private throwIfCancelled(planId: string): void {
-    if (this.cancelledPlans.has(planId)) throw new ConvertZZError("PLAN_CANCELLED", "音訊標籤作業已由使用者取消。");
+    if (this.cancelledPlans.has(planId))
+      throw new ConvertZZError("PLAN_CANCELLED", "音訊標籤作業已由使用者取消。");
   }
 }
 
@@ -393,7 +466,11 @@ async function expandAudioPaths(inputPaths: string[], recursive: boolean): Promi
   return Array.from(paths).sort((left, right) => left.localeCompare(right));
 }
 
-async function collectAudioFiles(directory: string, recursive: boolean, paths: Set<string>): Promise<void> {
+async function collectAudioFiles(
+  directory: string,
+  recursive: boolean,
+  paths: Set<string>,
+): Promise<void> {
   const entries = await readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.isSymbolicLink()) continue;
@@ -413,24 +490,33 @@ function containerEnabled(request: AudioTagPlanRequest, container: AudioContaine
   return true;
 }
 
-function directionForContainer(request: AudioTagPlanRequest, container: AudioContainer): AudioTagPlanRequest["conversion"]["direction"] {
+function directionForContainer(
+  request: AudioTagPlanRequest,
+  container: AudioContainer,
+): AudioTagPlanRequest["conversion"]["direction"] {
   if (container === "id3v1") return request.id3v1Direction;
   if (container === "id3v2") return request.id3v2Direction;
   return request.conversion.direction;
 }
 
-function conversionForContainer(request: AudioTagPlanRequest, container: AudioContainer): AudioTagPlanRequest["conversion"] {
-  const zhconvert = container === "id3v1"
-    ? request.id3v1Zhconvert ?? request.conversion.zhconvert
-    : container === "id3v2"
-      ? request.id3v2Zhconvert ?? request.conversion.zhconvert
-      : request.conversion.zhconvert;
+function conversionForContainer(
+  request: AudioTagPlanRequest,
+  container: AudioContainer,
+): AudioTagPlanRequest["conversion"] {
+  const zhconvert =
+    container === "id3v1"
+      ? (request.id3v1Zhconvert ?? request.conversion.zhconvert)
+      : container === "id3v2"
+        ? (request.id3v2Zhconvert ?? request.conversion.zhconvert)
+        : request.conversion.zhconvert;
   return { ...request.conversion, direction: directionForContainer(request, container), zhconvert };
 }
 
-const LATIN1_REPAIR_CHARACTERS = new Set(Array.from(
-  "¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ",
-));
+const LATIN1_REPAIR_CHARACTERS = new Set(
+  Array.from(
+    "¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ",
+  ),
+);
 
 function repairId3v2Value(
   value: string,
@@ -439,7 +525,9 @@ function repairId3v2Value(
 ): string {
   if (!enabled || value.length === 0) return value;
   const characters = Array.from(value);
-  const latin1Count = characters.filter((character) => LATIN1_REPAIR_CHARACTERS.has(character)).length;
+  const latin1Count = characters.filter((character) =>
+    LATIN1_REPAIR_CHARACTERS.has(character),
+  ).length;
   if (latin1Count / characters.length <= 0.2) return value;
   return decodeText(Buffer.from(value, "latin1"), encoding).text;
 }
@@ -450,7 +538,9 @@ function mp3AudioPayload(buffer: Buffer): Buffer {
 
 function pictureFingerprint(v2: unknown): string {
   if (!isRecord(v2)) return "[]";
-  const pictures = [v2.APIC, v2.PIC].flatMap((value) => Array.isArray(value) ? value : value ? [value] : []);
+  const pictures = [v2.APIC, v2.PIC].flatMap((value) =>
+    Array.isArray(value) ? value : value ? [value] : [],
+  );
   return JSON.stringify(normalizeFingerprint(pictures));
 }
 
@@ -461,13 +551,19 @@ function normalizeFingerprint(value: unknown): unknown {
   }
   if (Array.isArray(value)) return value.map(normalizeFingerprint);
   if (isRecord(value)) {
-    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, normalizeFingerprint(value[key])]));
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, normalizeFingerprint(value[key])]),
+    );
   }
   return value;
 }
 
 function sameValues(actual: string[], expected: string[]): boolean {
-  return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
+  return (
+    actual.length === expected.length && actual.every((value, index) => value === expected[index])
+  );
 }
 
 function makeField(container: AudioContainer, key: string, values: string[]): AudioTagField {
@@ -481,7 +577,19 @@ function makeField(container: AudioContainer, key: string, values: string[]): Au
 }
 
 const COMMON_ID3V2_FRAMES = new Set([
-  "TT2", "TIT2", "TP1", "TPE1", "TAL", "TALB", "TYE", "TYER", "TDRC", "TRK", "TRCK", "TCO", "TCON",
+  "TT2",
+  "TIT2",
+  "TP1",
+  "TPE1",
+  "TAL",
+  "TALB",
+  "TYE",
+  "TYER",
+  "TDRC",
+  "TRK",
+  "TRCK",
+  "TCO",
+  "TCON",
 ]);
 
 function readAdditionalId3v2TextFields(v2: unknown): AudioTagField[] {
@@ -496,15 +604,22 @@ function readAdditionalId3v2TextFields(v2: unknown): AudioTagField[] {
     if ((frameId === "TXXX" || frameId === "TXX") && Array.isArray(value)) {
       value.forEach((frame, index) => {
         if (!isRecord(frame) || typeof frame.text !== "string") return;
-        const description = typeof frame.description === "string" && frame.description ? frame.description : `自訂文字 ${index + 1}`;
+        const description =
+          typeof frame.description === "string" && frame.description
+            ? frame.description
+            : `自訂文字 ${index + 1}`;
         fields.push(customMp3Field(`custom:${frameId}:${index}`, description, [frame.text]));
       });
       continue;
     }
-    if ((frameId === "USLT" || frameId === "ULT" || frameId === "COMM" || frameId === "COM") && Array.isArray(value)) {
+    if (
+      (frameId === "USLT" || frameId === "ULT" || frameId === "COMM" || frameId === "COM") &&
+      Array.isArray(value)
+    ) {
       value.forEach((frame, index) => {
         if (!isRecord(frame) || typeof frame.text !== "string") return;
-        const description = typeof frame.descriptor === "string" && frame.descriptor ? frame.descriptor : frameId;
+        const description =
+          typeof frame.descriptor === "string" && frame.descriptor ? frame.descriptor : frameId;
         fields.push(customMp3Field(`described:${frameId}:${index}`, description, [frame.text]));
       });
     }
@@ -565,10 +680,18 @@ function emptyId3v1(): Id3v1Values {
   return { title: "", artist: "", album: "", year: "", comment: "", track: "", genre: "" };
 }
 
-function readId3v1(buffer: Buffer, encoding: Exclude<TextEncoding, "auto">): { values: Id3v1Values; genreCode: number } | undefined {
-  if (buffer.length < 128 || buffer.subarray(buffer.length - 128, buffer.length - 125).toString("ascii") !== "TAG") return undefined;
+function readId3v1(
+  buffer: Buffer,
+  encoding: Exclude<TextEncoding, "auto">,
+): { values: Id3v1Values; genreCode: number } | undefined {
+  if (
+    buffer.length < 128 ||
+    buffer.subarray(buffer.length - 128, buffer.length - 125).toString("ascii") !== "TAG"
+  )
+    return undefined;
   const tag = buffer.subarray(buffer.length - 128);
-  const decode = (start: number, length: number) => decodeText(tag.subarray(start, start + length), encoding).text.replace(/[\u0000 ]+$/g, "");
+  const decode = (start: number, length: number) =>
+    decodeText(tag.subarray(start, start + length), encoding).text.replace(/[\u0000 ]+$/g, "");
   const track = tag[125] === 0 && tag[126] > 0 ? String(tag[126]) : "";
   return {
     values: {
@@ -584,7 +707,12 @@ function readId3v1(buffer: Buffer, encoding: Exclude<TextEncoding, "auto">): { v
   };
 }
 
-function appendId3v1(buffer: Buffer, values: Id3v1Values, genreCode: number, encoding: Exclude<TextEncoding, "auto">): Buffer {
+function appendId3v1(
+  buffer: Buffer,
+  values: Id3v1Values,
+  genreCode: number,
+  encoding: Exclude<TextEncoding, "auto">,
+): Buffer {
   const tag = Buffer.alloc(128);
   tag.write("TAG", 0, "ascii");
   writeEncodedField(tag, 3, 30, values.title, encoding);
@@ -601,13 +729,20 @@ function appendId3v1(buffer: Buffer, values: Id3v1Values, genreCode: number, enc
   return Buffer.concat([buffer, tag]);
 }
 
-function writeEncodedField(target: Buffer, offset: number, length: number, value: string, encoding: Exclude<TextEncoding, "auto">): void {
+function writeEncodedField(
+  target: Buffer,
+  offset: number,
+  length: number,
+  value: string,
+  encoding: Exclude<TextEncoding, "auto">,
+): void {
   const encoded = encodeText(value, encoding);
   encoded.copy(target, offset, 0, Math.min(length, encoded.length));
 }
 
 function stripId3v1(buffer: Buffer): Buffer {
-  return buffer.length >= 128 && buffer.subarray(buffer.length - 128, buffer.length - 125).toString("ascii") === "TAG"
+  return buffer.length >= 128 &&
+    buffer.subarray(buffer.length - 128, buffer.length - 125).toString("ascii") === "TAG"
     ? buffer.subarray(0, buffer.length - 128)
     : buffer;
 }

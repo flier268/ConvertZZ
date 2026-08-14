@@ -4,7 +4,10 @@ import type { SettingsV2 } from "@shared/contracts";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/dpi", () => ({ LogicalPosition: class {} }));
 vi.mock("@tauri-apps/api/window", () => ({ getAllWindows: async () => [] }));
-vi.mock("@tauri-apps/plugin-global-shortcut", () => ({ register: vi.fn(), unregisterAll: vi.fn() }));
+vi.mock("@tauri-apps/plugin-global-shortcut", () => ({
+  register: vi.fn(),
+  unregisterAll: vi.fn(),
+}));
 vi.mock("./legacyActions", () => ({ executeLegacyAction: vi.fn() }));
 vi.mock("element-plus", () => ({ ElMessage: { error: vi.fn() } }));
 

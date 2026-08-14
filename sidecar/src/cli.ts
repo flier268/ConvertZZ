@@ -17,12 +17,10 @@ export function parseLegacyCli(args: string[], defaultEngine: EngineKind = "segm
     if (argument === "/file") {
       parsed.mode = "file";
       explicitMode = true;
-    }
-    else if (argument === "/audio") {
+    } else if (argument === "/audio") {
       parsed.mode = "audio";
       explicitMode = true;
-    }
-    else if (argument === "/i:ule") parsed.inputEncoding = "utf16le";
+    } else if (argument === "/i:ule") parsed.inputEncoding = "utf16le";
     else if (argument === "/i:ube") parsed.inputEncoding = "utf16be";
     else if (argument === "/i:utf8") parsed.inputEncoding = "utf8";
     else if (argument === "/i:gbk") parsed.inputEncoding = "gbk";

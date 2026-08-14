@@ -74,7 +74,7 @@ class ReplacementTrie {
       unmatched = [];
     };
 
-    for (let index = 0; index < characters.length; ) {
+    for (let index = 0; index < characters.length;) {
       let node = this.root;
       let cursor = index;
       let match: { end: number; replacement: string; order: number } | undefined;
@@ -127,8 +127,7 @@ export class LegacyDictionary {
         .map((entry) => ({
           source: direction === "s2t" ? entry.simplified : entry.traditional,
           target: direction === "s2t" ? entry.traditional : entry.simplified,
-          priority:
-            direction === "s2t" ? entry.simplifiedPriority : entry.traditionalPriority,
+          priority: direction === "s2t" ? entry.simplifiedPriority : entry.traditionalPriority,
           enabled: entry.enabled,
         }))
         .filter((entry) => {
@@ -172,9 +171,10 @@ export class LegacyDictionary {
       protectedText = protectedText.split(word).join(token);
     }
 
-    let converted = direction === "s2t"
-      ? this.s2t.replace(protectedText, baseConvert)
-      : this.t2s.replace(protectedText, baseConvert);
+    let converted =
+      direction === "s2t"
+        ? this.s2t.replace(protectedText, baseConvert)
+        : this.t2s.replace(protectedText, baseConvert);
     for (const [token, word] of placeholders) converted = converted.split(token).join(word);
     return converted;
   }

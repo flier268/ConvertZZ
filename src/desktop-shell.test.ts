@@ -18,13 +18,15 @@ describe("Tauri desktop shell", () => {
 
     expect(main.windows).toEqual(["main"]);
     expect(main.permissions).toEqual(expect.arrayContaining(required));
-    expect(main.permissions).toEqual(expect.arrayContaining([
-      "core:window:allow-hide",
-      "core:window:allow-show",
-      "core:window:allow-set-position",
-      "global-shortcut:allow-register",
-      "global-shortcut:allow-unregister-all",
-    ]));
+    expect(main.permissions).toEqual(
+      expect.arrayContaining([
+        "core:window:allow-hide",
+        "core:window:allow-show",
+        "core:window:allow-set-position",
+        "global-shortcut:allow-register",
+        "global-shortcut:allow-unregister-all",
+      ]),
+    );
     expect(floating.windows).toEqual(["floating"]);
     expect(floating.permissions).toEqual(expect.arrayContaining(required));
     expect(floating.permissions).toEqual(expect.arrayContaining(["opener:default"]));
@@ -34,12 +36,14 @@ describe("Tauri desktop shell", () => {
     const floating = readJson("src-tauri/capabilities/floating.json");
     const component = readProjectFile("src/FloatingBall.vue");
 
-    expect(floating.permissions).toEqual(expect.arrayContaining([
-      "core:window:allow-set-position",
-      "core:window:allow-start-dragging",
-      "core:window:allow-hide",
-      "core:window:allow-show",
-    ]));
+    expect(floating.permissions).toEqual(
+      expect.arrayContaining([
+        "core:window:allow-set-position",
+        "core:window:allow-start-dragging",
+        "core:window:allow-hide",
+        "core:window:allow-show",
+      ]),
+    );
     expect(component).toContain("onMoved");
     expect(component).toContain("saveSettings");
   });
@@ -48,12 +52,26 @@ describe("Tauri desktop shell", () => {
     const styles = readProjectFile("src/styles.css");
     const component = readProjectFile("src/FloatingBall.vue");
     const config = readJson("src-tauri/tauri.conf.json") as {
-      app?: { windows?: Array<{ label?: string; transparent?: boolean; visible?: boolean; backgroundColor?: number[]; shadow?: boolean; width?: number; height?: number }> };
+      app?: {
+        windows?: Array<{
+          label?: string;
+          transparent?: boolean;
+          visible?: boolean;
+          backgroundColor?: number[];
+          shadow?: boolean;
+          width?: number;
+          height?: number;
+        }>;
+      };
     };
     expect(config.app?.windows?.find((window) => window.label === "main")?.visible).toBe(false);
     expect(config.app?.windows?.find((window) => window.label === "floating")?.visible).toBe(false);
-    expect(config.app?.windows?.find((window) => window.label === "floating")?.transparent).toBe(true);
-    expect(config.app?.windows?.find((window) => window.label === "floating")?.backgroundColor).toEqual([0, 0, 0, 0]);
+    expect(config.app?.windows?.find((window) => window.label === "floating")?.transparent).toBe(
+      true,
+    );
+    expect(
+      config.app?.windows?.find((window) => window.label === "floating")?.backgroundColor,
+    ).toEqual([0, 0, 0, 0]);
     expect(styles).toContain("html.floating-window");
     expect(styles).toContain("-webkit-user-select: none");
     expect(styles).not.toContain("drop-shadow");
@@ -120,7 +138,9 @@ describe("Tauri desktop shell", () => {
     const toast = readJson("src-tauri/capabilities/toast.json");
 
     expect(config.app?.windows?.find((window) => window.label === "toast")?.visible).toBe(false);
-    expect(config.app?.windows?.find((window) => window.label === "toast")?.decorations).toBe(false);
+    expect(config.app?.windows?.find((window) => window.label === "toast")?.decorations).toBe(
+      false,
+    );
     expect(rust).toContain("fn show_toast");
     expect(rust).toContain("place_toast_near_cursor");
     expect(actions).toContain("showAppToast");
@@ -151,13 +171,15 @@ describe("Tauri desktop shell", () => {
     expect(rust).toContain("show_menu_on_left_click(false)");
     expect(rust).toContain("WindowEvent::CloseRequested");
     expect(rust).toContain('app.emit("app://legacy-action", id)');
-    expect(rust).toContain(".text(\"a3\", \"Unicode 簡 → Unicode 繁\")");
-    expect(rust).toContain(".text(\"b1\", \"文件/檔名轉換\")");
-    expect(rust).toContain(".text(\"settings\", \"設定\")");
+    expect(rust).toContain('.text("a3", "Unicode 簡 → Unicode 繁")');
+    expect(rust).toContain('.text("b1", "文件/檔名轉換")');
+    expect(rust).toContain('.text("settings", "設定")');
     for (const actionId of ["a1", "a4", "b2", "c3", "za1", "ze2", "1", "about", "report", "quit"]) {
       expect(rust).toContain(`.text("${actionId}"`);
     }
-    expect(config.bundle?.icon).toEqual(expect.arrayContaining(["icons/icon.png", "icons/icon.ico"]));
+    expect(config.bundle?.icon).toEqual(
+      expect.arrayContaining(["icons/icon.png", "icons/icon.ico"]),
+    );
     expect(config.bundle?.icon).not.toContain("../ConvertZZ/Windows Logo.png");
   });
 

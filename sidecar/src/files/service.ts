@@ -1,5 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { chmod, copyFile, lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import type {
   ApplyResult,
@@ -39,7 +50,11 @@ interface DirectoryTransactionEntry {
 }
 
 type ProgressReporter = (progress: { current: number; total: number; message: string }) => void;
-type StageValidator = (path: string, expected: Buffer | undefined, sourcePath: string) => Promise<void>;
+type StageValidator = (
+  path: string,
+  expected: Buffer | undefined,
+  sourcePath: string,
+) => Promise<void>;
 
 export class FileService {
   private readonly plans = new Map<string, StoredPlan>();
@@ -62,10 +77,14 @@ export class FileService {
   async plan(request: FilePlanRequest, report?: ProgressReporter): Promise<FileConversionPlan> {
     await validateOutputPattern(request.paths[0], request.outputPath);
     const paths = await collectFiles(request.paths, request.recursive, request.allowedExtensions);
-    const directories = request.mode === "content" ? [] : await collectDirectories(request.paths, request.recursive);
+    const directories =
+      request.mode === "content" ? [] : await collectDirectories(request.paths, request.recursive);
     const files: PreparedFile[] = [];
     const warnings: string[] = [];
-    const previewMaxBytes = Math.min(1024 * 1024, Math.max(1024, request.previewMaxBytes ?? 6 * 1024));
+    const previewMaxBytes = Math.min(
+      1024 * 1024,
+      Math.max(1024, request.previewMaxBytes ?? 6 * 1024),
+    );
 
     for (const [index, sourcePath] of paths.entries()) {
       try {
@@ -75,25 +94,50 @@ export class FileService {
         const convertedContent = decoded
           ? await this.conversion.convert({ text: decoded.text, ...request.conversion })
           : undefined;
-        const convertedName = request.mode === "content"
-          ? basename(sourcePath)
-          : (await this.conversion.convert({ text: basename(sourcePath), ...request.conversion })).text;
+        const convertedName =
+          request.mode === "content"
+            ? basename(sourcePath)
+            : (await this.conversion.convert({ text: basename(sourcePath), ...request.conversion }))
+                .text;
         const defaultOutputPath = join(dirname(sourcePath), convertedName);
         const outputPath = request.outputDirectory
-          ? await resolveOutputDirectoryPath(sourcePath, request.paths, request.outputDirectory, convertedName, request.mode, this.conversion, request.conversion)
+          ? await resolveOutputDirectoryPath(
+              sourcePath,
+              request.paths,
+              request.outputDirectory,
+              convertedName,
+              request.mode,
+              this.conversion,
+              request.conversion,
+            )
           : request.outputPath
-            ? resolveRequestedOutputPath(sourcePath, request.paths[0] ?? sourcePath, request.outputPath, convertedName, request.mode)
+            ? resolveRequestedOutputPath(
+                sourcePath,
+                request.paths[0] ?? sourcePath,
+                request.outputPath,
+                convertedName,
+                request.mode,
+              )
             : defaultOutputPath;
         const outputEncoding = resolveOutputEncoding(request.outputEncoding, decoded?.encoding);
         let outputText = convertedContent
           ? request.fixCharsetDeclaration
-            ? fixCharsetDeclaration(convertedContent.text, outputEncoding, extname(sourcePath), request.fixCharsetExtensions)
+            ? fixCharsetDeclaration(
+                convertedContent.text,
+                outputEncoding,
+                extname(sourcePath),
+                request.fixCharsetExtensions,
+              )
             : convertedContent.text
           : "";
-        if (convertedContent && request.conversion.direction === "none" && outputEncoding === "big5") {
+        if (
+          convertedContent &&
+          request.conversion.direction === "none" &&
+          outputEncoding === "big5"
+        ) {
           outputText = repairUnrepresentableBig5(outputText);
         }
-        const conflict = outputPath !== sourcePath && await exists(outputPath);
+        const conflict = outputPath !== sourcePath && (await exists(outputPath));
         files.push({
           sourcePath,
           outputPath,
@@ -104,7 +148,9 @@ export class FileService {
           outputPreview: convertedContent ? outputText.slice(0, previewMaxBytes) : convertedName,
           status: conflict && request.conflictPolicy === "skip" ? "conflict" : "ready",
           warning: conflict ? "輸出路徑已存在。" : undefined,
-          content: convertedContent ? encodeText(outputText, outputEncoding, request.addBom) : undefined,
+          content: convertedContent
+            ? encodeText(outputText, outputEncoding, request.addBom)
+            : undefined,
           conflictPolicy: request.conflictPolicy,
         });
         if (convertedContent) warnings.push(...convertedContent.warnings);
@@ -121,14 +167,22 @@ export class FileService {
           conflictPolicy: request.conflictPolicy,
         });
       }
-      report?.({ current: index + 1, total: paths.length, message: `正在建立預覽：${basename(sourcePath)}` });
+      report?.({
+        current: index + 1,
+        total: paths.length,
+        message: `正在建立預覽：${basename(sourcePath)}`,
+      });
     }
 
     if (!request.outputDirectory && !request.outputPath) {
-      for (const sourcePath of directories.sort((left, right) => pathDepth(right) - pathDepth(left))) {
-        const convertedName = (await this.conversion.convert({ text: basename(sourcePath), ...request.conversion })).text;
+      for (const sourcePath of directories.sort(
+        (left, right) => pathDepth(right) - pathDepth(left),
+      )) {
+        const convertedName = (
+          await this.conversion.convert({ text: basename(sourcePath), ...request.conversion })
+        ).text;
         const outputPath = join(dirname(sourcePath), convertedName);
-        const conflict = outputPath !== sourcePath && await exists(outputPath);
+        const conflict = outputPath !== sourcePath && (await exists(outputPath));
         files.push({
           sourcePath,
           outputPath,
@@ -154,16 +208,25 @@ export class FileService {
     return publicPlan;
   }
 
-  async apply(planId: string, report?: ProgressReporter, selectedPaths?: string[]): Promise<ApplyResult> {
+  async apply(
+    planId: string,
+    report?: ProgressReporter,
+    selectedPaths?: string[],
+  ): Promise<ApplyResult> {
     const plan = this.plans.get(planId);
     if (!plan) throw new ConvertZZError("PLAN_NOT_FOUND", "檔案轉換計畫已失效。請重新預覽。");
     const result: ApplyResult = { succeeded: [], skipped: [], failed: [] };
     const transaction: TransactionEntry[] = [];
     const directoryTransaction: DirectoryTransactionEntry[] = [];
-    const selection = selectedPaths ? new Set(selectedPaths.map((value) => resolve(value))) : undefined;
+    const selection = selectedPaths
+      ? new Set(selectedPaths.map((value) => resolve(value)))
+      : undefined;
 
     try {
-      const readyFiles = plan.files.filter((file) => file.status === "ready" && (!selection || selection.has(resolve(file.sourcePath))));
+      const readyFiles = plan.files.filter(
+        (file) =>
+          file.status === "ready" && (!selection || selection.has(resolve(file.sourcePath))),
+      );
       const total = Math.max(1, readyFiles.length * 2);
       let current = 0;
       for (const file of plan.files) {
@@ -197,7 +260,7 @@ export class FileService {
       for (const entry of transaction) {
         this.throwIfCancelled(planId);
         const { file } = entry;
-        if (file.outputPath !== file.sourcePath && await exists(file.outputPath)) {
+        if (file.outputPath !== file.sourcePath && (await exists(file.outputPath))) {
           if (entry.file.conflictPolicy === "skip") {
             await rm(entry.stagePath);
             if (entry.originalBackup) await rename(entry.originalBackup, file.sourcePath);
@@ -219,7 +282,11 @@ export class FileService {
         .sort((left, right) => pathDepth(right.sourcePath) - pathDepth(left.sourcePath));
       for (const item of directoryItems) {
         this.throwIfCancelled(planId);
-        if (item.status !== "ready" || (selection && !selection.has(resolve(item.sourcePath))) || item.outputPath === item.sourcePath) {
+        if (
+          item.status !== "ready" ||
+          (selection && !selection.has(resolve(item.sourcePath))) ||
+          item.outputPath === item.sourcePath
+        ) {
           result.skipped.push(item.sourcePath);
           continue;
         }
@@ -250,31 +317,45 @@ export class FileService {
       this.plans.delete(planId);
       this.cancelledPlans.delete(planId);
       if (error instanceof ConvertZZError && error.code === "PLAN_CANCELLED") throw error;
-      result.failed.push({ path: "批次作業", message: error instanceof Error ? error.message : String(error) });
+      result.failed.push({
+        path: "批次作業",
+        message: error instanceof Error ? error.message : String(error),
+      });
       return result;
     }
 
     for (const entry of transaction) {
       if (!entry.committed) continue;
-      result.succeeded.push(resolveCommittedDirectoryPath(entry.file.outputPath, directoryTransaction));
+      result.succeeded.push(
+        resolveCommittedDirectoryPath(entry.file.outputPath, directoryTransaction),
+      );
       for (const backup of [entry.originalBackup, entry.conflictBackup]) {
         if (!backup) continue;
         const effectiveBackup = resolveCommittedDirectoryPath(backup, directoryTransaction);
         try {
           await rm(effectiveBackup);
         } catch (error) {
-          result.failed.push({ path: effectiveBackup, message: `已完成轉換，但無法清除復原暫存檔。${error instanceof Error ? error.message : String(error)}` });
+          result.failed.push({
+            path: effectiveBackup,
+            message: `已完成轉換，但無法清除復原暫存檔。${error instanceof Error ? error.message : String(error)}`,
+          });
         }
       }
     }
     for (const entry of directoryTransaction) {
       if (entry.committed) result.succeeded.push(entry.item.outputPath);
       if (entry.conflictBackup) {
-        const effectiveBackup = resolveCommittedDirectoryPath(entry.conflictBackup, directoryTransaction);
+        const effectiveBackup = resolveCommittedDirectoryPath(
+          entry.conflictBackup,
+          directoryTransaction,
+        );
         try {
           await rm(effectiveBackup, { recursive: true });
         } catch (error) {
-          result.failed.push({ path: effectiveBackup, message: `已完成轉換，但無法清除復原暫存資料夾。${error instanceof Error ? error.message : String(error)}` });
+          result.failed.push({
+            path: effectiveBackup,
+            message: `已完成轉換，但無法清除復原暫存資料夾。${error instanceof Error ? error.message : String(error)}`,
+          });
         }
       }
     }
@@ -284,10 +365,15 @@ export class FileService {
   }
 
   private throwIfCancelled(planId: string): void {
-    if (this.cancelledPlans.has(planId)) throw new ConvertZZError("PLAN_CANCELLED", "檔案作業已由使用者取消。");
+    if (this.cancelledPlans.has(planId))
+      throw new ConvertZZError("PLAN_CANCELLED", "檔案作業已由使用者取消。");
   }
 
-  private async verifyStage(path: string, expected: Buffer | undefined, sourcePath: string): Promise<void> {
+  private async verifyStage(
+    path: string,
+    expected: Buffer | undefined,
+    sourcePath: string,
+  ): Promise<void> {
     try {
       await verifyStage(path, expected, sourcePath);
       await this.stageValidator?.(path, expected, sourcePath);
@@ -298,9 +384,19 @@ export class FileService {
   }
 }
 
-async function collectFiles(inputs: string[], recursive: boolean, allowedExtensions?: string[]): Promise<string[]> {
+async function collectFiles(
+  inputs: string[],
+  recursive: boolean,
+  allowedExtensions?: string[],
+): Promise<string[]> {
   const collected = new Set<string>();
-  const allowed = new Set((allowedExtensions ?? []).map((extension) => extension.toLowerCase().startsWith(".") ? extension.toLowerCase() : `.${extension.toLowerCase()}`));
+  const allowed = new Set(
+    (allowedExtensions ?? []).map((extension) =>
+      extension.toLowerCase().startsWith(".")
+        ? extension.toLowerCase()
+        : `.${extension.toLowerCase()}`,
+    ),
+  );
   const visit = async (path: string, discovered = false): Promise<void> => {
     const absolute = resolve(path);
     if (/[*?]/u.test(absolute)) {
@@ -308,21 +404,23 @@ async function collectFiles(inputs: string[], recursive: boolean, allowedExtensi
       const matcher = wildcardMatcher(basename(absolute));
       const entries = await readdir(directory, { withFileTypes: true });
       for (const entry of entries) {
-      if (entry.isFile() && matcher.test(entry.name)) collected.add(join(directory, entry.name));
+        if (entry.isFile() && matcher.test(entry.name)) collected.add(join(directory, entry.name));
       }
       return;
     }
     const info = await lstat(absolute);
     if (info.isSymbolicLink()) return;
     if (info.isFile()) {
-      if (!discovered || !allowed.size || allowed.has(extname(absolute).toLowerCase())) collected.add(absolute);
+      if (!discovered || !allowed.size || allowed.has(extname(absolute).toLowerCase()))
+        collected.add(absolute);
       return;
     }
     if (!info.isDirectory()) return;
     const entries = await readdir(absolute, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isSymbolicLink()) continue;
-      if (entry.isFile() && (!allowed.size || allowed.has(extname(entry.name).toLowerCase()))) collected.add(join(absolute, entry.name));
+      if (entry.isFile() && (!allowed.size || allowed.has(extname(entry.name).toLowerCase())))
+        collected.add(join(absolute, entry.name));
       else if (recursive && entry.isDirectory()) await visit(join(absolute, entry.name), true);
     }
   };
@@ -357,7 +455,11 @@ async function validateOutputPattern(inputPattern?: string, outputPattern?: stri
   if (outputWildcards && outputWildcards !== inputWildcards) {
     throw new ConvertZZError("CLI_WILDCARD", "輸入與輸出路徑的萬用字元數量不同。");
   }
-  if (!outputWildcards && await exists(resolve(outputPattern)) && (await stat(resolve(outputPattern))).isFile()) {
+  if (
+    !outputWildcards &&
+    (await exists(resolve(outputPattern))) &&
+    (await stat(resolve(outputPattern))).isFile()
+  ) {
     throw new ConvertZZError("CLI_OUTPUT", "多檔輸入的輸出路徑不能是既有檔案。");
   }
 }
@@ -396,10 +498,16 @@ async function resolveOutputDirectoryPath(
   const base = inputs.length === 1 && !/[*?]/u.test(firstInput) ? firstInput : dirname(firstInput);
   const relativePath = relative(base, sourcePath);
   const safeRelative = relativePath.startsWith("..") ? basename(sourcePath) : relativePath;
-  const relativeDirectory = dirname(safeRelative) === "." ? [] : dirname(safeRelative).split(/[\\/]/u);
-  const convertedDirectories = mode === "content"
-    ? relativeDirectory
-    : await Promise.all(relativeDirectory.map(async (part) => (await conversion.convert({ text: part, ...conversionRequest })).text));
+  const relativeDirectory =
+    dirname(safeRelative) === "." ? [] : dirname(safeRelative).split(/[\\/]/u);
+  const convertedDirectories =
+    mode === "content"
+      ? relativeDirectory
+      : await Promise.all(
+          relativeDirectory.map(
+            async (part) => (await conversion.convert({ text: part, ...conversionRequest })).text,
+          ),
+        );
   return join(resolve(outputDirectory), ...convertedDirectories, convertedName);
 }
 
@@ -412,7 +520,10 @@ function wildcardMatcher(pattern: string): RegExp {
   return new RegExp(`^${source}$`, process.platform === "win32" ? "iu" : "u");
 }
 
-function resolveOutputEncoding(requested: TextEncoding, detected?: TextEncoding): Exclude<TextEncoding, "auto"> {
+function resolveOutputEncoding(
+  requested: TextEncoding,
+  detected?: TextEncoding,
+): Exclude<TextEncoding, "auto"> {
   if (requested !== "auto") return requested;
   return detected && detected !== "auto" ? detected : "utf8";
 }
@@ -424,24 +535,36 @@ function repairUnrepresentableBig5(text: string): string {
   }).join("");
 }
 
-function fixCharsetDeclaration(text: string, encoding: TextEncoding, extension: string, configured?: string[]): string {
+function fixCharsetDeclaration(
+  text: string,
+  encoding: TextEncoding,
+  extension: string,
+  configured?: string[],
+): string {
   const extensions = configured?.length
-    ? new Set(configured.map((value) => value.trim().toLowerCase()).filter(Boolean).map((value) => value.startsWith(".") ? value : `.${value}`))
+    ? new Set(
+        configured
+          .map((value) => value.trim().toLowerCase())
+          .filter(Boolean)
+          .map((value) => (value.startsWith(".") ? value : `.${value}`)),
+      )
     : new Set([".htm", ".html", ".shtm", ".shtml", ".asp", ".aspx", ".php", ".css"]);
   if (!extensions.has(extension.toLowerCase())) return text;
-  const charset = ({
-    "utf8": "utf-8",
-    "utf8-bom": "utf-8",
-    "utf16le": "utf-16le",
-    "utf16be": "utf-16be",
-    "big5": "big5",
-    "gbk": "gbk",
-    "shift-jis": "shift_jis",
-    "euc-jp": "euc-jp",
-    "iso-2022-jp": "iso-2022-jp",
-    "hz-gb-2312": "hz-gb-2312",
-    "auto": "utf-8",
-  } satisfies Record<TextEncoding, string>)[encoding];
+  const charset = (
+    {
+      utf8: "utf-8",
+      "utf8-bom": "utf-8",
+      utf16le: "utf-16le",
+      utf16be: "utf-16be",
+      big5: "big5",
+      gbk: "gbk",
+      "shift-jis": "shift_jis",
+      "euc-jp": "euc-jp",
+      "iso-2022-jp": "iso-2022-jp",
+      "hz-gb-2312": "hz-gb-2312",
+      auto: "utf-8",
+    } satisfies Record<TextEncoding, string>
+  )[encoding];
   return text
     .replace(/(<meta\s+[^>]*charset\s*=\s*["']?)[^\s"'/>]+/gi, `$1${charset}`)
     .replace(/(@charset\s+["'])[^"']+(["'])/gi, `$1${charset}$2`)
@@ -466,9 +589,13 @@ async function assertSourceWritable(path: string): Promise<void> {
   }
 }
 
-async function verifyStage(path: string, expected: Buffer | undefined, sourcePath: string): Promise<void> {
+async function verifyStage(
+  path: string,
+  expected: Buffer | undefined,
+  sourcePath: string,
+): Promise<void> {
   const staged = await readFile(path);
-  const comparison = expected ?? await readFile(sourcePath);
+  const comparison = expected ?? (await readFile(sourcePath));
   if (!staged.equals(comparison)) {
     await rm(path, { force: true });
     throw new ConvertZZError("FILE_VERIFY", "暫存檔寫入驗證失敗。", { path });
@@ -479,14 +606,18 @@ async function rollbackTransaction(transaction: TransactionEntry[]): Promise<voi
   const reversed = [...transaction].reverse();
   for (const entry of reversed) {
     try {
-      if (entry.committed && await exists(entry.file.outputPath)) await rm(entry.file.outputPath);
+      if (entry.committed && (await exists(entry.file.outputPath))) await rm(entry.file.outputPath);
     } catch {
       // The original failure is returned while recoverable temporary files remain in place.
     }
   }
   for (const entry of reversed) {
     try {
-      if (entry.originalBackup && await exists(entry.originalBackup) && !(await exists(entry.file.sourcePath))) {
+      if (
+        entry.originalBackup &&
+        (await exists(entry.originalBackup)) &&
+        !(await exists(entry.file.sourcePath))
+      ) {
         await rename(entry.originalBackup, entry.file.sourcePath);
       }
     } catch {
@@ -495,7 +626,11 @@ async function rollbackTransaction(transaction: TransactionEntry[]): Promise<voi
   }
   for (const entry of reversed) {
     try {
-      if (entry.conflictBackup && await exists(entry.conflictBackup) && !(await exists(entry.file.outputPath))) {
+      if (
+        entry.conflictBackup &&
+        (await exists(entry.conflictBackup)) &&
+        !(await exists(entry.file.outputPath))
+      ) {
         await rename(entry.conflictBackup, entry.file.outputPath);
       }
       if (await exists(entry.stagePath)) await rm(entry.stagePath);
@@ -508,12 +643,24 @@ async function rollbackTransaction(transaction: TransactionEntry[]): Promise<voi
 async function rollbackDirectories(transaction: DirectoryTransactionEntry[]): Promise<void> {
   for (const entry of [...transaction].reverse()) {
     try {
-      if (entry.committed && await exists(entry.item.outputPath) && !(await exists(entry.item.sourcePath))) {
+      if (
+        entry.committed &&
+        (await exists(entry.item.outputPath)) &&
+        !(await exists(entry.item.sourcePath))
+      ) {
         await rename(entry.item.outputPath, entry.item.sourcePath);
-      } else if (!entry.committed && await exists(entry.temporaryPath) && !(await exists(entry.item.sourcePath))) {
+      } else if (
+        !entry.committed &&
+        (await exists(entry.temporaryPath)) &&
+        !(await exists(entry.item.sourcePath))
+      ) {
         await rename(entry.temporaryPath, entry.item.sourcePath);
       }
-      if (entry.conflictBackup && await exists(entry.conflictBackup) && !(await exists(entry.item.outputPath))) {
+      if (
+        entry.conflictBackup &&
+        (await exists(entry.conflictBackup)) &&
+        !(await exists(entry.item.outputPath))
+      ) {
         await rename(entry.conflictBackup, entry.item.outputPath);
       }
     } catch {
@@ -522,7 +669,10 @@ async function rollbackDirectories(transaction: DirectoryTransactionEntry[]): Pr
   }
 }
 
-function transactionPath(path: string, kind: "stage" | "original" | "conflict" | "directory"): string {
+function transactionPath(
+  path: string,
+  kind: "stage" | "original" | "conflict" | "directory",
+): string {
   return join(dirname(path), `.convertzz-${kind}-${randomUUID()}${extname(path)}`);
 }
 
@@ -530,7 +680,10 @@ function pathDepth(path: string): number {
   return resolve(path).split(/[\\/]/u).filter(Boolean).length;
 }
 
-function resolveCommittedDirectoryPath(path: string, transaction: DirectoryTransactionEntry[]): string {
+function resolveCommittedDirectoryPath(
+  path: string,
+  transaction: DirectoryTransactionEntry[],
+): string {
   return transaction.reduce((current, entry) => {
     if (!entry.committed) return current;
     const suffix = relative(entry.item.sourcePath, current);

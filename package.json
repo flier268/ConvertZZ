@@ -2,7 +2,7 @@
   "name": "convertzz",
   "version": "2.0.0",
   "private": true,
-  "packageManager": "pnpm@10.26.1",
+  "packageManager": "pnpm@11.21.0",
   "description": "ConvertZZ cross-platform Chinese text conversion desktop application",
   "license": "GPL-3.0-only",
   "type": "module",
@@ -45,20 +45,20 @@
     "novel-segment": "2.7.121",
     "taglib-wasm": "2.0.0",
     "vue": "3.5.41",
-    "vue-router": "4.6.3"
+    "vue-router": "5.2.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.11.4",
-    "@types/node": "24.10.1",
+    "@types/node": "24.13.3",
     "@vitejs/plugin-vue": "6.0.8",
-    "@vue/test-utils": "2.4.6",
+    "@vue/test-utils": "2.4.11",
     "@yao-pkg/pkg": "6.22.0",
     "esbuild": "0.28.2",
     "ffmpeg-static": "^5.3.0",
-    "jsdom": "27.1.0",
+    "jsdom": "30.0.1",
     "prettier": "^3.9.6",
-    "tsx": "4.20.6",
-    "typescript": "5.9.3",
+    "tsx": "4.23.12",
+    "typescript": "6.0.3",
     "vite": "8.2.1",
     "vitest": "4.1.10",
     "vue-tsc": "3.3.9"
@@ -85,11 +85,5 @@
       "node_modules/novel-segment/**/*.{json,txt,csv}"
     ],
     "outputPath": "src-tauri/binaries"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "ffmpeg-static"
-    ]
   }
 }

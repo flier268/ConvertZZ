@@ -273,4 +273,5 @@ src-tauri/icons/[0-9]*x*.png
 src-tauri/icons/Square*Logo.png
 src-tauri/icons/StoreLogo.png
 .vite/
+tests/.cache/
 *.log

@@ -343,6 +343,24 @@ pnpm run dev
 pnpm run check
 ```
 
+用 QEMU 在乾淨的 Ubuntu 22.04 虛擬機安裝 DEB，確認沒有 Node.js 與 `*-dev`，並離線掃描 APE／OGG。
+
+需要本機的 `qemu-system-x86_64`、`qemu-img`、`genisoimage` 或 `xorriso`，以及先建立好的 Linux 發行檔。
+
+```bash
+pnpm tauri build --bundles deb,appimage
+pnpm run test:qemu
+```
+
+映像會快取於 `tests/.cache/qemu`。第一次會依序嘗試台灣的 TWDS、NCHC 鏡像，最後才連 Ubuntu 官方站。之後重跑只開虛擬機。
+
+若官方站逾時，可自行下載 `jammy-server-cloudimg-amd64.img` 後指定路徑：
+
+```bash
+export CONVERTZZ_QEMU_IMAGE=$HOME/Downloads/jammy-server-cloudimg-amd64.img
+pnpm run test:qemu
+```
+
 建立 sidecar。
 
 ```bash

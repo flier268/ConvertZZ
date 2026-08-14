@@ -182,4 +182,18 @@ describe("Tauri desktop shell", () => {
     expect(verifier).toContain('formats.join(",") !== "ape,ogg"');
     expect(verifier).toContain('operation: "convert.preview"');
   });
+
+  it("documents a QEMU clean Ubuntu guest for Linux package acceptance", () => {
+    const qemu = readProjectFile("scripts/qemu-linux.mjs");
+    const verifier = readProjectFile("scripts/verify-linux-qemu.mjs");
+    const npm = readProjectFile("package.json");
+
+    expect(npm).toContain("test:qemu");
+    expect(verifier).toContain("runLinuxQemuVerification");
+    expect(qemu).toContain("qemu-system-x86_64");
+    expect(qemu).toContain("jammy-server-cloudimg-amd64.img");
+    expect(qemu).toContain("mirror.twds.com.tw");
+    expect(qemu).toContain("unshare --net");
+    expect(qemu).toContain("libayatana-appindicator3-dev");
+  });
 });

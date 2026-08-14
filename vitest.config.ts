@@ -12,7 +12,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["sidecar/src/**/*.test.ts", "src/**/*.test.ts"],
+    include: ["sidecar/src/**/*.test.ts", "src/**/*.test.ts", "tests/**/*.test.ts"],
     coverage: { reporter: ["text", "html"] },
   },
 });

@@ -22,6 +22,7 @@
     "typecheck": "vue-tsc --noEmit && tsc -p sidecar/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:qemu": "node scripts/verify-linux-qemu.mjs",
     "check": "pnpm run typecheck && pnpm test && pnpm run build:web"
   },
   "dependencies": {

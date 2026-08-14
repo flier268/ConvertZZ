@@ -150,8 +150,8 @@ fn simulate_copy_paste(action: String) -> Result<(), String> {
 
 #[tauri::command]
 fn save_zhconvert_api_key(api_key: String) -> Result<bool, String> {
-    let entry =
-        Entry::new("org.convertzz.app", "zhconvert-api-key").map_err(|error| error.to_string())?;
+    let entry = Entry::new("dev.flier268.convertzz", "zhconvert-api-key")
+        .map_err(|error| error.to_string())?;
     match entry.set_password(&api_key) {
         Ok(()) => Ok(true),
         Err(_) => Ok(false),
@@ -160,8 +160,8 @@ fn save_zhconvert_api_key(api_key: String) -> Result<bool, String> {
 
 #[tauri::command]
 fn load_zhconvert_api_key() -> Result<Option<String>, String> {
-    let entry =
-        Entry::new("org.convertzz.app", "zhconvert-api-key").map_err(|error| error.to_string())?;
+    let entry = Entry::new("dev.flier268.convertzz", "zhconvert-api-key")
+        .map_err(|error| error.to_string())?;
     match entry.get_password() {
         Ok(value) => Ok(Some(value)),
         Err(keyring::Error::NoEntry) => Ok(None),

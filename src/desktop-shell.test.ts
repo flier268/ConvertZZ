@@ -82,6 +82,19 @@ describe("Tauri desktop shell", () => {
     expect(settings).toContain("啟動時顯示主視窗");
   });
 
+  it("moves ConvertZZ.json import into the first-run tour", () => {
+    const settings = readProjectFile("src/pages/SettingsPage.vue");
+    const tour = readProjectFile("src/OnboardingTour.vue");
+    const loader = readProjectFile("src/lib/settings.ts");
+    const about = readProjectFile("src/pages/AboutPage.vue");
+
+    expect(settings).not.toContain("匯入 ConvertZZ.json");
+    expect(loader).not.toContain("找到舊版 ConvertZZ.json");
+    expect(tour).toContain("匯入舊版設定");
+    expect(tour).toContain("importLegacySettings");
+    expect(about).toContain("重看系統導覽");
+  });
+
   it("assigns an icon and left-click behavior to the tray", () => {
     const rust = readProjectFile("src-tauri/src/lib.rs");
     const config = readJson("src-tauri/tauri.conf.json") as { bundle?: { icon?: string[] } };

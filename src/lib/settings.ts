@@ -1,34 +1,23 @@
 import { reactive, readonly } from "vue";
-import { invoke } from "@tauri-apps/api/core";
 import { load, type Store } from "@tauri-apps/plugin-store";
-import { confirm, message } from "@tauri-apps/plugin-dialog";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import type { Direction, SettingsV2, ZhConvertOptions } from "@shared/contracts";
+import { ONBOARDING_STORE_KEY } from "./onboarding";
 import { sidecar } from "./sidecar";
 
 const state = reactive<{ ready: boolean; value?: SettingsV2 }>({ ready: false });
 let store: Store | undefined;
 
+async function settingsStore(): Promise<Store> {
+  store ??= await load("settings-v2.json", { autoSave: 250 });
+  return store;
+}
+
 export async function loadSettings(): Promise<SettingsV2> {
   if (state.value) return state.value;
-  store = await load("settings-v2.json", { autoSave: 250 });
-  const saved = await store.get<SettingsV2>("settings");
-  const legacyPath = saved ? undefined : await invoke<string | null>("legacy_settings_path");
-  let value: SettingsV2;
-  if (legacyPath && await confirm(
-    "找到舊版 ConvertZZ.json。是否先建立備份，再匯入為 2.0 設定？",
-    { title: "匯入舊版設定", kind: "warning" },
-  )) {
-    try {
-      const backup = await sidecar.request<{ backupPath: string }>("settings.backup", { path: legacyPath });
-      value = await sidecar.request<SettingsV2>("settings.migrate", { path: legacyPath });
-      await message(`備份已建立於：\n${backup.backupPath}`, { title: "設定備份完成", kind: "info" });
-    } catch (error) {
-      await message(`備份失敗。舊版設定未匯入。\n${error instanceof Error ? error.message : String(error)}`, { title: "設定備份失敗", kind: "error" });
-      value = await sidecar.request<SettingsV2>("settings.migrate", { input: undefined });
-    }
-  } else {
-    value = await sidecar.request<SettingsV2>("settings.migrate", { input: saved });
-  }
+  const currentStore = await settingsStore();
+  const saved = await currentStore.get<SettingsV2>("settings");
+  const value = await sidecar.request<SettingsV2>("settings.migrate", { input: saved });
   state.value = reactive(value) as SettingsV2;
   state.ready = true;
   await saveSettings();
@@ -37,8 +26,23 @@ export async function loadSettings(): Promise<SettingsV2> {
 
 export async function saveSettings(): Promise<void> {
   if (!state.value) return;
-  store ??= await load("settings-v2.json", { autoSave: 250 });
-  await store.set("settings", JSON.parse(JSON.stringify(state.value)));
+  const currentStore = await settingsStore();
+  await currentStore.set("settings", JSON.parse(JSON.stringify(state.value)));
+}
+
+export async function isOnboardingComplete(): Promise<boolean> {
+  const currentStore = await settingsStore();
+  return Boolean(await currentStore.get(ONBOARDING_STORE_KEY));
+}
+
+export async function markOnboardingComplete(): Promise<void> {
+  const currentStore = await settingsStore();
+  await currentStore.set(ONBOARDING_STORE_KEY, true);
+}
+
+export async function clearOnboardingComplete(): Promise<void> {
+  const currentStore = await settingsStore();
+  await currentStore.set(ONBOARDING_STORE_KEY, false);
 }
 
 export async function replaceSettings(input: unknown): Promise<SettingsV2> {
@@ -49,8 +53,11 @@ export async function replaceSettings(input: unknown): Promise<SettingsV2> {
   return state.value;
 }
 
-export async function importLegacySettings(path: string): Promise<{ settings: SettingsV2; backupPath: string } | undefined> {
-  if (!await confirm(
+export async function importLegacySettings(
+  path: string,
+  options: { confirmReplace?: boolean } = {},
+): Promise<{ settings: SettingsV2; backupPath: string } | undefined> {
+  if (options.confirmReplace !== false && !await confirm(
     "匯入會取代目前的 2.0 設定。是否先備份舊版設定，再繼續？",
     { title: "確認匯入", kind: "warning" },
   )) return undefined;

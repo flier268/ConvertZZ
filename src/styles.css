@@ -60,6 +60,8 @@ html.floating-window, html.floating-window body, html.floating-window #app { bac
 .field-suffix { margin-left: 8px; color: #6c807d; }
 .muted, .legal-note { color: #70827f; font-size: 13px; }
 .legal-note { margin: 12px 0 0; }
+.onboarding-path, .onboarding-result { margin: 8px 0; word-break: break-all; }
+.onboarding-import-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .about-hero .el-card__body { display: flex; align-items: center; gap: 24px; padding: 28px; }
 .about-mark { width: 80px; height: 80px; border-radius: 24px; font-size: 28px; }
 .about-hero h2 { margin: 0 0 8px; }

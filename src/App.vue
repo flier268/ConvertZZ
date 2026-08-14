@@ -25,7 +25,7 @@ import { loadSettings } from "./lib/settings";
 import { sidecar } from "./lib/sidecar";
 import { setCliInvocation } from "./lib/cli";
 import type { ParsedCli } from "@shared/contracts";
-import { applyDesktopSettings } from "./lib/desktop";
+import { applyDesktopSettings, applyStartupWindowVisibility } from "./lib/desktop";
 import { executeLegacyAction } from "./lib/legacyActions";
 import { checkLatestRelease } from "./lib/update";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -53,6 +53,8 @@ onMounted(async () => {
   try {
     const settings = await loadSettings();
     await applyDesktopSettings(settings);
+    const args = await invoke<string[]>("startup_args");
+    await applyStartupWindowVisibility(settings, args.length > 0);
     const savedApiKey = await invoke<string | null>("load_zhconvert_api_key").catch(() => null);
     if (savedApiKey) await sidecar.request("zhconvert.configure", { apiKey: savedApiKey });
     const currentHealth = await sidecar.request<{ node: string; version: string }>("health", {});
@@ -60,6 +62,7 @@ onMounted(async () => {
     if (settings.checkVersionOnStart) {
       void checkLatestRelease(currentHealth.version).then(async (update) => {
         if (!update.updateAvailable) return;
+        await invoke("show_main_window");
         try {
           await ElMessageBox.confirm(`發現新版本 ${update.latestVersion}。目前版本為 ${update.currentVersion}。是否開啟下載頁面？`, "發現更新", { type: "info" });
           await openUrl(update.url);
@@ -68,7 +71,6 @@ onMounted(async () => {
         }
       }).catch(() => undefined);
     }
-    const args = await invoke<string[]>("startup_args");
     if (args.length) {
       const parsed = await sidecar.request<ParsedCli>("cli.parse", { args, defaultEngine: settings.engine });
       setCliInvocation(parsed);

@@ -33,6 +33,7 @@ describe("設定遷移", () => {
     });
     expect(result.version).toBe(2);
     expect(result.engine).toBe("segmented");
+    expect(result.showMainWindowOnStart).toBe(false);
     expect(result.recognizeEncoding).toBe(false);
     expect(result.floatingBall).toEqual({ enabled: false, x: 100, y: 200 });
     expect(result.hotkeys.shortcuts[0]).toMatchObject({ enabled: true, accelerator: "Control+Shift+F8", action: "a1" });
@@ -63,5 +64,11 @@ describe("設定遷移", () => {
     expect(await readFile(first, "utf8")).toBe("{\"Prompt\":false}");
     expect(await readFile(second, "utf8")).toBe("{\"Prompt\":false}");
     expect((await readdir(directory)).filter((name) => name.startsWith("ConvertZZ.backup-"))).toHaveLength(2);
+  });
+
+  it("舊版與缺少欄位的 2.0 設定預設不啟動主視窗", () => {
+    expect(migrateSettings(undefined).showMainWindowOnStart).toBe(false);
+    expect(migrateSettings({ version: 2, engine: "legacy" }).showMainWindowOnStart).toBe(false);
+    expect(migrateSettings({ version: 2, showMainWindowOnStart: true }).showMainWindowOnStart).toBe(true);
   });
 });

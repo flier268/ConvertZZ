@@ -47,9 +47,9 @@ describe("Tauri desktop shell", () => {
     const styles = readProjectFile("src/styles.css");
     const component = readProjectFile("src/FloatingBall.vue");
     const config = readJson("src-tauri/tauri.conf.json") as {
-      app?: { windows?: Array<{ label?: string; transparent?: boolean }> };
+      app?: { windows?: Array<{ label?: string; transparent?: boolean; visible?: boolean }> };
     };
-
+    expect(config.app?.windows?.find((window) => window.label === "main")?.visible).toBe(false);
     expect(config.app?.windows?.find((window) => window.label === "floating")?.transparent).toBe(true);
     expect(styles).toContain("html.floating-window");
     expect(component).toContain("floating-z-large");
@@ -68,6 +68,18 @@ describe("Tauri desktop shell", () => {
     expect(component).not.toContain('run("t2s")');
     expect(rust).toContain("fn show_main_window");
     expect(rust).toContain("fn quit_app");
+  });
+
+  it("hides the main window on startup unless the setting is enabled", () => {
+    const app = readProjectFile("src/App.vue");
+    const settings = readProjectFile("src/pages/SettingsPage.vue");
+    const desktop = readProjectFile("src/lib/desktop.ts");
+
+    expect(desktop).toContain("applyStartupWindowVisibility");
+    expect(app).toContain("applyStartupWindowVisibility");
+    expect(app).toContain("args.length > 0");
+    expect(settings).toContain("showMainWindowOnStart");
+    expect(settings).toContain("啟動時顯示主視窗");
   });
 
   it("assigns an icon and left-click behavior to the tray", () => {

@@ -228,6 +228,7 @@ export interface SettingsV2 {
     serviceInfoCachedAt?: string;
   };
   checkVersionOnStart: boolean;
+  showMainWindowOnStart: boolean;
 }
 
 export type SidecarOperation =

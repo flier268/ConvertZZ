@@ -5,6 +5,10 @@ import type { PlatformCapabilities, SettingsV2 } from "@shared/contracts";
 import { executeLegacyAction } from "./legacyActions";
 import { ElMessage } from "element-plus";
 
+export async function applyStartupWindowVisibility(settings: SettingsV2, forceShow = false): Promise<void> {
+  if (forceShow || settings.showMainWindowOnStart) await invoke("show_main_window");
+}
+
 export async function applyDesktopSettings(settings: SettingsV2): Promise<string[]> {
   const warnings: string[] = [];
   const floating = (await getAllWindows()).find((window) => window.label === "floating");

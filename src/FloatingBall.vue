@@ -17,6 +17,7 @@ import {
 import { applyFloatingBallWindow } from "./lib/desktop";
 import { loadSettings, saveSettings } from "./lib/settings";
 import { showAppToast } from "./lib/toast";
+import BrandMark from "./BrandMark.vue";
 
 const busy = ref(false);
 const htmlMenu = ref<{ x: number; y: number }>();
@@ -131,8 +132,7 @@ async function handleDrop(event: DragEvent) {
     @drop.prevent="handleDrop"
   >
     <div class="floating-orb" :class="{ busy }" aria-label="ConvertZZ 浮動球">
-      <span class="floating-z-large" aria-hidden="true">Z</span>
-      <span class="floating-z-small" aria-hidden="true">Z</span>
+      <BrandMark />
     </div>
     <nav
       v-if="htmlMenu"

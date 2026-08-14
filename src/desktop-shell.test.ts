@@ -48,7 +48,7 @@ describe("Tauri desktop shell", () => {
     const styles = readProjectFile("src/styles.css");
     const component = readProjectFile("src/FloatingBall.vue");
     const config = readJson("src-tauri/tauri.conf.json") as {
-      app?: { windows?: Array<{ label?: string; transparent?: boolean; visible?: boolean; backgroundColor?: number[]; shadow?: boolean }> };
+      app?: { windows?: Array<{ label?: string; transparent?: boolean; visible?: boolean; backgroundColor?: number[]; shadow?: boolean; width?: number; height?: number }> };
     };
     expect(config.app?.windows?.find((window) => window.label === "main")?.visible).toBe(false);
     expect(config.app?.windows?.find((window) => window.label === "floating")?.visible).toBe(false);
@@ -57,9 +57,15 @@ describe("Tauri desktop shell", () => {
     expect(styles).toContain("html.floating-window");
     expect(styles).toContain("-webkit-user-select: none");
     expect(styles).not.toContain("drop-shadow");
+    expect(config.app?.windows?.find((window) => window.label === "floating")?.width).toBe(72);
+    expect(config.app?.windows?.find((window) => window.label === "floating")?.height).toBe(72);
     expect(config.app?.windows?.find((window) => window.label === "floating")?.shadow).toBe(false);
-    expect(component).toContain("floating-z-large");
-    expect(component).toContain("floating-z-small");
+    expect(styles).toContain("width: 72px");
+    expect(readProjectFile("src/BrandMark.vue")).toContain('width="72"');
+    expect(readProjectFile("src-tauri/src/lib.rs")).toContain("LogicalSize::new(72.0, 72.0)");
+    expect(component).toContain("BrandMark");
+    expect(readProjectFile("src/BrandMark.vue")).toContain('class="brand-z"');
+    expect(readProjectFile("src/BrandMark.vue")).toContain('class="brand-two"');
     expect(component).toContain("@selectstart.prevent");
   });
 

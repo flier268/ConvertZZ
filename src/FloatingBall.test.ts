@@ -38,8 +38,11 @@ describe("浮動球左右鍵", () => {
     const event = new Event("selectstart", { cancelable: true });
     wrapper.get(".floating-shell").element.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
-    expect(wrapper.get(".floating-z-large").attributes("aria-hidden")).toBe("true");
-    expect(wrapper.get(".floating-z-small").attributes("aria-hidden")).toBe("true");
+    const mark = wrapper.get("svg.brand-mark-svg");
+    expect(mark.attributes("aria-hidden")).toBe("true");
+    expect(mark.get(".brand-z").exists()).toBe(true);
+    expect(mark.get(".brand-two").exists()).toBe(true);
+    expect(wrapper.find(".floating-z-large").exists()).toBe(false);
   });
 
   it("左鍵沒有輔助鍵時不轉換也不開選單", async () => {

@@ -22,6 +22,7 @@ import DictionaryPage from "./pages/DictionaryPage.vue";
 import SettingsPage from "./pages/SettingsPage.vue";
 import AboutPage from "./pages/AboutPage.vue";
 import OnboardingTour from "./OnboardingTour.vue";
+import BrandMark from "./BrandMark.vue";
 import { loadSettings } from "./lib/settings";
 import { sidecar } from "./lib/sidecar";
 import { setCliInvocation } from "./lib/cli";
@@ -115,7 +116,7 @@ onBeforeUnmount(() => unlisten.forEach((dispose) => dispose()));
   <el-container class="app-shell">
     <el-aside width="232px" class="sidebar">
       <div class="brand">
-        <div id="tour-brand" class="brand-mark">ZZ</div>
+        <div id="tour-brand" class="brand-mark"><BrandMark /></div>
         <div>
           <strong>ConvertZZ</strong>
           <small>跨平台中文轉換</small>

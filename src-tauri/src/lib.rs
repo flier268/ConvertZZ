@@ -470,6 +470,9 @@ fn hide_startup_windows(app: &tauri::App) {
             let _ = window.hide();
         }
     }
+    if let Some(floating) = app.get_webview_window("floating") {
+        let _ = floating.set_size(tauri::LogicalSize::new(72.0, 72.0));
+    }
 }
 
 fn clear_overlay_window_backgrounds(app: &tauri::App) {

@@ -1,0 +1,86 @@
+{
+  "name": "convertzz",
+  "version": "2.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.26.1",
+  "description": "ConvertZZ cross-platform Chinese text conversion desktop application",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "bin": {
+    "convertzz-sidecar": "sidecar/dist/convertzz-sidecar.cjs"
+  },
+  "scripts": {
+    "dev": "tauri dev",
+    "dev:web": "vite",
+    "build": "pnpm run typecheck && vite build",
+    "build:web": "vite build",
+    "sidecar:compile": "node scripts/compile-sidecar.mjs",
+    "sidecar:build": "pnpm run sidecar:compile && node scripts/build-sidecar.mjs",
+    "sidecar:dev": "tsx sidecar/src/index.ts",
+    "tauri": "tauri",
+    "tauri:build": "tauri build",
+    "typecheck": "vue-tsc --noEmit && tsc -p sidecar/tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "pnpm run typecheck && pnpm test && pnpm run build:web"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "2.3.2",
+    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-clipboard-manager": "2.3.2",
+    "@tauri-apps/plugin-dialog": "2.7.2",
+    "@tauri-apps/plugin-global-shortcut": "2.3.2",
+    "@tauri-apps/plugin-opener": "2.5.4",
+    "@tauri-apps/plugin-store": "2.4.4",
+    "chardet": "2.2.0",
+    "cjk-conv": "1.2.150",
+    "element-plus": "2.14.4",
+    "encoding-japanese": "2.2.0",
+    "iconv-lite": "0.7.3",
+    "mp3tag.js": "3.17.0",
+    "novel-segment": "2.7.121",
+    "taglib-wasm": "2.0.0",
+    "vue": "3.5.41",
+    "vue-router": "4.6.3"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.4",
+    "@types/node": "24.10.1",
+    "@vitejs/plugin-vue": "6.0.8",
+    "@vue/test-utils": "2.4.6",
+    "@yao-pkg/pkg": "6.22.0",
+    "esbuild": "0.28.2",
+    "jsdom": "27.1.0",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "vite": "8.2.1",
+    "vitest": "4.1.10",
+    "vue-tsc": "3.3.9"
+  },
+  "pkg": {
+    "scripts": [
+      "sidecar/dist/**/*.cjs",
+      "node_modules/cjk-conv/index.js",
+      "node_modules/cjk-conv/version.js",
+      "node_modules/cjk-conv/lib/**/*.js",
+      "node_modules/novel-segment/index.js",
+      "node_modules/novel-segment/__root.js",
+      "node_modules/novel-segment/version.js",
+      "node_modules/novel-segment/lib/**/*.js",
+      "node_modules/segment-dict/index.js",
+      "node_modules/segment-dict/version.js",
+      "node_modules/segment-dict/lib/**/*.js",
+      "node_modules/deepmerge-plus/dist/**/*.cjs",
+      "node_modules/.pnpm/deepmerge-plus@*/node_modules/deepmerge-plus/dist/**/*.cjs"
+    ],
+    "assets": [
+      "node_modules/segment-dict/**/*",
+      "node_modules/.pnpm/segment-dict@*/node_modules/segment-dict/dict/**/*",
+      "node_modules/novel-segment/**/*.{json,txt,csv}"
+    ],
+    "outputPath": "src-tauri/binaries"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  }
+}

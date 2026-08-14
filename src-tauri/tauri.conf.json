@@ -1,0 +1,64 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ConvertZZ",
+  "version": "2.0.0",
+  "identifier": "org.convertzz.app",
+  "build": {
+    "beforeDevCommand": "pnpm run sidecar:build && pnpm run dev:web",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm run sidecar:build && pnpm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost blob: data:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost https://api.zhconvert.org https://api.github.com"
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "ConvertZZ 2.0",
+        "width": 1180,
+        "height": 760,
+        "minWidth": 960,
+        "minHeight": 640,
+        "center": true
+      },
+      {
+        "label": "floating",
+        "url": "index.html?window=floating",
+        "title": "ConvertZZ",
+        "width": 72,
+        "height": 72,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "externalBin": ["binaries/convertzz-sidecar"],
+    "resources": {
+      "../ConvertZZ/Dictionary.csv": "Dictionary.csv",
+      "../node_modules/taglib-wasm/dist/taglib-wasi.wasm": "taglib-wasi.wasm",
+      "../THIRD_PARTY_NOTICES.md": "licenses/THIRD_PARTY_NOTICES.md",
+      "../node_modules/taglib-wasm/LICENSE": "licenses/taglib-wasm-LICENSE.txt",
+      "../licenses/LGPL-2.1.txt": "licenses/taglib-COPYING.LGPL.txt"
+    },
+    "icon": ["icons/icon.png", "icons/icon.ico"],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
+  }
+}

@@ -1,0 +1,154 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 發行標籤
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: windows-x64
+            bundles: nsis,msi
+          - os: ubuntu-22.04
+            artifact: linux-x64
+            bundles: appimage,deb,rpm
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: 安裝 Linux 建置套件
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential file libayatana-appindicator3-dev libdbus-1-dev \
+            librsvg2-dev libwebkit2gtk-4.1-dev patchelf pkg-config rpm
+      - name: 安裝相依套件
+        run: pnpm install --frozen-lockfile
+      - name: 執行測試
+        run: pnpm run check
+      - name: 建立安裝包
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri build --bundles ${{ matrix.bundles }}
+      - name: 建立 Linux 發行驗證樣本
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/taglib/taglib/3ace0483c0d7a2a4c1dbf9277274f0e733530504/tests/data/mac-399.ape -o /tmp/convertzz-release-test.ape
+          printf '%s  %s\n' '8c851b4f52bbbd822262040ae8961b8c27f8f702d1be3fa50cca283d009aadea' '/tmp/convertzz-release-test.ape' | sha256sum --check
+          curl -fsSL https://raw.githubusercontent.com/taglib/taglib/3ace0483c0d7a2a4c1dbf9277274f0e733530504/tests/data/test.ogg -o /tmp/convertzz-release-test.ogg
+          printf '%s  %s\n' 'b064240a5cca0f9241b942b8d4680cedda555e5aab5f15c1d983767193a7f54d' '/tmp/convertzz-release-test.ogg' | sha256sum --check
+      - name: 離線驗證 AppImage 內的 sidecar 與 WASM
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          appimages=(src-tauri/target/release/bundle/appimage/*.AppImage)
+          test "${#appimages[@]}" -eq 1
+          unshare --user --map-root-user --net \
+            node scripts/verify-linux-appimage.mjs \
+            "${appimages[0]}" \
+            /tmp/convertzz-release-test.ape \
+            /tmp/convertzz-release-test.ogg
+      - name: 建立 Linux SHA-256
+        if: runner.os == 'Linux'
+        shell: bash
+        run: sha256sum src-tauri/target/release/bundle/appimage/*.AppImage src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/rpm/*.rpm > SHA256SUMS-linux-x64.txt
+      - name: 記錄 Linux 執行相依
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="RUNTIME-DEPENDENCIES-linux-x64.txt"
+          {
+            echo "ConvertZZ Linux runtime dependency report"
+            echo
+            for package in src-tauri/target/release/bundle/deb/*.deb; do
+              echo "DEB: $(basename "$package")"
+              dpkg-deb --field "$package" Depends
+              echo
+            done
+            for package in src-tauri/target/release/bundle/rpm/*.rpm; do
+              echo "RPM: $(basename "$package")"
+              rpm -qpR "$package"
+              echo
+            done
+            echo "AppImage: Tauri collected shared libraries are bundled."
+            echo "AppImage media framework bundling: disabled."
+          } > "$report"
+
+          if grep -Eiq '(^|[[:space:],])(nodejs|npm|build-essential|pkg-config|[^[:space:],]+-dev)([[:space:],]|$)' "$report"; then
+            echo "Build-only dependency leaked into release metadata."
+            cat "$report"
+            exit 1
+          fi
+      - name: 建立 Windows SHA-256
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem src-tauri/target/release/bundle -File -Recurse | Where-Object { $_.Extension -in '.exe', '.msi' }
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $file.FullName).Hash.ToLowerInvariant()
+            "$hash  $($file.Name)"
+          }
+          $lines | Set-Content -Encoding utf8NoBOM SHA256SUMS-windows-x64.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.deb
+            src-tauri/target/release/bundle/**/*.rpm
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.msi
+            SHA256SUMS-*.txt
+            RUNTIME-DEPENDENCIES-*.txt
+          if-no-files-found: error
+
+  draft-release:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: 建立草稿 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ConvertZZ ${{ env.RELEASE_TAG }}
+          draft: true
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            此版本預設未提供程式碼簽章。
+
+            Windows 與 Linux 使用者可使用隨附的 SHA-256 檔案驗證下載內容。
+          files: artifacts/**/*

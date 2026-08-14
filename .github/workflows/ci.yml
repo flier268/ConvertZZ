@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: 安裝音訊測試工具
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: 安裝相依套件
+        run: pnpm install --frozen-lockfile
+      - name: 取得固定版本的 APE 測試樣本
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/taglib/taglib/3ace0483c0d7a2a4c1dbf9277274f0e733530504/tests/data/mac-399.ape -o /tmp/convertzz-test.ape
+          printf '%s  %s\n' '8c851b4f52bbbd822262040ae8961b8c27f8f702d1be3fa50cca283d009aadea' '/tmp/convertzz-test.ape' | sha256sum --check
+      - name: 檢查前端與 sidecar
+        env:
+          CONVERTZZ_APE_FIXTURE: /tmp/convertzz-test.ape
+        run: pnpm run check
+      - name: 建立 Node.js 24 sidecar
+        run: pnpm run sidecar:build
+      - name: 驗證無 Node.js sidecar
+        shell: bash
+        run: |
+          triple="$(rustc -vV | sed -n 's/^host: //p')"
+          test -n "${triple:?}"
+          binary="src-tauri/binaries/convertzz-sidecar-${triple}"
+          test -x "${binary:?}"
+          response="$(printf '%s\n' '{"id":"ci","operation":"convert.preview","payload":{"text":"里面开发头发","direction":"s2t","engine":"segmented"}}' | "${binary:?}" --dictionary ConvertZZ/Dictionary.csv --wasm node_modules/taglib-wasm/dist/taglib-wasi.wasm)"
+          test "$(printf '%s' "$response" | jq -r '.result.text')" = "裡面開發頭髮"
+          audio_response="$(printf '%s\n' '{"id":"audio","operation":"audio.scan","payload":{"paths":["/tmp/convertzz-test.ape"]}}' | "${binary:?}" --dictionary ConvertZZ/Dictionary.csv --wasm "$(pwd)/node_modules/taglib-wasm/dist/taglib-wasi.wasm")"
+          printf '%s\n' "$audio_response" | grep -F '"format":"ape"'
+          if printf '%s\n' "$audio_response" | grep -Eq '"warning"|dynamic import callback'; then
+            exit 1
+          fi
+
+  rust-format:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: 檢查 Rust 格式
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check

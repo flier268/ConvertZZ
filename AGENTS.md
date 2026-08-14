@@ -63,6 +63,7 @@ cargo update -p <crate> --manifest-path src-tauri/Cargo.toml
 
 - 現有 Node 套件多數為精確版本。新增或升級時加上 `--save-exact`，不要改成 `^` 或 `~`，除非該套件本來就使用範圍版本。
 - 升級 pnpm 用 `corepack use`，不要手改 `packageManager`。
+- GitHub Actions 的 `pnpm/action-setup` 不要寫 `version`，讓它讀取 `package.json` 的 `packageManager`。
 - 只改功能旗標、可選相依或目標平台區段時，可以編輯 `Cargo.toml` 的非版本欄位，版本仍交給 `cargo add` 或 `cargo update`。
 - 更新後執行 `pnpm run check`。授權或 WASM 相依變更時同步更新第三方聲明。
 

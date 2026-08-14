@@ -333,7 +333,18 @@ watch(
         <el-table-column prop="sourcePath" label="來源" min-width="260" show-overflow-tooltip />
         <el-table-column prop="outputPath" label="輸出" min-width="260" show-overflow-tooltip />
         <el-table-column prop="detectedEncoding" label="編碼" width="120" />
-        <el-table-column prop="outputPreview" label="預覽" min-width="220" show-overflow-tooltip />
+        <el-table-column
+          prop="sourcePreview"
+          label="來源預覽"
+          min-width="200"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="outputPreview"
+          label="輸出預覽"
+          min-width="200"
+          show-overflow-tooltip
+        />
         <el-table-column prop="warning" label="警告" min-width="220" show-overflow-tooltip />
       </el-table>
     </el-card>

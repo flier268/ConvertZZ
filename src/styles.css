@@ -298,6 +298,15 @@ html.floating-window * {
 .switch-row {
   margin-top: 8px;
 }
+.settings-note {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0 0;
+  color: #667b78;
+  font-size: 13px;
+}
 .card-actions {
   justify-content: flex-end;
   margin-top: 12px;

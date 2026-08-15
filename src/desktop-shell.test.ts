@@ -153,6 +153,7 @@ describe("Tauri desktop shell", () => {
     expect(rust).toContain("tauri_plugin_updater::Builder");
     expect(rust).toContain("tauri_plugin_process::init");
     expect(app).toContain("promptForAppUpdate");
+    expect(app).toContain("skippedVersion: settings.skippedUpdateVersion");
     expect(about).toContain("promptForAppUpdate");
     expect(about).not.toContain("github.com/flier268/ConvertZZ/releases");
   });

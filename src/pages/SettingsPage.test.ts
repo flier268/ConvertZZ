@@ -76,6 +76,7 @@ function settingsFixture(): SettingsV2 {
       jpTextStyles: "",
     },
     checkVersionOnStart: true,
+    skippedUpdateVersion: "",
     showMainWindowOnStart: false,
   };
 }
@@ -148,6 +149,18 @@ describe("設定分頁", () => {
     await flushPromises();
     expect(wrapper.get("#pane-files").text()).toContain("檔案篩選器");
     expect(wrapper.get("#pane-files").text()).not.toContain("SendTo 捷徑");
+    wrapper.unmount();
+  });
+
+  it("有略過版本時可從一般分頁清除", async () => {
+    const settings = settingsFixture();
+    settings.skippedUpdateVersion = "2.1.0";
+    getLoadedSettings.mockReturnValue(settings);
+    loadSettings.mockResolvedValue(settings);
+    const wrapper = await mountPage();
+    expect(wrapper.text()).toContain("已略過 2.1.0");
+    await wrapper.get(".settings-note button").trigger("click");
+    expect(settings.skippedUpdateVersion).toBe("");
     wrapper.unmount();
   });
 });

@@ -158,6 +158,12 @@ async function saveApiKey() {
             ><el-checkbox v-model="settings.showMainWindowOnStart">啟動時顯示主視窗</el-checkbox
             ><el-checkbox v-model="settings.checkVersionOnStart">啟動時檢查更新</el-checkbox>
           </div>
+          <p v-if="settings.skippedUpdateVersion" class="settings-note">
+            已略過 {{ settings.skippedUpdateVersion }}，啟動時不會再詢問此版本。
+            <el-button text type="primary" @click="settings.skippedUpdateVersion = ''"
+              >清除略過</el-button
+            >
+          </p>
           <div v-if="capabilities?.sendToShortcut" class="settings-windows">
             <div class="section-title">Windows 整合</div>
             <el-button

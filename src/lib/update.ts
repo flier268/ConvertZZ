@@ -84,6 +84,15 @@ export async function resolveUpdate(
   };
 }
 
+export function isUpdateVersionSkipped(
+  latestVersion: string,
+  skippedVersion: string | undefined,
+): boolean {
+  const skipped = skippedVersion?.trim();
+  if (!skipped) return false;
+  return compareVersions(latestVersion, skipped) <= 0;
+}
+
 export function compareVersions(left: string, right: string): number {
   const a = versionParts(left);
   const b = versionParts(right);

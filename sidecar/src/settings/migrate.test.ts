@@ -102,4 +102,12 @@ describe("設定遷移", () => {
       true,
     );
   });
+
+  it("缺少欄位的 2.0 設定預設不略過任何更新版本", () => {
+    expect(migrateSettings(undefined).skippedUpdateVersion).toBe("");
+    expect(migrateSettings({ version: 2, engine: "legacy" }).skippedUpdateVersion).toBe("");
+    expect(
+      migrateSettings({ version: 2, skippedUpdateVersion: "2.1.0" }).skippedUpdateVersion,
+    ).toBe("2.1.0");
+  });
 });

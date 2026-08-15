@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { checkLatestRelease, compareVersions, resolveUpdate } from "./update";
+import {
+  checkLatestRelease,
+  compareVersions,
+  isUpdateVersionSkipped,
+  resolveUpdate,
+} from "./update";
 
 describe("版本檢查", () => {
   it("比較正式版本", () => {
@@ -57,6 +62,14 @@ describe("版本檢查", () => {
       kind: "open",
       latestVersion: "2.1.0",
     });
+  });
+
+  it("啟動檢查會略過已記錄版本，較新版本仍會詢問", () => {
+    expect(isUpdateVersionSkipped("2.1.0", "")).toBe(false);
+    expect(isUpdateVersionSkipped("2.1.0", undefined)).toBe(false);
+    expect(isUpdateVersionSkipped("2.1.0", "2.1.0")).toBe(true);
+    expect(isUpdateVersionSkipped("2.1.0", "2.2.0")).toBe(true);
+    expect(isUpdateVersionSkipped("2.2.0", "2.1.0")).toBe(false);
   });
 
   it("沒有新版本時回傳 none", async () => {

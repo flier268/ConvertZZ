@@ -71,7 +71,10 @@ onMounted(async () => {
     const currentHealth = await sidecar.request<{ node: string; version: string }>("health", {});
     health.value = currentHealth;
     if (settings.checkVersionOnStart) {
-      void promptForAppUpdate({ silentWhenCurrent: true }).catch(() => undefined);
+      void promptForAppUpdate({
+        silentWhenCurrent: true,
+        skippedVersion: settings.skippedUpdateVersion,
+      }).catch(() => undefined);
     }
     if (args.length) {
       const parsed = await sidecar.request<ParsedCli>("cli.parse", {

@@ -1,4 +1,8 @@
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 export default defineConfig({
   testDir: "./specs",
@@ -17,8 +21,11 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command: "pnpm run dev:e2e",
+    cwd: root,
     url: "http://127.0.0.1:1422",
     reuseExistingServer: false,
     timeout: 120_000,
+    stdout: "pipe",
+    stderr: "pipe",
   },
 });

@@ -29,7 +29,7 @@ export default defineConfig({
   server: {
     port: process.env.CONVERTZZ_E2E === "1" ? 1422 : 1420,
     strictPort: true,
-    host: host || false,
+    host: process.env.CONVERTZZ_E2E === "1" ? "127.0.0.1" : host || false,
     hmr: host ? { protocol: "ws", host, port: 1421 } : undefined,
     watch: { ignored: ["**/src-tauri/**", "**/ConvertZZ/**"] },
   },

@@ -165,6 +165,8 @@ describe("Tauri desktop shell", () => {
     expect(vite).toContain("convertzz-e2e-tauri-mock");
     expect(vite).toContain("@tauri-apps/");
     expect(playwright).toContain("pnpm run dev:e2e");
+    expect(playwright).toContain("cwd: root");
+    expect(vite).toContain('host: process.env.CONVERTZZ_E2E === "1" ? "127.0.0.1"');
     expect(mock).toContain('case "sidecar_send"');
   });
 

@@ -4,7 +4,8 @@ import { getAllWindows } from "@tauri-apps/api/window";
 import { register, unregisterAll } from "@tauri-apps/plugin-global-shortcut";
 import type { PlatformCapabilities, SettingsV2 } from "@shared/contracts";
 import { executeLegacyAction } from "./legacyActions";
-import { ElMessage } from "element-plus";
+import { registrableShortcuts, unregisteredAcceleratorWarnings } from "./hotkey";
+import { showAppToast } from "./toast";
 
 export function floatingBallPosition(settings: SettingsV2): { x: number; y: number } | undefined {
   const { x, y } = settings.floatingBall;
@@ -40,20 +41,19 @@ export async function applyDesktopSettings(
 
   const capabilities = await invoke<PlatformCapabilities>("platform_capabilities");
   if (!capabilities.globalShortcuts) return warnings;
+  warnings.push(...unregisteredAcceleratorWarnings(settings.hotkeys.shortcuts));
   await unregisterAll();
-  for (const shortcut of settings.hotkeys.shortcuts.filter(
-    (item) => item.enabled && item.accelerator,
-  )) {
+  for (const shortcut of registrableShortcuts(settings.hotkeys.shortcuts)) {
     try {
       await register(shortcut.accelerator, async (event) => {
-        if (event.state !== "Released") return;
+        if (event.state !== "Pressed") return;
         try {
           await executeLegacyAction(shortcut.action, settings, undefined, {
             copy: settings.hotkeys.autoCopy,
             paste: settings.hotkeys.autoPaste,
           });
         } catch (error) {
-          ElMessage.error(error instanceof Error ? error.message : String(error));
+          await showAppToast(error instanceof Error ? error.message : String(error));
         }
       });
     } catch (error) {

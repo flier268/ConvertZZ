@@ -61,7 +61,8 @@ provide("replayOnboarding", () => tour.value?.replay());
 onMounted(async () => {
   try {
     const settings = await loadSettings();
-    await applyDesktopSettings(settings, { revealFloating: false });
+    const desktopWarnings = await applyDesktopSettings(settings, { revealFloating: false });
+    for (const warning of desktopWarnings) await showAppToast(warning);
     const args = await invoke<string[]>("startup_args");
     hasCliArgs.value = args.length > 0;
     await applyStartupWindowVisibility(settings, args.length > 0);

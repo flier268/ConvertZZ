@@ -38,6 +38,56 @@ export function acceleratorFromKeyboardEvent(event: {
   return parts.join("+");
 }
 
+const MODIFIER_TOKENS = new Set([
+  "ALT",
+  "SHIFT",
+  "CONTROL",
+  "CTRL",
+  "COMMAND",
+  "CMD",
+  "SUPER",
+  "META",
+  "OPTION",
+  "COMMANDORCONTROL",
+  "COMMANDORCTRL",
+  "CMDORCTRL",
+  "CMDORCONTROL",
+]);
+
+export function assignShortcutAccelerator(
+  shortcut: { accelerator: string; enabled: boolean },
+  recorded: string | "clear" | undefined,
+): void {
+  if (recorded === "clear") {
+    shortcut.accelerator = "";
+    shortcut.enabled = false;
+    return;
+  }
+  if (!recorded) return;
+  shortcut.accelerator = recorded;
+  shortcut.enabled = true;
+}
+
+export function acceleratorMainKey(accelerator: string): string | undefined {
+  const token = accelerator.split("+").at(-1)?.trim();
+  if (!token || MODIFIER_TOKENS.has(token.toUpperCase())) return undefined;
+  return token;
+}
+
+export function registrableShortcuts<T extends { enabled: boolean; accelerator: string }>(
+  shortcuts: T[],
+): T[] {
+  return shortcuts.filter((item) => item.enabled && item.accelerator);
+}
+
+export function unregisteredAcceleratorWarnings(
+  shortcuts: Array<{ enabled: boolean; accelerator: string }>,
+): string[] {
+  return shortcuts
+    .filter((item) => item.accelerator && !item.enabled)
+    .map((item) => `快捷鍵 ${item.accelerator} 已設定但未啟用，因此尚未註冊。`);
+}
+
 function tauriKeyName(event: { key: string; code: string }): string | undefined {
   const code = event.code;
   const letter = /^Key([A-Z])$/u.exec(code);

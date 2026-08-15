@@ -11,7 +11,7 @@ import type {
 import { loadSettings, saveSettings } from "../lib/settings";
 import { sidecar } from "../lib/sidecar";
 import { applyDesktopSettings } from "../lib/desktop";
-import { acceleratorFromKeyboardEvent } from "../lib/hotkey";
+import { acceleratorFromKeyboardEvent, assignShortcutAccelerator } from "../lib/hotkey";
 import { LEGACY_ACTIONS } from "../lib/legacyActions";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
@@ -57,9 +57,7 @@ const dirty = computed(() => {
 function captureAccelerator(shortcut: ShortcutSetting, event: KeyboardEvent): void {
   event.preventDefault();
   event.stopPropagation();
-  const accelerator = acceleratorFromKeyboardEvent(event);
-  if (accelerator === "clear") shortcut.accelerator = "";
-  else if (accelerator) shortcut.accelerator = accelerator;
+  assignShortcutAccelerator(shortcut, acceleratorFromKeyboardEvent(event));
 }
 
 onMounted(async () => {
@@ -182,8 +180,8 @@ async function saveApiKey() {
         :closable="false"
       />
       <div class="switch-row">
-        <el-checkbox v-model="settings.hotkeys.autoCopy">快捷鍵前自動複製</el-checkbox
-        ><el-checkbox v-model="settings.hotkeys.autoPaste">轉換後自動貼上</el-checkbox>
+        <el-checkbox v-model="settings.hotkeys.autoCopy">快捷鍵讀取選取文字</el-checkbox
+        ><el-checkbox v-model="settings.hotkeys.autoPaste">轉換後寫回選取文字</el-checkbox>
       </div>
       <el-table :data="settings.hotkeys.shortcuts"
         ><el-table-column label="啟用" width="70"
@@ -205,7 +203,7 @@ async function saveApiKey() {
               placeholder="點選後按下組合鍵"
               @keydown="captureAccelerator(scope.row, $event)" /></template></el-table-column
       ></el-table>
-      <p class="muted">點選快捷鍵欄位後按下組合鍵。Backspace 可清除。</p></el-card
+      <p class="muted">點選快捷鍵欄位後按下組合鍵，錄製後會自動啟用。Backspace 可清除。</p></el-card
     >
     <el-card shadow="never"
       ><template #header><div class="section-title">浮動球快速動作</div></template

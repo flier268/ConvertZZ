@@ -40,6 +40,24 @@ jobs:
             exit 1
           fi
 
+  e2e:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: 安裝相依套件
+        run: pnpm install --frozen-lockfile
+      - name: 安裝 Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: 執行前端 e2e
+        run: pnpm run test:e2e
+
   rust-format:
     runs-on: ubuntu-22.04
     steps:

@@ -1,11 +1,24 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import vue from "@vitejs/plugin-vue";
 import { fileURLToPath, URL } from "node:url";
 
 const host = process.env.TAURI_DEV_HOST;
+const tauriMock = fileURLToPath(new URL("./e2e/mocks/tauri.ts", import.meta.url));
+
+function mockTauriForE2e(): Plugin {
+  return {
+    name: "convertzz-e2e-tauri-mock",
+    enforce: "pre",
+    resolveId(id) {
+      if (process.env.CONVERTZZ_E2E !== "1") return null;
+      if (id === "@tauri-apps/api" || id.startsWith("@tauri-apps/")) return tauriMock;
+      return null;
+    },
+  };
+}
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [mockTauriForE2e(), vue()],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
@@ -14,7 +27,7 @@ export default defineConfig({
   },
   clearScreen: false,
   server: {
-    port: 1420,
+    port: process.env.CONVERTZZ_E2E === "1" ? 1422 : 1420,
     strictPort: true,
     host: host || false,
     hmr: host ? { protocol: "ws", host, port: 1421 } : undefined,

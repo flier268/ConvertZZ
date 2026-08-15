@@ -158,6 +158,16 @@ describe("Tauri desktop shell", () => {
     expect(about).not.toContain("github.com/flier268/ConvertZZ/releases");
   });
 
+  it("runs frontend e2e against Vite with mocked Tauri APIs", () => {
+    const vite = readProjectFile("vite.config.ts");
+    const playwright = readProjectFile("e2e/playwright.config.ts");
+    const mock = readProjectFile("e2e/mocks/tauri.ts");
+    expect(vite).toContain("convertzz-e2e-tauri-mock");
+    expect(vite).toContain("@tauri-apps/");
+    expect(playwright).toContain("pnpm run dev:e2e");
+    expect(mock).toContain('case "sidecar_send"');
+  });
+
   it("shows conversion prompts in a separate toast window", () => {
     const config = readJson("src-tauri/tauri.conf.json") as {
       app?: { windows?: Array<{ label?: string; visible?: boolean; decorations?: boolean }> };

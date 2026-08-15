@@ -17,6 +17,7 @@ ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程
 | `scripts/` | sidecar 編譯、打包、git hook 與 Linux 驗證 |
 | `ConvertZZ/` | 舊 WPF 原始碼。驗收完成前不得刪除 |
 | `tests/fixtures/` | 音訊與發行驗證樣本 |
+| `e2e/` | Playwright 前端端對端測試 |
 
 前端用 `@` 對應 `src/`，用 `@shared` 對應 `shared/`。Sidecar 直接匯入 `shared/contracts.ts` 編譯後的相對路徑。
 
@@ -47,6 +48,7 @@ pnpm run sidecar:build
 - `pnpm fmt` 會格式化 Vue、TypeScript 與 Rust。存檔與 commit 前也會自動執行。
 - Rust 格式檢查：`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`。
 - `pnpm run tauri:build` 與 `pnpm run test:qemu` 很重，只在使用者明確要求發行或乾淨環境驗證時執行。
+- `pnpm run test:e2e` 用 Playwright 對 Vite 前端做畫面測試，Tauri API 由 `e2e/mocks/` 模擬。不要把這條指令加進 `pnpm run check`。
 
 ## 套件更新
 
@@ -79,6 +81,8 @@ cargo update -p <crate> --manifest-path src-tauri/Cargo.toml
 ## 測試
 
 Vitest 涵蓋 `sidecar/src/**/*.test.ts`、`src/**/*.test.ts` 與 `tests/**/*.test.ts`。
+
+前端 e2e 使用 `e2e/` 的 Playwright 規格，執行 `pnpm run test:e2e`。這會啟動 Vite 並模擬 Tauri／sidecar，不啟動桌面視窗。
 
 - 引擎變更必須覆蓋黃金案例、空白標點保留、長文分段，以及舊字典的啟用、優先權與 `9999` 保護詞。
 - 檔案變更必須覆蓋預覽未確認不寫入、衝突略過、暫存驗證、兩階段重新命名、失敗回復與不跟隨符號連結。

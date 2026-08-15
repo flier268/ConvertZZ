@@ -156,6 +156,8 @@ AppIndicator 開發套件只存在於建置環境。
 - 此變更保留參數相容性，但刻意不保留無確認寫入行為。
 - Linux 乾淨環境可用 `pnpm run test:qemu`，以 QEMU 啟動 Ubuntu 22.04 cloud image，安裝 DEB 後離線驗證 sidecar 與 WASM。
 
+前端 Playwright（`pnpm run test:e2e`）覆蓋啟動、首次匯入步驟、覆寫二次確認、無法自動安裝時開啟 Release，以及略過版本寫回設定。這不能取代桌面視窗、托盤、簽署安裝、實機快捷鍵與發行包的人工證據。未完成這些證據前，下列「待人工驗收」項目不得改為已通過。
+
 ## 明確驗收項目
 
 ### A. 專案與建置基線

@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "tauri dev",
     "dev:web": "vite",
+    "dev:e2e": "node scripts/dev-web-e2e.mjs",
     "build": "pnpm run typecheck && vite build",
     "build:web": "vite build",
     "sidecar:compile": "node scripts/compile-sidecar.mjs",
@@ -23,6 +24,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:qemu": "node scripts/verify-linux-qemu.mjs",
+    "test:e2e": "playwright test --config e2e/playwright.config.ts",
     "fmt": "prettier --write . && cargo fmt --manifest-path src-tauri/Cargo.toml",
     "fmt:check": "prettier --check . && cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
     "prepare": "node scripts/setup-git-hooks.mjs",
@@ -50,6 +52,7 @@
     "vue-router": "5.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@tauri-apps/cli": "2.11.4",
     "@types/node": "24.13.3",
     "@vitejs/plugin-vue": "6.0.8",

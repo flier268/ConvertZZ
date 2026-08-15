@@ -341,6 +341,12 @@ pnpm run dev
 pnpm run check
 ```
 
+執行前端端對端測試。會啟動 Vite，用 Playwright 操作畫面，並模擬 Tauri API。第一次需先安裝瀏覽器：`pnpm exec playwright install chromium`。
+
+```bash
+pnpm run test:e2e
+```
+
 格式化 Rust、Vue 與 Node.js。編輯器存檔與 commit 前也會自動執行。
 
 ```bash

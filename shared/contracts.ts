@@ -244,7 +244,6 @@ export type SidecarOperation =
   | "dictionary.read"
   | "dictionary.update"
   | "dictionary.preview"
-  | "settings.backup"
   | "settings.migrate"
   | "zhconvert.configure"
   | "zhconvert.serviceInfo"

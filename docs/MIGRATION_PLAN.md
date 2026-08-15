@@ -217,8 +217,8 @@ AppIndicator 開發套件只存在於建置環境。
 | D-05 | 全形與半形工具可雙向處理。 | 執行工具測試與畫面操作。 | 測試結果與截圖。 | 已通過 |
 | D-06 | Unicode 跳脫工具保留舊版能力。 | 執行編碼與解碼案例。 | 測試結果與截圖。 | 已通過 |
 | D-07 | 首次匯入 `ConvertZZ.json` 前會詢問使用者。 | 使用含舊設定的乾淨資料目錄啟動。 | 操作錄影。 | 待人工驗收 |
-| D-08 | 同意匯入後會先建立不覆蓋的備份。 | 執行兩次匯入。 | 兩個備份檔名與內容雜湊。 | 已通過 |
-| D-09 | 備份失敗時不匯入也不覆寫。 | 使用唯讀目錄執行匯入。 | 錯誤畫面與檔案雜湊。 | 部分完成 |
+| D-08 | 匯入只讀取舊 `ConvertZZ.json`，結果另存為 2.0 設定。 | 匯入前後比對來源。 | 來源雜湊不變，目錄沒有備份檔。 | 已通過 |
+| D-09 | 讀取或轉換失敗時不覆寫目前設定，也不修改來源。 | 對不存在或無法讀取的檔案執行匯入。 | 測試結果與錯誤畫面。 | 已通過 |
 | D-10 | 所有已匯入的 `SettingsV2` 欄位會影響實際行為。 | 逐欄變更並重啟驗證。 | 設定驗收表。 | 已通過 |
 | D-11 | 儲存舊字典前會詢問使用者。 | 修改一筆詞條後按下儲存。 | 操作錄影。 | 待人工驗收 |
 | D-12 | 同意儲存後會先建立不覆蓋的時間戳備份。 | 連續儲存兩次。 | 備份檔名與內容雜湊。 | 已通過 |
@@ -384,8 +384,7 @@ AppIndicator 開發套件只存在於建置環境。
 - 平台：Linux Mint 22.3、X11、x86_64。
 - `pnpm run check` 通過：typecheck、110 項測試、前端正式建置。音訊整合不再略過。尚無 CI 連結，故 J-01 仍為部分完成。
 - 新增／補強測試後再跑 `sidecar/src/audio/service.test.ts`、`migrate.test.ts`、`cli.test.ts`：27 項通過。
-- D-08：連續兩次 `backupLegacySettings` 產生不同時間戳檔名，內容與來源相同。
-- D-09：唯讀目錄下備份拋錯，來源 `ConvertZZ.json` 不變且沒有備份檔。匯入失敗時的對話畫面尚未錄影。
+- D-08／D-09（舊）：當時匯入會先備份舊 JSON。此契約已改為只讀取來源。
 - E-03：取消計畫後 `files.apply` 回報 `PLAN_NOT_FOUND`，來源檔未改。
 - E-06：寫入使用來源同目錄 `.convertzz-*` 暫存檔；覆寫與驗證失敗測試皆確認暫存會清除或不會取代原檔。
 - F-02：ID3v1 以 Big5 與 GBK 寫入「裡面」，再用對應來源編碼掃描，標題皆讀回「裡面」。
@@ -410,7 +409,7 @@ AppIndicator 開發套件只存在於建置環境。
 - 原始碼版本：本輪變更。
 - 平台：Linux Mint 22.3、X11、x86_64。
 - F-03：`mp3tag.js` 的 `getAudio` 會把 UTF-16 標籤中的 `0xFF` 誤判成 MPEG 同步位元，導致 2.3／UTF-16 寫回被音訊驗證拒絕。改為先依 ID3 標頭略過標籤，再尋找 MPEG 同步位元。測試將 2.4 樣本寫成 2.3＋UTF-16、2.4＋UTF-8、2.4＋UTF-16，標頭版本與 `TIT2` 編碼位元皆符合，標題讀回「裡面」。
-- D-09：唯讀目錄備份失敗時來源不變、沒有備份檔。前端備份失敗不會呼叫 `settings.migrate` 或覆寫設定。導覽匯入步驟會顯示錯誤警示。人工截圖仍未錄製，故維持部分完成。
+- D-09（舊）：當時以備份失敗作為不覆寫的閘門。來源 JSON 已改為唯讀匯入。
 - D-10：`src/lib/settingsApply.test.ts` 建立設定驗收表。舊版 `Engine=Fanhuaji` 匯入為 `zhconvert`；其餘已匯入欄位逐一變更後，檔案預設、ZhConvert 請求、浮動球、快捷鍵、啟動檢查與主視窗行為都會改變。
 - J-01：GitHub Actions CI `31821662830`（`c3a85a0`）通過。20 個測試檔、120 項測試，含 `sidecar/src/audio/service.test.ts` 14 項；CI 安裝 `ffmpeg-static`。https://github.com/flier268/ConvertZZ/actions/runs/31821662830
 - J-11：本機 RPM `Requires` 為 `libayatana-appindicator3.so.1`、`libwebkit2gtk-4.1.so.0`、`libgtk-3.so.0`，不含 Node.js 或 `*-dev`。APT／DEB 已在 QEMU 驗證；DNF 安裝仍未跑，維持部分完成。
@@ -422,14 +421,21 @@ AppIndicator 開發套件只存在於建置環境。
 - 原始碼版本：`efe9463`。畫面取自本機 `target/release/convertzz`。
 - 平台：Linux Mint、X11、XFCE、x86_64。
 - 證據目錄：`docs/acceptance/2026-08-15/`。
-- 新增 `src/acceptance-contracts.test.ts` 鎖定 D-07、D-09、D-11、E-01、E-02、E-05、F-07、F-08、G-12、H-03、H-06、I-03 至 I-05 的畫面與路由契約。
+- 新增 `src/acceptance-contracts.test.ts` 鎖定 D-07、D-08、D-09、D-11、E-01、E-02、E-05、F-07、F-08、G-12、H-03、H-06、I-03 至 I-05 的畫面與路由契約。
 - E-01／H-03：`/file /f:t /tmp/convertzz-accept/里面.txt` 自動建立預覽。表格顯示來源、輸出、`utf8` 與「裡面開發頭髮皇后」。
 - F-07／F-08／G-13：第二個程序把 `/audio` 交給既有視窗並切到音訊頁。APE／OGG 只顯示 APEv2／Vorbis 方向，沒有 ID3 版本或編碼選項。OGG 列出 `UNICODETAG` 與多值 `UNUSUALTAG`。
 - G-02／G-03／G-05／G-06／G-10：浮動球為獨立 72×72 透明視窗。拖動後座標 `1778,186` → `1564,364`。關閉主視窗後程序與浮動球仍在。
 - G-07：通知區可見應用程式圖示。托盤左右鍵選單未穩定點到 AppIndicator，G-08／G-09 維持待人工驗收。
 - H-06：Linux 設定頁沒有 SendTo。Windows 捷徑仍待 Windows 驗收。
 - 檔案預覽表補上來源預覽欄，讓內容差異可見。
-- 下列項目仍缺指定證據：D-07、D-09 截圖、D-11 確認對話、E-02 檔名預覽列、E-05 覆寫對話、G-02／G-04／G-05／G-07／G-08／G-09／G-11／G-12 的跨平台或錄影、H-06 Windows、I-01 至 I-08 的 Windows／Wayland 實機、J-04／J-08／J-12／J-14。
+- 下列項目仍缺指定證據：D-07、D-11 確認對話、E-02 檔名預覽列、E-05 覆寫對話、G-02／G-04／G-05／G-07／G-08／G-09／G-11／G-12 的跨平台或錄影、H-06 Windows、I-01 至 I-08 的 Windows／Wayland 實機、J-04／J-08／J-12／J-14。
+
+## 2026-08-15 舊設定匯入契約
+
+- 舊版 `ConvertZZ.json` 匯入改為只讀取來源，結果另存為 Tauri `settings-v2.json`。
+- 不再建立 `ConvertZZ.backup-*`。
+- D-08：`migrateSettingsFromPath` 匯入後來源內容不變，目錄沒有備份檔。
+- D-09：來源不存在時匯入失敗，目錄仍為空；前端讀取失敗不會呼叫第二次遷移或覆寫設定。導覽仍顯示錯誤警示。
 
 ## 驗收紀錄格式
 

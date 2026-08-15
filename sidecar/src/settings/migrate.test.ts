@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { chmod, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { backupLegacySettings, migrateSettings } from "./migrate.js";
+import { migrateSettings, migrateSettingsFromPath } from "./migrate.js";
 
 const temporary: string[] = [];
 afterEach(async () =>
@@ -69,33 +69,24 @@ describe("設定遷移", () => {
     });
   });
 
-  it("匯入前建立不覆寫的時間戳備份", async () => {
+  it("從路徑匯入只讀取來源，不修改也不另建備份", async () => {
     const directory = await mkdtemp(join(tmpdir(), "convertzz-settings-"));
     temporary.push(directory);
     const source = join(directory, "ConvertZZ.json");
-    await writeFile(source, '{"Prompt":false}', "utf8");
-    const first = await backupLegacySettings(source);
-    const second = await backupLegacySettings(source);
-    expect(first).not.toBe(second);
-    expect(await readFile(first, "utf8")).toBe('{"Prompt":false}');
-    expect(await readFile(second, "utf8")).toBe('{"Prompt":false}');
-    expect(
-      (await readdir(directory)).filter((name) => name.startsWith("ConvertZZ.backup-")),
-    ).toHaveLength(2);
+    const original = '{"Prompt":false}';
+    await writeFile(source, original, "utf8");
+    const result = await migrateSettingsFromPath(source);
+    expect(result.promptAfterConversion).toBe(false);
+    expect(await readFile(source, "utf8")).toBe(original);
+    expect(await readdir(directory)).toEqual(["ConvertZZ.json"]);
   });
 
-  it("備份失敗時不寫入備份也不改變來源", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "convertzz-settings-ro-"));
+  it("讀取失敗時不寫入也不改變來源目錄", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "convertzz-settings-missing-"));
     temporary.push(directory);
     const source = join(directory, "ConvertZZ.json");
-    await writeFile(source, '{"Prompt":false}', "utf8");
-    await chmod(directory, 0o555);
-    await expect(backupLegacySettings(source)).rejects.toBeTruthy();
-    await chmod(directory, 0o755);
-    expect(await readFile(source, "utf8")).toBe('{"Prompt":false}');
-    expect(
-      (await readdir(directory)).filter((name) => name.startsWith("ConvertZZ.backup-")),
-    ).toHaveLength(0);
+    await expect(migrateSettingsFromPath(source)).rejects.toBeTruthy();
+    expect(await readdir(directory)).toEqual([]);
   });
 
   it("舊版 Local 引擎匯入為新式分詞，Fanhuaji 匯入為 ZhConvert", () => {

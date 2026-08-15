@@ -71,9 +71,9 @@ async function importFrom(path: string): Promise<void> {
   try {
     const imported = await importLegacySettings(path, { confirmReplace: false });
     if (!imported) return;
-    await applyDesktopSettings(imported.settings);
+    await applyDesktopSettings(imported);
     settingsImported.value = true;
-    importResult.value = `已匯入，備份位於 ${imported.backupPath}`;
+    importResult.value = "已讀取舊設定，並另存為 2.0 設定。";
     ElMessage.success(importResult.value);
   } catch (error) {
     importError.value = importFailureMessage(error);
@@ -151,7 +151,7 @@ onMounted(async () => {
         </p>
       </template>
       <template v-else-if="step.id === 'import'">
-        <p>若你有 1.x 的 ConvertZZ.json，可先備份再匯入為 2.0 設定。</p>
+        <p>若你有 1.x 的 ConvertZZ.json，可讀取後另存為 2.0 設定。來源檔不會被修改。</p>
         <p v-if="legacyPath" class="onboarding-path">已找到：{{ legacyPath }}</p>
         <p v-else>也可以稍後自行選擇檔案。</p>
         <el-alert

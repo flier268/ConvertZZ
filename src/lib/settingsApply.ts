@@ -42,5 +42,5 @@ export function importedSettingsEffects(settings: SettingsV2) {
 }
 
 export function importFailureMessage(error: unknown): string {
-  return `備份失敗。設定未匯入。${error instanceof Error ? error.message : String(error)}`;
+  return `匯入失敗。目前設定未變更。${error instanceof Error ? error.message : String(error)}`;
 }

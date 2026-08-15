@@ -246,8 +246,8 @@ describe("已匯入 SettingsV2 欄位會影響實際行為", () => {
     }
   });
 
-  it("備份失敗訊息可供畫面顯示", () => {
-    expect(importFailureMessage(new Error("EACCES"))).toBe("備份失敗。設定未匯入。EACCES");
+  it("匯入失敗訊息可供畫面顯示", () => {
+    expect(importFailureMessage(new Error("ENOENT"))).toBe("匯入失敗。目前設定未變更。ENOENT");
   });
 
   it("fileConversionDefaults 會套用預覽上限與 BOM", () => {

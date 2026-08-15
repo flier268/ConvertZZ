@@ -10,20 +10,21 @@ describe("待人工驗收項目的畫面契約", () => {
   it("D-07 首次匯入前會詢問", () => {
     const settings = readProjectFile("src/lib/settings.ts");
     const tour = readProjectFile("src/OnboardingTour.vue");
-    expect(settings).toContain("匯入會取代目前的 2.0 設定。是否先備份舊版設定，再繼續？");
+    expect(settings).toContain("匯入會取代目前的 2.0 設定。是否繼續？");
     expect(settings).toContain('title: "確認匯入"');
     expect(tour).toContain("importLegacySettings");
     expect(tour).toContain("匯入找到的設定");
   });
 
-  it("D-09 備份失敗會顯示錯誤且不繼續匯入", () => {
+  it("D-08／D-09 匯入只讀取舊 JSON，失敗時不覆寫目前設定", () => {
     const tour = readProjectFile("src/OnboardingTour.vue");
     const settings = readProjectFile("src/lib/settings.ts");
+    expect(tour).toContain("來源檔不會被修改");
     expect(tour).toContain("onboarding-import-error");
     expect(tour).toContain("importFailureMessage");
     const importer = settings.slice(settings.indexOf("export async function importLegacySettings"));
-    expect(importer.indexOf("settings.backup")).toBeGreaterThan(0);
-    expect(importer.indexOf("settings.backup")).toBeLessThan(importer.indexOf("settings.migrate"));
+    expect(importer).toContain("settings.migrate");
+    expect(importer).not.toContain("settings.backup");
   });
 
   it("D-11 儲存字典前會詢問並備份", () => {

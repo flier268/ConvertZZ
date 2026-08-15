@@ -56,18 +56,17 @@ export async function replaceSettings(input: unknown): Promise<SettingsV2> {
 export async function importLegacySettings(
   path: string,
   options: { confirmReplace?: boolean } = {},
-): Promise<{ settings: SettingsV2; backupPath: string } | undefined> {
+): Promise<SettingsV2 | undefined> {
   if (
     options.confirmReplace !== false &&
-    !(await confirm("匯入會取代目前的 2.0 設定。是否先備份舊版設定，再繼續？", {
+    !(await confirm("匯入會取代目前的 2.0 設定。是否繼續？", {
       title: "確認匯入",
       kind: "warning",
     }))
   )
     return undefined;
-  const backup = await sidecar.request<{ backupPath: string }>("settings.backup", { path });
   const migrated = await sidecar.request<SettingsV2>("settings.migrate", { path });
-  return { settings: await replaceSettings(migrated), backupPath: backup.backupPath };
+  return replaceSettings(migrated);
 }
 
 export function useSettingsState() {

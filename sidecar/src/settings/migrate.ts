@@ -1,25 +1,12 @@
 import type { EngineKind, SettingsV2 } from "../../../shared/contracts.js";
-import { randomUUID } from "node:crypto";
-import { COPYFILE_EXCL } from "node:constants";
-import { copyFile } from "node:fs/promises";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 
 type LegacySettings = Record<string, unknown>;
 
-export async function backupLegacySettings(inputPath: string): Promise<string> {
-  const sourcePath = resolve(inputPath);
-  const extension = extname(sourcePath) || ".json";
-  const stem = basename(sourcePath, extname(sourcePath));
-  const timestamp = new Date()
-    .toISOString()
-    .replace(/[^0-9]/gu, "")
-    .slice(0, 14);
-  const backupPath = join(
-    dirname(sourcePath),
-    `${stem}.backup-${timestamp}-${randomUUID().slice(0, 8)}${extension}`,
-  );
-  await copyFile(sourcePath, backupPath, COPYFILE_EXCL);
-  return backupPath;
+export async function migrateSettingsFromPath(inputPath: string): Promise<SettingsV2> {
+  const raw = await readFile(resolve(inputPath), "utf8");
+  return migrateSettings(JSON.parse(raw.replace(/^\uFEFF/, "")));
 }
 
 export function defaultSettings(): SettingsV2 {

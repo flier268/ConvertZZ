@@ -15,7 +15,7 @@ import { ConversionService } from "./conversion/engines.js";
 import { DictionaryService } from "./dictionary/service.js";
 import { toErrorPayload } from "./errors.js";
 import { FileService } from "./files/service.js";
-import { backupLegacySettings, migrateSettings } from "./settings/migrate.js";
+import { migrateSettings, migrateSettingsFromPath } from "./settings/migrate.js";
 import { convertUtility } from "./utility.js";
 
 const options = parseOptions(process.argv.slice(2));
@@ -96,15 +96,9 @@ async function dispatch(
       return dictionary.update(request.payload as Parameters<DictionaryService["update"]>[0]);
     case "dictionary.preview":
       return dictionary.preview(request.payload as Parameters<DictionaryService["preview"]>[0]);
-    case "settings.backup": {
-      const backupPath = await backupLegacySettings((request.payload as { path: string }).path);
-      return { backupPath };
-    }
     case "settings.migrate":
       if ((request.payload as { path?: string }).path) {
-        const { readFile } = await import("node:fs/promises");
-        const raw = await readFile((request.payload as { path: string }).path, "utf8");
-        return migrateSettings(JSON.parse(raw.replace(/^\uFEFF/, "")));
+        return migrateSettingsFromPath((request.payload as { path: string }).path);
       }
       return migrateSettings((request.payload as { input: unknown }).input);
     case "zhconvert.configure":

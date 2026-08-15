@@ -403,7 +403,7 @@ DEB 與 RPM 不會自動覆寫，程式會改開啟 GitHub Releases。
 
 發行工作流程會簽署更新產物並上傳 `latest.json`。
 
-請在 GitHub Secrets 設定 `TAURI_SIGNING_PRIVATE_KEY` 與 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。
+金鑰產生、GitHub Secrets 與發行注意事項請見 [自動更新金鑰與發行說明](docs/AUTO_UPDATE.md)。
 
 第三方授權請見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 

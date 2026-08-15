@@ -19,6 +19,7 @@ vi.mock("./lib/toast", () => ({ showAppToast: vi.fn() }));
 vi.mock("./lib/settings", () => ({
   loadSettings: (...args: unknown[]) => loadSettings(...args),
   saveSettings: vi.fn(),
+  patchSavedSettings: vi.fn(),
 }));
 vi.mock("element-plus", () => ({ ElMessage: { error: vi.fn(), success: vi.fn() } }));
 

@@ -47,7 +47,8 @@ describe("Tauri desktop shell", () => {
       ]),
     );
     expect(component).toContain("onMoved");
-    expect(component).toContain("saveSettings");
+    expect(component).toContain("patchSavedSettings");
+    expect(component).not.toContain("saveSettings");
   });
 
   it("keeps the floating surface transparent and uses asymmetric letters", () => {

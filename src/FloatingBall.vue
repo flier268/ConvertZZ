@@ -15,7 +15,7 @@ import {
   quickActionKey,
 } from "./lib/floatingGestures";
 import { applyFloatingBallWindow } from "./lib/desktop";
-import { loadSettings, saveSettings } from "./lib/settings";
+import { loadSettings, patchSavedSettings } from "./lib/settings";
 import { showAppToast } from "./lib/toast";
 import BrandMark from "./BrandMark.vue";
 
@@ -30,10 +30,10 @@ async function persistPosition(position: PhysicalPosition) {
   if (!floatingWindow) return;
   const scaleFactor = await floatingWindow.scaleFactor();
   const logical = position.toLogical(scaleFactor);
-  const settings = await loadSettings();
-  settings.floatingBall.x = Math.round(logical.x);
-  settings.floatingBall.y = Math.round(logical.y);
-  await saveSettings();
+  await patchSavedSettings((settings) => {
+    settings.floatingBall.x = Math.round(logical.x);
+    settings.floatingBall.y = Math.round(logical.y);
+  });
 }
 
 onMounted(async () => {

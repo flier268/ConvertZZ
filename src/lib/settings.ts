@@ -9,25 +9,44 @@ const state = reactive<{ ready: boolean; value?: SettingsV2 }>({ ready: false })
 let store: Store | undefined;
 
 async function settingsStore(): Promise<Store> {
-  store ??= await load("settings-v2.json", { autoSave: 250 });
+  store ??= await load("settings-v2.json", { autoSave: false });
   return store;
+}
+
+function putSettings(value: SettingsV2): SettingsV2 {
+  if (state.value) Object.assign(state.value, value);
+  else state.value = reactive(value) as SettingsV2;
+  state.ready = true;
+  return state.value;
 }
 
 export async function loadSettings(): Promise<SettingsV2> {
   if (state.value) return state.value;
+  return reloadSettings();
+}
+
+export async function reloadSettings(): Promise<SettingsV2> {
   const currentStore = await settingsStore();
+  await currentStore.reload();
   const saved = await currentStore.get<SettingsV2>("settings");
   const value = await sidecar.request<SettingsV2>("settings.migrate", { input: saved });
-  state.value = reactive(value) as SettingsV2;
-  state.ready = true;
-  await saveSettings();
-  return state.value;
+  return putSettings(value);
 }
 
 export async function saveSettings(): Promise<void> {
   if (!state.value) return;
   const currentStore = await settingsStore();
   await currentStore.set("settings", JSON.parse(JSON.stringify(state.value)));
+  await currentStore.save();
+}
+
+export async function patchSavedSettings(
+  patch: (settings: SettingsV2) => void,
+): Promise<SettingsV2> {
+  const settings = await reloadSettings();
+  patch(settings);
+  await saveSettings();
+  return settings;
 }
 
 export async function isOnboardingComplete(): Promise<boolean> {
@@ -38,19 +57,20 @@ export async function isOnboardingComplete(): Promise<boolean> {
 export async function markOnboardingComplete(): Promise<void> {
   const currentStore = await settingsStore();
   await currentStore.set(ONBOARDING_STORE_KEY, true);
+  await currentStore.save();
 }
 
 export async function clearOnboardingComplete(): Promise<void> {
   const currentStore = await settingsStore();
   await currentStore.set(ONBOARDING_STORE_KEY, false);
+  await currentStore.save();
 }
 
 export async function replaceSettings(input: unknown): Promise<SettingsV2> {
   const migrated = await sidecar.request<SettingsV2>("settings.migrate", { input });
-  state.value = reactive(migrated) as SettingsV2;
-  state.ready = true;
+  putSettings(migrated);
   await saveSettings();
-  return state.value;
+  return state.value!;
 }
 
 export async function importLegacySettings(

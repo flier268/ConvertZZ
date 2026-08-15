@@ -35,11 +35,7 @@ export async function convertClipboard(
   zhconvert?: ZhConvertOptions,
   dictionaryPath?: string,
 ): Promise<ConversionResult> {
-  if (automation.copy) {
-    await invoke("simulate_copy_paste", { action: "copy" });
-    await new Promise((resolve) => setTimeout(resolve, 120));
-  }
-  const source = await readText();
+  const source = automation.copy ? await invoke<string>("capture_selection") : await readText();
   const result = await convertText(
     source,
     direction,
@@ -49,6 +45,6 @@ export async function convertClipboard(
     dictionaryPath,
   );
   await writeText(result.text);
-  if (automation.paste) await invoke("simulate_copy_paste", { action: "paste" });
+  if (automation.paste) await invoke("replace_selection", { text: result.text });
   return result;
 }

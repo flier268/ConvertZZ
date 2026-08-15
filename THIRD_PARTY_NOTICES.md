@@ -20,6 +20,7 @@ ConvertZZ 2.0 包含第三方自由軟體。
 | encoding-japanese | 2.2.0 | MIT |
 | iconv-lite | 0.7.3 | MIT |
 | enigo | 0.6 | MIT |
+| arboard | 3.6.1 | Apache-2.0 OR MIT |
 | keyring | 3 | Apache-2.0 OR MIT |
 | flate2 | 1.1.9 | Apache-2.0 OR MIT |
 | sha2 | 0.10.9 | Apache-2.0 OR MIT |

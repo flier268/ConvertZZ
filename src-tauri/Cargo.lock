@@ -578,6 +578,7 @@ dependencies = [
 name = "convertzz"
 version = "2.0.0"
 dependencies = [
+ "arboard",
  "enigo",
  "flate2",
  "keyring",
@@ -597,6 +598,8 @@ dependencies = [
  "tauri-plugin-updater",
  "tokio",
  "uuid",
+ "windows",
+ "x11rb",
 ]
 
 [[package]]

@@ -98,8 +98,14 @@ describe("待人工驗收項目的畫面契約", () => {
   it("I-03 Wayland 不會嘗試鍵盤注入", () => {
     const rust = readProjectFile("src-tauri/src/lib.rs");
     expect(rust).toContain("automatic_copy_paste: !wayland");
-    expect(rust).toContain("if !capabilities.automatic_copy_paste");
-    expect(rust).toContain("目前顯示伺服器不允許自動鍵盤操作。");
+    expect(rust).toContain("if !platform_capabilities().automatic_copy_paste");
+    expect(rust).toContain("目前顯示伺服器不允許自動讀寫選取文字。");
+    expect(rust).not.toContain("simulate_copy_paste");
+    expect(rust).not.toContain("Key::Control");
+    expect(readProjectFile("src/lib/legacyActions.ts")).toContain(
+      'invoke<string>("capture_selection")',
+    );
+    expect(readProjectFile("src/lib/legacyActions.ts")).toContain('invoke("replace_selection"');
   });
 
   it("I-04／I-05 Wayland 限制會顯示在關於頁", () => {

@@ -84,11 +84,10 @@ export async function executeLegacyAction(
     return { durationMs: Math.round(performance.now() - started) };
   }
 
-  if (automation.copy && input === undefined) {
-    await invoke("simulate_copy_paste", { action: "copy" });
-    await new Promise((resolve) => setTimeout(resolve, 120));
-  }
-  let text = input ?? (await readText());
+  let text =
+    automation.copy && input === undefined
+      ? await invoke<string>("capture_selection")
+      : (input ?? (await readText()));
 
   if (action === "a1") {
     text = await utility(text, "encoding", "big5", "gbk");
@@ -139,8 +138,7 @@ export async function executeLegacyAction(
   }
 
   await writeText(text);
-  if (automation.paste && input === undefined)
-    await invoke("simulate_copy_paste", { action: "paste" });
+  if (automation.paste && input === undefined) await invoke("replace_selection", { text });
   const durationMs = Math.round(performance.now() - started);
   if (settings.promptAfterConversion && !automation.copy && !automation.paste) {
     await showAppToast(`轉換完成\n耗時：${durationMs} ms`);

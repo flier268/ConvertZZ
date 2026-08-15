@@ -1,4 +1,6 @@
-use enigo::{Direction, Enigo, Key, Keyboard, Mouse, Settings};
+mod selection;
+
+use enigo::{Enigo, Mouse, Settings};
 use keyring::Entry;
 use serde::Serialize;
 use std::sync::Arc;
@@ -108,6 +110,21 @@ fn platform_capabilities() -> PlatformCapabilities {
         };
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        return PlatformCapabilities {
+            platform: "macos",
+            display_server: "macos",
+            global_shortcuts: true,
+            automatic_copy_paste: true,
+            floating_always_on_top: true,
+            tray: true,
+            send_to_shortcut: false,
+            credential_storage: true,
+            limitations: vec!["自動複製貼上需要輔助使用（Accessibility）權限。"],
+        };
+    }
+
     #[allow(unreachable_code)]
     PlatformCapabilities {
         platform: "unknown",
@@ -123,29 +140,19 @@ fn platform_capabilities() -> PlatformCapabilities {
 }
 
 #[tauri::command]
-fn simulate_copy_paste(action: String) -> Result<(), String> {
-    let capabilities = platform_capabilities();
-    if !capabilities.automatic_copy_paste {
-        return Err("目前顯示伺服器不允許自動鍵盤操作。".into());
+fn capture_selection() -> Result<String, String> {
+    if !platform_capabilities().automatic_copy_paste {
+        return Err("目前顯示伺服器不允許自動讀寫選取文字。".into());
     }
-    let character = match action.as_str() {
-        "copy" => 'c',
-        "paste" => 'v',
-        _ => return Err("不支援的鍵盤動作。".into()),
-    };
-    let mut enigo = Enigo::new(&Settings::default()).map_err(|error| error.to_string())?;
-    enigo
-        .key(Key::Control, Direction::Press)
-        .map_err(|error| error.to_string())?;
-    let action_result = enigo
-        .key(Key::Unicode(character), Direction::Click)
-        .map_err(|error| error.to_string());
-    let release_result = enigo
-        .key(Key::Control, Direction::Release)
-        .map_err(|error| error.to_string());
-    action_result?;
-    release_result?;
-    Ok(())
+    selection::capture()
+}
+
+#[tauri::command]
+fn replace_selection(text: String) -> Result<(), String> {
+    if !platform_capabilities().automatic_copy_paste {
+        return Err("目前顯示伺服器不允許自動讀寫選取文字。".into());
+    }
+    selection::replace(text)
 }
 
 #[tauri::command]
@@ -610,7 +617,8 @@ pub fn run() {
             startup_args,
             legacy_settings_path,
             platform_capabilities,
-            simulate_copy_paste,
+            capture_selection,
+            replace_selection,
             save_zhconvert_api_key,
             load_zhconvert_api_key,
             set_send_to_shortcut,

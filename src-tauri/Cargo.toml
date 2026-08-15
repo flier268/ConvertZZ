@@ -16,6 +16,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+arboard = "3.6.1"
 enigo = "0.6"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "vendored", "crypto-rust"] }
 serde = { version = "1", features = ["derive"] }
@@ -36,3 +37,7 @@ uuid = { version = "1", features = ["v4"] }
 [target.'cfg(target_os = "linux")'.dependencies]
 flate2 = "1"
 sha2 = "0.10"
+x11rb = "0.13.2"
+
+[target."cfg(windows)".dependencies]
+windows = { version = "0.61.3", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }

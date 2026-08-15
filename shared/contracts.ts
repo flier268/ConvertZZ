@@ -143,8 +143,8 @@ export interface ApplyResult {
 }
 
 export interface PlatformCapabilities {
-  platform: "windows" | "linux" | "unknown";
-  displayServer: "windows" | "x11" | "wayland" | "unknown";
+  platform: "windows" | "linux" | "macos" | "unknown";
+  displayServer: "windows" | "x11" | "wayland" | "macos" | "unknown";
   globalShortcuts: boolean;
   automaticCopyPaste: boolean;
   floatingAlwaysOnTop: boolean;

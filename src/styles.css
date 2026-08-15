@@ -153,6 +153,27 @@ html.floating-window * {
 .page-stack:has(.settings-save-bar) {
   padding-bottom: 72px;
 }
+.settings-tabs > .el-tabs__header {
+  margin: 0 0 18px;
+}
+.settings-tabs .el-tabs__item {
+  font-weight: 650;
+  color: #5d7672;
+}
+.settings-tabs .el-tabs__item.is-active {
+  color: #173f3a;
+}
+.settings-tabs .el-tabs__active-bar {
+  background: #1f8a7b;
+}
+.settings-windows {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e7efed;
+}
+.settings-windows .section-title {
+  margin-bottom: 10px;
+}
 .page-stack {
   display: flex;
   flex-direction: column;
@@ -301,9 +322,22 @@ html.floating-window * {
   font-weight: 750;
   color: #173f3a;
 }
+.field-with-suffix-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-width: 0;
+}
+.field-with-suffix-row .el-input-number {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
 .field-suffix {
-  margin-left: 8px;
+  flex: none;
   color: #6c807d;
+  white-space: nowrap;
 }
 .muted,
 .legal-note {

@@ -176,6 +176,20 @@ describe("Tauri desktop shell", () => {
     expect(toast.windows).toEqual(["toast"]);
   });
 
+  it("reuses the settings page instead of remounting it on every visit", () => {
+    const app = readProjectFile("src/App.vue");
+    const settings = readProjectFile("src/pages/SettingsPage.vue");
+
+    expect(app).toContain('<keep-alive include="SettingsPage">');
+    expect(settings).toContain('defineOptions({ name: "SettingsPage" })');
+    expect(settings).toContain("getLoadedSettings");
+    expect(settings).toContain('<el-tabs v-model="activeTab" class="settings-tabs">');
+    expect(settings).toContain('name="general" lazy');
+    expect(settings).toContain('name="hotkeys" lazy');
+    expect(settings).toContain('name="floating" lazy');
+    expect(settings).not.toContain("load_zhconvert_api_key");
+  });
+
   it("moves ConvertZZ.json import into the first-run tour", () => {
     const settings = readProjectFile("src/pages/SettingsPage.vue");
     const tour = readProjectFile("src/OnboardingTour.vue");

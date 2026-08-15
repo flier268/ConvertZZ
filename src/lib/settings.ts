@@ -93,6 +93,10 @@ export function useSettingsState() {
   return readonly(state);
 }
 
+export function getLoadedSettings(): SettingsV2 | undefined {
+  return state.value;
+}
+
 export function zhConvertOptions(settings: SettingsV2, direction: Direction): ZhConvertOptions {
   return {
     converter:

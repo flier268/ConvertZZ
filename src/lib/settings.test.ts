@@ -85,6 +85,20 @@ describe("設定持久化", () => {
     expect(storeSave).not.toHaveBeenCalled();
   });
 
+  it("已載入的設定可同步讀取", async () => {
+    vi.resetModules();
+    const { getLoadedSettings, loadSettings } = await import("./settings");
+    const saved = {
+      version: 2,
+      hotkeys: { autoCopy: true, autoPaste: true, shortcuts: [] },
+    };
+    storeGet.mockResolvedValue(saved);
+    request.mockResolvedValue(saved);
+    expect(getLoadedSettings()).toBeUndefined();
+    await loadSettings();
+    expect(getLoadedSettings()).toMatchObject(saved);
+  });
+
   it("修補浮動球位置前會先重讀磁碟上的快捷鍵", async () => {
     vi.resetModules();
     const { patchSavedSettings } = await import("./settings");

@@ -160,7 +160,11 @@ onBeforeUnmount(() => unlisten.forEach((dispose) => dispose()));
       </div>
     </el-aside>
     <el-main class="content">
-      <component :is="currentPage" v-if="ready" />
+      <template v-if="ready">
+        <keep-alive include="SettingsPage">
+          <component :is="currentPage" />
+        </keep-alive>
+      </template>
       <el-alert
         v-else-if="startupError"
         title="ConvertZZ 無法啟動"

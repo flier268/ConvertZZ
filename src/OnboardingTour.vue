@@ -171,7 +171,7 @@ onMounted(async () => {
         </div>
       </template>
       <template v-else>
-        <p>可在這裡調整預設引擎、啟動時是否顯示主視窗，以及點選後按下組合鍵來設定全域快捷鍵。</p>
+        <p>可在這裡調整預設引擎與啟動時是否顯示主視窗。全域快捷鍵與浮動球動作在對應分頁。</p>
       </template>
     </el-tour-step>
   </el-tour>

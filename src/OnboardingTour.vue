@@ -3,7 +3,12 @@ import { onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openFile } from "@tauri-apps/plugin-dialog";
 import { ElMessage } from "element-plus";
-import { ONBOARDING_STEPS, pageForOnboardingStep, type OnboardingPage } from "./lib/onboarding";
+import {
+  importStepNextLabel,
+  ONBOARDING_STEPS,
+  pageForOnboardingStep,
+  type OnboardingPage,
+} from "./lib/onboarding";
 import { applyDesktopSettings } from "./lib/desktop";
 import {
   clearOnboardingComplete,
@@ -23,6 +28,7 @@ const legacyPath = ref<string>();
 const importing = ref(false);
 const importResult = ref("");
 const importError = ref("");
+const settingsImported = ref(false);
 
 const targets: Record<string, string | undefined> = {
   welcome: undefined,
@@ -40,6 +46,7 @@ async function startTour(): Promise<void> {
   current.value = 0;
   importResult.value = "";
   importError.value = "";
+  settingsImported.value = false;
   legacyPath.value =
     (await invoke<string | null>("legacy_settings_path").catch(() => null)) ?? undefined;
   emit("navigate", "quick");
@@ -65,6 +72,7 @@ async function importFrom(path: string): Promise<void> {
     const imported = await importLegacySettings(path, { confirmReplace: false });
     if (!imported) return;
     await applyDesktopSettings(imported.settings);
+    settingsImported.value = true;
     importResult.value = `已匯入，備份位於 ${imported.backupPath}`;
     ElMessage.success(importResult.value);
   } catch (error) {
@@ -115,7 +123,9 @@ onMounted(async () => {
       :key="step.id"
       :title="step.title"
       :target="targets[step.id]"
-      :next-button-props="step.id === 'import' ? { children: '略過匯入' } : undefined"
+      :next-button-props="
+        step.id === 'import' ? { children: importStepNextLabel(settingsImported) } : undefined
+      "
     >
       <template v-if="step.id === 'welcome'">
         <p>這是跨平台的中文轉換工具。接下來會帶你看主要畫面、浮動球，以及是否要匯入舊版設定。</p>

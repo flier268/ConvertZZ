@@ -23,3 +23,7 @@ export function pageForOnboardingStep(index: number): OnboardingPage {
 export function importStepIndex(): number {
   return ONBOARDING_STEPS.findIndex((step) => step.id === "import");
 }
+
+export function importStepNextLabel(imported: boolean): string {
+  return imported ? "下一步" : "略過匯入";
+}

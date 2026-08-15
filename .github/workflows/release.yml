@@ -30,11 +30,11 @@ jobs:
             bundles: appimage,deb,rpm
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
         with:
           run_install: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -118,7 +118,7 @@ jobs:
             "$hash  $($file.Name)"
           }
           $lines | Set-Content -Encoding utf8NoBOM SHA256SUMS-windows-x64.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: |
@@ -136,8 +136,8 @@ jobs:
     needs: build
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
@@ -149,7 +149,7 @@ jobs:
             --repo "${{ github.repository }}" \
             --out artifacts/latest.json
       - name: 建立草稿 Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ConvertZZ ${{ env.RELEASE_TAG }}

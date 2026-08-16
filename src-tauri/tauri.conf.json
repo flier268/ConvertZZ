@@ -23,7 +23,8 @@
         "minHeight": 640,
         "center": true,
         "focus": false,
-        "visible": false
+        "visible": false,
+        "create": false
       },
       {
         "label": "floating",
@@ -39,7 +40,8 @@
         "skipTaskbar": true,
         "shadow": false,
         "focus": false,
-        "visible": false
+        "visible": false,
+        "create": false
       },
       {
         "label": "toast",
@@ -54,7 +56,8 @@
         "skipTaskbar": true,
         "shadow": false,
         "focus": false,
-        "visible": false
+        "visible": false,
+        "create": false
       }
     ]
   },

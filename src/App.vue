@@ -113,7 +113,10 @@ onMounted(async () => {
     );
     ready.value = true;
   } catch (error) {
-    startupError.value = error instanceof Error ? error.message : String(error);
+    const message = error instanceof Error ? error.message : String(error);
+    const logPath = await invoke<string | null>("app_log_path").catch(() => null);
+    startupError.value = logPath ? `${message}\n記錄檔：${logPath}` : message;
+    await invoke("show_main_window").catch(() => undefined);
   }
 });
 

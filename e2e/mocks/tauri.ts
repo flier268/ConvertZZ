@@ -127,6 +127,8 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
     case "sidecar_send":
       queueMicrotask(() => respondToSidecar(String(args.request ?? "")));
       return undefined as T;
+    case "app_log_path":
+      return null as T;
     case "startup_args":
       return [] as T;
     case "legacy_settings_path":

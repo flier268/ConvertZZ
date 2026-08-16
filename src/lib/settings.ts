@@ -13,6 +13,24 @@ async function settingsStore(): Promise<Store> {
   return store;
 }
 
+function isMissingStoreFile(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /os error 2|ENOENT|cannot find the file specified|no such file or directory|系統找不到指定的檔案/i.test(
+    message,
+  );
+}
+
+async function readStoredSettings(): Promise<SettingsV2 | undefined> {
+  const currentStore = await settingsStore();
+  try {
+    await currentStore.reload();
+  } catch (error) {
+    // plugin-store 初次 load 會忽略缺檔，但 reload 會把 NotFound 丟回前端。
+    if (!isMissingStoreFile(error)) throw error;
+  }
+  return currentStore.get<SettingsV2>("settings");
+}
+
 function putSettings(value: SettingsV2): SettingsV2 {
   if (state.value) Object.assign(state.value, value);
   else state.value = reactive(value) as SettingsV2;
@@ -26,9 +44,7 @@ export async function loadSettings(): Promise<SettingsV2> {
 }
 
 export async function reloadSettings(): Promise<SettingsV2> {
-  const currentStore = await settingsStore();
-  await currentStore.reload();
-  const saved = await currentStore.get<SettingsV2>("settings");
+  const saved = await readStoredSettings();
   const value = await sidecar.request<SettingsV2>("settings.migrate", { input: saved });
   return putSettings(value);
 }

@@ -70,6 +70,27 @@ describe("設定持久化", () => {
     request.mockReset();
   });
 
+  it("設定檔不存在時仍可載入遷移後的預設值，且不寫回磁碟", async () => {
+    vi.resetModules();
+    const { loadSettings } = await import("./settings");
+    storeGet.mockResolvedValue(undefined);
+    storeReload.mockRejectedValue(new Error("系統找不到指定的檔案。 (os error 2)"));
+    const migrated = { version: 2, engine: "segmented" };
+    request.mockResolvedValue(migrated);
+    await expect(loadSettings()).resolves.toMatchObject(migrated);
+    expect(request).toHaveBeenCalledWith("settings.migrate", { input: undefined });
+    expect(storeSet).not.toHaveBeenCalled();
+    expect(storeSave).not.toHaveBeenCalled();
+  });
+
+  it("設定檔讀取失敗且不是缺檔時仍要中止啟動", async () => {
+    vi.resetModules();
+    const { loadSettings } = await import("./settings");
+    storeReload.mockRejectedValue(new Error("Failed to deserialize store. invalid JSON"));
+    await expect(loadSettings()).rejects.toThrow("Failed to deserialize store. invalid JSON");
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it("載入設定時不把記憶體內容寫回磁碟", async () => {
     vi.resetModules();
     const { loadSettings } = await import("./settings");

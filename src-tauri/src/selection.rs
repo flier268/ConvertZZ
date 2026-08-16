@@ -1,21 +1,29 @@
 use arboard::Clipboard;
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(any(test, target_os = "linux", target_os = "windows"))]
+use std::time::Instant;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 const CLIPBOARD_TIMEOUT: Duration = Duration::from_millis(300);
+#[cfg(target_os = "windows")]
+const CLIPBOARD_TIMEOUT: Duration = Duration::from_millis(500);
 #[cfg(target_os = "linux")]
 const MODIFIER_WAIT: Duration = Duration::from_millis(2000);
+#[cfg(target_os = "windows")]
+const MODIFIER_WAIT: Duration = Duration::from_millis(300);
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 const PASTE_TIMEOUT: Duration = Duration::from_millis(2500);
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 const KEY_PRESS_TIME: Duration = Duration::from_millis(20);
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 const MODIFIER_POLL: Duration = Duration::from_millis(20);
 
 /// Shift / Control / Alt / Hyper / Super / ISO-Level3. CapsLock 與 NumLock 不算。
+#[cfg(any(test, target_os = "linux"))]
 const LEFTOVER_MODIFIER_BITS: u16 = (1 << 0) | (1 << 2) | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7);
 
+#[cfg(any(test, target_os = "linux"))]
 fn leftover_modifiers(mask: u16) -> bool {
     mask & LEFTOVER_MODIFIER_BITS != 0
 }
@@ -70,7 +78,7 @@ fn with_clipboard<T>(
     )
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 fn run_with_timeout<T: Send + 'static>(
     timeout: Duration,
     timeout_message: impl Into<String>,
@@ -88,6 +96,7 @@ fn run_with_timeout<T: Send + 'static>(
         .map_err(|_| timeout_message.into())
 }
 
+#[cfg(any(test, target_os = "linux", target_os = "windows"))]
 fn wait_while(
     timeout: Duration,
     interval: Duration,
@@ -106,7 +115,7 @@ fn wait_while(
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 fn send_shortcut(modifier: enigo::Key, key: enigo::Key) -> Result<(), String> {
     use enigo::{Direction, Enigo, Keyboard, Settings};
 
@@ -235,36 +244,123 @@ mod macos {
 
 #[cfg(target_os = "windows")]
 mod windows {
-    use super::with_clipboard;
-    use windows::Win32::Foundation::{LPARAM, WPARAM};
-    use windows::Win32::UI::WindowsAndMessaging::{
-        GetForegroundWindow, SendMessageW, WM_COPY, WM_PASTE,
+    use super::{
+        run_with_timeout, send_shortcut, wait_while, with_clipboard, CLIPBOARD_TIMEOUT,
+        KEY_PRESS_TIME, MODIFIER_POLL, MODIFIER_WAIT,
+    };
+    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+    use std::time::Duration;
+    use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
     };
 
     pub(super) fn capture() -> Result<String, String> {
-        send_edit_message(WM_COPY)?;
-        let text =
-            with_clipboard(|clipboard| clipboard.get().text().map_err(|error| error.to_string()))?;
+        prepare_keyboard()?;
+        let before = clipboard_sequence();
+        send_shortcut(Key::Control, Key::C)?;
+        wait_for_copied_text(before)
+    }
+
+    pub(super) fn replace(text: &str) -> Result<(), String> {
+        prepare_keyboard()?;
+        let owned = text.to_string();
+        run_with_timeout(CLIPBOARD_TIMEOUT, "寫入剪貼簿逾時。", move || {
+            with_clipboard(|clipboard| clipboard.set_text(owned).map_err(|error| error.to_string()))
+        })??;
+        send_shortcut(Key::Control, Key::V)
+    }
+
+    fn prepare_keyboard() -> Result<(), String> {
+        if wait_while(
+            MODIFIER_WAIT,
+            MODIFIER_POLL,
+            || Ok(any_modifier_down()),
+            "修飾鍵尚未放開，無法複製貼上。",
+        )
+        .is_err()
+        {
+            release_held_modifiers()?;
+        }
+        std::thread::sleep(KEY_PRESS_TIME);
+        Ok(())
+    }
+
+    fn wait_for_copied_text(before: u32) -> Result<String, String> {
+        let mut text = String::new();
+        wait_while(
+            CLIPBOARD_TIMEOUT,
+            Duration::from_millis(20),
+            || {
+                if clipboard_sequence() == before {
+                    return Ok(true);
+                }
+                text = read_clipboard_text()?;
+                Ok(text.is_empty())
+            },
+            "沒有可轉換的選取文字。",
+        )?;
         if text.is_empty() {
             return Err("沒有可轉換的選取文字。".into());
         }
         Ok(text)
     }
 
-    pub(super) fn replace(text: &str) -> Result<(), String> {
-        with_clipboard(|clipboard| clipboard.set_text(text).map_err(|error| error.to_string()))?;
-        send_edit_message(WM_PASTE)
+    fn read_clipboard_text() -> Result<String, String> {
+        run_with_timeout(CLIPBOARD_TIMEOUT, "讀取選取文字逾時。", || {
+            with_clipboard(|clipboard| match clipboard.get().text() {
+                Ok(value) => Ok(value),
+                Err(_) => Ok(String::new()),
+            })
+        })?
     }
 
-    fn send_edit_message(message: u32) -> Result<(), String> {
-        unsafe {
-            let window = GetForegroundWindow();
-            if window.0.is_null() {
-                return Err("找不到前景視窗。".into());
-            }
-            SendMessageW(window, message, WPARAM(0), LPARAM(0));
+    fn clipboard_sequence() -> u32 {
+        unsafe { GetClipboardSequenceNumber() }
+    }
+
+    fn any_modifier_down() -> bool {
+        [VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN]
+            .into_iter()
+            .any(virtual_key_down)
+    }
+
+    fn virtual_key_down(key: VIRTUAL_KEY) -> bool {
+        virtual_key_held(unsafe { GetAsyncKeyState(i32::from(key.0)) })
+    }
+
+    pub(super) fn virtual_key_held(state: i16) -> bool {
+        (state as u16) & 0x8000 != 0
+    }
+
+    fn release_held_modifiers() -> Result<(), String> {
+        let mut enigo = Enigo::new(&Settings::default()).map_err(|error| error.to_string())?;
+        for key in held_modifier_keys() {
+            enigo
+                .key(key, Direction::Release)
+                .map_err(|error| error.to_string())?;
         }
         Ok(())
+    }
+
+    fn held_modifier_keys() -> Vec<Key> {
+        let mut keys = Vec::new();
+        if virtual_key_down(VK_SHIFT) {
+            keys.push(Key::Shift);
+        }
+        if virtual_key_down(VK_CONTROL) {
+            keys.push(Key::Control);
+        }
+        if virtual_key_down(VK_MENU) {
+            keys.push(Key::Alt);
+        }
+        if virtual_key_down(VK_LWIN) {
+            keys.push(Key::LWin);
+        }
+        if virtual_key_down(VK_RWIN) {
+            keys.push(Key::RWin);
+        }
+        keys
     }
 }
 
@@ -307,7 +403,16 @@ mod tests {
         assert!(started.elapsed() < Duration::from_millis(200));
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn virtual_key_held_uses_high_bit() {
+        assert!(!super::windows::virtual_key_held(0));
+        assert!(!super::windows::virtual_key_held(1));
+        assert!(super::windows::virtual_key_held(i16::MIN));
+        assert!(super::windows::virtual_key_held(-32767));
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     #[test]
     fn clipboard_timeout_does_not_block_forever() {
         use super::{run_with_timeout, CLIPBOARD_TIMEOUT};

@@ -95,6 +95,17 @@ describe("待人工驗收項目的畫面契約", () => {
     expect(settings).toContain("capabilities?.sendToShortcut");
   });
 
+  it("I-01 Windows 快捷鍵會先放開修飾鍵再送 Ctrl+C／V", () => {
+    const rust = readProjectFile("src-tauri/src/selection.rs");
+    expect(rust).toContain("prepare_keyboard");
+    expect(rust).toContain("release_held_modifiers");
+    expect(rust).toContain("send_shortcut(Key::Control, Key::C)");
+    expect(rust).toContain("send_shortcut(Key::Control, Key::V)");
+    expect(rust).toContain("GetClipboardSequenceNumber");
+    expect(rust).not.toContain("WM_COPY");
+    expect(rust).not.toContain("WM_PASTE");
+  });
+
   it("I-03 Wayland 不會嘗試鍵盤注入", () => {
     const rust = readProjectFile("src-tauri/src/lib.rs");
     expect(rust).toContain("automatic_copy_paste: !wayland");

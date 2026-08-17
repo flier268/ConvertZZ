@@ -132,4 +132,13 @@ describe("字典管理", () => {
     expect(lines[1]).toBe("");
     expect(lines[2]).toContain("\t二\t3\t兩\t3");
   });
+
+  it("讀取結果保留原始路徑供後續寫入", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "convertzz-dictionary-display-"));
+    temporary.push(directory);
+    const path = join(directory, "Dictionary.csv");
+    await writeFile(path, "\uFEFFtrue\t一般\t一\t1\t壹\t1\n");
+    const result = await new DictionaryService(path).read({});
+    expect(result.path).toBe(path);
+  });
 });

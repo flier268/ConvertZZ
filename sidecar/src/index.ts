@@ -125,8 +125,8 @@ function send(response: SidecarResponse): void {
 function parseOptions(args: string[]): { dictionary?: string; wasm?: string } {
   const parsed: { dictionary?: string; wasm?: string } = {};
   for (let index = 0; index < args.length; index += 1) {
-    if (args[index] === "--dictionary") parsed.dictionary = args[++index];
-    else if (args[index] === "--wasm") parsed.wasm = args[++index];
+    if (args[index] === "--dictionary" && args[index + 1]) parsed.dictionary = args[++index];
+    else if (args[index] === "--wasm" && args[index + 1]) parsed.wasm = args[++index];
   }
   return parsed;
 }

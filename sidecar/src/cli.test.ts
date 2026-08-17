@@ -66,4 +66,17 @@ describe("舊版命令列", () => {
       paths: ["a.txt", "b.txt"],
     });
   });
+
+  it("命令列路徑保留原始字串供檔案作業使用", () => {
+    expect(
+      parseLegacyCli([
+        "/file",
+        "\\\\?\\C:\\Temp\\里面.txt",
+        "\\\\?\\UNC\\server\\share\\converted.txt",
+      ]),
+    ).toMatchObject({
+      mode: "file",
+      paths: ["\\\\?\\C:\\Temp\\里面.txt", "\\\\?\\UNC\\server\\share\\converted.txt"],
+    });
+  });
 });

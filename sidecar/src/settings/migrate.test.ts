@@ -56,6 +56,7 @@ describe("設定遷移", () => {
     expect(result.quickActions.leftClickCtrl).toBe("a3");
     expect(result.quickActions.rightDropShift).toBe("ze2");
     expect(result.files.unicodeAddBom).toBe(true);
+    expect(result.files.defaultPath).toBe("D:\\Text");
     expect(result.zhconvert).toMatchObject({
       converterS2T: "Taiwan",
       converterT2S: "Simplified",
@@ -109,5 +110,15 @@ describe("設定遷移", () => {
     expect(
       migrateSettings({ version: 2, skippedUpdateVersion: "2.1.0" }).skippedUpdateVersion,
     ).toBe("2.1.0");
+  });
+
+  it("遷移時保留已保存路徑的原始字串", () => {
+    const result = migrateSettings({
+      version: 2,
+      dictionaryPath: "\\\\?\\C:\\Program Files\\ConvertZZ\\Dictionary.csv",
+      files: { defaultPath: "\\\\?\\D:\\Text", typeFilter: "", fixCharsetExtensions: [] },
+    });
+    expect(result.dictionaryPath).toBe("\\\\?\\C:\\Program Files\\ConvertZZ\\Dictionary.csv");
+    expect(result.files.defaultPath).toBe("\\\\?\\D:\\Text");
   });
 });

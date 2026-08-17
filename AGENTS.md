@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程見 [README.md](README.md)。遷移範圍與驗收條件見 [docs/MIGRATION_PLAN.md](docs/MIGRATION_PLAN.md)。
+ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程見 [README.md](README.md)。遷移範圍與未完成驗收條件見 [docs/MIGRATION_PLAN.md](docs/MIGRATION_PLAN.md)；已通過項目見 [docs/MIGRATION_COMPLETED.md](docs/MIGRATION_COMPLETED.md)。
 
 使用繁體中文與使用者溝通。使用者介面字串也使用繁體中文。
 
@@ -88,7 +88,7 @@ Vitest 涵蓋 `sidecar/src/**/*.test.ts`、`src/**/*.test.ts` 與 `tests/**/*.te
 - 檔案變更必須覆蓋預覽未確認不寫入、衝突略過、暫存驗證、兩階段重新命名、失敗回復與不跟隨符號連結。
 - 音訊變更必須覆蓋未選欄位、未知欄位、二進位欄位與封面不變，且不得重新編碼音訊內容。
 - ZhConvert 變更必須用模擬伺服器鎖定官方 `/convert`，並確認網路失敗時不切換引擎。
-- 單元測試通過不等於桌面或發行包驗收通過。不要把 `已通過` 寫進遷移計畫，除非指定證據已存在。
+- 單元測試通過不等於桌面或發行包驗收通過。不要把項目標為 `已通過` 並移入 [docs/MIGRATION_COMPLETED.md](docs/MIGRATION_COMPLETED.md)，除非指定證據已存在。
 
 ## 安全與相容
 

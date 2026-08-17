@@ -156,7 +156,7 @@ Linux 使用者可從托盤選單開啟主視窗。
 
 ## 遷移驗收狀態
 
-完整遷移範圍、完成定義與逐項驗收方式請見 [ConvertZZ 2.0 遷移計畫與驗收清單](docs/MIGRATION_PLAN.md)。
+完整遷移範圍、完成定義與未完成驗收項目請見 [ConvertZZ 2.0 遷移計畫與驗收清單](docs/MIGRATION_PLAN.md)。已通過項目封存於 [遷移已完成項目](docs/MIGRATION_COMPLETED.md)。
 
 | 範圍 | 狀態 | 說明 |
 | --- | --- | --- |

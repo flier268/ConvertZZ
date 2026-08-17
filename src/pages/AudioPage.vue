@@ -69,7 +69,7 @@ async function choose() {
 async function chooseFolder() {
   const selected = await open({ directory: true, multiple: false });
   if (!selected) return;
-  paths.value = [selected];
+  paths.value = Array.isArray(selected) ? selected : [selected];
   await scan();
 }
 

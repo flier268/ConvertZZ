@@ -20,6 +20,7 @@ const outputDirectory = ref<string>();
 const plan = ref<FileConversionPlan>();
 const busy = ref(false);
 const promptAfterConversion = ref(true);
+const backup = ref(true);
 const defaultPath = ref<string>();
 const fileFilters = ref([
   {
@@ -51,6 +52,7 @@ loadSettings().then((settings) => {
   options.vocabularyCorrection = defaults.vocabularyCorrection;
   options.inputEncoding = defaults.inputEncoding;
   promptAfterConversion.value = defaults.promptAfterConversion;
+  backup.value = defaults.autoBackupBeforeConversion;
   defaultPath.value = defaults.defaultPath;
   fileFilters.value = defaults.fileFilters.length ? defaults.fileFilters : fileFilters.value;
   previewMaxBytes.value = defaults.previewMaxBytes;
@@ -134,6 +136,7 @@ async function createPlan() {
         allowedExtensions,
         previewMaxBytes: previewMaxBytes.value,
         conflictPolicy: options.conflictPolicy,
+        backup: backup.value,
         conversion: {
           direction: options.direction,
           engine: options.engine,
@@ -217,6 +220,7 @@ watch(
     options.outputEncoding = cli.outputEncoding;
     options.direction = cli.direction;
     options.engine = cli.engine;
+    backup.value = cli.backup;
     if (cli.vocabularyCorrection !== "settings")
       options.vocabularyCorrection = cli.vocabularyCorrection === "enabled";
     if (paths.value.length) await createPlan();
@@ -286,7 +290,8 @@ watch(
         <el-checkbox v-model="options.vocabularyCorrection">詞彙修正</el-checkbox
         ><el-checkbox v-model="options.recursive">包含子資料夾</el-checkbox
         ><el-checkbox v-model="options.fixCharsetDeclaration">修正 charset 宣告</el-checkbox
-        ><el-checkbox v-model="options.addBom">加入 BOM</el-checkbox>
+        ><el-checkbox v-model="options.addBom">加入 BOM</el-checkbox
+        ><el-checkbox v-model="backup">轉換前備份（.bak）</el-checkbox>
       </div>
       <div class="path-summary">
         <span>{{ paths.length ? paths.join("、") : "尚未選取路徑" }}</span

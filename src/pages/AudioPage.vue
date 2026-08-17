@@ -19,6 +19,7 @@ const files = ref<AudioTagFile[]>([]);
 const plan = ref<AudioTagPlan>();
 const busy = ref(false);
 const promptAfterConversion = ref(true);
+const backup = ref(true);
 const progress = ref<{ current: number; total: number; message: string }>();
 const options = reactive({
   direction: "s2t" as Direction,
@@ -44,6 +45,7 @@ loadSettings().then((settings) => {
   options.engine = settings.engine;
   options.vocabularyCorrection = settings.vocabularyCorrection;
   promptAfterConversion.value = settings.promptAfterConversion;
+  backup.value = settings.autoBackupBeforeConversion;
 });
 const hasMp3 = computed(() => files.value.some((file) => file.format === "mp3"));
 const selectedFileCount = computed(
@@ -129,6 +131,7 @@ async function createPlan() {
           dictionaryPath: settings.dictionaryPath,
         },
         conflictPolicy: "overwrite",
+        backup: backup.value,
         id3v1Enabled: options.id3v1Enabled,
         id3v1Direction: options.id3v1Direction,
         id3v1Zhconvert: zhConvertOptions(settings, options.id3v1Direction),
@@ -203,6 +206,7 @@ watch(
       options.id3v2Direction = invocation.options.direction;
     }
     options.engine = invocation.options.engine;
+    backup.value = invocation.options.backup;
     if (invocation.options.vocabularyCorrection !== "settings")
       options.vocabularyCorrection = invocation.options.vocabularyCorrection === "enabled";
     if (paths.value.length) await scan();
@@ -260,6 +264,9 @@ function fieldEnabled(
         </el-form-item>
         <el-form-item label="詞彙修正"
           ><el-switch v-model="options.vocabularyCorrection"
+        /></el-form-item>
+        <el-form-item label="轉換前備份"
+          ><el-switch v-model="backup" active-text=".bak"
         /></el-form-item>
         <el-form-item label="資料夾掃描"
           ><el-checkbox v-model="options.recursive">包含子資料夾</el-checkbox></el-form-item

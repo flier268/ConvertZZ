@@ -196,7 +196,16 @@ async function saveApiKey() {
           <div class="switch-row">
             <el-checkbox v-model="settings.vocabularyCorrection">詞彙修正</el-checkbox
             ><el-checkbox v-model="settings.recognizeEncoding">自動辨識編碼</el-checkbox
-            ><el-checkbox v-model="settings.promptAfterConversion">完成後提示</el-checkbox
+            ><el-tooltip
+              content="檔案、檔名與音訊標籤寫入前會建立 .bak。選取資料夾時備份整份資料夾，不會對其中每個檔案分別加後綴。命令列可用 /b:f 關閉。"
+              placement="top"
+              :show-after="300"
+            >
+              <el-checkbox v-model="settings.autoBackupBeforeConversion"
+                >轉換前自動備份</el-checkbox
+              >
+            </el-tooltip>
+            <el-checkbox v-model="settings.promptAfterConversion">完成後提示</el-checkbox
             ><el-checkbox v-model="settings.showMainWindowOnStart">啟動時顯示主視窗</el-checkbox
             ><el-checkbox v-model="settings.checkVersionOnStart">啟動時檢查更新</el-checkbox>
           </div>

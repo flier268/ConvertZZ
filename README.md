@@ -266,6 +266,10 @@ AppImage 會封裝建置時收集到的對應執行函式庫。
 
 `/d:s` 代表沿用設定。
 
+`/b:t` 代表轉換前建立 `.bak` 備份（預設）。
+
+`/b:f` 代表不建立備份。
+
 `/i:*` 與 `/o:*` 會設定來源與輸出編碼。
 
 未指定 `/file` 時，第二個檔案參數會沿用舊版的輸出路徑語意。
@@ -275,6 +279,8 @@ AppImage 會封裝建置時收集到的對應執行函式庫。
 命令列檔案仍會先顯示預覽。
 
 這項行為符合 2.0 版的寫入安全規則。
+
+檔案、檔名與音訊標籤寫入前預設會建立 `.bak` 備份；選取資料夾時備份整份資料夾為 `資料夾.bak`。可在設定中關閉「轉換前自動備份」，或於命令列使用 `/b:f`。
 
 ## 開發與建置環境
 
@@ -377,7 +383,7 @@ pnpm run test:qemu
 pnpm run sidecar:build
 ```
 
-產出檔名為 `src-tauri/binaries/convertzz-sidecar-$TARGET_TRIPLE`。`pnpm run dev` 會先 `sidecar:ensure`（缺檔才重建），`beforeDevCommand` 只啟動 Vite；`beforeBuildCommand` 會在打包前完整重建 sidecar。Linux 另產出 gzip 資源供 AppImage 使用。
+產出檔名為 `src-tauri/binaries/convertzz-sidecar-$TARGET_TRIPLE`。`pnpm run dev` 會先 `sidecar:ensure`（缺檔或 sidecar／shared 來源較新才重建），`beforeDevCommand` 只啟動 Vite；`beforeBuildCommand` 會在打包前完整重建 sidecar。Linux 另產出 gzip 資源供 AppImage 使用。
 
 建立目前平台的安裝包。
 

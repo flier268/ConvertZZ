@@ -19,6 +19,7 @@ import type {
   FilePlanRequest,
   TextEncoding,
 } from "../../../shared/contracts.js";
+import { createUserBackups, resolveBackupRoots, type BackupRoot } from "../backup.js";
 import type { ConversionService } from "../conversion/engines.js";
 import { decodeText, encodeText } from "../encoding/codecs.js";
 import { ConvertZZError } from "../errors.js";
@@ -32,6 +33,8 @@ interface PreparedFile extends FilePlanItem {
 interface StoredPlan {
   publicPlan: FileConversionPlan;
   files: PreparedFile[];
+  backup: boolean;
+  backupRoots: BackupRoot[];
 }
 
 interface TransactionEntry {
@@ -204,7 +207,12 @@ export class FileService {
       items: files.map(({ content: _content, conflictPolicy: _policy, ...item }) => item),
       warnings: Array.from(new Set(warnings)),
     };
-    this.plans.set(planId, { publicPlan, files });
+    this.plans.set(planId, {
+      publicPlan,
+      files,
+      backup: request.backup !== false,
+      backupRoots: await resolveBackupRoots(request.paths),
+    });
     return publicPlan;
   }
 
@@ -227,6 +235,17 @@ export class FileService {
         (file) =>
           file.status === "ready" && (!selection || selection.has(resolve(file.sourcePath))),
       );
+      if (plan.backup && readyFiles.length) {
+        report?.({
+          current: 0,
+          total: Math.max(1, readyFiles.length * 2 + 1),
+          message: "正在建立備份…",
+        });
+        await createUserBackups(
+          plan.backupRoots,
+          readyFiles.map((file) => file.sourcePath),
+        );
+      }
       const total = Math.max(1, readyFiles.length * 2);
       let current = 0;
       for (const file of plan.files) {

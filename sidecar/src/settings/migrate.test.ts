@@ -45,6 +45,7 @@ describe("設定遷移", () => {
     });
     expect(result.version).toBe(2);
     expect(result.engine).toBe("zhconvert");
+    expect(result.autoBackupBeforeConversion).toBe(true);
     expect(result.showMainWindowOnStart).toBe(false);
     expect(result.recognizeEncoding).toBe(false);
     expect(result.floatingBall).toEqual({ enabled: false, x: 100, y: 200 });
@@ -110,6 +111,15 @@ describe("設定遷移", () => {
     expect(
       migrateSettings({ version: 2, skippedUpdateVersion: "2.1.0" }).skippedUpdateVersion,
     ).toBe("2.1.0");
+  });
+
+  it("升級或缺欄的 2.0 設定、以及匯入舊設定都會啟用轉換前備份", () => {
+    expect(migrateSettings(undefined).autoBackupBeforeConversion).toBe(true);
+    expect(migrateSettings({ version: 2, engine: "legacy" }).autoBackupBeforeConversion).toBe(true);
+    expect(
+      migrateSettings({ version: 2, autoBackupBeforeConversion: false }).autoBackupBeforeConversion,
+    ).toBe(false);
+    expect(migrateSettings({ Prompt: false }).autoBackupBeforeConversion).toBe(true);
   });
 
   it("遷移時保留已保存路徑的原始字串", () => {

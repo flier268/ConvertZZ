@@ -41,6 +41,53 @@ describe("損毀音訊", () => {
   });
 });
 
+describe("音訊備份", () => {
+  it("寫入前建立檔案 .bak", async () => {
+    const directory = await temporaryDirectory("convertzz-audio-backup-file-");
+    const path = join(directory, "song.mp3");
+    await writeTaggedMp3(path, "里面", "里面");
+    const before = await readFile(path);
+    const service = audioService();
+    const plan = await service.plan({
+      ...basePlanRequest([path]),
+      backup: true,
+      selectedPaths: [path],
+      selectedFields: { [path]: ["id3v1:title"] },
+    });
+    const result = await service.apply(plan.planId);
+    expect(result.failed).toEqual([]);
+    expect(await readFile(`${path}.bak`)).toEqual(before);
+  });
+
+  it("選取資料夾時備份整份資料夾.bak", async () => {
+    const parent = await temporaryDirectory("convertzz-audio-backup-folder-");
+    const folder = join(parent, "music");
+    await mkdir(folder);
+    const first = join(folder, "a.mp3");
+    const second = join(folder, "b.mp3");
+    await writeTaggedMp3(first, "里面", "里面");
+    await writeTaggedMp3(second, "开发", "开发");
+    const firstBefore = await readFile(first);
+    const secondBefore = await readFile(second);
+    const service = audioService();
+    const plan = await service.plan({
+      ...basePlanRequest([folder]),
+      backup: true,
+      recursive: false,
+      selectedPaths: [first, second],
+      selectedFields: {
+        [first]: ["id3v1:title"],
+        [second]: ["id3v1:title"],
+      },
+    });
+    const result = await service.apply(plan.planId);
+    expect(result.failed).toEqual([]);
+    expect(await readFile(join(`${folder}.bak`, "a.mp3"))).toEqual(firstBefore);
+    expect(await readFile(join(`${folder}.bak`, "b.mp3"))).toEqual(secondBefore);
+    expect(await readFile(`${first}.bak`).catch(() => null)).toBeNull();
+  });
+});
+
 describe("音訊批次選取", () => {
   it("依遞迴選項展開資料夾", async () => {
     const directory = await temporaryDirectory("convertzz-audio-folder-");
@@ -392,6 +439,7 @@ function basePlanRequest(paths: string[]): AudioTagPlanRequest {
     selectedFields: {},
     conversion: { direction: "s2t", engine: "segmented" },
     conflictPolicy: "skip",
+    backup: false,
     id3v1Enabled: true,
     id3v1Direction: "s2t",
     id3v1SourceEncoding: "gbk",

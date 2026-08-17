@@ -49,6 +49,7 @@ function settingsFixture(overrides: Partial<SettingsV2> = {}): SettingsV2 {
     direction: "s2t",
     vocabularyCorrection: true,
     promptAfterConversion: false,
+    autoBackupBeforeConversion: true,
     recognizeEncoding: true,
     previewMaxKb: 6,
     floatingBall: { enabled: true, x: -1, y: -1 },

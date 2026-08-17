@@ -11,6 +11,7 @@ export function parseLegacyCli(args: string[], defaultEngine: EngineKind = "segm
     engine: defaultEngine,
     operation: "content",
     vocabularyCorrection: "settings",
+    backup: true,
   };
   for (const raw of args) {
     const argument = raw.toLowerCase();
@@ -39,6 +40,8 @@ export function parseLegacyCli(args: string[], defaultEngine: EngineKind = "segm
     else if (argument === "/e:l") parsed.engine = "legacy";
     else if (argument === "/e:f") parsed.engine = "zhconvert";
     else if (argument === "/e:n") parsed.engine = "segmented";
+    else if (argument === "/b:t") parsed.backup = true;
+    else if (argument === "/b:f") parsed.backup = false;
     else parsed.paths.push(raw);
   }
   if (!explicitMode && parsed.paths.length > 0) {

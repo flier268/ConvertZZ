@@ -64,6 +64,8 @@ export interface FilePlanRequest {
   allowedExtensions?: string[];
   previewMaxBytes?: number;
   conflictPolicy: ConflictPolicy;
+  /** 轉換前自動建立 .bak 備份；省略時預設啟用。 */
+  backup?: boolean;
   conversion: Omit<ConversionRequest, "text">;
 }
 
@@ -118,6 +120,8 @@ export interface AudioTagPlanRequest extends AudioScanRequest {
   selectedFields: Record<string, string[]>;
   conversion: Omit<ConversionRequest, "text">;
   conflictPolicy: ConflictPolicy;
+  /** 寫入前自動建立 .bak 備份；省略時預設啟用。 */
+  backup?: boolean;
   id3v1Enabled: boolean;
   id3v1Direction: Direction;
   id3v1Zhconvert?: ZhConvertOptions;
@@ -164,6 +168,8 @@ export interface ParsedCli {
   engine: EngineKind;
   operation: "content" | "filename" | "both";
   vocabularyCorrection: "settings" | "enabled" | "disabled";
+  /** 轉換前備份；預設 true。`/b:f` 可關閉。 */
+  backup: boolean;
 }
 
 export interface ShortcutSetting {
@@ -194,6 +200,8 @@ export interface SettingsV2 {
   vocabularyCorrection: boolean;
   dictionaryPath?: string;
   promptAfterConversion: boolean;
+  /** 檔案、檔名與音訊標籤轉換前自動建立 .bak 備份。 */
+  autoBackupBeforeConversion: boolean;
   recognizeEncoding: boolean;
   previewMaxKb: number;
   floatingBall: { enabled: boolean; x: number; y: number };

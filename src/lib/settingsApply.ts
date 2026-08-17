@@ -18,6 +18,7 @@ export function fileConversionDefaults(settings: SettingsV2) {
         : undefined,
     fileFilters: parseLegacyFileFilters(settings.files.typeFilter),
     promptAfterConversion: settings.promptAfterConversion,
+    autoBackupBeforeConversion: settings.autoBackupBeforeConversion,
     dictionaryPath: settings.dictionaryPath,
   };
 }

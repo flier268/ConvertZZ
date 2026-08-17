@@ -10,7 +10,7 @@ const loadSettings = vi.fn();
 const importLegacySettings = vi.fn();
 const openFile = vi.fn();
 const applyDesktopSettings = vi.fn();
-const onSettingsReplaced = vi.fn(() => () => undefined);
+const onSettingsReplaced = vi.fn((_listener?: () => void) => () => undefined);
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invoke(...args),
@@ -40,6 +40,7 @@ function settingsFixture(): SettingsV2 {
     direction: "s2t",
     vocabularyCorrection: true,
     promptAfterConversion: true,
+    autoBackupBeforeConversion: true,
     recognizeEncoding: true,
     previewMaxKb: 6,
     dictionaryPath: "",

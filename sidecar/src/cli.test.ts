@@ -52,6 +52,12 @@ describe("舊版命令列", () => {
     });
   });
 
+  it("預設啟用轉換前備份，/b:f 可關閉", () => {
+    expect(parseLegacyCli(["/file", "book.txt"]).backup).toBe(true);
+    expect(parseLegacyCli(["/file", "/b:f", "book.txt"]).backup).toBe(false);
+    expect(parseLegacyCli(["/audio", "/b:t", "song.mp3"]).backup).toBe(true);
+  });
+
   it("保留舊版的輸入與輸出路徑語意", () => {
     expect(parseLegacyCli(["/f:t", "books/*.txt", "converted/*.txt"])).toMatchObject({
       mode: "file",

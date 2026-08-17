@@ -6,6 +6,7 @@ const defaultSettings: SettingsV2 = {
   direction: "s2t",
   vocabularyCorrection: true,
   promptAfterConversion: true,
+  autoBackupBeforeConversion: true,
   recognizeEncoding: true,
   previewMaxKb: 6,
   floatingBall: { enabled: false, x: -1, y: -1 },

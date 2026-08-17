@@ -347,6 +347,8 @@ describe("Tauri desktop shell", () => {
     expect(packageJson.scripts?.dev).toBe("pnpm run sidecar:ensure && tauri dev");
     expect(packageJson.scripts?.["sidecar:ensure"]).toBe("node scripts/ensure-sidecar.mjs");
     expect(ensureScript).toContain("convertzz-sidecar-");
+    expect(ensureScript).toContain("isSidecarStale");
+    expect(ensureScript).toContain("Sidecar binary older than sources");
     expect(buildScript).toContain('--print", "host-tuple');
     expect(buildScript).toContain('resolve(root, "sidecar", ".build")');
     expect(buildScript).toContain("publishFile(stagingOutput, output)");

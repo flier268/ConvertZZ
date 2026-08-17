@@ -23,6 +23,7 @@ import type {
   AudioTagPlanRequest,
   TextEncoding,
 } from "../../../shared/contracts.js";
+import { createUserBackups, resolveBackupRoots, type BackupRoot } from "../backup.js";
 import type { ConversionService } from "../conversion/engines.js";
 import { decodeText, encodeText } from "../encoding/codecs.js";
 import { ConvertZZError } from "../errors.js";
@@ -53,6 +54,8 @@ interface PreparedAudio {
 interface StoredAudioPlan {
   publicPlan: AudioTagPlan;
   files: PreparedAudio[];
+  backup: boolean;
+  backupRoots: BackupRoot[];
 }
 
 type ProgressReporter = (progress: { current: number; total: number; message: string }) => void;
@@ -165,7 +168,12 @@ export class AudioService {
       files: scanned,
       warnings: Array.from(new Set(warnings)),
     };
-    this.plans.set(planId, { publicPlan, files: prepared });
+    this.plans.set(planId, {
+      publicPlan,
+      files: prepared,
+      backup: request.backup !== false,
+      backupRoots: await resolveBackupRoots(request.paths),
+    });
     return publicPlan;
   }
 
@@ -173,6 +181,25 @@ export class AudioService {
     const plan = this.plans.get(planId);
     if (!plan) throw new ConvertZZError("PLAN_NOT_FOUND", "音訊標籤計畫已失效。請重新預覽。");
     const result: ApplyResult = { succeeded: [], skipped: [], failed: [] };
+    const writable = plan.files.filter((file) => Object.keys(file.updates).length > 0);
+
+    try {
+      if (plan.backup && writable.length) {
+        report?.({ current: 0, total: Math.max(1, plan.files.length), message: "正在建立備份…" });
+        await createUserBackups(
+          plan.backupRoots,
+          writable.map((file) => file.path),
+        );
+      }
+    } catch (error) {
+      this.plans.delete(planId);
+      this.cancelledPlans.delete(planId);
+      result.failed.push({
+        path: "備份",
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return result;
+    }
 
     for (const [index, file] of plan.files.entries()) {
       this.throwIfCancelled(planId);

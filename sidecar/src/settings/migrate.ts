@@ -16,6 +16,7 @@ export function defaultSettings(): SettingsV2 {
     direction: "s2t",
     vocabularyCorrection: true,
     promptAfterConversion: true,
+    autoBackupBeforeConversion: true,
     recognizeEncoding: true,
     previewMaxKb: 6,
     floatingBall: { enabled: true, x: -1, y: -1 },
@@ -79,6 +80,8 @@ export function migrateSettings(input: unknown): SettingsV2 {
       ...defaults,
       ...input,
       engine: input.engine ?? "segmented",
+      // 舊版 2.0／匯入設定若尚無此欄，預設啟用轉換前備份。
+      autoBackupBeforeConversion: booleanValue(input.autoBackupBeforeConversion, true),
       floatingBall: { ...defaults.floatingBall, ...input.floatingBall },
       hotkeys: { ...defaults.hotkeys, ...input.hotkeys },
       quickActions: { ...defaults.quickActions, ...input.quickActions },
@@ -110,6 +113,7 @@ export function migrateSettings(input: unknown): SettingsV2 {
     engine: engineValue(legacy.Engine),
     vocabularyCorrection: booleanValue(legacy["Vocabulary correction"], true),
     promptAfterConversion: booleanValue(legacy.Prompt, true),
+    autoBackupBeforeConversion: true,
     recognizeEncoding: booleanValue(legacy.RecognitionEncoding, true),
     previewMaxKb: numberValue(legacy.MaxLengthPreview, 6),
     floatingBall: {

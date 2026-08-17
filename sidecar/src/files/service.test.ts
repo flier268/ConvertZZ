@@ -30,6 +30,7 @@ describe("檔案轉換", () => {
       fixCharsetDeclaration: false,
       previewMaxBytes: 1024,
       conflictPolicy: "skip",
+      backup: false,
       conversion: { direction: "s2t", engine: "segmented" },
     });
     expect(plan.items[0].sourcePreview).toBe(source.slice(0, 1024));
@@ -56,6 +57,7 @@ describe("檔案轉換", () => {
       addBom: false,
       fixCharsetDeclaration: true,
       conflictPolicy: "skip",
+      backup: false,
       conversion: { direction: "s2t", engine: "segmented" },
     });
     expect(plan.items[0].sourcePreview).toContain("里面开发");
@@ -128,6 +130,7 @@ describe("檔案轉換", () => {
       addBom: false,
       fixCharsetDeclaration: false,
       conflictPolicy: "skip",
+      backup: false,
       conversion: { direction: "s2t", engine: "segmented" },
     });
     expect(plan.items).toHaveLength(1);
@@ -152,6 +155,7 @@ describe("檔案轉換", () => {
         addBom: false,
         fixCharsetDeclaration: false,
         conflictPolicy: "skip",
+        backup: false,
         conversion: { direction: "s2t", engine: "segmented" },
       }),
     ).rejects.toMatchObject({ code: "CLI_WILDCARD" });
@@ -216,6 +220,7 @@ describe("檔案轉換", () => {
       addBom: false,
       fixCharsetDeclaration: false,
       conflictPolicy: "skip",
+      backup: false,
       conversion: { direction: "none", engine: "segmented" },
     });
 
@@ -360,6 +365,85 @@ describe("檔案轉換", () => {
     }
   });
 
+  it("轉換前會建立檔案 .bak 備份", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "convertzz-file-backup-"));
+    temporary.push(directory);
+    const path = join(directory, "note.txt");
+    await writeFile(path, "里面开发", "utf8");
+    const service = new FileService(new ConversionService(resolve("ConvertZZ/Dictionary.csv")));
+    const plan = await service.plan({
+      paths: [path],
+      mode: "content",
+      recursive: false,
+      inputEncoding: "utf8",
+      outputEncoding: "utf8",
+      addBom: false,
+      fixCharsetDeclaration: false,
+      conflictPolicy: "skip",
+      backup: true,
+      conversion: { direction: "s2t", engine: "segmented" },
+    });
+    const result = await service.apply(plan.planId);
+    expect(result.failed).toEqual([]);
+    expect(await readFile(path, "utf8")).toBe("裡面開發");
+    expect(await readFile(`${path}.bak`, "utf8")).toBe("里面开发");
+  });
+
+  it("選取資料夾時備份整份資料夾.bak 而非每個檔案", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "convertzz-folder-backup-"));
+    temporary.push(parent);
+    const folder = join(parent, "docs");
+    const nested = join(folder, "nested");
+    await mkdir(nested, { recursive: true });
+    await writeFile(join(folder, "one.txt"), "里面", "utf8");
+    await writeFile(join(nested, "two.txt"), "开发", "utf8");
+    const service = new FileService(new ConversionService(resolve("ConvertZZ/Dictionary.csv")));
+    const plan = await service.plan({
+      paths: [folder],
+      mode: "content",
+      recursive: true,
+      allowedExtensions: [".txt"],
+      inputEncoding: "utf8",
+      outputEncoding: "utf8",
+      addBom: false,
+      fixCharsetDeclaration: false,
+      conflictPolicy: "skip",
+      backup: true,
+      conversion: { direction: "s2t", engine: "segmented" },
+    });
+    const result = await service.apply(plan.planId);
+    expect(result.failed).toEqual([]);
+    expect(await readFile(join(folder, "one.txt"), "utf8")).toBe("裡面");
+    expect(await readFile(join(nested, "two.txt"), "utf8")).toBe("開發");
+    expect(await readFile(join(`${folder}.bak`, "one.txt"), "utf8")).toBe("里面");
+    expect(await readFile(join(`${folder}.bak`, "nested", "two.txt"), "utf8")).toBe("开发");
+    const names = await readdir(folder);
+    expect(names.some((name) => name.endsWith(".bak"))).toBe(false);
+    expect(names).not.toContain("one.txt.bak");
+  });
+
+  it("backup:false 時不建立 .bak", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "convertzz-no-backup-"));
+    temporary.push(directory);
+    const path = join(directory, "note.txt");
+    await writeFile(path, "里面", "utf8");
+    const service = new FileService(new ConversionService(resolve("ConvertZZ/Dictionary.csv")));
+    const plan = await service.plan({
+      paths: [path],
+      mode: "content",
+      recursive: false,
+      inputEncoding: "utf8",
+      outputEncoding: "utf8",
+      addBom: false,
+      fixCharsetDeclaration: false,
+      conflictPolicy: "skip",
+      backup: false,
+      conversion: { direction: "s2t", engine: "segmented" },
+    });
+    await service.apply(plan.planId);
+    expect(await readdir(directory)).toEqual(["note.txt"]);
+  });
+
   it.runIf(process.platform !== "win32")("唯讀目錄失敗時保持原檔", async () => {
     const directory = await mkdtemp(join(tmpdir(), "convertzz-readonly-"));
     temporary.push(directory);
@@ -388,6 +472,7 @@ function fileNameRequest(path: string, conflictPolicy: "skip" | "overwrite") {
     addBom: false,
     fixCharsetDeclaration: false,
     conflictPolicy,
+    backup: false,
     conversion: { direction: "s2t" as const, engine: "segmented" as const },
   };
 }

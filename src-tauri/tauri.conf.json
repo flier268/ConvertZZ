@@ -76,6 +76,13 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser"
+      },
+      "wix": {
+        "language": {
+          "zh-TW": {
+            "localePath": "./windows/wix/zh-TW.wxl"
+          }
+        }
       }
     },
     "linux": {

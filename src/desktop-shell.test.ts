@@ -325,6 +325,31 @@ describe("Tauri desktop shell", () => {
     expect(buildScript).toContain("gzipSync");
   });
 
+  it("follows Tauri sidecar + beforeDevCommand conventions", () => {
+    const packageJson = readJson("package.json") as { scripts?: Record<string, string> };
+    const config = readJson("src-tauri/tauri.conf.json") as {
+      build?: { beforeDevCommand?: string; beforeBuildCommand?: string };
+      bundle?: { externalBin?: string[] };
+    };
+    const buildScript = readProjectFile("scripts/build-sidecar.mjs");
+    const ensureScript = readProjectFile("scripts/ensure-sidecar.mjs");
+
+    // beforeDevCommand is only the frontend server (official config hook usage).
+    expect(config.build?.beforeDevCommand).toBe("pnpm run dev:web");
+    expect(config.build?.beforeDevCommand).not.toContain("sidecar");
+    // Production still packages the sidecar before the frontend bundle step.
+    expect(config.build?.beforeBuildCommand).toContain("sidecar:build");
+    expect(config.bundle?.externalBin).toEqual(["binaries/convertzz-sidecar"]);
+    // Official pattern: package sidecar first, then tauri dev.
+    expect(packageJson.scripts?.dev).toBe("pnpm run sidecar:ensure && tauri dev");
+    expect(packageJson.scripts?.["sidecar:ensure"]).toBe("node scripts/ensure-sidecar.mjs");
+    expect(ensureScript).toContain("convertzz-sidecar-");
+    expect(buildScript).toContain('--print", "host-tuple');
+    expect(buildScript).toContain('resolve(root, "sidecar", ".build")');
+    expect(buildScript).toContain("publishFile(stagingOutput, output)");
+    expect(buildScript).toContain("convertzz-sidecar-${triple}${extension}");
+  });
+
   it("verifies the real AppImage sidecar without network access", () => {
     const workflow = readProjectFile(".github/workflows/release.yml");
     const verifier = readProjectFile("scripts/verify-linux-appimage.mjs");

@@ -371,11 +371,13 @@ export CONVERTZZ_QEMU_IMAGE=$HOME/Downloads/jammy-server-cloudimg-amd64.img
 pnpm run test:qemu
 ```
 
-建立 sidecar。
+建立 sidecar（對齊 [Tauri externalBin / Node.js sidecar](https://v2.tauri.app/learn/sidecar-nodejs/)：先封裝，再給 `tauri dev` / `tauri build` 使用）。
 
 ```bash
 pnpm run sidecar:build
 ```
+
+產出檔名為 `src-tauri/binaries/convertzz-sidecar-$TARGET_TRIPLE`。`pnpm run dev` 會先 `sidecar:ensure`（缺檔才重建），`beforeDevCommand` 只啟動 Vite；`beforeBuildCommand` 會在打包前完整重建 sidecar。Linux 另產出 gzip 資源供 AppImage 使用。
 
 建立目前平台的安裝包。
 

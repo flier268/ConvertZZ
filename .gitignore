@@ -263,6 +263,7 @@ node_modules/
 dist/
 coverage/
 sidecar/dist/
+sidecar/.build/
 src-tauri/target/
 src-tauri/gen/
 src-tauri/binaries/convertzz-sidecar-*

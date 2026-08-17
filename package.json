@@ -10,13 +10,14 @@
     "convertzz-sidecar": "sidecar/dist/convertzz-sidecar.cjs"
   },
   "scripts": {
-    "dev": "tauri dev",
+    "dev": "pnpm run sidecar:ensure && tauri dev",
     "dev:web": "vite",
     "dev:e2e": "node scripts/dev-web-e2e.mjs",
     "build": "pnpm run typecheck && vite build",
     "build:web": "vite build",
     "sidecar:compile": "node scripts/compile-sidecar.mjs",
     "sidecar:build": "pnpm run sidecar:compile && node scripts/build-sidecar.mjs",
+    "sidecar:ensure": "node scripts/ensure-sidecar.mjs",
     "sidecar:dev": "tsx sidecar/src/index.ts",
     "tauri": "tauri",
     "tauri:build": "tauri build",

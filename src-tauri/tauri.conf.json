@@ -4,7 +4,7 @@
   "version": "2.0.0",
   "identifier": "dev.flier268.convertzz",
   "build": {
-    "beforeDevCommand": "pnpm run sidecar:build && pnpm run dev:web",
+    "beforeDevCommand": "pnpm run dev:web",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm run sidecar:build && pnpm run build",
     "frontendDist": "../dist"

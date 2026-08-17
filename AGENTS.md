@@ -44,6 +44,8 @@ pnpm fmt
 pnpm run sidecar:build
 ```
 
+- `pnpm run dev` = `sidecar:ensure`（缺 sidecar 才重建）+ `tauri dev`。`beforeDevCommand` 只跑 `dev:web`（Vite），不要把 sidecar 建置塞回 beforeDev，以免寫入 `src-tauri/binaries/` 觸發監看重啟。
+- 改 sidecar 原始碼後請執行 `pnpm run sidecar:build` 再重啟 dev，或刪掉 `src-tauri/binaries/convertzz-sidecar-*` 讓 ensure 重建。
 - `pnpm run check` 是 CI 門檻：Prettier、型別檢查、Vitest 與前端建置。
 - `pnpm fmt` 會格式化 Vue、TypeScript 與 Rust。存檔與 commit 前也會自動執行。
 - Rust 格式檢查：`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`。

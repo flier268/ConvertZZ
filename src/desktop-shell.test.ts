@@ -116,6 +116,34 @@ describe("Tauri desktop shell", () => {
     expect(settings).toContain("showMainWindowOnStart");
     expect(settings).toContain("啟動時顯示主視窗");
     expect(rust).toContain("fn hide_startup_windows");
+    expect(rust).toContain("fn create_configured_windows");
+    expect(rust.indexOf("create_configured_windows(app)")).toBeLessThan(
+      rust.indexOf("attach_sidecar(app)"),
+    );
+  });
+
+  it("builds hidden windows before spawning the sidecar", () => {
+    const config = readJson("src-tauri/tauri.conf.json") as {
+      app?: { windows?: Array<{ label?: string; create?: boolean }> };
+    };
+    const rust = readProjectFile("src-tauri/src/lib.rs");
+
+    expect(config.app?.windows?.every((window) => window.create === false)).toBe(true);
+    expect(rust).toContain("fn create_configured_windows");
+    expect(rust.indexOf("create_configured_windows(app)")).toBeLessThan(
+      rust.indexOf("attach_sidecar(app)"),
+    );
+    expect(rust).toContain("spawn_blocking");
+    expect(rust).toContain("轉換核心已終止");
+    expect(rust).toContain("convertzz.log");
+    expect(rust).toContain("fn app_log_path");
+  });
+
+  it("builds the Windows release binary without a console subsystem", () => {
+    const main = readProjectFile("src-tauri/src/main.rs");
+
+    expect(main).toContain("cfg_attr(not(debug_assertions)");
+    expect(main).toContain('windows_subsystem = "windows"');
   });
 
   it("positions the floating ball before showing it", () => {
@@ -154,8 +182,27 @@ describe("Tauri desktop shell", () => {
     expect(rust).toContain("tauri_plugin_process::init");
     expect(app).toContain("promptForAppUpdate");
     expect(app).toContain("skippedVersion: settings.skippedUpdateVersion");
+    expect(app).toContain("app_log_path");
+    expect(app).toContain("記錄檔：");
     expect(about).toContain("promptForAppUpdate");
     expect(about).not.toContain("github.com/flier268/ConvertZZ/releases");
+  });
+
+  it("registers sidecar state before setup so invoke cannot miss manage()", () => {
+    const rust = readProjectFile("src-tauri/src/lib.rs");
+
+    expect(rust).toContain(".manage(SidecarState::starting())");
+    expect(rust.indexOf(".manage(SidecarState::starting())")).toBeLessThan(rust.indexOf(".setup("));
+    expect(rust).toContain("SidecarProcess::Starting");
+    expect(rust).toContain("fn attach_sidecar");
+    expect(rust).toContain("轉換核心無法啟動");
+    expect(rust).not.toMatch(/let sidecar = start_sidecar[\s\S]*app\.manage\(sidecar\)/);
+  });
+
+  it("raises the production chunk size warning for Element Plus", () => {
+    const vite = readProjectFile("vite.config.ts");
+
+    expect(vite).toContain("chunkSizeWarningLimit: 1500");
   });
 
   it("runs frontend e2e against Vite with mocked Tauri APIs", () => {
@@ -218,6 +265,22 @@ describe("Tauri desktop shell", () => {
     expect(about).toContain("重看系統導覽");
   });
 
+  it("builds the Windows MSI as a Traditional Chinese installer", () => {
+    const config = readJson("src-tauri/tauri.conf.json") as {
+      bundle?: {
+        windows?: { wix?: { language?: Record<string, { localePath?: string }> } };
+      };
+    };
+    const locale = readProjectFile("src-tauri/windows/wix/zh-TW.wxl");
+
+    expect(config.bundle?.windows?.wix?.language?.["zh-TW"]?.localePath).toBe(
+      "./windows/wix/zh-TW.wxl",
+    );
+    expect(locale).toContain('Culture="zh-TW"');
+    expect(locale).toContain("啟動 ConvertZZ");
+    expect(locale).not.toContain("en-US");
+  });
+
   it("assigns an icon and left-click behavior to the tray", () => {
     const rust = readProjectFile("src-tauri/src/lib.rs");
     const config = readJson("src-tauri/tauri.conf.json") as { bundle?: { icon?: string[] } };
@@ -250,6 +313,8 @@ describe("Tauri desktop shell", () => {
       "binaries/convertzz-sidecar-linux-resource.sha256": "convertzz-sidecar.sha256",
     });
     expect(rust).toContain('resource_dir.join("convertzz-sidecar.gz")');
+    expect(rust).toContain("dictionary.to_string_lossy().into_owned()");
+    expect(rust).toContain("wasm.to_string_lossy().into_owned()");
     expect(rust).toContain("prepare_linux_sidecar");
     expect(rust).toContain("PermissionsExt");
     expect(rust).toContain("GzDecoder");

@@ -36,6 +36,7 @@ export default defineConfig({
   envPrefix: ["VITE_", "TAURI_ENV_*"],
   build: {
     target: "es2022",
+    chunkSizeWarningLimit: 1500,
     minify: process.env.TAURI_ENV_DEBUG ? false : "esbuild",
     sourcemap: Boolean(process.env.TAURI_ENV_DEBUG),
   },

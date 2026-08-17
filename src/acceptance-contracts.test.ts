@@ -18,21 +18,27 @@ describe("驗收項目的自動化契約", () => {
   it("D-07 首次匯入前會詢問", () => {
     const settings = readProjectFile("src/lib/settings.ts");
     const tour = readProjectFile("src/OnboardingTour.vue");
+    const page = readProjectFile("src/pages/SettingsPage.vue");
     expect(settings).toContain("匯入會取代目前的 2.0 設定。是否繼續？");
     expect(settings).toContain('title: "確認匯入"');
     expect(tour).toContain("importLegacySettings");
     expect(tour).toContain("匯入找到的設定");
+    expect(page).toContain("匯入 ConvertZZ.json");
+    expect(page).toContain("importLegacySettings");
   });
 
   it("D-08／D-09 匯入只讀取舊 JSON，失敗時不覆寫目前設定", () => {
     const tour = readProjectFile("src/OnboardingTour.vue");
     const settings = readProjectFile("src/lib/settings.ts");
+    const page = readProjectFile("src/pages/SettingsPage.vue");
     expect(tour).toContain("來源檔不會被修改");
     expect(tour).toContain("onboarding-import-error");
     expect(tour).toContain("importFailureMessage");
+    expect(page).toContain("importFailureMessage");
     const importer = settings.slice(settings.indexOf("export async function importLegacySettings"));
     expect(importer).toContain("settings.migrate");
     expect(importer).not.toContain("settings.backup");
+    expect(settings).toContain("notifySettingsReplaced");
   });
 
   it("D-11 儲存字典前會詢問並備份", () => {

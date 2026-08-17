@@ -250,15 +250,18 @@ describe("Tauri desktop shell", () => {
     expect(settings).not.toContain("load_zhconvert_api_key");
   });
 
-  it("moves ConvertZZ.json import into the first-run tour", () => {
+  it("keeps ConvertZZ.json import on settings page and first-run tour", () => {
     const settings = readProjectFile("src/pages/SettingsPage.vue");
     const tour = readProjectFile("src/OnboardingTour.vue");
     const loader = readProjectFile("src/lib/settings.ts");
     const about = readProjectFile("src/pages/AboutPage.vue");
 
-    expect(settings).not.toContain("匯入 ConvertZZ.json");
+    expect(settings).toContain("匯入 ConvertZZ.json");
+    expect(settings).toContain("importLegacySettings");
+    expect(settings).toContain("onSettingsReplaced");
     expect(settings).toContain("settings-save-bar");
-    expect(settings).not.toContain("header-actions");
+    expect(settings).toContain("header-actions");
+    expect(loader).toContain("notifySettingsReplaced");
     expect(loader).not.toContain("找到舊版 ConvertZZ.json");
     expect(tour).toContain("匯入舊版設定");
     expect(tour).toContain("importLegacySettings");

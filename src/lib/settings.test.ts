@@ -38,10 +38,16 @@ describe("匯入舊版設定", () => {
     confirm.mockResolvedValue(true);
     const migrated = { version: 2, engine: "segmented" };
     request.mockResolvedValue(migrated);
+    const onReplaced = vi.fn();
+    const { onSettingsReplaced } = await import("./settings");
+    const stop = onSettingsReplaced(onReplaced);
     await expect(importLegacySettings("/tmp/ConvertZZ.json")).resolves.toMatchObject(migrated);
     expect(request).toHaveBeenNthCalledWith(1, "settings.migrate", { path: "/tmp/ConvertZZ.json" });
     expect(request.mock.calls.every(([operation]) => operation === "settings.migrate")).toBe(true);
-    expect(storeSet).toHaveBeenCalled();
+    expect(storeSet).toHaveBeenCalledWith("settings", expect.objectContaining(migrated));
+    expect(storeSave).toHaveBeenCalled();
+    expect(onReplaced).toHaveBeenCalledTimes(1);
+    stop();
   });
 
   it("讀取或轉換失敗時不覆寫目前設定", async () => {

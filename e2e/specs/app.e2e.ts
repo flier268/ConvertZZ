@@ -97,10 +97,11 @@ test.describe("ConvertZZ 前端", () => {
     await expect(page.getByRole("cell", { name: "裡面.txt", exact: true })).toBeVisible();
   });
 
-  test("H-06 Linux 設定頁不顯示 SendTo", async ({ page }) => {
+  test("H-06 Linux 設定頁不顯示 SendTo，並可匯入舊設定", async ({ page }) => {
     await openApp(page);
     await openPage(page, "#tour-settings", "設定");
     await expect(page.getByRole("heading", { name: "設定" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "匯入 ConvertZZ.json" })).toBeVisible();
     await expect(page.getByText("SendTo 捷徑")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "建立 SendTo 捷徑" })).toHaveCount(0);
   });

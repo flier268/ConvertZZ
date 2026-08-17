@@ -1,18 +1,26 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
+import { open as openFile } from "@tauri-apps/plugin-dialog";
 import { ElMessage } from "element-plus";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import type {
   PlatformCapabilities,
   QuickActionSettings,
   SettingsV2,
   ShortcutSetting,
 } from "@shared/contracts";
-import { getLoadedSettings, loadSettings, saveSettings } from "../lib/settings";
+import {
+  getLoadedSettings,
+  importLegacySettings,
+  loadSettings,
+  onSettingsReplaced,
+  saveSettings,
+} from "../lib/settings";
 import { sidecar } from "../lib/sidecar";
 import { applyDesktopSettings } from "../lib/desktop";
 import { acceleratorFromKeyboardEvent, assignShortcutAccelerator } from "../lib/hotkey";
 import { LEGACY_ACTIONS } from "../lib/legacyActions";
+import { importFailureMessage } from "../lib/settingsApply";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 defineOptions({ name: "SettingsPage" });
@@ -22,6 +30,7 @@ const capabilities = ref<PlatformCapabilities>();
 const apiKey = ref("");
 const modulesJson = ref("{}");
 const busy = ref(false);
+const importing = ref(false);
 const savedSnapshot = ref("");
 const activeTab = ref("general");
 const quickActionRows: Array<{ label: string; key: keyof QuickActionSettings }> = [
@@ -76,8 +85,17 @@ void invoke<PlatformCapabilities>("platform_capabilities").then((value) => {
   capabilities.value = value;
 });
 
+const stopReplacedListener = onSettingsReplaced(() => {
+  const loaded = getLoadedSettings();
+  if (loaded) bindSettings(loaded);
+});
+
 onMounted(async () => {
   if (!settings.value) bindSettings(await loadSettings());
+});
+
+onUnmounted(() => {
+  stopReplacedListener();
 });
 
 async function save() {
@@ -107,6 +125,27 @@ async function save() {
   }
 }
 
+async function importLegacyJson() {
+  const path = await openFile({
+    multiple: false,
+    filters: [{ name: "ConvertZZ 舊版設定", extensions: ["json"] }],
+  });
+  if (!path) return;
+  importing.value = true;
+  try {
+    const imported = await importLegacySettings(path as string);
+    if (!imported) return;
+    bindSettings(imported);
+    const warnings = await applyDesktopSettings(imported);
+    ElMessage.success("已讀取舊設定，並另存為 2.0 設定。");
+    warnings.forEach((warning) => ElMessage.warning(warning));
+  } catch (error) {
+    ElMessage.error(importFailureMessage(error));
+  } finally {
+    importing.value = false;
+  }
+}
+
 async function saveApiKey() {
   const persisted = await invoke<boolean>("save_zhconvert_api_key", { apiKey: apiKey.value }).catch(
     () => false,
@@ -123,7 +162,10 @@ async function saveApiKey() {
       <div>
         <p class="eyebrow">PREFERENCES</p>
         <h1>設定</h1>
-        <p>設定會保存於 Tauri 應用程式資料目錄。</p>
+        <p>設定會保存於 Tauri 應用程式資料目錄。可從 1.x 的 ConvertZZ.json 匯入。</p>
+      </div>
+      <div class="header-actions">
+        <el-button :loading="importing" @click="importLegacyJson">匯入 ConvertZZ.json</el-button>
       </div>
     </header>
     <el-card shadow="never">

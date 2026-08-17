@@ -7,17 +7,28 @@ import type { PlatformCapabilities, SettingsV2 } from "@shared/contracts";
 const invoke = vi.fn();
 const getLoadedSettings = vi.fn();
 const loadSettings = vi.fn();
+const importLegacySettings = vi.fn();
+const openFile = vi.fn();
+const applyDesktopSettings = vi.fn();
+const onSettingsReplaced = vi.fn(() => () => undefined);
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invoke(...args),
 }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  open: (...args: unknown[]) => openFile(...args),
+}));
 vi.mock("../lib/sidecar", () => ({ sidecar: { request: vi.fn() } }));
-vi.mock("../lib/desktop", () => ({ applyDesktopSettings: vi.fn() }));
+vi.mock("../lib/desktop", () => ({
+  applyDesktopSettings: (...args: unknown[]) => applyDesktopSettings(...args),
+}));
 vi.mock("../lib/settings", () => ({
   getLoadedSettings: () => getLoadedSettings(),
   loadSettings: (...args: unknown[]) => loadSettings(...args),
   saveSettings: vi.fn(),
+  importLegacySettings: (...args: unknown[]) => importLegacySettings(...args),
+  onSettingsReplaced: (listener: () => void) => onSettingsReplaced(listener),
 }));
 
 import SettingsPage from "./SettingsPage.vue";
@@ -106,8 +117,14 @@ describe("設定分頁", () => {
     invoke.mockReset();
     getLoadedSettings.mockReset();
     loadSettings.mockReset();
+    importLegacySettings.mockReset();
+    openFile.mockReset();
+    applyDesktopSettings.mockReset();
+    onSettingsReplaced.mockReset();
+    onSettingsReplaced.mockReturnValue(() => undefined);
     getLoadedSettings.mockReturnValue(settingsFixture());
     loadSettings.mockResolvedValue(settingsFixture());
+    applyDesktopSettings.mockResolvedValue([]);
     invoke.mockImplementation(async (command: string) => {
       if (command === "platform_capabilities") return linuxCapabilities;
       return null;
@@ -189,6 +206,28 @@ describe("設定分頁", () => {
     expect(wrapper.text()).toContain("已略過 2.1.0");
     await wrapper.get(".settings-note button").trigger("click");
     expect(settings.skippedUpdateVersion).toBe("");
+    wrapper.unmount();
+  });
+
+  it("可從設定頁匯入 ConvertZZ.json 並套用桌面設定", async () => {
+    const imported = settingsFixture();
+    imported.engine = "legacy";
+    imported.previewMaxKb = 12;
+    openFile.mockResolvedValue("/tmp/ConvertZZ.json");
+    importLegacySettings.mockResolvedValue(imported);
+    const wrapper = await mountPage();
+    expect(wrapper.text()).toContain("匯入 ConvertZZ.json");
+    await wrapper.get(".header-actions button").trigger("click");
+    await flushPromises();
+    expect(openFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: [expect.objectContaining({ extensions: ["json"] })],
+      }),
+    );
+    expect(importLegacySettings).toHaveBeenCalledWith("/tmp/ConvertZZ.json");
+    expect(applyDesktopSettings).toHaveBeenCalledWith(imported);
+    const previewInput = wrapper.get(".field-with-suffix-row input");
+    expect((previewInput.element as HTMLInputElement).value).toBe("12");
     wrapper.unmount();
   });
 });

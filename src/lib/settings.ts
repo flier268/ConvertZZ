@@ -7,6 +7,19 @@ import { sidecar } from "./sidecar";
 
 const state = reactive<{ ready: boolean; value?: SettingsV2 }>({ ready: false });
 let store: Store | undefined;
+const replacedListeners = new Set<() => void>();
+
+function notifySettingsReplaced(): void {
+  for (const listener of replacedListeners) listener();
+}
+
+/** 當匯入或整份取代設定後通知畫面重綁（例如 SettingsPage 的 modulesJson 快照）。 */
+export function onSettingsReplaced(listener: () => void): () => void {
+  replacedListeners.add(listener);
+  return () => {
+    replacedListeners.delete(listener);
+  };
+}
 
 async function settingsStore(): Promise<Store> {
   store ??= await load("settings-v2.json", { autoSave: false });
@@ -86,6 +99,7 @@ export async function replaceSettings(input: unknown): Promise<SettingsV2> {
   const migrated = await sidecar.request<SettingsV2>("settings.migrate", { input });
   putSettings(migrated);
   await saveSettings();
+  notifySettingsReplaced();
   return state.value!;
 }
 

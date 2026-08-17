@@ -1,10 +1,10 @@
 # ConvertZZ 2.0 遷移：已完成項目封存
 
-本文件封存已通過的驗收項目與相關本機／CI 證據摘要。
+本文件封存已通過的驗收項目。
 
 進行中與待確認項目見 [MIGRATION_PLAN.md](MIGRATION_PLAN.md)。
 
-狀態標記定義與完成定義見主計畫。本封存內項目狀態均為 `已通過`，除非表格另有說明（歷史紀錄中可能出現已過時的中間狀態）。
+狀態標記定義與完成定義見主計畫。本封存內項目狀態均為 `已通過`。
 
 截圖與操作證據目錄：`docs/acceptance/`。
 
@@ -114,12 +114,19 @@
 | 編號 | 驗收條件 | 判定方式 | 必要證據 | 目前狀態 |
 | --- | --- | --- | --- | --- |
 | G-01 | 主視窗含八個計畫頁面。 | 逐頁開啟並檢查。 | 頁面截圖組。 | 已通過 |
+| G-02 | 浮動球使用獨立透明視窗。 | 顯示浮動球。 | Windows 與 Linux 截圖。 | 已通過 |
 | G-03 | 浮動球可用滑鼠拖動。 | 拖動後關閉並重啟。 | 操作錄影。 | 已通過 |
+| G-04 | 浮動球位置會在重啟後復原。 | 記錄拖動前後座標。 | 操作錄影與設定內容。 | 已通過 |
+| G-05 | 浮動球圖示沒有白底外框。 | 在深色與淺色桌面檢查。 | 兩張截圖。 | 已通過 |
 | G-06 | 浮動球顯示一大一小的 Z。 | 目視檢查圖示。 | 截圖。 | 已通過 |
+| G-07 | 系統托盤會顯示應用程式圖示。 | 啟動後檢查通知區。 | Windows 與 Linux 截圖。 | 已通過 |
+| G-08 | Windows 托盤左鍵會顯示主視窗。Linux 會提供等效的開啟選單。 | 隱藏主視窗後操作托盤。 | Windows 與 Linux 操作錄影。 | 已通過 |
+| G-09 | 托盤右鍵會顯示選單。 | 右鍵點擊托盤。 | 操作錄影。 | 已通過 |
 | G-10 | 關閉主視窗時程式會留在托盤。 | 點擊主視窗關閉按鈕。 | 操作錄影與程序清單。 | 已通過 |
+| G-11 | 剪貼簿讀寫不會出現 capability 錯誤。 | 執行浮動球左右鍵轉換。 | 操作錄影與錯誤紀錄。 | 已通過 |
 | G-14 | 問題回報會開啟 GitHub Issues。 | 點擊問題回報。 | 瀏覽器網址截圖。 | 已通過 |
 
-### H. 舊版命令列相容（已通過子集）
+### H. 舊版命令列相容
 
 | 編號 | 驗收條件 | 判定方式 | 必要證據 | 目前狀態 |
 | --- | --- | --- | --- | --- |
@@ -128,11 +135,14 @@
 | H-03 | `/file` 會建立檔案預覽。 | 使用命令列開啟文字檔。 | 畫面截圖。 | 已通過 |
 | H-04 | 舊版方向、詞彙修正與編碼參數保持相容。 | 執行參數矩陣測試。 | 測試結果。 | 已通過 |
 | H-05 | 舊版第二輸出檔與萬用字元語意保持相容。 | 執行代表性檔名案例。 | 測試結果與輸出清單。 | 已通過 |
+| H-06 | Windows SendTo 捷徑只出現在 Windows。 | 在 Windows 啟用與停用。 | 捷徑內容與操作錄影。 | 已通過 |
 
 ### I. 平台差異（已通過子集）
 
 | 編號 | 驗收條件 | 判定方式 | 必要證據 | 目前狀態 |
 | --- | --- | --- | --- | --- |
+| I-01 | Windows 可使用全域快捷鍵與自動複製貼上。 | 在 Windows x64 實機操作。 | 操作錄影。 | 已通過 |
+| I-02 | Linux X11 可使用全域快捷鍵與自動複製貼上。 | 在 X11 實機操作。 | 操作錄影。 | 已通過 |
 | I-09 | Linux 使用者不需要安裝 AppIndicator 開發套件。 | 在沒有 `libayatana-appindicator3-dev` 的乾淨環境執行安裝包。 | 套件清單與操作錄影。 | 已通過 |
 
 ### J. 測試與發行（已通過子集）
@@ -142,6 +152,8 @@
 | J-01 | `pnpm run check` 全部必要測試通過。 | 在含完整音訊樣本的 CI 執行測試。 | CI 連結。 | 已通過 |
 | J-02 | 音訊測試包含 MP3、APE、OGG 與 Opus。 | 檢查測試樣本與完整報告。 | 無略過項目的測試報告。 | 已通過 |
 | J-03 | ZhConvert 測試不連線至正式服務。 | 檢查測試網路目標。 | 模擬伺服器紀錄。 | 已通過 |
+| J-04 | Windows x64 產生 NSIS 與 MSI。 | 執行 Release 工作流程。 | 兩個可下載產物。 | 已通過 |
+| J-05 | Linux x64 產生 AppImage、DEB 與 RPM。 | 在 Ubuntu 22.04 執行工作流程。 | 三個可下載產物。 | 已通過 |
 | J-07 | Linux 執行相依不含 Node.js、`*-dev` 與其他建置套件。 | 檢查 DEB、RPM 與相依報告。 | 相依報告。 | 已通過 |
 | J-09 | Linux 乾淨環境不需 Node.js 即可安裝與執行。 | 使用全新 Ubuntu 22.04 虛擬機。 | 環境清單與操作錄影。 | 已通過 |
 | J-10 | AppImage 不要求使用者安裝開發套件。 | 在未安裝 `*-dev` 套件的環境執行。 | 套件清單與操作錄影。 | 已通過 |
@@ -153,109 +165,3 @@
 | --- | --- | --- | --- | --- |
 | K-02 | 所有已知平台限制已寫入 README 差異表。 | 比對失敗與限制紀錄。 | README 差異。 | 已通過 |
 
----
-
-## 歷史驗收紀錄
-
-以下為拆分前寫入主計畫的本機／CI 證據摘要，供追溯。狀態以主計畫與本封存表格為準；日誌中的中間狀態可能已過時。
-
-### 2026-08-14 Linux X11 本機驗收
-
-- 原始碼版本：`33b5009`。
-- 平台：Linux Mint 22.3、X11、x86_64。
-- `pnpm run check` 通過：93 項通過，4 項音訊整合因本機沒有 `ffmpeg` 而略過。
-- 之後改以開發相依 `ffmpeg-static` 與 `tests/fixtures` 跑完整音訊整合。MP3、APE、OGG、OGA、Opus 寫入往返均通過。該 ffmpeg 不打進發行包。
-- `cargo fmt --check` 通過。
-- Sidecar `convertzz-sidecar-x86_64-unknown-linux-gnu` 健康檢查回傳 Node.js `24.18.1`。標準錯誤串流為空。
-- `convert.preview`：「里面皇后头发开发」→「裡面皇后頭髮開發」。
-- `utility.convert`：HTML 十進位／十六進位、全形／半形、Unicode 跳脫案例通過。
-- 離線掃描 TagLib `mac-399.ape` 與 `test.ogg`：格式分別為 `ape`、`ogg`；OGG 多值欄位 `UNUSUALTAG` 保留兩個值。
-- AppImage、DEB、RPM 皆含 `licenses/THIRD_PARTY_NOTICES.md`、`taglib-wasm-LICENSE.txt`、`taglib-COPYING.LGPL.txt`。
-- Linux 發行檔 SHA-256：
-  - AppImage `5d82b262b9743d709a50fb98d96505a78514a758e0ae2d6563410aa6ee15c8a8`
-  - DEB `ac8e689209b717484cfb30b714e3889389749d85cada8f0f344d3f6122832e7f`
-  - RPM `c5325616e48e409ddc37d8054fe5e112fc4788ec24a5926261688dc824778c4a`
-- 啟動正式建置的 `ConvertZZ 2.0`：側欄八頁可開啟。設定預設引擎為「新式分詞」。ZhConvert 區塊顯示「使用此服務時必須遵守繁化姬的署名與商業使用條款。」浮動球為獨立視窗，圖示為一大一小的 Z。
-- 音訊整合測試改由專案內 `ffmpeg-static` 執行，不再依賴系統 ffmpeg。
-- 關於頁的「回報問題」「檢查更新」已由驗收人確認會開啟 GitHub Issues 與 Releases。
-- 本次尚未取代 Windows、Wayland、乾淨虛擬機與發行工作流程驗收。
-
-### 2026-08-15 自動更新
-
-- 關於頁與啟動檢查改為先查詢簽署的 `latest.json`，確認後才下載安裝。
-- DEB、RPM 或缺少更新簽章時仍開啟 GitHub Releases。
-- 2026-08-14 的「檢查更新會開啟 Releases」紀錄只適用於變更前的建置。
-
-### 2026-08-14 Linux AppImage 本機驗證
-
-- `pnpm tauri build --bundles appimage --ci` 成功。
-- 產物為 `ConvertZZ_2.0.0_amd64.AppImage`。
-- AppImage SHA-256 為 `5d82b262b9743d709a50fb98d96505a78514a758e0ae2d6563410aa6ee15c8a8`。
-- 驗證在 Linux 網路命名空間內執行。
-- 封裝後 sidecar 使用 Node.js `24.18.1`。
-- 健康檢查通過。
-- 「里面开发头发」轉換為「裡面開發頭髮」。
-- 離線 APE 與 OGG 掃描通過。
-- 封裝內 gzip 資源沒有執行權限。
-- 解壓後 sidecar SHA-256 與封裝內校驗值相同。
-- 本次尚未取代 Ubuntu 22.04 乾淨虛擬機驗收。
-- 本次尚未取代 Windows、X11 與 Wayland 人工驗收。
-
-### 2026-08-14 剩餘項目本機驗收
-
-- 原始碼版本：`6828ff0` 加上本輪測試補強。
-- 平台：Linux Mint 22.3、X11、x86_64。
-- `pnpm run check` 通過：typecheck、110 項測試、前端正式建置。音訊整合不再略過。尚無 CI 連結，故 J-01 仍為部分完成。
-- 新增／補強測試後再跑 `sidecar/src/audio/service.test.ts`、`migrate.test.ts`、`cli.test.ts`：27 項通過。
-- D-08／D-09（舊）：當時匯入會先備份舊 JSON。此契約已改為只讀取來源。
-- E-03：取消計畫後 `files.apply` 回報 `PLAN_NOT_FOUND`，來源檔未改。
-- E-06：寫入使用來源同目錄 `.convertzz-*` 暫存檔；覆寫與驗證失敗測試皆確認暫存會清除或不會取代原檔。
-- F-02：ID3v1 以 Big5 與 GBK 寫入「裡面」，再用對應來源編碼掃描，標題皆讀回「裡面」。
-- F-03：畫面與計畫可選 ID3v2.3／2.4 與文字編碼。以現有 `mp3tag.js` 寫入後，來源為 2.4 的樣本標頭仍為 2.4，故版本往返尚未視為通過。
-- F-09：OGG `artist` 兩值「头发」「皇后」轉換後為「頭髮」「皇后」。
-- F-15：本機 AppImage 與 DEB 皆含 `usr/lib/ConvertZZ/taglib-wasi.wasm`。先前離線 AppImage 驗證已掃描 APE／OGG。
-- H-02：`/audio` 可帶入 mp3／ape／ogg／opus；`audio.scan` 依副檔名分別回報這四種格式。
-- J-07：DEB `Depends` 為 `libayatana-appindicator3-1, libwebkit2gtk-4.1-0, libgtk-3-0`，不含 Node.js 或 `*-dev`。
-- 下列項目仍缺指定平台的人工證據，維持待人工驗收：D-07、D-11、E-01、E-02、E-05、F-07、F-08、G-02 至 G-13（已通過者除外）、H-03、H-06、I-01 至 I-08、J-04、J-08、J-12、J-14。
-- Windows、Wayland 與發行工作流程簽核仍未開始。K 閘門未通過。
-
-### 2026-08-14 QEMU Ubuntu 22.04 乾淨環境
-
-- 指令：`pnpm run test:qemu`。
-- 客體：Ubuntu 22.04 cloud image，KVM 加速。
-- 結果：`deb=true`、`nodejs=false`、`appindicatorDev=false`、`webkit=true`、`wasm=true`、`offlineAudio=true`、`appimageExtracted=true`、`kvm=true`。
-- 據此將 B-03、I-09、J-09、J-10、J-13 標為已通過。
-- J-11 僅完成 APT／DEB；RPM／DNF 尚未跑。
-
-### 2026-08-15 部分完成項目補強
-
-- 原始碼版本：本輪變更。
-- 平台：Linux Mint 22.3、X11、x86_64。
-- F-03：`mp3tag.js` 的 `getAudio` 會把 UTF-16 標籤中的 `0xFF` 誤判成 MPEG 同步位元，導致 2.3／UTF-16 寫回被音訊驗證拒絕。改為先依 ID3 標頭略過標籤，再尋找 MPEG 同步位元。測試將 2.4 樣本寫成 2.3＋UTF-16、2.4＋UTF-8、2.4＋UTF-16，標頭版本與 `TIT2` 編碼位元皆符合，標題讀回「裡面」。
-- D-09（舊）：當時以備份失敗作為不覆寫的閘門。來源 JSON 已改為唯讀匯入。
-- D-10：`src/lib/settingsApply.test.ts` 建立設定驗收表。舊版 `Engine=Fanhuaji` 匯入為 `zhconvert`；其餘已匯入欄位逐一變更後，檔案預設、ZhConvert 請求、浮動球、快捷鍵、啟動檢查與主視窗行為都會改變。
-- J-01：GitHub Actions CI `31821662830`（`c3a85a0`）通過。20 個測試檔、120 項測試，含 `sidecar/src/audio/service.test.ts` 14 項；CI 安裝 `ffmpeg-static`。https://github.com/flier268/ConvertZZ/actions/runs/31821662830
-- J-11：本機 RPM `Requires` 為 `libayatana-appindicator3.so.1`、`libwebkit2gtk-4.1.so.0`、`libgtk-3.so.0`，不含 Node.js 或 `*-dev`。APT／DEB 已在 QEMU 驗證；DNF 安裝仍未跑，維持部分完成。
-- K-02：README 平台差異表已含快捷鍵、自動貼上、浮動球置頂、SendTo、托盤與憑證庫。關於頁補上憑證庫列。缺少 Secret Service 時，Linux 能力清單會顯示金鑰只保留於工作階段。
-
-### 2026-08-15 Linux X11 人工／自動驗收
-
-- 應用程式版本：`2.0.0`。
-- 原始碼版本：`efe9463`。畫面取自本機 `target/release/convertzz`。
-- 平台：Linux Mint、X11、XFCE、x86_64。
-- 證據目錄：`docs/acceptance/2026-08-15/`。
-- 新增 `src/acceptance-contracts.test.ts` 鎖定 D-07、D-08、D-09、D-11、E-01、E-02、E-05、F-07、F-08、G-12、H-03、H-06、I-03 至 I-05 的畫面與路由契約。
-- E-01／H-03：`/file /f:t /tmp/convertzz-accept/里面.txt` 自動建立預覽。表格顯示來源、輸出、`utf8` 與「裡面開發頭髮皇后」。
-- F-07／F-08／G-13：第二個程序把 `/audio` 交給既有視窗並切到音訊頁。APE／OGG 只顯示 APEv2／Vorbis 方向，沒有 ID3 版本或編碼選項。OGG 列出 `UNICODETAG` 與多值 `UNUSUALTAG`。
-- G-02／G-03／G-05／G-06／G-10：浮動球為獨立 72×72 透明視窗。拖動後座標 `1778,186` → `1564,364`。關閉主視窗後程序與浮動球仍在。
-- G-07：通知區可見應用程式圖示。托盤左右鍵選單未穩定點到 AppIndicator，G-08／G-09 維持待人工驗收。
-- H-06：Linux 設定頁沒有 SendTo。Windows 捷徑仍待 Windows 驗收。
-- 檔案預覽表補上來源預覽欄，讓內容差異可見。
-- 下列項目仍缺指定證據：D-07、D-11 確認對話、E-02 檔名預覽列、E-05 覆寫對話、G-02／G-04／G-05／G-07／G-08／G-09／G-11／G-12 的跨平台或錄影、H-06 Windows、I-01 至 I-08 的 Windows／Wayland 實機、J-04／J-08／J-12／J-14。
-
-### 2026-08-15 舊設定匯入契約
-
-- 舊版 `ConvertZZ.json` 匯入改為只讀取來源，結果另存為 Tauri `settings-v2.json`。
-- 不再建立 `ConvertZZ.backup-*`。
-- D-08：`migrateSettingsFromPath` 匯入後來源內容不變，目錄沒有備份檔。
-- D-09：來源不存在時匯入失敗，目錄仍為空；前端讀取失敗不會呼叫第二次遷移或覆寫設定。導覽仍顯示錯誤警示。

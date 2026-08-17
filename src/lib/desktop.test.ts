@@ -62,4 +62,23 @@ describe("applyDesktopSettings", () => {
       paste: true,
     });
   });
+
+  it("I-04 平台不支援全域快捷鍵時不註冊", async () => {
+    vi.mocked(invoke).mockResolvedValue({ globalShortcuts: false });
+    vi.mocked(register).mockClear();
+    vi.mocked(unregisterAll).mockClear();
+    const settings = {
+      floatingBall: { enabled: false, x: -1, y: -1 },
+      hotkeys: {
+        autoCopy: true,
+        autoPaste: true,
+        shortcuts: [{ enabled: true, accelerator: "Alt+U", action: "a4" }],
+      },
+    } as SettingsV2;
+
+    const warnings = await applyDesktopSettings(settings);
+    expect(warnings).toEqual([]);
+    expect(unregisterAll).not.toHaveBeenCalled();
+    expect(register).not.toHaveBeenCalled();
+  });
 });

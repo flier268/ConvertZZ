@@ -177,6 +177,8 @@ function respondToSidecar(raw: string): void {
     const input = payload.input as SettingsV2 | undefined;
     result = input?.version === 2 ? input : structuredClone(defaultSettings);
   } else if (operation === "files.plan") {
+    const mode = String(payload.mode ?? "content");
+    const rename = mode === "filename" || mode === "both";
     result = {
       planId: "plan-1",
       createdAt: "2026-08-15T00:00:00.000Z",
@@ -184,12 +186,12 @@ function respondToSidecar(raw: string): void {
       items: [
         {
           sourcePath: "/tmp/里面.txt",
-          outputPath: "/tmp/里面.txt",
-          kind: "file",
+          outputPath: rename ? "/tmp/裡面.txt" : "/tmp/里面.txt",
+          kind: rename ? "filename" : "file",
           selected: true,
           detectedEncoding: "utf8",
-          sourcePreview: "里面开发头发",
-          outputPreview: "裡面開發頭髮",
+          sourcePreview: rename ? "里面.txt" : "里面开发头发",
+          outputPreview: rename ? "裡面.txt" : "裡面開發頭髮",
           status: "ready",
         },
       ],
@@ -198,6 +200,30 @@ function respondToSidecar(raw: string): void {
     result = { succeeded: ["/tmp/里面.txt"], skipped: [], failed: [] };
   } else if (operation === "files.cancel") {
     result = {};
+  } else if (operation === "dictionary.read") {
+    result = {
+      path: String(payload.path ?? "/tmp/Dictionary.csv"),
+      total: 1,
+      entries: [
+        {
+          index: 0,
+          enabled: true,
+          type: "test",
+          simplified: "里面",
+          simplifiedPriority: 1,
+          traditional: "裡面",
+          traditionalPriority: 1,
+        },
+      ],
+    };
+  } else if (operation === "dictionary.update") {
+    result = { updated: 1, backupPath: "/tmp/Dictionary.backup-20260817.csv" };
+  } else if (operation === "dictionary.preview") {
+    result = { text: "裡面" };
+  } else if (operation === "convert.preview") {
+    result = { text: "裡面開發頭髮", durationMs: 1 };
+  } else if (operation === "utility.convert") {
+    result = { text: String(payload.text ?? "") };
   }
   void emit("sidecar://message", JSON.stringify({ id, type: "response", ok: true, result }));
 }

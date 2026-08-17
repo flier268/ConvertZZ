@@ -86,6 +86,8 @@ Vitest 涵蓋 `sidecar/src/**/*.test.ts`、`src/**/*.test.ts` 與 `tests/**/*.te
 
 前端 e2e 使用 `e2e/` 的 Playwright 規格，執行 `pnpm run test:e2e`。這會啟動 Vite 並模擬 Tauri／sidecar，不啟動桌面視窗。
 
+驗收通過後應盡量補可重跑護欄：畫面／路由契約（`src/acceptance-contracts.test.ts`）、發行工作流程（`tests/release-workflow.test.ts`）、行為單元測試與 e2e。契約通過不等於桌面殼層或乾淨環境人工證據已完成。
+
 - 引擎變更必須覆蓋黃金案例、空白標點保留、長文分段，以及舊字典的啟用、優先權與 `9999` 保護詞。
 - 檔案變更必須覆蓋預覽未確認不寫入、衝突略過、暫存驗證、兩階段重新命名、失敗回復與不跟隨符號連結。
 - 音訊變更必須覆蓋未選欄位、未知欄位、二進位欄位與封面不變，且不得重新編碼音訊內容。

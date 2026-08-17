@@ -72,4 +72,58 @@ test.describe("ConvertZZ 前端", () => {
     await openPage(page, "#tour-settings", "設定");
     await expect(page.locator(".settings-note")).toContainText("已略過 2.1.0");
   });
+
+  test("G-15 可安裝更新會先確認再下載", async ({ page }) => {
+    await openApp(page, { update: "install" });
+    await openPage(page, "#tour-about", "ConvertZZ 2.0");
+    await page.getByRole("button", { name: "檢查更新" }).click();
+    await expect(page.getByText("發現新版本 2.1.0")).toBeVisible();
+    await expect(page.getByText("是否下載並安裝")).toBeVisible();
+    await expect(page.getByRole("button", { name: "下載並安裝" })).toBeVisible();
+    await page.getByRole("button", { name: "稍後再說" }).click();
+  });
+
+  test("E-02 檔名作業預覽會顯示來源與輸出", async ({ page }) => {
+    await openApp(page);
+    await openPage(page, "#tour-files", "檔案與檔名");
+    await page.locator(".el-form-item", { hasText: "作業" }).locator(".el-select").click();
+    await page.getByRole("option", { name: "轉換檔名" }).click();
+    await page.getByRole("button", { name: "選取檔案" }).click();
+    await page.getByRole("button", { name: "建立預覽" }).click();
+    await expect(page.getByText("變更預覽")).toBeVisible();
+    await expect(page.getByRole("cell", { name: "/tmp/里面.txt", exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "/tmp/裡面.txt", exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "里面.txt", exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "裡面.txt", exact: true })).toBeVisible();
+  });
+
+  test("H-06 Linux 設定頁不顯示 SendTo", async ({ page }) => {
+    await openApp(page);
+    await openPage(page, "#tour-settings", "設定");
+    await expect(page.getByRole("heading", { name: "設定" })).toBeVisible();
+    await expect(page.getByText("SendTo 捷徑")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "建立 SendTo 捷徑" })).toHaveCount(0);
+  });
+
+  test("I-08 關於頁顯示平台差異表", async ({ page }) => {
+    await openApp(page);
+    await openPage(page, "#tour-about", "ConvertZZ 2.0");
+    await expect(page.getByText("平台差異")).toBeVisible();
+    await expect(page.getByText("全域快捷鍵")).toBeVisible();
+    await expect(page.getByText("SendTo 捷徑")).toBeVisible();
+    await expect(page.getByText("需 AppIndicator；使用選單開啟").first()).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Linux Wayland" })).toBeVisible();
+  });
+
+  test("D-11 儲存字典前會詢問", async ({ page }) => {
+    await openApp(page, { selectedFiles: "/tmp/Dictionary.csv" });
+    await openPage(page, "#tour-dictionary", "舊版字典");
+    await page.getByRole("button", { name: "選取可寫字典" }).click();
+    await expect(page.getByRole("button", { name: "儲存變更", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "新增" }).click();
+    await page.getByRole("button", { name: "儲存變更", exact: true }).click();
+    await expect
+      .poll(async () => (await e2eState(page)).confirms ?? [])
+      .toEqual(expect.arrayContaining([expect.stringContaining("將先備份字典，再寫入")]));
+  });
 });

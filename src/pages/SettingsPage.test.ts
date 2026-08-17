@@ -152,6 +152,34 @@ describe("設定分頁", () => {
     wrapper.unmount();
   });
 
+  it("H-06 Linux 一般分頁不顯示 SendTo", async () => {
+    const wrapper = await mountPage();
+    expect(wrapper.get("#pane-general").text()).not.toContain("SendTo 捷徑");
+    expect(wrapper.get("#pane-general").text()).not.toContain("建立 SendTo 捷徑");
+    wrapper.unmount();
+  });
+
+  it("I-04 無全域快捷鍵時顯示停用提示", async () => {
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "platform_capabilities") {
+        return {
+          ...linuxCapabilities,
+          displayServer: "wayland",
+          globalShortcuts: false,
+          automaticCopyPaste: false,
+          floatingAlwaysOnTop: false,
+          limitations: ["本版停用 Wayland 全域快捷鍵。"],
+        };
+      }
+      return null;
+    });
+    const wrapper = await mountPage();
+    await wrapper.get('[id^="tab-hotkeys"]').trigger("click");
+    await flushPromises();
+    expect(wrapper.text()).toContain("目前顯示伺服器無法保證全域快捷鍵。");
+    wrapper.unmount();
+  });
+
   it("有略過版本時可從一般分頁清除", async () => {
     const settings = settingsFixture();
     settings.skippedUpdateVersion = "2.1.0";

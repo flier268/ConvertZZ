@@ -125,9 +125,8 @@ export async function emit(event: string, payload?: unknown): Promise<void> {
 
 export async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
   switch (command) {
-    case "sidecar_send":
-      queueMicrotask(() => respondToSidecar(String(args.request ?? "")));
-      return undefined as T;
+    case "core_request":
+      return mockCoreRequest(String(args.operation ?? ""), args.payload) as T;
     case "app_log_path":
       return null as T;
     case "startup_args":
@@ -162,25 +161,17 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
   }
 }
 
-function respondToSidecar(raw: string): void {
-  let request: { id?: string; operation?: string; payload?: Record<string, unknown> };
-  try {
-    request = JSON.parse(raw) as typeof request;
-  } catch {
-    return;
-  }
-  const id = request.id ?? "";
-  const operation = request.operation ?? "";
-  const payload = request.payload ?? {};
-  let result: unknown = {};
-  if (operation === "health") result = { node: "24.0.0", version: "2.0.0" };
-  else if (operation === "settings.migrate") {
+function mockCoreRequest(operation: string, rawPayload: unknown): unknown {
+  const payload = (rawPayload ?? {}) as Record<string, unknown>;
+  if (operation === "health") return { engine: "rust", version: "2.0.0" };
+  if (operation === "settings.migrate") {
     const input = payload.input as SettingsV2 | undefined;
-    result = input?.version === 2 ? input : structuredClone(defaultSettings);
-  } else if (operation === "files.plan") {
+    return input?.version === 2 ? input : structuredClone(defaultSettings);
+  }
+  if (operation === "files.plan") {
     const mode = String(payload.mode ?? "content");
     const rename = mode === "filename" || mode === "both";
-    result = {
+    return {
       planId: "plan-1",
       createdAt: "2026-08-15T00:00:00.000Z",
       warnings: [],
@@ -197,12 +188,15 @@ function respondToSidecar(raw: string): void {
         },
       ],
     };
-  } else if (operation === "files.apply") {
-    result = { succeeded: ["/tmp/里面.txt"], skipped: [], failed: [] };
-  } else if (operation === "files.cancel") {
-    result = {};
-  } else if (operation === "dictionary.read") {
-    result = {
+  }
+  if (operation === "files.apply") {
+    return { succeeded: ["/tmp/里面.txt"], skipped: [], failed: [] };
+  }
+  if (operation === "files.cancel") {
+    return {};
+  }
+  if (operation === "dictionary.read") {
+    return {
       path: String(payload.path ?? "/tmp/Dictionary.csv"),
       total: 1,
       entries: [
@@ -217,16 +211,20 @@ function respondToSidecar(raw: string): void {
         },
       ],
     };
-  } else if (operation === "dictionary.update") {
-    result = { updated: 1, backupPath: "/tmp/Dictionary.backup-20260817.csv" };
-  } else if (operation === "dictionary.preview") {
-    result = { text: "裡面" };
-  } else if (operation === "convert.preview") {
-    result = { text: "裡面開發頭髮", durationMs: 1 };
-  } else if (operation === "utility.convert") {
-    result = { text: String(payload.text ?? "") };
   }
-  void emit("sidecar://message", JSON.stringify({ id, type: "response", ok: true, result }));
+  if (operation === "dictionary.update") {
+    return { updated: 1, backupPath: "/tmp/Dictionary.backup-20260817.csv" };
+  }
+  if (operation === "dictionary.preview") {
+    return { text: "裡面" };
+  }
+  if (operation === "convert.preview") {
+    return { text: "裡面開發頭髮", durationMs: 1 };
+  }
+  if (operation === "utility.convert") {
+    return { text: String(payload.text ?? "") };
+  }
+  return {};
 }
 
 export async function getVersion(): Promise<string> {

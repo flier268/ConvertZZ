@@ -10,26 +10,25 @@ ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程
 | --- | --- |
 | `src/` | Vue 3 畫面、預覽、確認與桌面狀態 |
 | `src/pages/` | 快速轉換、檔案、剪貼簿、音訊、工具、字典、設定、關於 |
-| `src/lib/` | 前端動作、設定、sidecar 客戶端、CLI、托盤與快捷鍵協調 |
-| `sidecar/src/` | 文字、編碼、檔案、字典、音訊標籤與舊設定匯入 |
-| `src-tauri/` | 視窗、托盤、快捷鍵、憑證庫、sidecar 程序與平台能力 |
-| `shared/contracts.ts` | 前後端共用的 NDJSON 操作與型別 |
-| `scripts/` | sidecar 編譯、打包、git hook 與 Linux 驗證 |
+| `src/lib/` | 前端動作、設定、核心客戶端、CLI、托盤與快捷鍵協調 |
+| `src-tauri/src/core/` | 文字、編碼、檔案、字典、音訊標籤與舊設定匯入 |
+| `src-tauri/` | 視窗、托盤、快捷鍵、憑證庫、轉換核心與平台能力 |
+| `shared/contracts.ts` | 前後端共用的操作與型別 |
+| `scripts/` | git hook 與 Linux 驗證 |
 | `ConvertZZ/` | 舊 WPF 原始碼。驗收完成前不得刪除 |
 | `tests/fixtures/` | 音訊與發行驗證樣本 |
 | `e2e/` | Playwright 前端端對端測試 |
 
-前端用 `@` 對應 `src/`，用 `@shared` 對應 `shared/`。Sidecar 直接匯入 `shared/contracts.ts` 編譯後的相對路徑。
+前端用 `@` 對應 `src/`，用 `@shared` 對應 `shared/`。
 
 ## 層級邊界
 
-- 轉換、編碼、檔案寫入、音訊標籤、字典與設定遷移只放在 sidecar。
-- 視窗、托盤、全域快捷鍵、憑證庫、平台能力與 sidecar 程序只放在 Rust。
+- 轉換、編碼、檔案寫入、音訊標籤、字典與設定遷移只放在 Rust 核心。
+- 視窗、托盤、全域快捷鍵、憑證庫與平台能力只放在 Rust 桌面層。
 - Vue 只負責呈現、預覽、確認與呼叫型別化操作。
-- 變更通訊協定時，先改 `shared/contracts.ts`，再同步 sidecar dispatch 與前端客戶端。
-- Sidecar 記錄只寫標準錯誤。標準輸出只承載 NDJSON。
+- 變更通訊協定時，先改 `shared/contracts.ts`，再同步 `src-tauri/src/core` dispatch 與前端客戶端。
 - 前端不得取得任意 Shell。檔案路徑只可來自選擇器或已驗證的工作項目。
-- 新式引擎只使用 `novel-segment` 的分詞與 `ZhtSynonymOptimizer`，字形只交給 `cjk-conv`。不要新增硬編碼語意取代清單。
+- 新式引擎只使用 `ws-segment-rs` 的分詞與 `ZhtSynonymOptimizer`，字形只交給 `cjk-convert-rs`。不要新增硬編碼語意取代清單。
 
 ## 建置與檢查
 
@@ -41,12 +40,12 @@ pnpm run dev
 pnpm run check
 pnpm test
 pnpm fmt
-pnpm run sidecar:build
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-- `pnpm run dev` = `sidecar:ensure`（缺檔或來源比二進位新才重建）+ `tauri dev`。`beforeDevCommand` 只跑 `dev:web`（Vite），不要把 sidecar 建置塞回 beforeDev，以免寫入 `src-tauri/binaries/` 觸發監看重啟。
-- 改 sidecar 後若 dev 已在跑，請執行 `pnpm run sidecar:build` 再重啟。
-- `pnpm run check` 是 CI 門檻：Prettier、型別檢查、Vitest 與前端建置。
+- `pnpm run dev` = `tauri dev`。`beforeDevCommand` 只跑 `dev:web`（Vite）。
+- 改 Rust 核心後若 dev 已在跑，請重啟 `tauri dev`。
+- `pnpm run check` 是前端 CI 門檻：Prettier、型別檢查、Vitest 與前端建置。Rust 核心另跑 `cargo test`。
 - `pnpm fmt` 會格式化 Vue、TypeScript 與 Rust。存檔與 commit 前也會自動執行。
 - Rust 格式檢查：`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`。
 - `pnpm run tauri:build` 與 `pnpm run test:qemu` 很重，只在使用者明確要求發行或乾淨環境驗證時執行。
@@ -82,9 +81,9 @@ cargo update -p <crate> --manifest-path src-tauri/Cargo.toml
 
 ## 測試
 
-Vitest 涵蓋 `sidecar/src/**/*.test.ts`、`src/**/*.test.ts` 與 `tests/**/*.test.ts`。
+Vitest 涵蓋 `src/**/*.test.ts` 與 `tests/**/*.test.ts`。轉換核心單元測試在 `src-tauri/src/core/**`。
 
-前端 e2e 使用 `e2e/` 的 Playwright 規格，執行 `pnpm run test:e2e`。這會啟動 Vite 並模擬 Tauri／sidecar，不啟動桌面視窗。
+前端 e2e 使用 `e2e/` 的 Playwright 規格，執行 `pnpm run test:e2e`。這會啟動 Vite 並模擬 Tauri／核心，不啟動桌面視窗。
 
 驗收通過後應盡量補可重跑護欄：畫面／路由契約（`src/acceptance-contracts.test.ts`）、發行工作流程（`tests/release-workflow.test.ts`）、行為單元測試與 e2e。契約通過不等於桌面殼層或乾淨環境人工證據已完成。
 
@@ -102,9 +101,8 @@ Vitest 涵蓋 `sidecar/src/**/*.test.ts`、`src/**/*.test.ts` 與 `tests/**/*.te
 - 舊版 `ConvertZZ.json` 只讀取，結果另存為 2.0 設定，不得修改來源。`Dictionary.csv` 必須先詢問，再建立不覆蓋的時間戳備份。備份失敗時不得寫入或覆寫。
 - `Dictionary.csv` 維持 UTF-8 BOM 六欄格式。
 - 命令列保持舊參數語意，但檔案作業仍要先預覽。不要恢復無確認寫入。
-- Linux sidecar 以 target triple 檔名建立，發行包用 gzip 資源加 SHA-256 解壓。不要改回會被 AppImage 破壞的內嵌資料配置。
 - 自動更新只簽署 Windows 安裝程式與 Linux AppImage。公鑰放在 `tauri.conf.json`，私鑰只存在 GitHub Secrets `TAURI_SIGNING_PRIVATE_KEY`。
-- 授權維持 GPL-3.0-only。第三方與 WASM 授權聲明必須同步更新。
+- 授權維持 GPL-3.0-only。第三方授權聲明必須同步更新。
 
 ## 代理程式注意事項
 

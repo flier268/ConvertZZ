@@ -64,7 +64,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm tauri build --bundles ${{ matrix.bundles }} --config src-tauri/tauri.updater.conf.json
-      - name: 離線驗證 AppImage 內的 sidecar 與 WASM
+      - name: 離線驗證 AppImage 內的轉換核心
         if: runner.os == 'Linux'
         shell: bash
         run: |

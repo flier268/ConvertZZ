@@ -262,11 +262,8 @@ __pycache__/
 node_modules/
 dist/
 coverage/
-sidecar/dist/
-sidecar/.build/
 src-tauri/target/
 src-tauri/gen/
-src-tauri/binaries/convertzz-sidecar-*
 src-tauri/icons/android/
 src-tauri/icons/ios/
 src-tauri/icons/*.icns

@@ -10,7 +10,7 @@ import type {
   EngineKind,
   TextEncoding,
 } from "@shared/contracts";
-import { sidecar } from "../lib/sidecar";
+import { core } from "../lib/coreClient";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { cliInvocation } from "../lib/cli";
 
@@ -79,7 +79,7 @@ async function scan() {
   busy.value = true;
   progress.value = undefined;
   try {
-    files.value = await sidecar.request<AudioTagFile[]>(
+    files.value = await core.request<AudioTagFile[]>(
       "audio.scan",
       {
         paths: paths.value,
@@ -116,7 +116,7 @@ async function createPlan() {
   progress.value = undefined;
   try {
     const settings = await loadSettings();
-    plan.value = await sidecar.request<AudioTagPlan>(
+    plan.value = await core.request<AudioTagPlan>(
       "audio.plan",
       {
         paths: paths.value,
@@ -170,7 +170,7 @@ async function applyPlan() {
   busy.value = true;
   progress.value = undefined;
   try {
-    const result = await sidecar.request<{ succeeded: string[]; failed: unknown[] }>(
+    const result = await core.request<{ succeeded: string[]; failed: unknown[] }>(
       "audio.apply",
       { planId: plan.value.planId },
       900_000,
@@ -190,7 +190,7 @@ async function applyPlan() {
 
 async function cancelPlan() {
   if (!plan.value) return;
-  await sidecar.request("audio.cancel", { planId: plan.value.planId });
+  await core.request("audio.cancel", { planId: plan.value.planId });
   plan.value = undefined;
   await scan();
 }

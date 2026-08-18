@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "pnpm run dev:web",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm run sidecar:build && pnpm run build",
+    "beforeBuildCommand": "pnpm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -64,13 +64,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "externalBin": ["binaries/convertzz-sidecar"],
     "resources": {
       "../ConvertZZ/Dictionary.csv": "Dictionary.csv",
-      "../node_modules/taglib-wasm/dist/taglib-wasi.wasm": "taglib-wasi.wasm",
-      "../THIRD_PARTY_NOTICES.md": "licenses/THIRD_PARTY_NOTICES.md",
-      "../node_modules/taglib-wasm/LICENSE": "licenses/taglib-wasm-LICENSE.txt",
-      "../licenses/LGPL-2.1.txt": "licenses/taglib-COPYING.LGPL.txt"
+      "resources/segment-dict": "segment-dict",
+      "../THIRD_PARTY_NOTICES.md": "licenses/THIRD_PARTY_NOTICES.md"
     },
     "icon": ["icons/icon.png", "icons/icon.ico"],
     "windows": {

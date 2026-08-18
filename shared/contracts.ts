@@ -240,7 +240,7 @@ export interface SettingsV2 {
   showMainWindowOnStart: boolean;
 }
 
-export type SidecarOperation =
+export type CoreOperation =
   | "health"
   | "convert.preview"
   | "files.plan"
@@ -259,24 +259,24 @@ export type SidecarOperation =
   | "utility.convert"
   | "cli.parse";
 
-export interface SidecarRequest<T = unknown> {
+export interface CoreRequest<T = unknown> {
   id: string;
-  operation: SidecarOperation;
+  operation: CoreOperation;
   payload: T;
 }
 
-export interface SidecarError {
+export interface CoreError {
   code: string;
   message: string;
   details?: unknown;
 }
 
-export interface SidecarResponse<T = unknown> {
+export interface CoreResponse<T = unknown> {
   id: string;
   type: "response" | "progress";
   ok: boolean;
   result?: T;
-  error?: SidecarError;
+  error?: CoreError;
   progress?: { current: number; total: number; message: string };
 }
 

@@ -14,7 +14,7 @@
 
 - 版本提升為 `2.0.0`。
 - 桌面介面遷移至 Vue 3、Element Plus 與 Tauri 2。
-- 文字與檔案核心遷移至 Node.js sidecar。
+- 文字與檔案核心遷移至 Rust（`cjk-convert-rs`、`ws-segment-rs`）。
 - Windows x64 與 Linux x64 共用相同轉換核心。
 - 新式分詞轉換成為預設方法。
 - 舊版六欄字典保留為相容方法。
@@ -57,16 +57,16 @@
 | --- | --- | --- |
 | 前端 | 畫面、預覽、確認與狀態呈現 | Vue 3.5、TypeScript、Vite、Element Plus 2.14 |
 | 桌面層 | 視窗、托盤、快捷鍵、檔案選擇與程序管理 | Tauri 2.11、Rust |
-| 核心層 | 文字、檔案、編碼、字典與音訊標籤 | Node.js 24 sidecar |
-| 發行層 | sidecar 編譯、WASM 資源與安裝包 | pnpm、`@yao-pkg/pkg`、Tauri Bundler |
+| 核心層 | 文字、檔案、編碼、字典與音訊標籤 | Rust（與桌面層同程序） |
+| 發行層 | 分詞字典與安裝包 | pnpm、Tauri Bundler |
 
-前端與 sidecar 使用長駐 NDJSON 通訊。
+前端透過 Tauri `core_request` 呼叫型別化操作。
 
 每個要求都包含識別碼、操作名稱與型別化資料。
 
 每個回應都包含結果、警告、進度或結構化錯誤。
 
-Sidecar 記錄只寫入標準錯誤串流。
+核心進度透過 Tauri 事件 `core://progress` 回傳。
 
 前端不取得任意 Shell 執行權限。
 
@@ -86,7 +86,7 @@ Sidecar 記錄只寫入標準錯誤串流。
 
 ### 第二階段：共用轉換核心
 
-建立 Node.js sidecar 與型別化通訊協定。
+在 `src-tauri/src/core` 建立 Rust 轉換核心與型別化 `core_request` 協定。
 
 實作新式分詞、舊版字典與 ZhConvert 三種引擎。
 
@@ -110,9 +110,9 @@ Sidecar 記錄只寫入標準錯誤串流。
 
 建立確認、衝突、暫存寫入、驗證與回復流程。
 
-使用 `mp3tag.js` 處理 MP3。
+使用 Rust `id3` 處理 MP3。
 
-使用 `taglib-wasm` 處理 APE、OGG、OGA 與 Opus。
+使用 Rust `lofty` 處理 APE、OGG、OGA 與 Opus。
 
 本階段完成後，文字標籤以外的音訊內容不得改變。
 
@@ -124,7 +124,7 @@ Linux 托盤使用 AppIndicator 執行函式庫。
 
 AppIndicator 開發套件只存在於建置環境。
 
-完成 Node.js sidecar 與 `taglib-wasi.wasm` 的離線封裝。
+將分詞字典與字典資源一併封入安裝包；轉換核心與桌面層同程序，不另外封裝外部程序。
 
 建立 Windows 與 Linux 發行工作流程。
 
@@ -140,21 +140,18 @@ AppIndicator 開發套件只存在於建置環境。
 
 ## 實作決策與已知差異
 
-- 新式引擎只使用 `novel-segment` 的分詞與 `ZhtSynonymOptimizer`。
-- 新式引擎只使用 `cjk-conv` 完成字形轉換。
+- 新式引擎只使用 `ws-segment-rs` 的分詞與 `ZhtSynonymOptimizer`。
+- 新式引擎只使用 `cjk-convert-rs` 完成字形轉換。
 - 專案不維護額外的硬編碼語意取代清單。
-- Linux sidecar 會以 target triple 檔名建立。
-- Linux 發行包會把 sidecar 作為 gzip 資源放入應用程式目錄。
-- 啟動時會驗證 SHA-256，再安全解壓到應用程式快取目錄。
-- 此配置可避免 AppImage 工具改寫 `@yao-pkg/pkg` 的內嵌資料。
-- Windows 仍使用 Tauri `externalBin` sidecar。
+- 轉換核心在 Tauri 同程序內執行，不使用 Node.js sidecar 或 `externalBin`。
+- 分詞字典以 `resources/segment-dict` 封入安裝包。
 - Linux 的 Tauri 托盤不提供左鍵事件。
 - Linux 使用者需從托盤選單開啟主視窗。
 - 舊版 `Encoding.Default` 會隨 Windows 系統碼頁改變。
 - 新版編碼工具改用明確指定的編碼。
 - 舊命令列批次改為先顯示預覽並要求確認。
 - 此變更保留參數相容性，但刻意不保留無確認寫入行為。
-- Linux 乾淨環境可用 `pnpm run test:qemu`，以 QEMU 啟動 Ubuntu 22.04 cloud image，安裝 DEB 後離線驗證 sidecar 與 WASM。
+- Linux 乾淨環境可用 `pnpm run test:qemu`，以 QEMU 啟動 Ubuntu 22.04 cloud image，安裝 DEB 後離線驗證主程式與分詞字典。
 
 前端 Playwright（`pnpm run test:e2e`）與 `src/acceptance-contracts.test.ts`、`tests/release-workflow.test.ts` 等會鎖定畫面契約、動作路由、發行工作流程與能力旗標，作為改壞後的自動護欄。這仍不能取代桌面視窗、托盤實機點擊、簽署安裝與乾淨環境的人工證據。未完成這些證據前，下列「待人工驗收」項目不得改為已通過。
 
@@ -165,7 +162,7 @@ AppIndicator 開發套件只存在於建置環境。
 | 區塊 | 說明 |
 | --- | --- |
 | A | 專案與建置基線（A-01～A-08） |
-| B | Sidecar 與通訊協定（B-01～B-09） |
+| B | 核心與通訊協定（B-01～B-09） |
 | C | 文字轉換引擎（C-01～C-16） |
 | D | 編碼／工具／相容資料（D-01～D-06、D-08～D-10、D-12） |
 | E | 檔案與檔名安全（E-01、E-03～E-04、E-06～E-11） |

@@ -9,7 +9,7 @@ import type {
   FilePlanRequest,
   TextEncoding,
 } from "@shared/contracts";
-import { sidecar } from "../lib/sidecar";
+import { core } from "../lib/coreClient";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { cliInvocation } from "../lib/cli";
 import { fileConversionDefaults } from "../lib/settingsApply";
@@ -120,7 +120,7 @@ async function createPlan() {
           .map((extension) => `.${extension.toLowerCase()}`),
       ),
     );
-    plan.value = await sidecar.request<FileConversionPlan>(
+    plan.value = await core.request<FileConversionPlan>(
       "files.plan",
       {
         paths: paths.value,
@@ -178,7 +178,7 @@ async function applyPlan() {
     const selectedPaths = plan.value.items
       .filter((item) => item.selected)
       .map((item) => item.sourcePath);
-    const result = await sidecar.request<{
+    const result = await core.request<{
       succeeded: string[];
       failed: Array<{ path: string; message: string }>;
     }>("files.apply", { planId: plan.value.planId, selectedPaths }, 600_000, (value) => {
@@ -204,7 +204,7 @@ async function applyPlan() {
 
 async function cancelPlan() {
   if (!plan.value) return;
-  await sidecar.request("files.cancel", { planId: plan.value.planId });
+  await core.request("files.cancel", { planId: plan.value.planId });
   plan.value = undefined;
 }
 

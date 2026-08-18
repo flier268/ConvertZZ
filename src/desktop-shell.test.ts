@@ -117,12 +117,10 @@ describe("Tauri desktop shell", () => {
     expect(settings).toContain("啟動時顯示主視窗");
     expect(rust).toContain("fn hide_startup_windows");
     expect(rust).toContain("fn create_configured_windows");
-    expect(rust.indexOf("create_configured_windows(app)")).toBeLessThan(
-      rust.indexOf("attach_sidecar(app)"),
-    );
+    expect(rust).toContain("CoreState::new");
   });
 
-  it("builds hidden windows before spawning the sidecar", () => {
+  it("builds hidden windows before initializing the conversion core", () => {
     const config = readJson("src-tauri/tauri.conf.json") as {
       app?: { windows?: Array<{ label?: string; create?: boolean }> };
     };
@@ -130,11 +128,7 @@ describe("Tauri desktop shell", () => {
 
     expect(config.app?.windows?.every((window) => window.create === false)).toBe(true);
     expect(rust).toContain("fn create_configured_windows");
-    expect(rust.indexOf("create_configured_windows(app)")).toBeLessThan(
-      rust.indexOf("attach_sidecar(app)"),
-    );
-    expect(rust).toContain("spawn_blocking");
-    expect(rust).toContain("轉換核心已終止");
+    expect(rust).toContain("fn core_request");
     expect(rust).toContain("convertzz.log");
     expect(rust).toContain("fn app_log_path");
   });
@@ -188,15 +182,14 @@ describe("Tauri desktop shell", () => {
     expect(about).not.toContain("github.com/flier268/ConvertZZ/releases");
   });
 
-  it("registers sidecar state before setup so invoke cannot miss manage()", () => {
+  it("registers conversion core state before setup so invoke cannot miss manage()", () => {
     const rust = readProjectFile("src-tauri/src/lib.rs");
 
-    expect(rust).toContain(".manage(SidecarState::starting())");
-    expect(rust.indexOf(".manage(SidecarState::starting())")).toBeLessThan(rust.indexOf(".setup("));
-    expect(rust).toContain("SidecarProcess::Starting");
-    expect(rust).toContain("fn attach_sidecar");
-    expect(rust).toContain("轉換核心無法啟動");
-    expect(rust).not.toMatch(/let sidecar = start_sidecar[\s\S]*app\.manage\(sidecar\)/);
+    expect(rust).toContain("CoreState::new");
+    expect(rust.indexOf(".manage(")).toBeLessThan(rust.indexOf(".setup("));
+    expect(rust).toContain("fn core_request");
+    expect(rust).not.toContain("attach_sidecar");
+    expect(rust).not.toContain("SidecarState");
   });
 
   it("raises the production chunk size warning for Element Plus", () => {
@@ -214,7 +207,7 @@ describe("Tauri desktop shell", () => {
     expect(playwright).toContain("pnpm run dev:e2e");
     expect(playwright).toContain("cwd: root");
     expect(vite).toContain('host: process.env.CONVERTZZ_E2E === "1" ? "127.0.0.1"');
-    expect(mock).toContain('case "sidecar_send"');
+    expect(mock).toContain('case "core_request"');
   });
 
   it("shows conversion prompts in a separate toast window", () => {
@@ -304,67 +297,47 @@ describe("Tauri desktop shell", () => {
     expect(config.bundle?.icon).not.toContain("../ConvertZZ/Windows Logo.png");
   });
 
-  it("bundles the Linux sidecar as an untouched resource", () => {
+  it("does not package a Node.js core", () => {
     const linux = readJson("src-tauri/tauri.linux.conf.json") as {
+      bundle?: { externalBin?: string[]; resources?: Record<string, string> };
+    };
+    const config = readJson("src-tauri/tauri.conf.json") as {
       bundle?: { externalBin?: string[]; resources?: Record<string, string> };
     };
     const rust = readProjectFile("src-tauri/src/lib.rs");
 
     expect(linux.bundle?.externalBin).toEqual([]);
-    expect(linux.bundle?.resources).toMatchObject({
-      "binaries/convertzz-sidecar-linux-resource.gz": "convertzz-sidecar.gz",
-      "binaries/convertzz-sidecar-linux-resource.sha256": "convertzz-sidecar.sha256",
+    expect(config.bundle?.externalBin).toBeUndefined();
+    expect(config.bundle?.resources).toMatchObject({
+      "../ConvertZZ/Dictionary.csv": "Dictionary.csv",
+      "resources/segment-dict": "segment-dict",
     });
-    expect(rust).toContain('resource_dir.join("convertzz-sidecar.gz")');
-    expect(rust).toContain("dictionary.to_string_lossy().into_owned()");
-    expect(rust).toContain("wasm.to_string_lossy().into_owned()");
-    expect(rust).toContain("prepare_linux_sidecar");
-    expect(rust).toContain("PermissionsExt");
-    expect(rust).toContain("GzDecoder");
-    expect(rust).toContain("sha256_file(&destination)");
-    expect(rust).toContain("permissions.set_mode(0o755)");
-    const buildScript = readProjectFile("scripts/build-sidecar.mjs");
-    expect(buildScript).toContain("convertzz-sidecar-linux-resource.gz");
-    expect(buildScript).toContain("gzipSync");
+    expect(rust).toContain("fn core_request");
+    expect(rust).not.toContain("prepare_linux_sidecar");
+    expect(rust).not.toContain("convertzz-core");
   });
 
-  it("follows Tauri sidecar + beforeDevCommand conventions", () => {
+  it("keeps beforeDevCommand as the frontend server only", () => {
     const packageJson = readJson("package.json") as { scripts?: Record<string, string> };
     const config = readJson("src-tauri/tauri.conf.json") as {
       build?: { beforeDevCommand?: string; beforeBuildCommand?: string };
-      bundle?: { externalBin?: string[] };
     };
-    const buildScript = readProjectFile("scripts/build-sidecar.mjs");
-    const ensureScript = readProjectFile("scripts/ensure-sidecar.mjs");
 
-    // beforeDevCommand is only the frontend server (official config hook usage).
     expect(config.build?.beforeDevCommand).toBe("pnpm run dev:web");
-    expect(config.build?.beforeDevCommand).not.toContain("sidecar");
-    // Production still packages the sidecar before the frontend bundle step.
-    expect(config.build?.beforeBuildCommand).toContain("sidecar:build");
-    expect(config.bundle?.externalBin).toEqual(["binaries/convertzz-sidecar"]);
-    // Official pattern: package sidecar first, then tauri dev.
-    expect(packageJson.scripts?.dev).toBe("pnpm run sidecar:ensure && tauri dev");
-    expect(packageJson.scripts?.["sidecar:ensure"]).toBe("node scripts/ensure-sidecar.mjs");
-    expect(ensureScript).toContain("convertzz-sidecar-");
-    expect(ensureScript).toContain("isSidecarStale");
-    expect(ensureScript).toContain("Sidecar binary older than sources");
-    expect(buildScript).toContain('--print", "host-tuple');
-    expect(buildScript).toContain('resolve(root, "sidecar", ".build")');
-    expect(buildScript).toContain("publishFile(stagingOutput, output)");
-    expect(buildScript).toContain("convertzz-sidecar-${triple}${extension}");
+    expect(config.build?.beforeDevCommand).not.toContain("core");
+    expect(config.build?.beforeBuildCommand).toBe("pnpm run build");
+    expect(packageJson.scripts?.dev).toBe("tauri dev");
+    expect(packageJson.scripts?.["core:ensure"]).toBeUndefined();
   });
 
-  it("verifies the real AppImage sidecar without network access", () => {
+  it("verifies the real AppImage conversion core without network access", () => {
     const workflow = readProjectFile(".github/workflows/release.yml");
     const verifier = readProjectFile("scripts/verify-linux-appimage.mjs");
 
     expect(workflow).toContain("unshare --user --map-root-user --net");
     expect(workflow).toContain("node scripts/verify-linux-appimage.mjs");
-    expect(verifier).toContain("AppImage 內的 sidecar 資源不應具有執行權限");
-    expect(verifier).toContain("AppImage 解壓後的 sidecar 不符");
-    expect(verifier).toContain('formats.join(",") !== "ape,ogg"');
-    expect(verifier).toContain('operation: "convert.preview"');
+    expect(verifier).toContain("usr/bin/convertzz");
+    expect(verifier).toContain("segment-dict");
   });
 
   it("documents a QEMU clean Ubuntu guest for Linux package acceptance", () => {
@@ -377,7 +350,7 @@ describe("Tauri desktop shell", () => {
     expect(qemu).toContain("qemu-system-x86_64");
     expect(qemu).toContain("jammy-server-cloudimg-amd64.img");
     expect(qemu).toContain("mirror.twds.com.tw");
-    expect(qemu).toContain("unshare --net");
+    expect(qemu).toContain("segment-dict");
     expect(qemu).toContain("libayatana-appindicator3-dev");
   });
 });

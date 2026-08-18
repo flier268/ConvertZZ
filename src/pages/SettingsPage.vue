@@ -16,7 +16,7 @@ import {
   onSettingsReplaced,
   saveSettings,
 } from "../lib/settings";
-import { sidecar } from "../lib/sidecar";
+import { core } from "../lib/coreClient";
 import { applyDesktopSettings } from "../lib/desktop";
 import { acceleratorFromKeyboardEvent, assignShortcutAccelerator } from "../lib/hotkey";
 import { LEGACY_ACTIONS } from "../lib/legacyActions";
@@ -150,7 +150,7 @@ async function saveApiKey() {
   const persisted = await invoke<boolean>("save_zhconvert_api_key", { apiKey: apiKey.value }).catch(
     () => false,
   );
-  await sidecar.request("zhconvert.configure", { apiKey: apiKey.value });
+  await core.request("zhconvert.configure", { apiKey: apiKey.value });
   apiKey.value = "";
   ElMessage.success(persisted ? "API 金鑰已保存於系統憑證庫" : "API 金鑰只保留於目前工作階段");
 }

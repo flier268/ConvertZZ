@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SettingsV2 } from "@shared/contracts";
-import { defaultSettings, migrateSettings } from "../../sidecar/src/settings/migrate";
+import { defaultSettings, migrateSettings } from "./settingsMigrate";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/dpi", () => ({ LogicalPosition: class {} }));
@@ -11,7 +11,7 @@ vi.mock("@tauri-apps/plugin-global-shortcut", () => ({
 }));
 vi.mock("@tauri-apps/plugin-store", () => ({ load: vi.fn() }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ confirm: vi.fn() }));
-vi.mock("./sidecar", () => ({ sidecar: { request: vi.fn() } }));
+vi.mock("./coreClient", () => ({ core: { request: vi.fn() } }));
 vi.mock("./legacyActions", () => ({ executeLegacyAction: vi.fn() }));
 vi.mock("element-plus", () => ({ ElMessage: { error: vi.fn() } }));
 

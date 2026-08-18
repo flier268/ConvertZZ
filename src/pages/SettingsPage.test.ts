@@ -19,7 +19,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: (...args: unknown[]) => openFile(...args),
 }));
-vi.mock("../lib/sidecar", () => ({ sidecar: { request: vi.fn() } }));
+vi.mock("../lib/coreClient", () => ({ core: { request: vi.fn() } }));
 vi.mock("../lib/desktop", () => ({
   applyDesktopSettings: (...args: unknown[]) => applyDesktopSettings(...args),
 }));

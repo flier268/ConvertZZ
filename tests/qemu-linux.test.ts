@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  assertLinuxDebReady,
   CLOUD_IMAGE_NAME,
   cloudImageSources,
   cloudInitUserData,
@@ -24,9 +25,9 @@ describe("QEMU Linux 乾淨環境驗收", () => {
     expect(script).toContain("nodejs");
     expect(script).toContain("libayatana-appindicator3-dev");
     expect(script).toContain("libwebkit2gtk-4.1-0");
-    expect(script).toContain("taglib-wasi.wasm");
-    expect(script).toContain("unshare --net");
-    expect(script).toContain("mac-399.ape");
+    expect(script).toContain("segment-dict");
+    expect(script).toContain("Dictionary.csv");
+    expect(script).toContain("不應再包含 taglib WASM");
     expect(script).toContain("--appimage-extract");
     expect(script).toContain('cp "${appimages[0]}" "$EXTRACT/ConvertZZ.AppImage"');
     expect(script).not.toContain('chmod +x "${appimages[0]}"');
@@ -36,10 +37,12 @@ describe("QEMU Linux 乾淨環境驗收", () => {
 
   it("解析序列埠通過與失敗輸出", () => {
     expect(
-      parseQemuSerial(`boot\n${QEMU_RESULT} {"deb":true,"wasm":true}\n${QEMU_PASS}\n`),
+      parseQemuSerial(
+        `boot\n${QEMU_RESULT} {"deb":true,"nodejs":false,"core":true}\n${QEMU_PASS}\n`,
+      ),
     ).toMatchObject({
       pass: true,
-      result: { deb: true, wasm: true },
+      result: { deb: true, nodejs: false, core: true },
     });
     expect(parseQemuSerial(`${QEMU_FAIL} 安裝後不應出現 node\n`)).toMatchObject({
       pass: false,
@@ -52,6 +55,17 @@ describe("QEMU Linux 乾淨環境驗收", () => {
     expect(existsSync(artifacts.ape)).toBe(true);
     expect(existsSync(artifacts.ogg)).toBe(true);
     expect(qemuAvailable()).toBeTypeOf("boolean");
+  });
+
+  it("主機端會拒絕缺少分詞字典或仍含 sidecar 的舊 DEB", () => {
+    const artifacts = findLinuxArtifacts(projectRoot);
+    if (!artifacts.deb) return;
+    try {
+      assertLinuxDebReady(artifacts.deb);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      expect(message).toMatch(/segment-dict|sidecar|taglib-wasi|請先重建/);
+    }
   });
 
   it("映像下載會先試國內鏡像，並接受本機檔案", () => {

@@ -24,7 +24,7 @@ import AboutPage from "./pages/AboutPage.vue";
 import OnboardingTour from "./OnboardingTour.vue";
 import BrandMark from "./BrandMark.vue";
 import { loadSettings } from "./lib/settings";
-import { sidecar } from "./lib/sidecar";
+import { core } from "./lib/coreClient";
 import { setCliInvocation } from "./lib/cli";
 import type { ParsedCli } from "@shared/contracts";
 import { applyDesktopSettings, applyStartupWindowVisibility } from "./lib/desktop";
@@ -34,7 +34,7 @@ import { promptForAppUpdate } from "./lib/appUpdate";
 
 const active = ref("quick");
 const ready = ref(false);
-const health = ref<{ node: string; version: string }>();
+const health = ref<{ engine?: string; version: string }>();
 const startupError = ref("");
 const unlisten: Array<() => void> = [];
 
@@ -67,8 +67,8 @@ onMounted(async () => {
     hasCliArgs.value = args.length > 0;
     await applyStartupWindowVisibility(settings, args.length > 0);
     const savedApiKey = await invoke<string | null>("load_zhconvert_api_key").catch(() => null);
-    if (savedApiKey) await sidecar.request("zhconvert.configure", { apiKey: savedApiKey });
-    const currentHealth = await sidecar.request<{ node: string; version: string }>("health", {});
+    if (savedApiKey) await core.request("zhconvert.configure", { apiKey: savedApiKey });
+    const currentHealth = await core.request<{ engine?: string; version: string }>("health", {});
     health.value = currentHealth;
     if (settings.checkVersionOnStart) {
       void promptForAppUpdate({
@@ -77,7 +77,7 @@ onMounted(async () => {
       }).catch(() => undefined);
     }
     if (args.length) {
-      const parsed = await sidecar.request<ParsedCli>("cli.parse", {
+      const parsed = await core.request<ParsedCli>("cli.parse", {
         args,
         defaultEngine: settings.engine,
       });
@@ -102,7 +102,7 @@ onMounted(async () => {
     unlisten.push(
       await listen<string[]>("app://second-instance", async ({ payload }) => {
         const currentSettings = await loadSettings();
-        const parsed = await sidecar.request<ParsedCli>("cli.parse", {
+        const parsed = await core.request<ParsedCli>("cli.parse", {
           args: payload.slice(1),
           defaultEngine: currentSettings.engine,
         });
@@ -161,7 +161,7 @@ onBeforeUnmount(() => unlisten.forEach((dispose) => dispose()));
       </el-menu>
       <div class="runtime-status">
         <span class="status-dot" :class="{ online: health }"></span>
-        <span v-if="health">核心 {{ health.version }} · Node {{ health.node }}</span>
+        <span v-if="health">核心 {{ health.version }} · Rust</span>
         <span v-else>核心啟動中</span>
       </div>
     </el-aside>

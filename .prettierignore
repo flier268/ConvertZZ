@@ -1,6 +1,5 @@
 node_modules
 dist
-sidecar/dist
 src-tauri
 ConvertZZ
 coverage

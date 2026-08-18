@@ -7,7 +7,7 @@ import type {
   EngineKind,
   ZhConvertOptions,
 } from "@shared/contracts";
-import { sidecar } from "./sidecar";
+import { core } from "./coreClient";
 
 export async function convertText(
   text: string,
@@ -17,7 +17,7 @@ export async function convertText(
   zhconvert?: ZhConvertOptions,
   dictionaryPath?: string,
 ): Promise<ConversionResult> {
-  return sidecar.request<ConversionResult>("convert.preview", {
+  return core.request<ConversionResult>("convert.preview", {
     text,
     direction,
     engine,

@@ -18,8 +18,8 @@ vi.mock("@tauri-apps/plugin-store", () => ({
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   confirm: (...args: unknown[]) => confirm(...args),
 }));
-vi.mock("./sidecar", () => ({
-  sidecar: { request: (...args: unknown[]) => request(...args) },
+vi.mock("./coreClient", () => ({
+  core: { request: (...args: unknown[]) => request(...args) },
 }));
 
 const { importLegacySettings } = await import("./settings");

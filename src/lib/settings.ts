@@ -3,7 +3,7 @@ import { load, type Store } from "@tauri-apps/plugin-store";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { Direction, SettingsV2, ZhConvertOptions } from "@shared/contracts";
 import { ONBOARDING_STORE_KEY } from "./onboarding";
-import { sidecar } from "./sidecar";
+import { core } from "./coreClient";
 
 const state = reactive<{ ready: boolean; value?: SettingsV2 }>({ ready: false });
 let store: Store | undefined;
@@ -58,7 +58,7 @@ export async function loadSettings(): Promise<SettingsV2> {
 
 export async function reloadSettings(): Promise<SettingsV2> {
   const saved = await readStoredSettings();
-  const value = await sidecar.request<SettingsV2>("settings.migrate", { input: saved });
+  const value = await core.request<SettingsV2>("settings.migrate", { input: saved });
   return putSettings(value);
 }
 
@@ -96,7 +96,7 @@ export async function clearOnboardingComplete(): Promise<void> {
 }
 
 export async function replaceSettings(input: unknown): Promise<SettingsV2> {
-  const migrated = await sidecar.request<SettingsV2>("settings.migrate", { input });
+  const migrated = await core.request<SettingsV2>("settings.migrate", { input });
   putSettings(migrated);
   await saveSettings();
   notifySettingsReplaced();
@@ -115,7 +115,7 @@ export async function importLegacySettings(
     }))
   )
     return undefined;
-  const migrated = await sidecar.request<SettingsV2>("settings.migrate", { path });
+  const migrated = await core.request<SettingsV2>("settings.migrate", { path });
   return replaceSettings(migrated);
 }
 

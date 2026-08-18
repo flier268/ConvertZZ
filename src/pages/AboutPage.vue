@@ -76,7 +76,7 @@ const differences = [
       <div>
         <h2>新的核心。</h2>
         <p>Vue 與 Element Plus 提供介面。</p>
-        <p>Node.js sidecar 提供相同的 Windows 與 Linux 轉換結果。</p>
+        <p>Rust 轉換核心在同程序提供相同的 Windows 與 Linux 結果。</p>
       </div></el-card
     >
     <el-card shadow="never"
@@ -98,7 +98,7 @@ const differences = [
     <el-card shadow="never"
       ><template #header><div class="section-title">轉換差異</div></template>
       <p>舊版字典的優先權、長詞與保護詞規則保持不變。</p>
-      <p>未命中字元改由 cjk-conv 處理。</p>
+      <p>未命中字元改由 cjk-convert-rs 處理。</p>
       <p>少數字形可能與 Windows LCMapStringEx 不同。</p>
       <p>舊版 Encoding.Default 會依 Windows 系統碼頁改變。新版編碼工具改用明確指定的編碼。</p>
       <p>ZhConvert 是選用的網路服務。</p></el-card

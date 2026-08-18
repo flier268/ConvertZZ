@@ -6,7 +6,7 @@ authors = ["ConvertZZ contributors"]
 license = "GPL-3.0-only"
 repository = "https://github.com/flier268/ConvertZZ"
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.89"
 
 [lib]
 name = "convertzz_lib"
@@ -17,8 +17,16 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 arboard = "3.6.1"
-enigo = "0.6"
-keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "vendored", "crypto-rust"] }
+chardetng = "1.0.0"
+chrono = { version = "0.4.45", features = ["clock"] }
+cjk-convert-rs = "0.1.0"
+encoding_rs = "0.8.35"
+enigo = "0.6.1"
+id3 = "1.17.1"
+keyring = "4.1.6"
+lofty = "0.25.1"
+regex = "1.13.1"
+reqwest = { version = "0.13.4", default-features = false, features = ["form", "json", "rustls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2.11.5", features = ["tray-icon"] }
@@ -27,21 +35,24 @@ tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-process = "2.3.1"
-tauri-plugin-shell = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-store = "2"
 tauri-plugin-updater = "2.10.1"
+thiserror = "2.0.20"
+tokio = { version = "1.53.1", features = ["rt-multi-thread"] }
 uuid = { version = "1", features = ["v4"] }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-flate2 = "1"
-sha2 = "0.10"
-x11rb = "0.13.2"
+ws-segment-rs = "0.1.2"
 
 [target."cfg(windows)".dependencies]
-windows = { version = "0.61.3", features = [
+windows = { version = "0.62.2", features = [
     "Win32_Foundation",
     "Win32_System_DataExchange",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = "0.14.0"
+
+[dev-dependencies]
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }

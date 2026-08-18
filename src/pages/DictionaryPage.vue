@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from "vue";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { ElMessage } from "element-plus";
-import { sidecar } from "../lib/sidecar";
+import { core } from "../lib/coreClient";
 import { loadSettings, saveSettings } from "../lib/settings";
 
 interface Entry {
@@ -50,7 +50,7 @@ async function choose() {
 async function load() {
   busy.value = true;
   try {
-    const result = await sidecar.request<{ path: string; total: number; entries: Entry[] }>(
+    const result = await core.request<{ path: string; total: number; entries: Entry[] }>(
       "dictionary.read",
       {
         path: path.value,
@@ -118,7 +118,7 @@ async function save() {
     return;
   busy.value = true;
   try {
-    const result = await sidecar.request<{ updated: number; backupPath: string }>(
+    const result = await core.request<{ updated: number; backupPath: string }>(
       "dictionary.update",
       { path: path.value, ...changes() },
     );
@@ -137,7 +137,7 @@ async function preview() {
     return;
   }
   previewResult.value = (
-    await sidecar.request<{ text: string }>("dictionary.preview", {
+    await core.request<{ text: string }>("dictionary.preview", {
       path: path.value,
       text: previewSource.value,
       direction: previewDirection.value,

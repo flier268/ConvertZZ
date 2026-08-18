@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { e2eState, openApp, openPage } from "../helpers";
 
 test.describe("ConvertZZ 前端", () => {
-  test("啟動後顯示快速轉換並連上 sidecar", async ({ page }) => {
+  test("啟動後顯示快速轉換並連上轉換核心", async ({ page }) => {
     await openApp(page);
     await expect(page.getByRole("heading", { name: "快速轉換" })).toBeVisible();
     await expect(page.locator(".status-dot.online")).toBeVisible();

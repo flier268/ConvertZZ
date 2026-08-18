@@ -2,7 +2,7 @@
 
 ConvertZZ 是跨平台中文轉換工具。
 
-2.0 版使用 Vue、Element Plus、Node.js 與 Tauri 2。
+2.0 版使用 Vue、Element Plus、Tauri 2 與 Rust 轉換核心。
 
 正式支援 Windows x64 與 Linux x64。
 
@@ -30,15 +30,15 @@ ConvertZZ 是跨平台中文轉換工具。
 
 「新式分詞」是預設引擎。
 
-它使用 [novel-segment](https://github.com/bluelovers/ws-segment) 分詞。
+它使用 [ws-segment-rs](https://crates.io/crates/ws-segment-rs) 分詞（對應 Node 版 novel-segment 行為）。
 
 簡轉繁會啟用同義詞最佳化。
 
-語意修正只使用 `novel-segment` 提供的 `ZhtSynonymOptimizer`。
+語意修正只使用 `ZhtSynonymOptimizer`。
 
 專案不另外維護硬編碼語意取代清單。
 
-字形轉換由 [cjk-conv](https://github.com/bluelovers/cjk-convert) 完成。
+字形轉換由 [cjk-convert-rs](https://crates.io/crates/cjk-convert-rs) 完成。
 
 空白、換行與標點會保留原位。
 
@@ -52,7 +52,7 @@ ConvertZZ 是跨平台中文轉換工具。
 
 優先權 `9999` 仍代表保護詞。
 
-未命中字元會交由 `cjk-conv` 處理。
+未命中字元會交由 `cjk-convert-rs` 處理。
 
 少數字形會與 Windows `LCMapStringEx` 不同。
 
@@ -81,11 +81,9 @@ Linux 缺少 Secret Service 時只會保留於目前工作階段。
 | OGG、OGA | Vorbis Comment | 支援 | 支援 |
 | Opus | Vorbis Comment | 支援 | 支援 |
 
-MP3 標籤由 `mp3tag.js` 處理。
+音訊標籤由 Rust 核心以 `id3` 與 `lofty` 處理。
 
 ID3v1 可修復 Big5 與 GBK 文字。
-
-APE、OGG 與 Opus 由 `taglib-wasm` 處理。
 
 APEv2 與 Vorbis Comment 固定使用 UTF-8。
 
@@ -101,9 +99,7 @@ APEv2 與 Vorbis Comment 固定使用 UTF-8。
 
 音訊內容不會重新編碼。
 
-`taglib-wasi.wasm` 會包含於安裝包。
-
-程式不會在執行時下載 WASM。
+程式不會在執行時下載額外引擎。
 
 ## 檔案安全
 
@@ -166,8 +162,8 @@ Linux 使用者可從托盤選單開啟主視窗。
 | MP3、APE、OGG 與 Opus 標籤 | 已實作 | 完整音訊樣本驗收仍需在發行環境執行。 |
 | 舊版設定匯入 | 已實作 | 匯入前會詢問並備份。完整平台行為仍待人工驗收。 |
 | 舊版文字工具 | 已完成 | HTML、Unicode 跳脫、編碼與全半形工具已接通。 |
-| Sidecar 進度事件 | 已完成 | 檔案與音訊作業會送出中間進度與最終結果。 |
-| 發行包乾淨環境驗收 | 部分完成 | Linux AppImage 已通過離線 sidecar、轉換、APE 與 OGG 實包驗證。仍需乾淨虛擬機與 Windows 驗收。 |
+| 核心進度事件 | 已完成 | 檔案與音訊作業會送出中間進度與最終結果。 |
+| 發行包乾淨環境驗收 | 部分完成 | 仍需乾淨虛擬機與 Windows 驗收。 |
 | 舊 WPF 專案移除 | 尚未執行 | 會在上述驗收完成後移除。 |
 
 ## Linux 使用者相依
@@ -202,13 +198,9 @@ AppImage 會封裝 Tauri 收集到的桌面執行函式庫。
 
 AppImage 不會封裝額外的媒體框架。
 
-Linux sidecar 會以 gzip 資源封裝。
+轉換核心與桌面層同程序，不另外封裝外部轉換程序。
 
-啟動時會驗證 SHA-256。
-
-驗證後會解壓到 ConvertZZ 應用程式快取目錄。
-
-這個流程不使用系統 `gzip` 指令。
+分詞字典會一併放入安裝包。
 
 詳情可參考 [Tauri AppImage 文件](https://v2.tauri.app/distribute/appimage/)。
 
@@ -323,12 +315,6 @@ GTK 與 GLib 的開發套件會由 WebKitGTK 開發套件帶入。
 
 不建立 AppImage 時可以省略 `patchelf`。
 
-音訊整合測試使用開發相依 `ffmpeg-static`。
-
-`pnpm install` 會下載測試用 ffmpeg，不必另外安裝系統套件。
-
-該 ffmpeg 不會打進發行包。
-
 安裝依賴。
 
 ```bash
@@ -353,7 +339,7 @@ pnpm run check
 pnpm run test:e2e
 ```
 
-格式化 Rust、Vue 與 Node.js。編輯器存檔與 commit 前也會自動執行。
+格式化 Rust、Vue 與 TypeScript。編輯器存檔與 commit 前也會自動執行。
 
 ```bash
 pnpm fmt
@@ -377,21 +363,13 @@ export CONVERTZZ_QEMU_IMAGE=$HOME/Downloads/jammy-server-cloudimg-amd64.img
 pnpm run test:qemu
 ```
 
-建立 sidecar（對齊 [Tauri externalBin / Node.js sidecar](https://v2.tauri.app/learn/sidecar-nodejs/)：先封裝，再給 `tauri dev` / `tauri build` 使用）。
-
-```bash
-pnpm run sidecar:build
-```
-
-產出檔名為 `src-tauri/binaries/convertzz-sidecar-$TARGET_TRIPLE`。`pnpm run dev` 會先 `sidecar:ensure`（缺檔或 sidecar／shared 來源較新才重建），`beforeDevCommand` 只啟動 Vite；`beforeBuildCommand` 會在打包前完整重建 sidecar。Linux 另產出 gzip 資源供 AppImage 使用。
+`pnpm run dev` 會啟動 Vite 與 Tauri。轉換核心在 Rust 程序內。
 
 建立目前平台的安裝包。
 
 ```bash
 pnpm run tauri:build
 ```
-
-`@yao-pkg/pkg` 會將 Node.js 24 與 sidecar 一起封裝。
 
 ## 發行
 

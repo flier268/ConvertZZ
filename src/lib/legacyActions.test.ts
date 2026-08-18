@@ -9,7 +9,7 @@ const openUrl = vi.fn();
 const convertText = vi.fn();
 const showAppToast = vi.fn();
 const getAllWindows = vi.fn();
-const sidecarRequest = vi.fn();
+const coreRequest = vi.fn();
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invoke(...args),
@@ -33,8 +33,8 @@ vi.mock("./actions", () => ({
 vi.mock("./toast", () => ({
   showAppToast: (...args: unknown[]) => showAppToast(...args),
 }));
-vi.mock("./sidecar", () => ({
-  sidecar: { request: (...args: unknown[]) => sidecarRequest(...args) },
+vi.mock("./coreClient", () => ({
+  core: { request: (...args: unknown[]) => coreRequest(...args) },
 }));
 vi.mock("./settings", () => ({
   zhConvertOptions: () => undefined,
@@ -112,11 +112,11 @@ describe("executeLegacyAction", () => {
     convertText.mockReset();
     showAppToast.mockReset();
     getAllWindows.mockReset();
-    sidecarRequest.mockReset();
+    coreRequest.mockReset();
     readText.mockResolvedValue("里面");
     writeText.mockResolvedValue(undefined);
     convertText.mockResolvedValue({ text: "裡面", durationMs: 1 });
-    sidecarRequest.mockResolvedValue({ text: "結果" });
+    coreRequest.mockResolvedValue({ text: "結果" });
   });
 
   it("G-11 一般剪貼簿動作只走 clipboard 外掛讀寫", async () => {

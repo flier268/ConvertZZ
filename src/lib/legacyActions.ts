@@ -6,7 +6,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import type { SettingsV2, TextEncoding, UtilityConvertRequest } from "@shared/contracts";
 import { convertText } from "./actions";
 import { resolveShellAction } from "./appMenu";
-import { sidecar } from "./sidecar";
+import { core } from "./coreClient";
 import { zhConvertOptions } from "./settings";
 import { showAppToast } from "./toast";
 
@@ -152,7 +152,7 @@ async function utility(
   sourceEncoding?: TextEncoding,
   targetEncoding?: TextEncoding,
 ): Promise<string> {
-  const result = await sidecar.request<{ text: string }>("utility.convert", {
+  const result = await core.request<{ text: string }>("utility.convert", {
     text,
     kind,
     sourceEncoding,

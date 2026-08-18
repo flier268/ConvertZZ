@@ -1,106 +1,17 @@
+mod core;
 mod selection;
 
+use core::{CoreError, CoreState, ProgressEvent};
 use enigo::{Enigo, Mouse, Settings};
 use keyring::Entry;
 use serde::Serialize;
-use std::sync::{Condvar, Mutex};
-use std::time::{Duration, Instant};
+use serde_json::Value;
+use std::sync::Arc;
 use tauri::{
     menu::{MenuBuilder, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, PhysicalPosition, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindowBuilder, WindowEvent,
 };
-use tauri_plugin_shell::{
-    process::{CommandChild, CommandEvent},
-    ShellExt,
-};
-
-const SIDECAR_READY_TIMEOUT: Duration = Duration::from_secs(30);
-
-enum SidecarProcess<T> {
-    Starting,
-    Ready(T),
-    Failed(String),
-}
-
-struct SidecarState {
-    process: Mutex<SidecarProcess<CommandChild>>,
-    ready: Condvar,
-}
-
-impl SidecarState {
-    fn starting() -> Self {
-        Self {
-            process: Mutex::new(SidecarProcess::Starting),
-            ready: Condvar::new(),
-        }
-    }
-
-    fn settle(&self, result: Result<CommandChild, String>) {
-        settle_sidecar(&self.process, &self.ready, result);
-    }
-}
-
-trait SidecarWriter {
-    fn write_request(&mut self, request: &str) -> Result<(), String>;
-}
-
-impl SidecarWriter for CommandChild {
-    fn write_request(&mut self, request: &str) -> Result<(), String> {
-        self.write(format!("{request}\n").as_bytes())
-            .map_err(|error| error.to_string())
-    }
-}
-
-fn settle_sidecar<T>(
-    process: &Mutex<SidecarProcess<T>>,
-    ready: &Condvar,
-    result: Result<T, String>,
-) {
-    let mut slot = process.lock().unwrap_or_else(|error| error.into_inner());
-    if matches!(*slot, SidecarProcess::Failed(_)) {
-        ready.notify_all();
-        return;
-    }
-    *slot = match result {
-        Ok(child) => SidecarProcess::Ready(child),
-        Err(error) => SidecarProcess::Failed(error),
-    };
-    ready.notify_all();
-}
-
-fn send_sidecar_request<T: SidecarWriter>(
-    process: &Mutex<SidecarProcess<T>>,
-    ready: &Condvar,
-    request: &str,
-    timeout: Duration,
-) -> Result<(), String> {
-    let deadline = Instant::now() + timeout;
-    let mut slot = process
-        .lock()
-        .map_err(|_| "無法鎖定轉換核心。".to_string())?;
-    loop {
-        match &mut *slot {
-            SidecarProcess::Ready(child) => return child.write_request(request),
-            SidecarProcess::Failed(error) => return Err(error.clone()),
-            SidecarProcess::Starting => {
-                let remaining = deadline.saturating_duration_since(Instant::now());
-                if remaining.is_zero() {
-                    return Err("轉換核心啟動逾時。".into());
-                }
-                let (guard, wait) = ready
-                    .wait_timeout(slot, remaining)
-                    .map_err(|_| "無法等待轉換核心。".to_string())?;
-                slot = guard;
-                if wait.timed_out() {
-                    if matches!(*slot, SidecarProcess::Starting) {
-                        return Err("轉換核心啟動逾時。".into());
-                    }
-                }
-            }
-        }
-    }
-}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -117,22 +28,33 @@ struct PlatformCapabilities {
 }
 
 #[tauri::command]
-async fn sidecar_send(app: AppHandle, request: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<SidecarState>();
-        let result = send_sidecar_request(
-            &state.process,
-            &state.ready,
-            &request,
-            SIDECAR_READY_TIMEOUT,
+async fn core_request(
+    app: AppHandle,
+    state: State<'_, Arc<CoreState>>,
+    id: String,
+    operation: String,
+    payload: Value,
+) -> Result<Value, CoreError> {
+    let handle = app.clone();
+    let request_id = id.clone();
+    let progress = Arc::new(move |event: ProgressEvent| {
+        let _ = handle.emit(
+            "core://progress",
+            serde_json::json!({
+                "id": request_id,
+                "current": event.current,
+                "total": event.total,
+                "message": event.message,
+            }),
         );
-        if let Err(error) = &result {
-            append_log(&app, "host", error);
+    });
+    match core::dispatch(Arc::clone(&state), &operation, payload, progress).await {
+        Ok(result) => Ok(result),
+        Err(error) => {
+            append_log(&app, "core", &error.message);
+            Err(error)
         }
-        result
-    })
-    .await
-    .map_err(|error| error.to_string())?
+    }
 }
 
 #[tauri::command]
@@ -308,87 +230,23 @@ fn set_send_to_shortcut(enabled: bool) -> Result<(), String> {
     }
 }
 
-fn start_sidecar(app: &AppHandle) -> Result<CommandChild, Box<dyn std::error::Error>> {
-    let resource_dir = app.path().resource_dir()?;
-    let dictionary = resource_dir.join("Dictionary.csv");
-    let wasm = resource_dir.join("taglib-wasi.wasm");
-    let arguments = vec![
-        "--dictionary".to_string(),
-        dictionary.to_string_lossy().into_owned(),
-        "--wasm".to_string(),
-        wasm.to_string_lossy().into_owned(),
-    ];
-    #[cfg(target_os = "linux")]
-    let command = {
-        let source = resource_dir.join("convertzz-sidecar.gz");
-        let checksum = resource_dir.join("convertzz-sidecar.sha256");
-        let cache_dir = app.path().app_cache_dir()?.join("sidecar");
-        app.shell()
-            .command(prepare_linux_sidecar(&source, &checksum, &cache_dir)?)
-            .args(arguments)
-    };
-    #[cfg(not(target_os = "linux"))]
-    let command = app.shell().sidecar("convertzz-sidecar")?.args(arguments);
-    let (mut events, child) = command.spawn()?;
-    let handle = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let mut pending = String::new();
-        while let Some(event) = events.recv().await {
-            match event {
-                CommandEvent::Stdout(bytes) => {
-                    pending.push_str(&String::from_utf8_lossy(&bytes));
-                    while let Some(position) = pending.find('\n') {
-                        let line = pending[..position].trim().to_string();
-                        pending.drain(..=position);
-                        if !line.is_empty() {
-                            let _ = handle.emit("sidecar://message", line);
-                        }
-                    }
-                }
-                CommandEvent::Stderr(bytes) => {
-                    append_log(&handle, "sidecar", String::from_utf8_lossy(&bytes).trim());
-                }
-                CommandEvent::Error(error) => {
-                    append_log(&handle, "sidecar", &error);
-                    handle
-                        .state::<SidecarState>()
-                        .settle(Err(format!("轉換核心已終止：{error}")));
-                    let _ = handle.emit("sidecar://error", error);
-                }
-                CommandEvent::Terminated(payload) => {
-                    let code = payload
-                        .code
-                        .map(|code| code.to_string())
-                        .unwrap_or_else(|| "未知".into());
-                    append_log(&handle, "sidecar", &format!("terminated code={code}"));
-                    handle
-                        .state::<SidecarState>()
-                        .settle(Err(format!("轉換核心已終止。結束碼：{code}")));
-                    let _ = handle.emit("sidecar://terminated", payload.code);
-                }
-                _ => {}
-            }
-        }
-    });
-    Ok(child)
-}
-
-fn attach_sidecar(app: &tauri::App) -> bool {
-    let state = app.state::<SidecarState>();
-    append_log(app.handle(), "host", "starting convertzz-sidecar");
-    match start_sidecar(app.handle()) {
-        Ok(child) => {
-            append_log(app.handle(), "host", "convertzz-sidecar spawned");
-            state.settle(Ok(child));
-            true
-        }
-        Err(error) => {
-            let message = error.to_string();
-            append_log(app.handle(), "host", &format!("spawn failed: {message}"));
-            state.settle(Err(format!("轉換核心無法啟動：{message}")));
-            false
+fn discover_dictionary(app: Option<&AppHandle>) -> Option<std::path::PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(app) = app {
+        if let Ok(resource) = app.path().resource_dir() {
+            candidates.push(resource.join("Dictionary.csv"));
         }
     }
+    if let Ok(executable) = std::env::current_exe() {
+        if let Some(directory) = executable.parent() {
+            candidates.push(directory.join("Dictionary.csv"));
+        }
+    }
+    candidates.push(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ConvertZZ/Dictionary.csv"),
+    );
+    candidates.push(std::path::PathBuf::from("ConvertZZ/Dictionary.csv"));
+    candidates.into_iter().find(|path| path.is_file())
 }
 
 fn log_file_path(app: &AppHandle) -> Option<std::path::PathBuf> {
@@ -433,215 +291,6 @@ fn create_configured_windows(app: &tauri::App) -> tauri::Result<()> {
         WebviewWindowBuilder::from_config(app.handle(), config)?.build()?;
     }
     Ok(())
-}
-
-#[cfg(target_os = "linux")]
-fn prepare_linux_sidecar(
-    source: &std::path::Path,
-    checksum: &std::path::Path,
-    cache_dir: &std::path::Path,
-) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
-    use flate2::read::GzDecoder;
-    use sha2::{Digest, Sha256};
-    use std::io::{Read, Write};
-    use std::os::unix::fs::PermissionsExt;
-
-    let expected_hash = std::fs::read_to_string(checksum)?
-        .trim()
-        .to_ascii_lowercase();
-    if expected_hash.len() != 64 || !expected_hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err("Linux sidecar SHA-256 格式無效。".into());
-    }
-    std::fs::create_dir_all(&cache_dir)?;
-
-    let destination = cache_dir.join(format!("convertzz-sidecar-{expected_hash}"));
-    let cache_is_valid = destination
-        .symlink_metadata()
-        .map(|metadata| metadata.file_type().is_file())
-        .unwrap_or(false)
-        && matches!(sha256_file(&destination), Ok(actual_hash) if actual_hash == expected_hash);
-    if cache_is_valid {
-        let mut permissions = std::fs::metadata(&destination)?.permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(&destination, permissions)?;
-        return Ok(destination);
-    }
-
-    let temporary = cache_dir.join(format!(".convertzz-sidecar-{}.tmp", uuid::Uuid::new_v4()));
-    let prepared = (|| -> Result<(), Box<dyn std::error::Error>> {
-        let input = std::fs::File::open(source)?;
-        let mut decoder = GzDecoder::new(input);
-        let mut output = std::fs::File::create(&temporary)?;
-        let mut hasher = Sha256::new();
-        let mut buffer = [0_u8; 64 * 1024];
-        loop {
-            let count = decoder.read(&mut buffer)?;
-            if count == 0 {
-                break;
-            }
-            output.write_all(&buffer[..count])?;
-            hasher.update(&buffer[..count]);
-        }
-        output.sync_all()?;
-        if format!("{:x}", hasher.finalize()) != expected_hash {
-            return Err("Linux sidecar 解壓後的 SHA-256 不符。".into());
-        }
-        let mut permissions = std::fs::metadata(&temporary)?.permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(&temporary, permissions)?;
-        std::fs::rename(&temporary, &destination)?;
-        Ok(())
-    })();
-    if prepared.is_err() {
-        let _ = std::fs::remove_file(&temporary);
-    }
-    prepared?;
-    Ok(destination)
-}
-
-#[cfg(target_os = "linux")]
-fn sha256_file(path: &std::path::Path) -> Result<String, Box<dyn std::error::Error>> {
-    use sha2::{Digest, Sha256};
-    use std::io::Read;
-
-    let mut input = std::fs::File::open(path)?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 64 * 1024];
-    loop {
-        let count = input.read(&mut buffer)?;
-        if count == 0 {
-            break;
-        }
-        hasher.update(&buffer[..count]);
-    }
-    Ok(format!("{:x}", hasher.finalize()))
-}
-
-#[cfg(test)]
-mod sidecar_state_tests {
-    use super::{send_sidecar_request, settle_sidecar, SidecarProcess, SidecarWriter};
-    use std::sync::{Arc, Condvar, Mutex};
-    use std::time::Duration;
-
-    struct ListWriter(Vec<String>);
-
-    impl SidecarWriter for ListWriter {
-        fn write_request(&mut self, request: &str) -> Result<(), String> {
-            self.0.push(request.to_string());
-            Ok(())
-        }
-    }
-
-    #[test]
-    fn send_uses_a_ready_sidecar() {
-        let process = Mutex::new(SidecarProcess::Ready(ListWriter(Vec::new())));
-        let ready = Condvar::new();
-        send_sidecar_request(&process, &ready, "hello", Duration::from_secs(1)).unwrap();
-        let SidecarProcess::Ready(writer) = process.into_inner().unwrap() else {
-            panic!("sidecar should stay ready");
-        };
-        assert_eq!(writer.0, ["hello"]);
-    }
-
-    #[test]
-    fn send_returns_a_failed_start_error() {
-        let process = Mutex::new(SidecarProcess::<ListWriter>::Failed(
-            "轉換核心無法啟動：missing".into(),
-        ));
-        let ready = Condvar::new();
-        let error = send_sidecar_request(&process, &ready, "hello", Duration::from_secs(1))
-            .expect_err("failed sidecar");
-        assert_eq!(error, "轉換核心無法啟動：missing");
-    }
-
-    #[test]
-    fn send_waits_until_sidecar_is_ready() {
-        let process = Arc::new(Mutex::new(SidecarProcess::Starting));
-        let ready = Arc::new(Condvar::new());
-        let pending = Arc::clone(&process);
-        let signal = Arc::clone(&ready);
-        let worker = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(20));
-            settle_sidecar(&pending, &signal, Ok(ListWriter(Vec::new())));
-        });
-        send_sidecar_request(&process, &ready, "ping", Duration::from_secs(1)).unwrap();
-        worker.join().unwrap();
-        let guard = process.lock().unwrap();
-        let SidecarProcess::Ready(writer) = &*guard else {
-            panic!("sidecar should become ready");
-        };
-        assert_eq!(writer.0, ["ping"]);
-    }
-
-    #[test]
-    fn send_times_out_while_sidecar_is_starting() {
-        let process = Mutex::new(SidecarProcess::<ListWriter>::Starting);
-        let ready = Condvar::new();
-        let error = send_sidecar_request(&process, &ready, "ping", Duration::from_millis(20))
-            .expect_err("starting sidecar");
-        assert_eq!(error, "轉換核心啟動逾時。");
-    }
-
-    #[test]
-    fn settle_does_not_replace_failed_with_ready() {
-        let process = Mutex::new(SidecarProcess::<ListWriter>::Starting);
-        let ready = Condvar::new();
-        settle_sidecar(&process, &ready, Err("轉換核心已終止。結束碼：1".into()));
-        settle_sidecar(&process, &ready, Ok(ListWriter(vec!["late".into()])));
-        let SidecarProcess::Failed(error) = process.into_inner().unwrap() else {
-            panic!("failed sidecar must stay failed");
-        };
-        assert_eq!(error, "轉換核心已終止。結束碼：1");
-    }
-}
-
-#[cfg(all(test, target_os = "linux"))]
-mod linux_sidecar_tests {
-    use super::prepare_linux_sidecar;
-    use flate2::{write::GzEncoder, Compression};
-    use sha2::{Digest, Sha256};
-    use std::io::Write;
-    use std::os::unix::fs::PermissionsExt;
-
-    #[test]
-    fn rebuilds_a_damaged_content_addressed_cache() {
-        let root =
-            std::env::temp_dir().join(format!("convertzz-sidecar-test-{}", uuid::Uuid::new_v4()));
-        let source = root.join("convertzz-sidecar.gz");
-        let checksum = root.join("convertzz-sidecar.sha256");
-        let cache = root.join("cache");
-        let fixture = b"ConvertZZ sidecar fixture";
-        std::fs::create_dir(&root).expect("create test root");
-
-        let compressed = std::fs::File::create(&source).expect("create gzip resource");
-        let mut encoder = GzEncoder::new(compressed, Compression::best());
-        encoder.write_all(fixture).expect("compress fixture");
-        encoder.finish().expect("finish gzip resource");
-        std::fs::write(&checksum, format!("{:x}\n", Sha256::digest(fixture)))
-            .expect("write checksum");
-
-        let destination =
-            prepare_linux_sidecar(&source, &checksum, &cache).expect("prepare sidecar");
-        assert_eq!(std::fs::read(&destination).expect("read cache"), fixture);
-        assert_eq!(
-            std::fs::metadata(&destination)
-                .expect("read permissions")
-                .permissions()
-                .mode()
-                & 0o777,
-            0o755
-        );
-
-        std::fs::write(&destination, b"damaged").expect("damage cache");
-        let rebuilt = prepare_linux_sidecar(&source, &checksum, &cache).expect("rebuild cache");
-        assert_eq!(rebuilt, destination);
-        assert_eq!(
-            std::fs::read(&rebuilt).expect("read rebuilt cache"),
-            fixture
-        );
-
-        std::fs::remove_dir_all(&root).expect("remove test root");
-    }
 }
 
 fn install_tray(app: &tauri::App) -> tauri::Result<()> {
@@ -837,7 +486,9 @@ fn quit_app(app: AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(SidecarState::starting())
+        .manage(Arc::new(
+            CoreState::new(discover_dictionary(None)).expect("無法初始化轉換核心"),
+        ))
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             show_main(app);
             let _ = app.emit("app://second-instance", args);
@@ -846,7 +497,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
@@ -859,16 +509,12 @@ pub fn run() {
                 Ok(Err(error)) => append_log(app.handle(), "tray", &error.to_string()),
                 Ok(Ok(())) => {}
             }
-            let sidecar_ready = attach_sidecar(app);
             app.handle()
                 .plugin(tauri_plugin_global_shortcut::Builder::new().build())?;
-            if !sidecar_ready {
-                show_main(app.handle());
-            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            sidecar_send,
+            core_request,
             app_log_path,
             startup_args,
             legacy_settings_path,

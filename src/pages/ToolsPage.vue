@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import { ElMessage } from "element-plus";
 import type { TextEncoding, UtilityConvertRequest } from "@shared/contracts";
-import { sidecar } from "../lib/sidecar";
+import { core } from "../lib/coreClient";
 
 const source = ref("");
 const output = ref("");
@@ -23,7 +23,7 @@ const encodings: TextEncoding[] = [
 
 async function run() {
   try {
-    const result = await sidecar.request<{ text: string }>("utility.convert", {
+    const result = await core.request<{ text: string }>("utility.convert", {
       kind: kind.value,
       text: source.value,
       sourceEncoding: sourceEncoding.value,

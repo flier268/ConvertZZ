@@ -21,24 +21,17 @@ jobs:
           cache: pnpm
       - name: 安裝相依套件
         run: pnpm install --frozen-lockfile
-      - name: 檢查前端與 sidecar
-        run: pnpm run check
-      - name: 建立 Node.js 24 sidecar
-        run: pnpm run sidecar:build
-      - name: 驗證無 Node.js sidecar
-        shell: bash
+      - uses: dtolnay/rust-toolchain@stable
+      - name: 安裝 Linux 建置套件
         run: |
-          triple="$(rustc -vV | sed -n 's/^host: //p')"
-          test -n "${triple:?}"
-          binary="src-tauri/binaries/convertzz-sidecar-${triple}"
-          test -x "${binary:?}"
-          response="$(printf '%s\n' '{"id":"ci","operation":"convert.preview","payload":{"text":"里面开发头发","direction":"s2t","engine":"segmented"}}' | "${binary:?}" --dictionary ConvertZZ/Dictionary.csv --wasm node_modules/taglib-wasm/dist/taglib-wasi.wasm)"
-          test "$(printf '%s' "$response" | jq -r '.result.text')" = "裡面開發頭髮"
-          audio_response="$(printf '%s\n' '{"id":"audio","operation":"audio.scan","payload":{"paths":["tests/fixtures/mac-399.ape"]}}' | "${binary:?}" --dictionary ConvertZZ/Dictionary.csv --wasm "$(pwd)/node_modules/taglib-wasm/dist/taglib-wasi.wasm")"
-          printf '%s\n' "$audio_response" | grep -F '"format":"ape"'
-          if printf '%s\n' "$audio_response" | grep -Eq '"warning"|dynamic import callback'; then
-            exit 1
-          fi
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential libayatana-appindicator3-dev libdbus-1-dev \
+            librsvg2-dev libwebkit2gtk-4.1-dev pkg-config
+      - name: 檢查前端
+        run: pnpm run check
+      - name: 執行 Rust 核心測試
+        run: cargo test --manifest-path src-tauri/Cargo.toml -- --test-threads=1
 
   e2e:
     runs-on: ubuntu-22.04

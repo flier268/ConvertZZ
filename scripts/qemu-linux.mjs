@@ -85,31 +85,11 @@ export function guestScript() {
     'dpkg -s libayatana-appindicator3-1 >/dev/null || fail "APT 未補齊 AppIndicator"',
     'dpkg -s libgtk-3-0 >/dev/null || fail "APT 未補齊 GTK"',
     'test -x /usr/bin/convertzz || fail "缺少主程式"',
-    'test -f /usr/lib/ConvertZZ/taglib-wasi.wasm || fail "缺少 taglib-wasi.wasm"',
-    'test -f /usr/lib/ConvertZZ/convertzz-sidecar.gz || fail "缺少 sidecar 資源"',
     'test -f /usr/lib/ConvertZZ/Dictionary.csv || fail "缺少字典"',
+    'test -d /usr/lib/ConvertZZ/segment-dict/segment || fail "缺少分詞字典"',
+    'test ! -f /usr/lib/ConvertZZ/convertzz-sidecar.gz || fail "不應再包含 sidecar"',
+    'test ! -f /usr/lib/ConvertZZ/taglib-wasi.wasm || fail "不應再包含 taglib WASM"',
     'WORKDIR="$(mktemp -d)"',
-    'gzip -dc /usr/lib/ConvertZZ/convertzz-sidecar.gz > "$WORKDIR/sidecar"',
-    'chmod 755 "$WORKDIR/sidecar"',
-    'HASH="$(sha256sum "$WORKDIR/sidecar" | awk \'{print $1}\')"',
-    "EXPECT=\"$(tr -d '[:space:]' < /usr/lib/ConvertZZ/convertzz-sidecar.sha256 | tr 'A-F' 'a-f')\"",
-    'test "$HASH" = "$EXPECT" || fail "sidecar 雜湊不符"',
-    'SIDECAR=("$WORKDIR/sidecar" --dictionary /usr/lib/ConvertZZ/Dictionary.csv --wasm /usr/lib/ConvertZZ/taglib-wasi.wasm)',
-    'HEALTH="$(printf \'%s\\n\' \'{"id":"qemu-health","operation":"health","payload":{}}\' | "${SIDECAR[@]}")"',
-    'printf \'%s\\n\' "$HEALTH" | grep -F \'"ok":true\' >/dev/null || fail "健康檢查失敗"',
-    'printf \'%s\\n\' "$HEALTH" | grep -E \'"node":"24\\.\' >/dev/null || fail "sidecar 不是 Node.js 24"',
-    'CONVERT="$(printf \'%s\\n\' \'{"id":"qemu-convert","operation":"convert.preview","payload":{"text":"里面开发头发","direction":"s2t","engine":"segmented"}}\' | "${SIDECAR[@]}")"',
-    "printf '%s\\n' \"$CONVERT\" | grep -F '裡面開發頭髮' >/dev/null || fail \"文字轉換失敗\"",
-    'printf \'%s\\n\' \'{"id":"qemu-audio","operation":"audio.scan","payload":{"paths":["/mnt/share/mac-399.ape","/mnt/share/test.ogg"]}}\' > "$WORKDIR/audio.json"',
-    'AUDIO="$("${SIDECAR[@]}" < "$WORKDIR/audio.json")"',
-    'printf \'%s\\n\' "$AUDIO" | grep -F \'"format":"ape"\' >/dev/null || fail "APE 掃描失敗"',
-    'printf \'%s\\n\' "$AUDIO" | grep -F \'"format":"ogg"\' >/dev/null || fail "OGG 掃描失敗"',
-    'printf \'%s\\n\' "$AUDIO" | grep -Eq \'"warning"|dynamic import callback\' && fail "音訊掃描含警告"',
-    "if command -v unshare >/dev/null; then",
-    '  OFFLINE="$(unshare --net -- "${SIDECAR[@]}" < "$WORKDIR/audio.json")"',
-    '  printf \'%s\\n\' "$OFFLINE" | grep -F \'"format":"ape"\' >/dev/null || fail "離線 APE 掃描失敗"',
-    '  printf \'%s\\n\' "$OFFLINE" | grep -F \'"format":"ogg"\' >/dev/null || fail "離線 OGG 掃描失敗"',
-    "fi",
     "APPIMAGE=false",
     "appimages=(/mnt/share/*.AppImage)",
     'if test "${#appimages[@]}" -eq 1; then',
@@ -118,10 +98,11 @@ export function guestScript() {
     '  cp "${appimages[0]}" "$EXTRACT/ConvertZZ.AppImage"',
     '  chmod +x "$EXTRACT/ConvertZZ.AppImage"',
     '  (cd "$EXTRACT" && ./ConvertZZ.AppImage --appimage-extract >/dev/null)',
-    '  test -f "$EXTRACT/squashfs-root/usr/lib/ConvertZZ/taglib-wasi.wasm" || fail "AppImage 缺少 WASM"',
+    '  test -x "$EXTRACT/squashfs-root/usr/bin/convertzz" || fail "AppImage 缺少主程式"',
+    '  test -d "$EXTRACT/squashfs-root/usr/lib/ConvertZZ/segment-dict/segment" || fail "AppImage 缺少分詞字典"',
     "  APPIMAGE=true",
     "fi",
-    `printf '%s %s\\n' "${QEMU_RESULT}" "{\\"deb\\":true,\\"nodejs\\":false,\\"appindicatorDev\\":false,\\"webkit\\":true,\\"wasm\\":true,\\"offlineAudio\\":true,\\"appimageExtracted\\":$APPIMAGE}"`,
+    `printf '%s %s\\n' "${QEMU_RESULT}" "{\\"deb\\":true,\\"nodejs\\":false,\\"appindicatorDev\\":false,\\"webkit\\":true,\\"core\\":true,\\"appimageExtracted\\":$APPIMAGE}"`,
     `printf '%s\\n' "${QEMU_PASS}"`,
     "sleep 2",
     "poweroff -f || true",
@@ -167,11 +148,13 @@ export function findLinuxArtifacts(projectRoot) {
     ? readdirSync(debDirectory)
         .filter((name) => name.endsWith(".deb"))
         .map((name) => join(debDirectory, name))
+        .sort()
     : [];
   const appImage = existsSync(appImageDirectory)
     ? readdirSync(appImageDirectory)
         .filter((name) => name.endsWith(".AppImage"))
         .map((name) => join(appImageDirectory, name))
+        .sort()
     : [];
   return {
     deb: deb[0],
@@ -179,6 +162,65 @@ export function findLinuxArtifacts(projectRoot) {
     ape: join(root, "tests/fixtures/mac-399.ape"),
     ogg: join(root, "tests/fixtures/test.ogg"),
   };
+}
+
+/** Host-side DEB sanity check before starting QEMU. */
+export function assertLinuxDebReady(debPath) {
+  const listing = listDebContents(debPath);
+  const required = ["usr/lib/ConvertZZ/Dictionary.csv", "usr/lib/ConvertZZ/segment-dict/segment/"];
+  const forbidden = [
+    "usr/lib/ConvertZZ/convertzz-sidecar.gz",
+    "usr/lib/ConvertZZ/taglib-wasi.wasm",
+  ];
+  const missing = required.filter((entry) => !listing.some((line) => line.includes(entry)));
+  const presentForbidden = forbidden.filter((entry) =>
+    listing.some((line) => line.includes(entry)),
+  );
+  if (missing.length === 0 && presentForbidden.length === 0) return;
+
+  const hints = [
+    `DEB 內容不符合目前核心發行契約：${debPath}`,
+    missing.length ? `缺少：${missing.join("、")}` : "",
+    presentForbidden.length ? `不應再包含：${presentForbidden.join("、")}` : "",
+    "請先重建：pnpm tauri build --bundles deb,appimage",
+  ].filter(Boolean);
+  throw new Error(hints.join("\n"));
+}
+
+function listDebContents(debPath) {
+  if (!existsSync(debPath)) throw new Error(`找不到 DEB：${debPath}`);
+  const dpkg = spawnSync("dpkg-deb", ["-c", debPath], {
+    encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  if (dpkg.status === 0) return dpkg.stdout.split(/\r?\n/u).filter(Boolean);
+
+  // Fallback when dpkg-deb is unavailable: list data.tar.* members.
+  const members = spawnSync("ar", ["t", debPath], { encoding: "utf8" });
+  if (members.status !== 0) {
+    throw new Error(`無法讀取 DEB 內容（需要 dpkg-deb 或 ar）：${debPath}`);
+  }
+  const dataMember = members.stdout.split(/\r?\n/u).find((name) => name.startsWith("data.tar"));
+  if (!dataMember) throw new Error(`DEB 缺少 data.tar：${debPath}`);
+  const extracted = spawnSync("ar", ["p", debPath, dataMember], {
+    encoding: "buffer",
+    maxBuffer: 256 * 1024 * 1024,
+  });
+  if (extracted.status !== 0) throw new Error(`無法抽出 ${dataMember}：${debPath}`);
+  const tarArgs = dataMember.endsWith(".xz")
+    ? ["-tJ"]
+    : dataMember.endsWith(".gz")
+      ? ["-tz"]
+      : dataMember.endsWith(".zst")
+        ? ["-t", "--zstd"]
+        : ["-t"];
+  const listed = spawnSync("tar", tarArgs, {
+    encoding: "utf8",
+    input: extracted.stdout,
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  if (listed.status !== 0) throw new Error(`無法列出 ${dataMember}：${listed.stderr || debPath}`);
+  return listed.stdout.split(/\r?\n/u).filter(Boolean);
 }
 
 export function qemuAvailable() {
@@ -253,6 +295,7 @@ export async function runLinuxQemuVerification(options = {}) {
     throw new Error("本機沒有 qemu-system-x86_64、qemu-img 與 genisoimage／xorriso。");
   const artifacts = findLinuxArtifacts(projectRoot);
   if (!artifacts.deb) throw new Error("找不到 DEB。請先執行 pnpm tauri build --bundles deb。");
+  assertLinuxDebReady(artifacts.deb);
   if (!existsSync(artifacts.ape) || !existsSync(artifacts.ogg))
     throw new Error("找不到 tests/fixtures 音訊樣本。");
 

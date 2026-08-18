@@ -5,7 +5,7 @@ import { ElMessage } from "element-plus";
 import type { Direction, EngineKind, TextEncoding, UtilityConvertRequest } from "@shared/contracts";
 import { convertText } from "../lib/actions";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
-import { sidecar } from "../lib/sidecar";
+import { core } from "../lib/coreClient";
 
 const source = ref("");
 const output = ref("");
@@ -68,7 +68,7 @@ async function refresh(force = false) {
 
 async function reinterpret(text: string): Promise<string> {
   return (
-    await sidecar.request<{ text: string }>("utility.convert", {
+    await core.request<{ text: string }>("utility.convert", {
       kind: "encoding",
       text,
       sourceEncoding: targetEncoding.value,

@@ -115,7 +115,8 @@ async fn legacy_dictionary() {
 #[tokio::test]
 async fn legacy_dictionary_reloads_after_same_mtime_replace() {
     // CI filesystems may only resolve mtime to one second. Same-length replacements
-    // (裡面→裏邊) must still invalidate the cache after an atomic rename.
+    // (裡面→裏邊) must still invalidate the cache after an atomic rename (Unix inode /
+    // Windows creation_time; file_index is nightly-only).
     let directory =
         std::env::temp_dir().join(format!("convertzz-dict-cache-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&directory).unwrap();

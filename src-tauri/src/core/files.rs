@@ -1000,6 +1000,18 @@ fn assert_source_writable(path: &Path) -> Result<(), CoreError> {
             ));
         }
     }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_READONLY: u32 = 0x1;
+        if source.file_attributes() & FILE_ATTRIBUTE_READONLY != 0 {
+            return Err(CoreError::with_details(
+                "FILE_READONLY",
+                "來源檔案為唯讀，無法安全取代。",
+                serde_json::json!({ "path": path }),
+            ));
+        }
+    }
     Ok(())
 }
 

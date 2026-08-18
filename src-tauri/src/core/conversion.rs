@@ -13,8 +13,8 @@ use std::time::{Instant, SystemTime};
 const MAX_CHUNK_CHARACTERS: usize = 8_192;
 
 /// Dictionary cache identity. mtime alone is insufficient on filesystems with one-second
-/// resolution; length catches most edits, and inode/file-index catches atomic replaces that
-/// keep the same byte length.
+/// resolution; length catches most edits, and platform identity catches atomic replaces that
+/// keep the same byte length (Unix inode/dev; Windows creation time — `file_index` is nightly-only).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct DictionaryStamp {
     modified: SystemTime,
@@ -41,7 +41,9 @@ fn file_identity(metadata: &Metadata) -> u64 {
     #[cfg(windows)]
     {
         use std::os::windows::fs::MetadataExt;
-        metadata.file_index().unwrap_or(0)
+        // Stable stand-in for file_index: a replaced file keeps forced mtime/len but gets a
+        // new creation_time after write-temp + rename.
+        metadata.creation_time()
     }
     #[cfg(not(any(unix, windows)))]
     {

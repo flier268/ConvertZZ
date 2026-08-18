@@ -373,7 +373,7 @@ pnpm run tauri:build
 
 ## 發行
 
-Windows x64 會產生 NSIS 與 MSI。
+Windows x64 會產生 NSIS 安裝程式。預發行版本（例如 `2.0.0-beta1`）不產 MSI：WiX 只接受純數字預發行號。
 
 Linux x64 會產生 AppImage、DEB 與 RPM。
 

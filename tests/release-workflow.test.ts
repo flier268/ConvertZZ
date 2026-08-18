@@ -11,14 +11,18 @@ describe("發行工作流程契約", () => {
   const tauri = readProjectFile("src-tauri/tauri.conf.json");
   const updater = readProjectFile("src-tauri/tauri.updater.conf.json");
 
-  it("J-04 Windows matrix 產出 NSIS 與 MSI", () => {
+  it("J-04 Windows matrix 產出 NSIS（預發行版略過 MSI）", () => {
     expect(workflow).toContain("os: windows-latest");
     expect(workflow).toContain("artifact: windows-x64");
-    expect(workflow).toContain("bundles: nsis,msi");
+    expect(workflow).toContain("bundles: nsis");
+    expect(workflow).not.toContain("bundles: nsis,msi");
     expect(workflow).toContain("**/*.exe");
-    expect(workflow).toContain("**/*.msi");
-    expect(tauri).toContain('"targets": "all"');
+    expect(workflow).not.toContain("**/*.msi");
     expect(tauri).toContain('"nsis"');
+    expect(tauri).toContain('"appimage"');
+    expect(tauri).toContain('"deb"');
+    expect(tauri).toContain('"rpm"');
+    expect(tauri).not.toContain('"msi"');
     expect(tauri).toContain('"wix"');
   });
 

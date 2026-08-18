@@ -158,7 +158,7 @@
 | J-01 | `pnpm run check` 全部必要測試通過。 | 在含完整音訊樣本的 CI 執行測試。 | CI 連結。 | 已通過 |
 | J-02 | 音訊測試包含 MP3、APE、OGG 與 Opus。 | 檢查測試樣本與完整報告。 | 無略過項目的測試報告。 | 已通過 |
 | J-03 | ZhConvert 測試不連線至正式服務。 | 檢查測試網路目標。 | 模擬伺服器紀錄。 | 已通過 |
-| J-04 | Windows x64 產生 NSIS 與 MSI。 | 執行 Release 工作流程。 | 兩個可下載產物。 | 已通過 |
+| J-04 | Windows x64 產生 NSIS。預發行標籤略過 MSI（WiX 僅接受純數字預發行號）。 | 執行 Release 工作流程。 | NSIS 安裝程式與簽章。 | 已通過 |
 | J-05 | Linux x64 產生 AppImage、DEB 與 RPM。 | 在 Ubuntu 22.04 執行工作流程。 | 三個可下載產物。 | 已通過 |
 | J-07 | Linux 執行相依不含 Node.js、`*-dev` 與其他建置套件。 | 檢查 DEB、RPM 與相依報告。 | 相依報告。 | 已通過 |
 | J-09 | Linux 乾淨環境不需 Node.js 即可安裝與執行。 | 使用全新 Ubuntu 22.04 虛擬機。 | 環境清單與操作錄影。 | 已通過 |

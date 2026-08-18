@@ -130,7 +130,7 @@ cat ~/.tauri/convertzz.key
 
 | 安裝方式 | 行為 |
 | --- | --- |
-| Windows NSIS / MSI | 先詢問，確認後下載、驗證簽章、安裝並重啟 |
+| Windows NSIS | 先詢問，確認後下載、驗證簽章、安裝並重啟 |
 | Linux AppImage | 同上 |
 | Linux DEB / RPM | 無法就地覆寫。程式會改開啟 GitHub Releases |
 

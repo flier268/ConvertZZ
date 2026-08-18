@@ -235,7 +235,7 @@ AppIndicator 開發套件只存在於建置環境。
 | 狀態 | 內容 |
 | --- | --- |
 | 已成立 | 發行工作流程已寫入對 AppImage 等產物執行 `sha256sum` 的步驟；本機建置也曾產出雜湊。工作流程契約測試會鎖定此行為。 |
-| 仍缺 | 尚未用**正式 Release 工作流程產出的全套發行檔**（Windows NSIS／MSI、Linux AppImage／DEB／RPM）與對應校驗檔做一次完整對照，並留下校驗成功紀錄。 |
+| 仍缺 | 尚未用**正式 Release 工作流程產出的全套發行檔**（Windows NSIS、Linux AppImage／DEB／RPM）與對應校驗檔做一次完整對照，並留下校驗成功紀錄。預發行版不產 MSI。 |
 | 如何補齊 | 跑一輪會上傳草稿／正式產物的 Release 工作流程，對每個產物核對 SHA-256 並存紀錄。 |
 
 ### J-11

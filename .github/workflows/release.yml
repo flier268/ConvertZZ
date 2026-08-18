@@ -24,7 +24,8 @@ jobs:
         include:
           - os: windows-latest
             artifact: windows-x64
-            bundles: nsis,msi
+            # WiX/MSI 只接受純數字預發行號；2.0.0-beta1 這類標籤改只產 NSIS。
+            bundles: nsis
           - os: ubuntu-22.04
             artifact: linux-x64
             bundles: appimage,deb,rpm
@@ -112,7 +113,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $files = Get-ChildItem src-tauri/target/release/bundle -File -Recurse | Where-Object { $_.Extension -in '.exe', '.msi' }
+          $files = Get-ChildItem src-tauri/target/release/bundle -File -Recurse | Where-Object { $_.Extension -eq '.exe' }
           $lines = foreach ($file in $files) {
             $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $file.FullName).Hash.ToLowerInvariant()
             "$hash  $($file.Name)"
@@ -126,7 +127,6 @@ jobs:
             src-tauri/target/release/bundle/**/*.deb
             src-tauri/target/release/bundle/**/*.rpm
             src-tauri/target/release/bundle/**/*.exe
-            src-tauri/target/release/bundle/**/*.msi
             src-tauri/target/release/bundle/**/*.sig
             SHA256SUMS-*.txt
             RUNTIME-DEPENDENCIES-*.txt

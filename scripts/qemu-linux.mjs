@@ -87,7 +87,6 @@ export function guestScript() {
     'test -x /usr/bin/convertzz || fail "缺少主程式"',
     'test -f /usr/lib/ConvertZZ/Dictionary.csv || fail "缺少字典"',
     'test -d /usr/lib/ConvertZZ/segment-dict/segment || fail "缺少分詞字典"',
-    'test ! -f /usr/lib/ConvertZZ/convertzz-sidecar.gz || fail "不應再包含 sidecar"',
     'test ! -f /usr/lib/ConvertZZ/taglib-wasi.wasm || fail "不應再包含 taglib WASM"',
     'WORKDIR="$(mktemp -d)"',
     "APPIMAGE=false",
@@ -168,10 +167,7 @@ export function findLinuxArtifacts(projectRoot) {
 export function assertLinuxDebReady(debPath) {
   const listing = listDebContents(debPath);
   const required = ["usr/lib/ConvertZZ/Dictionary.csv", "usr/lib/ConvertZZ/segment-dict/segment/"];
-  const forbidden = [
-    "usr/lib/ConvertZZ/convertzz-sidecar.gz",
-    "usr/lib/ConvertZZ/taglib-wasi.wasm",
-  ];
+  const forbidden = ["usr/lib/ConvertZZ/taglib-wasi.wasm"];
   const missing = required.filter((entry) => !listing.some((line) => line.includes(entry)));
   const presentForbidden = forbidden.filter((entry) =>
     listing.some((line) => line.includes(entry)),

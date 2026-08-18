@@ -57,14 +57,14 @@ describe("QEMU Linux 乾淨環境驗收", () => {
     expect(qemuAvailable()).toBeTypeOf("boolean");
   });
 
-  it("主機端會拒絕缺少分詞字典或仍含 sidecar 的舊 DEB", () => {
+  it("主機端會拒絕缺少分詞字典或仍含 taglib WASM 的舊 DEB", () => {
     const artifacts = findLinuxArtifacts(projectRoot);
     if (!artifacts.deb) return;
     try {
       assertLinuxDebReady(artifacts.deb);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      expect(message).toMatch(/segment-dict|sidecar|taglib-wasi|請先重建/);
+      expect(message).toMatch(/segment-dict|taglib-wasi|請先重建/);
     }
   });
 

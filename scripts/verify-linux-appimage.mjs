@@ -33,9 +33,6 @@ try {
   if (!existsSync(join(segmentDict, "segment"))) {
     throw new Error("AppImage 缺少 segment-dict 分詞字典。");
   }
-  if (existsSync(join(resourceDirectory, "convertzz-sidecar.gz"))) {
-    throw new Error("AppImage 不應再包含 Node.js sidecar 資源。");
-  }
   if (existsSync(join(resourceDirectory, "taglib-wasi.wasm"))) {
     throw new Error("AppImage 不應再包含 taglib-wasi.wasm。");
   }

@@ -6,7 +6,7 @@
 
 | 錯誤作法 | 後果 | 正確作法 |
 | --- | --- | --- |
-| `convertzz --version` 或對 GUI 二進位跑「印版本就退」 | 開主視窗／sidecar，指令不退出 | 用 `dpkg -l`、`stat` 二進位、或設定／關於頁看版本 |
+| `convertzz --version` 或對 GUI 二進位跑「印版本就退」 | 開主視窗，指令不退出 | 用 `dpkg -l`、`stat` 二進位、或設定／關於頁看版本 |
 | `pkill -f convertzz` | 誤殺含該字串的 agent shell | `pgrep -x convertzz` → 對 PID `kill`／`kill -9` |
 | 假設已安裝 DEB 與 repo release 同建置 | 驗到舊行為 | 優先 `src-tauri/target/release/convertzz`；在 `META.txt` 記 mtime 與 git SHA |
 

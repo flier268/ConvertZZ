@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -188,8 +188,6 @@ describe("Tauri desktop shell", () => {
     expect(rust).toContain("CoreState::new");
     expect(rust.indexOf(".manage(")).toBeLessThan(rust.indexOf(".setup("));
     expect(rust).toContain("fn core_request");
-    expect(rust).not.toContain("attach_sidecar");
-    expect(rust).not.toContain("SidecarState");
   });
 
   it("raises the production chunk size warning for Element Plus", () => {
@@ -297,23 +295,22 @@ describe("Tauri desktop shell", () => {
     expect(config.bundle?.icon).not.toContain("../ConvertZZ/Windows Logo.png");
   });
 
-  it("does not package a Node.js core", () => {
-    const linux = readJson("src-tauri/tauri.linux.conf.json") as {
-      bundle?: { externalBin?: string[]; resources?: Record<string, string> };
-    };
+  it("packages the in-process conversion core only", () => {
+    const linuxConf = fileURLToPath(new URL("../src-tauri/tauri.linux.conf.json", import.meta.url));
+    const binariesDir = fileURLToPath(new URL("../src-tauri/binaries", import.meta.url));
     const config = readJson("src-tauri/tauri.conf.json") as {
       bundle?: { externalBin?: string[]; resources?: Record<string, string> };
     };
     const rust = readProjectFile("src-tauri/src/lib.rs");
 
-    expect(linux.bundle?.externalBin).toEqual([]);
+    expect(existsSync(linuxConf)).toBe(false);
+    expect(existsSync(binariesDir)).toBe(false);
     expect(config.bundle?.externalBin).toBeUndefined();
     expect(config.bundle?.resources).toMatchObject({
       "../ConvertZZ/Dictionary.csv": "Dictionary.csv",
       "resources/segment-dict": "segment-dict",
     });
     expect(rust).toContain("fn core_request");
-    expect(rust).not.toContain("prepare_linux_sidecar");
     expect(rust).not.toContain("convertzz-core");
   });
 

@@ -143,7 +143,7 @@ AppIndicator 開發套件只存在於建置環境。
 - 新式引擎只使用 `ws-segment-rs` 的分詞與 `ZhtSynonymOptimizer`。
 - 新式引擎只使用 `cjk-convert-rs` 完成字形轉換。
 - 專案不維護額外的硬編碼語意取代清單。
-- 轉換核心在 Tauri 同程序內執行，不使用 Node.js sidecar 或 `externalBin`。
+- 轉換核心在 Tauri 同程序內執行，不另外封裝外部 Node.js 程序。
 - 分詞字典以 `resources/segment-dict` 封入安裝包。
 - Linux 的 Tauri 托盤不提供左鍵事件。
 - Linux 使用者需從托盤選單開啟主視窗。

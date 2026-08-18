@@ -33,8 +33,12 @@ fn ffmpeg_bin() -> Option<String> {
         .map(|_| "ffmpeg".into())
 }
 
+fn require_ffmpeg() -> String {
+    ffmpeg_bin().expect("測試需要 ffmpeg（CI 與本機皆應安裝）")
+}
+
 fn generate_audio(path: &Path, codec: &str) {
-    let ffmpeg = ffmpeg_bin().expect("測試需要 ffmpeg");
+    let ffmpeg = require_ffmpeg();
     let status = Command::new(ffmpeg)
         .args([
             "-hide_banner",
@@ -55,7 +59,7 @@ fn generate_audio(path: &Path, codec: &str) {
 }
 
 fn audio_fingerprint(path: &Path) -> String {
-    let ffmpeg = ffmpeg_bin().expect("測試需要 ffmpeg");
+    let ffmpeg = require_ffmpeg();
     let output = Command::new(ffmpeg)
         .args(["-hide_banner", "-loglevel", "error", "-i"])
         .arg(path)
@@ -667,13 +671,21 @@ async fn writes_requested_id3v2_version_and_encoding() {
 async fn converts_ape_ogg_oga_and_opus_without_touching_unselected_fields() {
     let ape = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/mac-399.ape");
     let ogg = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/test.ogg");
-    if !ape.is_file() || !ogg.is_file() {
-        return;
-    }
+    assert!(ape.is_file(), "缺少 tests/fixtures/mac-399.ape");
+    assert!(ogg.is_file(), "缺少 tests/fixtures/test.ogg");
+    let _ = require_ffmpeg();
     let directory = temp_dir();
     let oga_source = directory.join("fixture.oga");
     std::fs::copy(&ogg, &oga_source).unwrap();
-    let mut samples = vec![
+    let opus = directory.join("fixture.opus");
+    generate_audio(&opus, "libopus");
+    let cover_bytes: Vec<u8> = {
+        let mut bytes = vec![0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+        bytes.extend_from_slice(b"convertzz-cover-fixture");
+        bytes.extend((0u8..=63).collect::<Vec<_>>());
+        bytes
+    };
+    let samples = vec![
         (ape, "sample.ape".to_string(), AudioContainer::Apev2),
         (ogg, "sample.ogg".to_string(), AudioContainer::VorbisComment),
         (
@@ -681,16 +693,12 @@ async fn converts_ape_ogg_oga_and_opus_without_touching_unselected_fields() {
             "sample.oga".to_string(),
             AudioContainer::VorbisComment,
         ),
-    ];
-    if ffmpeg_bin().is_some() {
-        let opus = directory.join("fixture.opus");
-        generate_audio(&opus, "libopus");
-        samples.push((
+        (
             opus,
             "sample.opus".to_string(),
             AudioContainer::VorbisComment,
-        ));
-    }
+        ),
+    ];
     for (source, name, container) in samples {
         let path = directory.join(name);
         std::fs::copy(&source, &path).unwrap();
@@ -698,10 +706,20 @@ async fn converts_ape_ogg_oga_and_opus_without_touching_unselected_fields() {
         if tagged.primary_tag().is_none() {
             tagged.insert_tag(lofty::tag::Tag::new(tagged.primary_tag_type()));
         }
+        let embed_cover = container == AudioContainer::VorbisComment;
         if let Some(tag) = tagged.primary_tag_mut() {
             tag.set_title("里面开发".to_string());
             tag.set_artist("头发".to_string());
             tag.set_album("未选择里面".to_string());
+            if embed_cover {
+                tag.push_picture(
+                    lofty::picture::Picture::unchecked(cover_bytes.clone())
+                        .mime_type(lofty::picture::MimeType::Png)
+                        .pic_type(PictureType::CoverFront)
+                        .description("cover")
+                        .build(),
+                );
+            }
         }
         tagged.save_to_path(&path, WriteOptions::default()).unwrap();
         let before = read_tagged(&path).unwrap();
@@ -713,11 +731,14 @@ async fn converts_ape_ogg_oga_and_opus_without_touching_unselected_fields() {
             .primary_tag()
             .and_then(|tag| tag.album())
             .map(|value| value.to_string());
-        let before_pictures = before
+        let before_picture = before
             .primary_tag()
-            .map(|tag| tag.pictures().len())
-            .unwrap_or(0);
-        let before_audio = ffmpeg_bin().map(|_| audio_fingerprint(&path));
+            .and_then(|tag| tag.pictures().first())
+            .map(|picture| picture.data().to_vec());
+        if embed_cover {
+            assert_eq!(before_picture.as_deref(), Some(cover_bytes.as_slice()));
+        }
+        let before_audio = audio_fingerprint(&path);
         let service = AudioService::new();
         let scanned = service
             .scan(
@@ -734,6 +755,9 @@ async fn converts_ape_ogg_oga_and_opus_without_touching_unselected_fields() {
             .await
             .unwrap();
         assert!(scanned[0].warning.is_none(), "{:?}", scanned[0].warning);
+        if embed_cover {
+            assert!(scanned[0].has_cover_art);
+        }
         let title = scanned[0]
             .fields
             .iter()
@@ -779,13 +803,11 @@ async fn converts_ape_ogg_oga_and_opus_without_touching_unselected_fields() {
         assert_eq!(
             after
                 .primary_tag()
-                .map(|tag| tag.pictures().len())
-                .unwrap_or(0),
-            before_pictures
+                .and_then(|tag| tag.pictures().first())
+                .map(|picture| picture.data().to_vec()),
+            before_picture
         );
-        if let Some(before_audio) = before_audio {
-            assert_eq!(audio_fingerprint(&path), before_audio);
-        }
+        assert_eq!(audio_fingerprint(&path), before_audio);
     }
     let _ = std::fs::remove_dir_all(&directory);
 }
@@ -793,9 +815,7 @@ async fn converts_ape_ogg_oga_and_opus_without_touching_unselected_fields() {
 #[tokio::test]
 async fn converts_multivalue_fields_value_by_value() {
     let ogg = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/test.ogg");
-    if !ogg.is_file() {
-        return;
-    }
+    assert!(ogg.is_file(), "缺少 tests/fixtures/test.ogg");
     let directory = temp_dir();
     let path = directory.join("multivalue.ogg");
     std::fs::copy(&ogg, &path).unwrap();
@@ -901,28 +921,25 @@ fn format_from_path_recognizes_supported_extensions() {
 async fn identifies_formats_by_extension() {
     let ape = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/mac-399.ape");
     let ogg = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/test.ogg");
+    assert!(ape.is_file(), "缺少 tests/fixtures/mac-399.ape");
+    assert!(ogg.is_file(), "缺少 tests/fixtures/test.ogg");
+    let _ = require_ffmpeg();
     let directory = temp_dir();
     let mp3 = directory.join("identify.mp3");
     write_tagged_mp3(&mp3, "里面", "里面", false);
     let mut paths = vec![mp3];
-    if ape.is_file() {
-        let dest = directory.join("identify.ape");
-        std::fs::copy(&ape, &dest).unwrap();
-        paths.push(dest);
-    }
-    if ogg.is_file() {
-        let dest = directory.join("identify.ogg");
-        std::fs::copy(&ogg, &dest).unwrap();
-        paths.push(dest);
-        let oga = directory.join("identify.oga");
-        std::fs::copy(&ogg, &oga).unwrap();
-        paths.push(oga);
-    }
-    if ffmpeg_bin().is_some() {
-        let opus = directory.join("identify.opus");
-        generate_audio(&opus, "libopus");
-        paths.push(opus);
-    }
+    let ape_dest = directory.join("identify.ape");
+    std::fs::copy(&ape, &ape_dest).unwrap();
+    paths.push(ape_dest);
+    let ogg_dest = directory.join("identify.ogg");
+    std::fs::copy(&ogg, &ogg_dest).unwrap();
+    paths.push(ogg_dest);
+    let oga = directory.join("identify.oga");
+    std::fs::copy(&ogg, &oga).unwrap();
+    paths.push(oga);
+    let opus = directory.join("identify.opus");
+    generate_audio(&opus, "libopus");
+    paths.push(opus);
     let service = AudioService::new();
     let scanned = service
         .scan(
@@ -943,30 +960,369 @@ async fn identifies_formats_by_extension() {
         .unwrap();
     let formats: std::collections::BTreeSet<_> = scanned.iter().map(|file| file.format).collect();
     assert!(formats.contains(&AudioFormat::Mp3));
-    if ape.is_file() {
-        assert!(formats.contains(&AudioFormat::Ape));
-    }
-    if ogg.is_file() {
-        assert!(formats.contains(&AudioFormat::Ogg));
-        assert_eq!(
-            scanned
-                .iter()
-                .filter(|file| file.path.ends_with(".oga"))
-                .count(),
-            1
-        );
-        assert!(scanned.iter().any(|file| {
-            file.path.ends_with(".oga") && file.format == AudioFormat::Ogg && file.warning.is_none()
-        }));
-    }
-    if ffmpeg_bin().is_some() {
-        assert!(formats.contains(&AudioFormat::Opus));
-        assert!(scanned.iter().any(|file| {
-            file.path.ends_with(".opus")
-                && file.format == AudioFormat::Opus
-                && file.warning.is_none()
-        }));
-    }
+    assert!(formats.contains(&AudioFormat::Ape));
+    assert!(formats.contains(&AudioFormat::Ogg));
+    assert!(formats.contains(&AudioFormat::Opus));
+    assert_eq!(
+        scanned
+            .iter()
+            .filter(|file| file.path.ends_with(".oga"))
+            .count(),
+        1
+    );
+    assert!(scanned.iter().any(|file| {
+        file.path.ends_with(".oga") && file.format == AudioFormat::Ogg && file.warning.is_none()
+    }));
+    assert!(scanned.iter().any(|file| {
+        file.path.ends_with(".opus") && file.format == AudioFormat::Opus && file.warning.is_none()
+    }));
     assert!(scanned.iter().all(|file| file.warning.is_none()));
     let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn keeps_unknown_text_binary_frames_and_cover_bytes() {
+    let directory = temp_dir();
+    let path = directory.join("unknown.mp3");
+    write_tagged_mp3(&path, "里面", "里面", true);
+    let mut tag = id3::Tag::read_from_path(&path).unwrap();
+    tag.set_text("TIT3", "未知字幕里面");
+    tag.add_frame(id3::frame::EncapsulatedObject {
+        mime_type: "application/octet-stream".into(),
+        filename: "payload.bin".into(),
+        description: "binary".into(),
+        data: vec![9, 8, 7, 6, 5],
+    });
+    tag.write_to_path(&path, Version::Id3v24).unwrap();
+    let before = std::fs::read(&path).unwrap();
+    let before_picture = picture_data(&path).expect("封面");
+    let before_geob = id3::Tag::read_from_path(&path)
+        .unwrap()
+        .encapsulated_objects()
+        .next()
+        .map(|object| object.data.clone())
+        .expect("GEOB");
+    let before_subtitle = id3::Tag::read_from_path(&path)
+        .unwrap()
+        .get("TIT3")
+        .and_then(|frame| frame.content().text())
+        .map(str::to_owned)
+        .expect("TIT3");
+    let service = AudioService::new();
+    let scanned = service
+        .scan(
+            shared_conversion(),
+            AudioScanRequest {
+                paths: vec![path.to_string_lossy().into_owned()],
+                recursive: None,
+                id3v1_source_encoding: Some(TextEncoding::Gbk),
+                id3v2_source_encoding: None,
+                id3v2_repair_source_encoding: None,
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    let unknown = field(&scanned[0], AudioContainer::Id3v2, "frame:TIT3").expect("未知文字欄位");
+    assert!(!unknown.selected);
+    assert!(!scanned[0]
+        .fields
+        .iter()
+        .any(|field| field.key.contains("GEOB") || field.key.contains("APIC")));
+    let mut request = base_plan(&[path.clone()]);
+    request.selected_fields = HashMap::from([(
+        path.to_string_lossy().into_owned(),
+        vec!["id3v2:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    let after = id3::Tag::read_from_path(&path).unwrap();
+    assert_eq!(after.title().as_deref(), Some("裡面"));
+    assert_eq!(
+        after
+            .get("TIT3")
+            .and_then(|frame| frame.content().text())
+            .map(str::to_owned),
+        Some(before_subtitle)
+    );
+    assert_eq!(
+        picture_data(&path).as_deref(),
+        Some(before_picture.as_slice())
+    );
+    assert_eq!(
+        after
+            .encapsulated_objects()
+            .next()
+            .map(|object| object.data.clone()),
+        Some(before_geob)
+    );
+    assert_eq!(
+        mp3_audio_payload(&before),
+        mp3_audio_payload(&std::fs::read(&path).unwrap())
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn keeps_unlisted_ogg_fields_unchanged() {
+    let ogg = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/test.ogg");
+    assert!(ogg.is_file(), "缺少 tests/fixtures/test.ogg");
+    let directory = temp_dir();
+    let path = directory.join("unknown.ogg");
+    std::fs::copy(&ogg, &path).unwrap();
+    let mut tagged = read_tagged(&path).unwrap();
+    if tagged.primary_tag().is_none() {
+        tagged.insert_tag(lofty::tag::Tag::new(tagged.primary_tag_type()));
+    }
+    if let Some(tag) = tagged.primary_tag_mut() {
+        tag.set_title("里面开发".to_string());
+        assert!(
+            tag.insert_text(ItemKey::ContentGroup, "未知群組里面".to_string()),
+            "應能寫入未列出的 Vorbis 欄位"
+        );
+    }
+    tagged.save_to_path(&path, WriteOptions::default()).unwrap();
+    let before_group = read_tagged(&path)
+        .unwrap()
+        .primary_tag()
+        .and_then(|tag| tag.get_string(ItemKey::ContentGroup))
+        .map(str::to_owned)
+        .expect("ContentGroup");
+    let service = AudioService::new();
+    let scanned = service
+        .scan(
+            shared_conversion(),
+            AudioScanRequest {
+                paths: vec![path.to_string_lossy().into_owned()],
+                recursive: None,
+                id3v1_source_encoding: None,
+                id3v2_source_encoding: None,
+                id3v2_repair_source_encoding: None,
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert!(scanned[0].fields.iter().all(|field| {
+        field.key != "contentGroup" && field.key != "grouping" && !field.label.contains("群組")
+    }));
+    let title = scanned[0]
+        .fields
+        .iter()
+        .find(|field| field.container == AudioContainer::VorbisComment && field.key == "title")
+        .expect("title");
+    let mut request = base_plan(&[path.clone()]);
+    request.selected_fields = HashMap::from([(
+        path.to_string_lossy().into_owned(),
+        vec![format!("vorbis-comment:{}", title.key)],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    let after = read_tagged(&path).unwrap();
+    assert_eq!(
+        after.primary_tag().and_then(|tag| tag.title()).as_deref(),
+        Some("裡面開發")
+    );
+    assert_eq!(
+        after
+            .primary_tag()
+            .and_then(|tag| tag.get_string(ItemKey::ContentGroup))
+            .map(str::to_owned),
+        Some(before_group)
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn cancel_rejects_old_audio_plan() {
+    let directory = temp_dir();
+    let path = directory.join("cancel.mp3");
+    write_tagged_mp3(&path, "里面", "里面", false);
+    let before = std::fs::read(&path).unwrap();
+    let service = AudioService::new();
+    let mut request = base_plan(&[path.clone()]);
+    request.selected_fields = HashMap::from([(
+        path.to_string_lossy().into_owned(),
+        vec!["id3v1:title".into(), "id3v2:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert_eq!(service.cancel(&plan.plan_id)["cancelled"], true);
+    let error = service.apply(&plan.plan_id, noop()).await.unwrap_err();
+    assert_eq!(error.code, "PLAN_NOT_FOUND");
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn truncated_ogg_reports_warning() {
+    let ogg = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/test.ogg");
+    assert!(ogg.is_file(), "缺少 tests/fixtures/test.ogg");
+    let directory = temp_dir();
+    let path = directory.join("truncated.ogg");
+    let bytes = std::fs::read(&ogg).unwrap();
+    std::fs::write(&path, &bytes[..bytes.len() / 4]).unwrap();
+    let service = AudioService::new();
+    let files = service
+        .scan(
+            shared_conversion(),
+            AudioScanRequest {
+                paths: vec![path.to_string_lossy().into_owned()],
+                recursive: None,
+                id3v1_source_encoding: None,
+                id3v2_source_encoding: None,
+                id3v2_repair_source_encoding: None,
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert!(files[0].warning.is_some());
+    assert!(files[0].fields.is_empty());
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn write_failure_keeps_original_audio() {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = temp_dir();
+    let path = directory.join("readonly.mp3");
+    write_tagged_mp3(&path, "里面", "里面", true);
+    let before = std::fs::read(&path).unwrap();
+    let before_picture = picture_data(&path);
+    let service = AudioService::new();
+    let mut request = base_plan(&[path.clone()]);
+    request.selected_fields = HashMap::from([(
+        path.to_string_lossy().into_owned(),
+        vec!["id3v2:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+    assert_eq!(result.failed.len(), 1);
+    assert!(result.succeeded.is_empty());
+    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    assert_eq!(picture_data(&path), before_picture);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn bak_conflict_skip_keeps_existing_backup() {
+    let directory = temp_dir();
+    let path = directory.join("song.mp3");
+    write_tagged_mp3(&path, "里面", "里面", false);
+    let bak = PathBuf::from(format!("{}.bak", path.display()));
+    std::fs::write(&bak, b"old-backup").unwrap();
+    let service = AudioService::new();
+    let mut request = base_plan(&[path.clone()]);
+    request.backup = Some(true);
+    request.conflict_policy = ConflictPolicy::Skip;
+    request.selected_fields = HashMap::from([(
+        path.to_string_lossy().into_owned(),
+        vec!["id3v2:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert_eq!(std::fs::read(&bak).unwrap(), b"old-backup");
+    let verified = service
+        .scan(
+            shared_conversion(),
+            AudioScanRequest {
+                paths: vec![path.to_string_lossy().into_owned()],
+                recursive: None,
+                id3v1_source_encoding: Some(TextEncoding::Big5),
+                id3v2_source_encoding: None,
+                id3v2_repair_source_encoding: None,
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        field(&verified[0], AudioContainer::Id3v2, "title").map(|field| field.values.clone()),
+        Some(vec!["裡面".into()])
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn bak_conflict_overwrite_replaces_existing_backup() {
+    let directory = temp_dir();
+    let path = directory.join("song.mp3");
+    write_tagged_mp3(&path, "里面", "里面", false);
+    let before = std::fs::read(&path).unwrap();
+    let bak = PathBuf::from(format!("{}.bak", path.display()));
+    std::fs::write(&bak, b"old-backup").unwrap();
+    let service = AudioService::new();
+    let mut request = base_plan(&[path.clone()]);
+    request.backup = Some(true);
+    request.conflict_policy = ConflictPolicy::Overwrite;
+    request.selected_fields = HashMap::from([(
+        path.to_string_lossy().into_owned(),
+        vec!["id3v2:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert_eq!(std::fs::read(&bak).unwrap(), before);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn recursive_audio_scan_skips_symlinks() {
+    let directory = temp_dir();
+    let outside = temp_dir();
+    let inside = directory.join("inside.mp3");
+    let linked = outside.join("outside.mp3");
+    write_tagged_mp3(&inside, "里面", "里面", false);
+    write_tagged_mp3(&linked, "开发", "开发", false);
+    std::os::unix::fs::symlink(&linked, directory.join("linked.mp3")).unwrap();
+    std::os::unix::fs::symlink(&outside, directory.join("linked-dir")).unwrap();
+    let service = AudioService::new();
+    let scanned = service
+        .scan(
+            shared_conversion(),
+            AudioScanRequest {
+                paths: vec![directory.to_string_lossy().into_owned()],
+                recursive: Some(true),
+                id3v1_source_encoding: None,
+                id3v2_source_encoding: None,
+                id3v2_repair_source_encoding: None,
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        scanned
+            .iter()
+            .map(|file| file.path.clone())
+            .collect::<Vec<_>>(),
+        [inside.to_string_lossy().into_owned()]
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+    let _ = std::fs::remove_dir_all(&outside);
 }

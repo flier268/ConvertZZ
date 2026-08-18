@@ -81,7 +81,7 @@ cargo update -p <crate> --manifest-path src-tauri/Cargo.toml
 
 ## 測試
 
-Vitest 涵蓋 `src/**/*.test.ts` 與 `tests/**/*.test.ts`。轉換核心單元測試在 `src-tauri/src/core/**`。
+Vitest 涵蓋 `src/**/*.test.ts` 與 `tests/**/*.test.ts`。轉換核心單元測試在 `src-tauri/src/core/**`。音訊單元測試需要本機或 CI 的 `ffmpeg`（用來產生 Opus 與比對 framemd5）；GitHub Actions 的 `ci.yml` 會安裝它。
 
 前端 e2e 使用 `e2e/` 的 Playwright 規格，執行 `pnpm run test:e2e`。這會啟動 Vite 並模擬 Tauri／核心，不啟動桌面視窗。
 
@@ -89,7 +89,7 @@ Vitest 涵蓋 `src/**/*.test.ts` 與 `tests/**/*.test.ts`。轉換核心單元�
 
 - 引擎變更必須覆蓋黃金案例、空白標點保留、長文分段，以及舊字典的啟用、優先權與 `9999` 保護詞。
 - 檔案變更必須覆蓋預覽未確認不寫入、衝突略過、暫存驗證、兩階段重新命名、失敗回復與不跟隨符號連結。
-- 音訊變更必須覆蓋未選欄位、未知欄位、二進位欄位與封面不變，且不得重新編碼音訊內容。
+- 音訊變更必須覆蓋未選欄位、未知欄位、二進位欄位與封面不變、`.bak` 衝突略過／覆寫，且不得重新編碼音訊內容。
 - ZhConvert 變更必須用模擬伺服器鎖定官方 `/convert`，並確認網路失敗時不切換引擎。
 - 單元測試通過不等於桌面或發行包驗收通過。不要把項目標為 `已通過` 並移入 [docs/MIGRATION_COMPLETED.md](docs/MIGRATION_COMPLETED.md)，除非指定證據已存在。
 
@@ -97,7 +97,7 @@ Vitest 涵蓋 `src/**/*.test.ts` 與 `tests/**/*.test.ts`。轉換核心單元�
 
 - 檔案與標籤作業必須先預覽，使用者確認後才寫入。
 - 內容先寫入同目錄暫存檔，驗證成功後才取代原檔。
-- 檔名衝突預設略過。覆寫需要額外確認。
+- 檔名衝突預設略過。覆寫需要額外確認。音訊 `.bak` 備份衝突同樣預設略過；選擇覆寫時需額外確認。
 - 舊版 `ConvertZZ.json` 只讀取，結果另存為 2.0 設定，不得修改來源。`Dictionary.csv` 必須先詢問，再建立不覆蓋的時間戳備份。備份失敗時不得寫入或覆寫。
 - `Dictionary.csv` 維持 UTF-8 BOM 六欄格式。
 - 命令列保持舊參數語意，但檔案作業仍要先預覽。不要恢復無確認寫入。

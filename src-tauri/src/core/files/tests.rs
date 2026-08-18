@@ -743,6 +743,121 @@ async fn backup_false_skips_bak() {
     let _ = std::fs::remove_dir_all(&directory);
 }
 
+#[tokio::test]
+async fn both_mode_converts_content_and_filename() {
+    let directory = temp_dir();
+    let source = directory.join("里面.txt");
+    std::fs::write(&source, "里面开发").unwrap();
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            FilePlanRequest {
+                paths: vec![source.to_string_lossy().into_owned()],
+                output_path: None,
+                output_directory: None,
+                mode: FileMode::Both,
+                recursive: false,
+                input_encoding: TextEncoding::Utf8,
+                output_encoding: TextEncoding::Utf8,
+                add_bom: false,
+                fix_charset_declaration: false,
+                fix_charset_extensions: None,
+                allowed_extensions: None,
+                preview_max_bytes: None,
+                conflict_policy: ConflictPolicy::Skip,
+                backup: Some(false),
+                conversion: conversion_s2t(),
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(plan.items.len(), 1);
+    assert!(plan.items[0].source_preview.contains("里面开发"));
+    assert!(plan.items[0].output_preview.contains("裡面開發"));
+    assert_eq!(
+        plan.items[0].output_path,
+        directory.join("裡面.txt").to_string_lossy().into_owned()
+    );
+    let result = service.apply(&plan.plan_id, None, noop()).await.unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert!(!source.exists());
+    let output = directory.join("裡面.txt");
+    assert_eq!(std::fs::read_to_string(&output).unwrap(), "裡面開發");
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn cancel_rejects_content_plan_without_writing() {
+    let directory = temp_dir();
+    let source = directory.join("note.txt");
+    std::fs::write(&source, "里面开发").unwrap();
+    let before = std::fs::read(&source).unwrap();
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            FilePlanRequest {
+                paths: vec![source.to_string_lossy().into_owned()],
+                output_path: None,
+                output_directory: None,
+                mode: FileMode::Content,
+                recursive: false,
+                input_encoding: TextEncoding::Utf8,
+                output_encoding: TextEncoding::Utf8,
+                add_bom: false,
+                fix_charset_declaration: false,
+                fix_charset_extensions: None,
+                allowed_extensions: None,
+                preview_max_bytes: None,
+                conflict_policy: ConflictPolicy::Skip,
+                backup: Some(false),
+                conversion: conversion_s2t(),
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert!(plan.items[0].output_preview.contains("裡面開發"));
+    assert_eq!(service.cancel(&plan.plan_id)["cancelled"], true);
+    let error = service
+        .apply(&plan.plan_id, None, noop())
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, "PLAN_NOT_FOUND");
+    assert_eq!(std::fs::read(&source).unwrap(), before);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn recursive_scan_skips_file_symlinks() {
+    let directory = temp_dir();
+    let outside = temp_dir();
+    std::fs::write(directory.join("inside.txt"), "內部").unwrap();
+    let linked_target = outside.join("outside.txt");
+    std::fs::write(&linked_target, "外部").unwrap();
+    std::os::unix::fs::symlink(&linked_target, directory.join("linked.txt")).unwrap();
+    let service = FileService::new();
+    let mut request = filename_request(&directory, ConflictPolicy::Skip);
+    request.recursive = true;
+    request.allowed_extensions = Some(vec!["txt".into()]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert_eq!(
+        plan.items
+            .iter()
+            .map(|item| item.source_path.clone())
+            .collect::<Vec<_>>(),
+        [directory.join("inside.txt").to_string_lossy().into_owned()]
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+    let _ = std::fs::remove_dir_all(&outside);
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn readonly_directory_keeps_original() {

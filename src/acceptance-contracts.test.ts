@@ -66,6 +66,17 @@ describe("驗收項目的自動化契約", () => {
     expect(page).toContain('label="略過"');
   });
 
+  it("音訊備份衝突預設略過，覆寫需額外確認", () => {
+    const page = readProjectFile("src/pages/AudioPage.vue");
+    expect(page).toContain('ref<AudioTagPlanRequest["conflictPolicy"]>("skip")');
+    expect(page).toContain('label="備份衝突"');
+    expect(page).toContain('label="略過"');
+    expect(page).toContain('value="overwrite"');
+    expect(page).toContain('conflictPolicy.value === "overwrite"');
+    expect(page).toContain("覆寫會取代既有的 .bak 備份。是否確定繼續？");
+    expect(page).toContain('title: "確認覆寫備份"');
+  });
+
   it("F-07 APEv2 與 Vorbis 不顯示 ID3 編碼選項", () => {
     const page = readProjectFile("src/pages/AudioPage.vue");
     const id3Block = page.slice(page.indexOf('v-if="hasMp3"'));

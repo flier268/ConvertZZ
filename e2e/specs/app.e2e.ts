@@ -127,4 +127,88 @@ test.describe("ConvertZZ 前端", () => {
       .poll(async () => (await e2eState(page)).confirms ?? [])
       .toEqual(expect.arrayContaining([expect.stringContaining("將先備份字典，再寫入")]));
   });
+
+  test("E-01 內容預覽會顯示來源與輸出文字", async ({ page }) => {
+    await openApp(page);
+    await openPage(page, "#tour-files", "檔案與檔名");
+    await page.getByRole("button", { name: "選取檔案" }).click();
+    await page.getByRole("button", { name: "建立預覽" }).click();
+    await expect(page.getByText("變更預覽")).toBeVisible();
+    await expect(page.getByRole("cell", { name: "里面开发头发", exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "裡面開發頭髮", exact: true })).toBeVisible();
+  });
+
+  test("E-03 取消計畫不會進入確認寫入", async ({ page }) => {
+    await openApp(page);
+    await openPage(page, "#tour-files", "檔案與檔名");
+    await page.getByRole("button", { name: "選取檔案" }).click();
+    await page.getByRole("button", { name: "建立預覽" }).click();
+    await expect(page.getByRole("button", { name: "確認執行" })).toBeVisible();
+    await page.getByRole("button", { name: "取消計畫" }).click();
+    await expect(page.getByRole("button", { name: "確認執行" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "建立預覽" })).toBeVisible();
+  });
+
+  test("內容與檔名預覽會同時顯示路徑與內容", async ({ page }) => {
+    await openApp(page);
+    await openPage(page, "#tour-files", "檔案與檔名");
+    await page.locator(".el-form-item", { hasText: "作業" }).locator(".el-select").click();
+    await page.getByRole("option", { name: "內容與檔名" }).click();
+    await page.getByRole("button", { name: "選取檔案" }).click();
+    await page.getByRole("button", { name: "建立預覽" }).click();
+    await expect(page.getByRole("cell", { name: "/tmp/里面.txt", exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "/tmp/裡面.txt", exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "里面开发头发", exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "裡面開發頭髮", exact: true })).toBeVisible();
+  });
+
+  test("音訊頁可掃描、預覽並在確認後寫入", async ({ page }) => {
+    await openApp(page, { selectedFiles: "/tmp/song.mp3" });
+    await openPage(page, "#tour-audio", "音訊標籤");
+    await page.getByRole("button", { name: "選取音訊檔案" }).click();
+    await expect(page.getByText("song.mp3")).toBeVisible();
+    await expect(page.getByText("含封面")).toBeVisible();
+    await expect(page.getByRole("cell", { name: "里面", exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "未知字幕", exact: true })).toBeVisible();
+    await expect(page.getByText("ID3v2 版本")).toBeVisible();
+    await page.getByRole("button", { name: "建立標籤預覽" }).click();
+    await expect(page.getByRole("columnheader", { name: "轉換預覽" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "裡面", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "確認寫入" }).click();
+    await expect
+      .poll(async () => (await e2eState(page)).confirms ?? [])
+      .toEqual(expect.arrayContaining([expect.stringContaining("將寫入")]));
+    await expect(page.getByRole("button", { name: "確認寫入" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "建立標籤預覽" })).toBeVisible();
+  });
+
+  test("音訊備份覆寫需要額外確認", async ({ page }) => {
+    await openApp(page, { selectedFiles: "/tmp/song.mp3" });
+    await openPage(page, "#tour-audio", "音訊標籤");
+    await page.locator(".el-form-item", { hasText: "備份衝突" }).locator(".el-select").click();
+    await page.getByRole("option", { name: "覆寫" }).click();
+    await page.getByRole("button", { name: "選取音訊檔案" }).click();
+    await page.getByRole("button", { name: "建立標籤預覽" }).click();
+    await page.getByRole("button", { name: "確認寫入" }).click();
+    await expect
+      .poll(async () => (await e2eState(page)).confirms ?? [])
+      .toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("將寫入"),
+          "覆寫會取代既有的 .bak 備份。是否確定繼續？",
+        ]),
+      );
+  });
+
+  test("音訊頁取消計畫會回到可重新預覽狀態", async ({ page }) => {
+    await openApp(page, { selectedFiles: "/tmp/song.mp3" });
+    await openPage(page, "#tour-audio", "音訊標籤");
+    await page.getByRole("button", { name: "選取音訊檔案" }).click();
+    await page.getByRole("button", { name: "建立標籤預覽" }).click();
+    await expect(page.getByRole("button", { name: "確認寫入" })).toBeVisible();
+    await page.getByRole("button", { name: "取消計畫" }).click();
+    await expect(page.getByRole("button", { name: "確認寫入" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "建立標籤預覽" })).toBeVisible();
+    await expect(page.getByText("song.mp3")).toBeVisible();
+  });
 });

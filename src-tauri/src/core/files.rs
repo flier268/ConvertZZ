@@ -404,6 +404,7 @@ impl FileService {
                         .iter()
                         .map(|file| PathBuf::from(&file.item.source_path))
                         .collect::<Vec<_>>(),
+                    ConflictPolicy::Overwrite,
                 )?;
             }
             let total = (ready_files.len() * 2).max(1) as u64;

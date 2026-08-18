@@ -20,6 +20,7 @@ const plan = ref<AudioTagPlan>();
 const busy = ref(false);
 const promptAfterConversion = ref(true);
 const backup = ref(true);
+const conflictPolicy = ref<AudioTagPlanRequest["conflictPolicy"]>("skip");
 const progress = ref<{ current: number; total: number; message: string }>();
 const options = reactive({
   direction: "s2t" as Direction,
@@ -130,7 +131,7 @@ async function createPlan() {
           zhconvert: zhConvertOptions(settings, options.direction),
           dictionaryPath: settings.dictionaryPath,
         },
-        conflictPolicy: "overwrite",
+        conflictPolicy: conflictPolicy.value,
         backup: backup.value,
         id3v1Enabled: options.id3v1Enabled,
         id3v1Direction: options.id3v1Direction,
@@ -163,6 +164,15 @@ async function applyPlan() {
   if (
     !(await confirm(`將寫入 ${selectedFileCount.value} 個音訊檔案的已選標籤。`, {
       title: "確認標籤轉換",
+      kind: "warning",
+    }))
+  )
+    return;
+  if (
+    backup.value &&
+    conflictPolicy.value === "overwrite" &&
+    !(await confirm("覆寫會取代既有的 .bak 備份。是否確定繼續？", {
+      title: "確認覆寫備份",
       kind: "warning",
     }))
   )
@@ -268,6 +278,12 @@ function fieldEnabled(
         <el-form-item label="轉換前備份"
           ><el-switch v-model="backup" active-text=".bak"
         /></el-form-item>
+        <el-form-item label="備份衝突"
+          ><el-select v-model="conflictPolicy" :disabled="!backup"
+            ><el-option label="略過" value="skip" /><el-option
+              label="覆寫"
+              value="overwrite" /></el-select
+        ></el-form-item>
         <el-form-item label="資料夾掃描"
           ><el-checkbox v-model="options.recursive">包含子資料夾</el-checkbox></el-form-item
         >

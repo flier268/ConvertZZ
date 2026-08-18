@@ -4,8 +4,8 @@ use super::encoding::{decode_text, encode_text};
 use super::error::CoreError;
 use super::types::{
     ApplyFailure, ApplyResult, AudioContainer, AudioFormat, AudioScanRequest, AudioTagField,
-    AudioTagFile, AudioTagPlan, AudioTagPlanRequest, ConversionOptions, ProgressReporter,
-    TextEncoding,
+    AudioTagFile, AudioTagPlan, AudioTagPlanRequest, ConflictPolicy, ConversionOptions,
+    ProgressReporter, TextEncoding,
 };
 use chrono::Utc;
 use lofty::config::WriteOptions;
@@ -37,6 +37,7 @@ struct StoredAudioPlan {
     files: Vec<PreparedAudio>,
     backup: bool,
     backup_roots: Vec<BackupRoot>,
+    conflict_policy: ConflictPolicy,
 }
 
 pub struct AudioService {
@@ -193,6 +194,7 @@ impl AudioService {
                     files: prepared,
                     backup: request.backup != Some(false),
                     backup_roots: resolve_backup_roots(&request.paths)?,
+                    conflict_policy: request.conflict_policy,
                 },
             );
         }
@@ -227,7 +229,9 @@ impl AudioService {
                 total: plan.files.len().max(1) as u64,
                 message: "正在建立備份…".into(),
             });
-            if let Err(error) = create_user_backups(&plan.backup_roots, &writable) {
+            if let Err(error) =
+                create_user_backups(&plan.backup_roots, &writable, plan.conflict_policy)
+            {
                 if let Ok(mut cancelled) = self.cancelled.lock() {
                     cancelled.remove(plan_id);
                 }

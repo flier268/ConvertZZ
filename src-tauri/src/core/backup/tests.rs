@@ -1,3 +1,4 @@
+use super::super::types::ConflictPolicy;
 use super::*;
 use uuid::Uuid;
 
@@ -91,7 +92,7 @@ fn copies_file_and_directory_backups() {
     std::fs::create_dir(&folder).unwrap();
     std::fs::write(folder.join("b.txt"), "folder-content").unwrap();
     assert_eq!(
-        create_user_backup(&file).unwrap(),
+        create_user_backup(&file, ConflictPolicy::Overwrite).unwrap(),
         PathBuf::from(format!("{}.bak", file.display()))
     );
     assert_eq!(
@@ -99,7 +100,7 @@ fn copies_file_and_directory_backups() {
         "file-content"
     );
     assert_eq!(
-        create_user_backup(&folder).unwrap(),
+        create_user_backup(&folder, ConflictPolicy::Overwrite).unwrap(),
         PathBuf::from(format!("{}.bak", folder.display()))
     );
     assert_eq!(
@@ -129,6 +130,7 @@ fn create_user_backups_only_covers_affected_roots() {
             },
         ],
         &[kept.clone()],
+        ConflictPolicy::Overwrite,
     )
     .unwrap();
     assert_eq!(created, [PathBuf::from(format!("{}.bak", kept.display()))]);
@@ -139,5 +141,25 @@ fn create_user_backups_only_covers_affected_roots() {
     assert!(names.contains(&"kept.txt".into()));
     assert!(names.contains(&"kept.txt.bak".into()));
     assert!(!names.contains(&"skipped.txt.bak".into()));
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[test]
+fn skip_keeps_existing_bak_overwrite_replaces() {
+    let directory = temp_dir();
+    let file = directory.join("song.mp3");
+    std::fs::write(&file, "new-content").unwrap();
+    let bak = PathBuf::from(format!("{}.bak", file.display()));
+    std::fs::write(&bak, "old-backup").unwrap();
+    assert_eq!(
+        create_user_backup(&file, ConflictPolicy::Skip).unwrap(),
+        bak
+    );
+    assert_eq!(std::fs::read_to_string(&bak).unwrap(), "old-backup");
+    assert_eq!(
+        create_user_backup(&file, ConflictPolicy::Overwrite).unwrap(),
+        bak
+    );
+    assert_eq!(std::fs::read_to_string(&bak).unwrap(), "new-content");
     let _ = std::fs::remove_dir_all(&directory);
 }

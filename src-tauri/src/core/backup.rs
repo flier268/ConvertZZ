@@ -1,4 +1,5 @@
 use super::error::CoreError;
+use super::types::ConflictPolicy;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -85,6 +86,7 @@ pub fn prune_nested_backup_roots(roots: Vec<BackupRoot>) -> Vec<BackupRoot> {
 pub fn create_user_backups(
     roots: &[BackupRoot],
     affected_paths: &[PathBuf],
+    policy: ConflictPolicy,
 ) -> Result<Vec<PathBuf>, CoreError> {
     if roots.is_empty() || affected_paths.is_empty() {
         return Ok(Vec::new());
@@ -100,13 +102,16 @@ pub fn create_user_backups(
             BackupKind::File => path == &root.path,
         });
         if covers {
-            created.push(create_user_backup(&root.path)?);
+            created.push(create_user_backup(&root.path, policy)?);
         }
     }
     Ok(created)
 }
 
-pub fn create_user_backup(source_path: &Path) -> Result<PathBuf, CoreError> {
+pub fn create_user_backup(
+    source_path: &Path,
+    policy: ConflictPolicy,
+) -> Result<PathBuf, CoreError> {
     let absolute = resolve_path(&source_path.to_string_lossy());
     let target = user_backup_path(&absolute);
     let metadata = fs::symlink_metadata(&absolute)?;
@@ -117,8 +122,13 @@ pub fn create_user_backup(source_path: &Path) -> Result<PathBuf, CoreError> {
             serde_json::json!({ "path": absolute }),
         ));
     }
-    let _ = fs::remove_dir_all(&target);
-    let _ = fs::remove_file(&target);
+    if target.exists() {
+        if policy == ConflictPolicy::Skip {
+            return Ok(target);
+        }
+        let _ = fs::remove_dir_all(&target);
+        let _ = fs::remove_file(&target);
+    }
     if metadata.is_dir() {
         copy_dir(&absolute, &target)?;
     } else if metadata.is_file() {

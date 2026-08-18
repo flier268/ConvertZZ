@@ -171,6 +171,7 @@ function mockCoreRequest(operation: string, rawPayload: unknown): unknown {
   if (operation === "files.plan") {
     const mode = String(payload.mode ?? "content");
     const rename = mode === "filename" || mode === "both";
+    const content = mode === "content" || mode === "both";
     return {
       planId: "plan-1",
       createdAt: "2026-08-15T00:00:00.000Z",
@@ -179,11 +180,11 @@ function mockCoreRequest(operation: string, rawPayload: unknown): unknown {
         {
           sourcePath: "/tmp/里面.txt",
           outputPath: rename ? "/tmp/裡面.txt" : "/tmp/里面.txt",
-          kind: rename ? "filename" : "file",
+          kind: rename && !content ? "filename" : "file",
           selected: true,
           detectedEncoding: "utf8",
-          sourcePreview: rename ? "里面.txt" : "里面开发头发",
-          outputPreview: rename ? "裡面.txt" : "裡面開發頭髮",
+          sourcePreview: content ? "里面开发头发" : "里面.txt",
+          outputPreview: content ? "裡面開發頭髮" : "裡面.txt",
           status: "ready",
         },
       ],
@@ -193,7 +194,86 @@ function mockCoreRequest(operation: string, rawPayload: unknown): unknown {
     return { succeeded: ["/tmp/里面.txt"], skipped: [], failed: [] };
   }
   if (operation === "files.cancel") {
-    return {};
+    return { cancelled: true };
+  }
+  if (operation === "audio.scan") {
+    return [
+      {
+        path: "/tmp/song.mp3",
+        format: "mp3",
+        selected: true,
+        hasCoverArt: true,
+        fields: [
+          {
+            key: "title",
+            label: "標題",
+            container: "id3v2",
+            values: ["里面"],
+            selected: true,
+          },
+          {
+            key: "artist",
+            label: "演出者",
+            container: "id3v2",
+            values: ["头发"],
+            selected: true,
+          },
+          {
+            key: "frame:TIT3",
+            label: "TIT3",
+            container: "id3v2",
+            values: ["未知字幕"],
+            selected: false,
+          },
+        ],
+      },
+    ];
+  }
+  if (operation === "audio.plan") {
+    return {
+      planId: "audio-plan-1",
+      createdAt: "2026-08-15T00:00:00.000Z",
+      warnings: [],
+      files: [
+        {
+          path: "/tmp/song.mp3",
+          format: "mp3",
+          selected: true,
+          hasCoverArt: true,
+          fields: [
+            {
+              key: "title",
+              label: "標題",
+              container: "id3v2",
+              values: ["里面"],
+              convertedValues: ["裡面"],
+              selected: true,
+            },
+            {
+              key: "artist",
+              label: "演出者",
+              container: "id3v2",
+              values: ["头发"],
+              convertedValues: ["頭髮"],
+              selected: true,
+            },
+            {
+              key: "frame:TIT3",
+              label: "TIT3",
+              container: "id3v2",
+              values: ["未知字幕"],
+              selected: false,
+            },
+          ],
+        },
+      ],
+    };
+  }
+  if (operation === "audio.apply") {
+    return { succeeded: ["/tmp/song.mp3"], skipped: [], failed: [] };
+  }
+  if (operation === "audio.cancel") {
+    return { cancelled: true };
   }
   if (operation === "dictionary.read") {
     return {

@@ -197,13 +197,20 @@ describe("驗收項目的自動化契約", () => {
   it("G-15／G-16 更新先確認；簽署通道不可用時改開 Releases", () => {
     const update = readProjectFile("src/lib/update.ts");
     const appUpdate = readProjectFile("src/lib/appUpdate.ts");
+    const settings = readProjectFile("src/pages/SettingsPage.vue");
+    const contracts = readProjectFile("shared/contracts.ts");
     expect(update).toContain('kind: "install"');
     expect(update).toContain('kind: "open"');
+    expect(update).toContain("includePreRelease");
     expect(update).toContain("簽署更新通道不可用時改走 GitHub Release");
     expect(appUpdate).toContain("是否下載並安裝");
     expect(appUpdate).toContain("此安裝方式無法自動更新");
     expect(appUpdate).toContain("downloadAndInstall");
     expect(appUpdate).toContain("openUrl(resolved.url)");
+    expect(appUpdate).toContain("includePreRelease");
+    expect(contracts).toContain("checkPreReleaseUpdates");
+    expect(settings).toContain("checkPreReleaseUpdates");
+    expect(settings).toContain("檢查開發／預發佈版本");
   });
 
   it("H-03 /file 會自動建立檔案預覽", () => {

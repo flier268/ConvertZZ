@@ -133,6 +133,19 @@ fn missing_v2_fields_default_skipped_update() {
 }
 
 #[test]
+fn missing_v2_fields_default_pre_release_updates_off() {
+    assert_eq!(migrate(Value::Null)["checkPreReleaseUpdates"], false);
+    assert_eq!(
+        migrate(json!({ "version": 2, "engine": "legacy" }))["checkPreReleaseUpdates"],
+        false
+    );
+    assert_eq!(
+        migrate(json!({ "version": 2, "checkPreReleaseUpdates": true }))["checkPreReleaseUpdates"],
+        true
+    );
+}
+
+#[test]
 fn missing_backup_flag_defaults_true() {
     assert_eq!(migrate(Value::Null)["autoBackupBeforeConversion"], true);
     assert_eq!(

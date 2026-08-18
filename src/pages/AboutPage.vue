@@ -6,6 +6,7 @@ import { inject, onMounted, ref } from "vue";
 import type { PlatformCapabilities } from "@shared/contracts";
 import BrandMark from "../BrandMark.vue";
 import { isDialogCancelled, promptForAppUpdate } from "../lib/appUpdate";
+import { loadSettings } from "../lib/settings";
 
 const capabilities = ref<PlatformCapabilities>();
 const checkingUpdate = ref(false);
@@ -17,7 +18,8 @@ onMounted(async () => {
 async function checkForUpdates(): Promise<void> {
   checkingUpdate.value = true;
   try {
-    await promptForAppUpdate();
+    const settings = await loadSettings();
+    await promptForAppUpdate({ includePreRelease: settings.checkPreReleaseUpdates });
   } catch (error) {
     if (!isDialogCancelled(error)) {
       ElMessage.error(error instanceof Error ? error.message : String(error));

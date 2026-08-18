@@ -68,6 +68,7 @@ export function defaultSettings(): SettingsV2 {
       jpTextStyles: "",
     },
     checkVersionOnStart: true,
+    checkPreReleaseUpdates: false,
     skippedUpdateVersion: "",
     showMainWindowOnStart: false,
   };

@@ -58,6 +58,7 @@ const defaultSettings: SettingsV2 = {
     jpTextStyles: "",
   },
   checkVersionOnStart: false,
+  checkPreReleaseUpdates: false,
   skippedUpdateVersion: "",
   showMainWindowOnStart: true,
 };
@@ -163,7 +164,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
 
 function mockCoreRequest(operation: string, rawPayload: unknown): unknown {
   const payload = (rawPayload ?? {}) as Record<string, unknown>;
-  if (operation === "health") return { engine: "rust", version: "2.0.0" };
+  if (operation === "health") return { engine: "rust", version: "2.0.0-beta1" };
   if (operation === "settings.migrate") {
     const input = payload.input as SettingsV2 | undefined;
     return input?.version === 2 ? input : structuredClone(defaultSettings);
@@ -308,7 +309,7 @@ function mockCoreRequest(operation: string, rawPayload: unknown): unknown {
 }
 
 export async function getVersion(): Promise<string> {
-  return "2.0.0";
+  return "2.0.0-beta1";
 }
 
 export class LogicalPosition {
@@ -378,7 +379,7 @@ export async function relaunch(): Promise<void> {}
 export async function check() {
   if (e2e().update !== "install") return null;
   return {
-    currentVersion: "2.0.0",
+    currentVersion: "2.0.0-beta1",
     version: "2.1.0",
     body: "測試更新",
     close: async () => undefined,

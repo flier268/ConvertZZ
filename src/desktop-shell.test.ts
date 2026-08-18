@@ -176,6 +176,7 @@ describe("Tauri desktop shell", () => {
     expect(rust).toContain("tauri_plugin_process::init");
     expect(app).toContain("promptForAppUpdate");
     expect(app).toContain("skippedVersion: settings.skippedUpdateVersion");
+    expect(app).toContain("includePreRelease: settings.checkPreReleaseUpdates");
     expect(app).toContain("app_log_path");
     expect(app).toContain("記錄檔：");
     expect(about).toContain("promptForAppUpdate");

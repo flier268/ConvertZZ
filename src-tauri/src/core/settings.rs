@@ -67,6 +67,7 @@ pub fn default_settings() -> Value {
             "jpTextStyles": ""
         },
         "checkVersionOnStart": true,
+        "checkPreReleaseUpdates": false,
         "skippedUpdateVersion": "",
         "showMainWindowOnStart": false
     })
@@ -163,6 +164,7 @@ pub fn migrate(input: Value) -> Value {
             "jpTextStyles": string_value(fanhuaji.get("JpTextStyles"))
         },
         "checkVersionOnStart": boolean_value(input.get("CheckVersion"), true),
+        "checkPreReleaseUpdates": false,
         "skippedUpdateVersion": "",
         "showMainWindowOnStart": false
     })

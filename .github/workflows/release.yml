@@ -154,7 +154,7 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ConvertZZ ${{ env.RELEASE_TAG }}
           draft: true
-          prerelease: false
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           generate_release_notes: true
           body: |
             此版本預設未提供作業系統程式碼簽章。

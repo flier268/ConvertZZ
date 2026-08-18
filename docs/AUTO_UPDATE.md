@@ -118,6 +118,10 @@ cat ~/.tauri/convertzz.key
 
 `/releases/latest` **只看已發佈、且不是預發佈的最新 Release**。
 
+程式預設只檢查正式版。設定中的「檢查開發／預發佈版本」開啟後，才會一併比較 alpha、beta、rc 等標籤（例如 `v2.0.0-beta1`），排序為 `2.0.0 > 2.0.0-beta2 > 2.0.0-beta1 > 2.0.0-alpha9`。
+
+含 `-` 的發行標籤（如 `v2.0.0-beta1`）會在 GitHub Release 標成 Pre-release，因此不會成為 `/releases/latest`。
+
 草稿 Release 不會被程式查到。
 
 請先檢查草稿內容，再按 Publish。

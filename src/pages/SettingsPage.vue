@@ -208,6 +208,15 @@ async function saveApiKey() {
             <el-checkbox v-model="settings.promptAfterConversion">完成後提示</el-checkbox
             ><el-checkbox v-model="settings.showMainWindowOnStart">啟動時顯示主視窗</el-checkbox
             ><el-checkbox v-model="settings.checkVersionOnStart">啟動時檢查更新</el-checkbox>
+            <el-tooltip
+              content="預設只提示正式版。開啟後也會檢查 alpha、beta、rc 等預發佈版本。"
+              placement="top"
+              :show-after="300"
+            >
+              <el-checkbox v-model="settings.checkPreReleaseUpdates"
+                >檢查開發／預發佈版本</el-checkbox
+              >
+            </el-tooltip>
           </div>
           <p v-if="settings.skippedUpdateVersion" class="settings-note">
             已略過 {{ settings.skippedUpdateVersion }}，啟動時不會再詢問此版本。

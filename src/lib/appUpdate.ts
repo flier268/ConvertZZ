@@ -19,12 +19,17 @@ export async function rememberSkippedUpdateVersion(version: string): Promise<voi
 }
 
 export async function promptForAppUpdate(
-  options: { silentWhenCurrent?: boolean; skippedVersion?: string } = {},
+  options: {
+    silentWhenCurrent?: boolean;
+    skippedVersion?: string;
+    includePreRelease?: boolean;
+  } = {},
 ): Promise<void> {
   const currentVersion = await getVersion();
   const pending: { update: Update | null } = { update: null };
   try {
     const resolved = await resolveUpdate(currentVersion, {
+      includePreRelease: options.includePreRelease,
       checkInstallable: async () => {
         pending.update = await check();
         if (!pending.update) return null;

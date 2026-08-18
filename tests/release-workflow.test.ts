@@ -45,6 +45,7 @@ describe("發行工作流程契約", () => {
     expect(workflow).toContain("softprops/action-gh-release");
     expect(workflow).toContain("files: artifacts/**/*");
     expect(workflow).toContain("write-latest-json.mjs");
+    expect(workflow).toContain("prerelease: ${{ contains(env.RELEASE_TAG, '-') }}");
   });
 
   it("J-14 草稿說明會註明未提供作業系統程式碼簽章", () => {

@@ -96,6 +96,7 @@ function settingsFixture(overrides: Partial<SettingsV2> = {}): SettingsV2 {
       jpTextStyles: "",
     },
     checkVersionOnStart: false,
+    checkPreReleaseUpdates: false,
     skippedUpdateVersion: "",
     showMainWindowOnStart: true,
     ...overrides,

@@ -33,6 +33,7 @@ export function importedSettingsEffects(settings: SettingsV2) {
     },
     showMainWindowOnStart: settings.showMainWindowOnStart,
     checkVersionOnStart: settings.checkVersionOnStart,
+    checkPreReleaseUpdates: settings.checkPreReleaseUpdates,
     hotkeys: {
       autoCopy: settings.hotkeys.autoCopy,
       autoPaste: settings.hotkeys.autoPaste,

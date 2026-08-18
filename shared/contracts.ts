@@ -236,6 +236,8 @@ export interface SettingsV2 {
     serviceInfoCachedAt?: string;
   };
   checkVersionOnStart: boolean;
+  /** 是否檢查 alpha／beta／rc 等預發佈版本；預設只檢查正式版。 */
+  checkPreReleaseUpdates: boolean;
   skippedUpdateVersion: string;
   showMainWindowOnStart: boolean;
 }

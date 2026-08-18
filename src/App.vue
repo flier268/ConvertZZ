@@ -74,6 +74,7 @@ onMounted(async () => {
       void promptForAppUpdate({
         silentWhenCurrent: true,
         skippedVersion: settings.skippedUpdateVersion,
+        includePreRelease: settings.checkPreReleaseUpdates,
       }).catch(() => undefined);
     }
     if (args.length) {

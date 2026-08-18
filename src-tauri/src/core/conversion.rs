@@ -59,21 +59,31 @@ pub struct ConversionService {
     pub zhconvert: ZhConvertClient,
 }
 
-fn configure_segment_dict_root() {
-    if std::env::var_os("NOVEL_SEGMENT_DICT_ROOT").is_some() {
-        return;
-    }
+fn segment_dict_candidates(executable: Option<&Path>, appdir: Option<&Path>) -> Vec<PathBuf> {
     let mut candidates = vec![
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/segment-dict"),
         PathBuf::from("src-tauri/resources/segment-dict"),
     ];
-    if let Ok(executable) = std::env::current_exe() {
-        if let Some(directory) = executable.parent() {
-            candidates.push(directory.join("segment-dict"));
-            candidates.push(directory.join("resources/segment-dict"));
-        }
+    if let Some(directory) = executable.and_then(Path::parent) {
+        candidates.push(directory.join("segment-dict"));
+        candidates.push(directory.join("resources/segment-dict"));
+        // Linux AppImage／DEB／RPM：二進位在 usr/bin，資源在 usr/lib/ConvertZZ。
+        candidates.push(directory.join("../lib/ConvertZZ/segment-dict"));
     }
-    if let Some(path) = candidates
+    if let Some(appdir) = appdir {
+        candidates.push(appdir.join("usr/lib/ConvertZZ/segment-dict"));
+        candidates.push(appdir.join("segment-dict"));
+    }
+    candidates
+}
+
+fn configure_segment_dict_root() {
+    if std::env::var_os("NOVEL_SEGMENT_DICT_ROOT").is_some() {
+        return;
+    }
+    let executable = std::env::current_exe().ok();
+    let appdir = std::env::var_os("APPDIR").map(PathBuf::from);
+    if let Some(path) = segment_dict_candidates(executable.as_deref(), appdir.as_deref())
         .into_iter()
         .find(|path| path.join("segment").is_dir())
     {

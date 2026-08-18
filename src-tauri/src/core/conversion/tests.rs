@@ -73,6 +73,38 @@ async fn preserves_whitespace_and_punctuation() {
 }
 
 #[test]
+fn segment_dict_candidates_include_linux_bundle_layout() {
+    let exe = Path::new("/tmp/squashfs-root/usr/bin/convertzz");
+    let appdir = Path::new("/tmp/squashfs-root");
+    let candidates = super::segment_dict_candidates(Some(exe), Some(appdir));
+    assert!(candidates.iter().any(|path| {
+        path == Path::new("/tmp/squashfs-root/usr/bin/../lib/ConvertZZ/segment-dict")
+            || path.ends_with("lib/ConvertZZ/segment-dict")
+    }));
+    assert!(candidates
+        .iter()
+        .any(|path| path == Path::new("/tmp/squashfs-root/usr/lib/ConvertZZ/segment-dict")));
+}
+
+#[test]
+fn segment_dict_candidates_resolve_extracted_appimage_layout() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/tmp-segment-dict-layout");
+    let bin_dir = root.join("usr/bin");
+    let dict_dir = root.join("usr/lib/ConvertZZ/segment-dict/segment");
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&bin_dir).unwrap();
+    std::fs::create_dir_all(&dict_dir).unwrap();
+    let exe = bin_dir.join("convertzz");
+    std::fs::write(&exe, []).unwrap();
+    let resolved = super::segment_dict_candidates(Some(&exe), Some(&root))
+        .into_iter()
+        .find(|path| path.join("segment").is_dir());
+    let _ = std::fs::remove_dir_all(&root);
+    let resolved = resolved.expect("bundle layout segment-dict");
+    assert!(resolved.join("segment").is_dir());
+}
+
+#[test]
 fn split_text_breaks_on_ideographic_full_stop_without_slicing_mid_char() {
     let source = format!("{}。{}", "甲".repeat(5_000), "乙".repeat(4_000));
     let chunks = split_text(&source);

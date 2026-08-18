@@ -62,4 +62,14 @@ describe("發行工作流程契約", () => {
       "https://github.com/flier268/ConvertZZ/releases/latest/download/latest.json",
     );
   });
+
+  it("Windows 發行會跑 pnpm check，且倉庫強制 LF 以免 Prettier 因 CRLF 失敗", () => {
+    const gitattributes = readProjectFile(".gitattributes");
+    const prettier = readProjectFile(".prettierrc.json");
+
+    expect(workflow).toContain("pnpm run check");
+    expect(workflow).toContain("os: windows-latest");
+    expect(gitattributes).toMatch(/^\*\s+text=auto\s+eol=lf\s*$/m);
+    expect(prettier).toContain('"endOfLine": "lf"');
+  });
 });

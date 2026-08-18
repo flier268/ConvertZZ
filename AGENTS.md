@@ -72,7 +72,7 @@ cargo update -p <crate> --manifest-path src-tauri/Cargo.toml
 
 ## 程式風格
 
-- TypeScript、Vue 與 JSON 使用 Prettier：行寬 100、雙引號、分號、多行尾逗號。
+- TypeScript、Vue 與 JSON 使用 Prettier：行寬 100、雙引號、分號、多行尾逗號、換行 LF。`.gitattributes` 以 `eol=lf` 避免 Windows CI 因 CRLF 讓 `prettier --check` 失敗。
 - Rust 使用 `rustfmt`。
 - 新程式碼使用 TypeScript。維持現有的 `camelCase` 函式與欄位、`PascalCase` 元件與型別。
 - Vue 頁面維持 Composition API 與現有 Element Plus 用法。

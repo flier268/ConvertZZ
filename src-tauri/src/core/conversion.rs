@@ -5,15 +5,54 @@ use super::zhconvert::ZhConvertClient;
 use cjk_convert_rs::{cjk2zht, cn2tw, tw2cn};
 use novel_segment::{DoSegmentOptions, Segment, SegmentOptions};
 use std::collections::HashMap;
+use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime};
 
 const MAX_CHUNK_CHARACTERS: usize = 8_192;
 
+/// Dictionary cache identity. mtime alone is insufficient on filesystems with one-second
+/// resolution; length catches most edits, and inode/file-index catches atomic replaces that
+/// keep the same byte length.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DictionaryStamp {
+    modified: SystemTime,
+    len: u64,
+    identity: u64,
+}
+
+impl DictionaryStamp {
+    fn from_metadata(metadata: &Metadata) -> Self {
+        Self {
+            modified: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+            len: metadata.len(),
+            identity: file_identity(metadata),
+        }
+    }
+}
+
+fn file_identity(metadata: &Metadata) -> u64 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        metadata.ino() ^ metadata.dev().rotate_left(32)
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        metadata.file_index().unwrap_or(0)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = metadata;
+        0
+    }
+}
+
 pub struct ConversionService {
     segmenter: Segment,
-    dictionaries: Mutex<HashMap<PathBuf, (SystemTime, Arc<LegacyDictionary>)>>,
+    dictionaries: Mutex<HashMap<PathBuf, (DictionaryStamp, Arc<LegacyDictionary>)>>,
     default_dictionary: Option<PathBuf>,
     pub zhconvert: ZhConvertClient,
 }
@@ -158,20 +197,18 @@ impl ConversionService {
     }
 
     fn dictionary(&self, path: &Path) -> Result<Arc<LegacyDictionary>, CoreError> {
-        let mtime = std::fs::metadata(path)?
-            .modified()
-            .unwrap_or(SystemTime::UNIX_EPOCH);
+        let stamp = DictionaryStamp::from_metadata(&std::fs::metadata(path)?);
         let mut cache = self
             .dictionaries
             .lock()
             .map_err(|_| CoreError::new("DICTIONARY_LOCK", "無法鎖定字典快取。"))?;
-        if let Some((cached_mtime, dictionary)) = cache.get(path) {
-            if *cached_mtime == mtime {
+        if let Some((cached_stamp, dictionary)) = cache.get(path) {
+            if *cached_stamp == stamp {
                 return Ok(Arc::clone(dictionary));
             }
         }
         let dictionary = Arc::new(LegacyDictionary::load(path)?);
-        cache.insert(path.to_path_buf(), (mtime, Arc::clone(&dictionary)));
+        cache.insert(path.to_path_buf(), (stamp, Arc::clone(&dictionary)));
         Ok(dictionary)
     }
 }

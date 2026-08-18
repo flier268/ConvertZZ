@@ -113,6 +113,61 @@ async fn legacy_dictionary() {
 }
 
 #[tokio::test]
+async fn legacy_dictionary_reloads_after_same_mtime_replace() {
+    // CI filesystems may only resolve mtime to one second. Same-length replacements
+    // (裡面→裏邊) must still invalidate the cache after an atomic rename.
+    let directory =
+        std::env::temp_dir().join(format!("convertzz-dict-cache-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("Dictionary.csv");
+    let original = "\u{feff}true\t一般\t里面\t1\t裡面\t1\n";
+    let updated = "\u{feff}true\t一般\t里面\t3\t裏邊\t3\n";
+    assert_eq!(original.len(), updated.len());
+    std::fs::write(&path, original).unwrap();
+    let mtime = std::fs::metadata(&path).unwrap().modified().unwrap();
+
+    let first = service()
+        .convert(ConversionRequest {
+            text: "里面".into(),
+            direction: Direction::S2t,
+            engine: EngineKind::Legacy,
+            dictionary_path: Some(path.to_string_lossy().into_owned()),
+            zhconvert: None,
+            vocabulary_correction: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(first.text, "裡面");
+
+    let temporary = directory.join(".convertzz-dictionary-next.csv");
+    let previous = directory.join(".convertzz-dictionary-previous.csv");
+    std::fs::write(&temporary, updated).unwrap();
+    std::fs::rename(&path, &previous).unwrap();
+    std::fs::rename(&temporary, &path).unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_modified(mtime)
+        .unwrap();
+    assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), mtime);
+
+    let second = service()
+        .convert(ConversionRequest {
+            text: "里面".into(),
+            direction: Direction::S2t,
+            engine: EngineKind::Legacy,
+            dictionary_path: Some(path.to_string_lossy().into_owned()),
+            zhconvert: None,
+            vocabulary_correction: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(second.text, "裏邊");
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
 async fn vocabulary_off_uses_glyph_only() {
     let result = service()
         .convert(ConversionRequest {

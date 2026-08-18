@@ -157,8 +157,6 @@ jobs:
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           generate_release_notes: true
           body: |
-            此版本預設未提供作業系統程式碼簽章。
-
             Windows 安裝程式與 Linux AppImage 可用應用程式內自動更新。
 
             自動更新會驗證 latest.json 與安裝包簽章。

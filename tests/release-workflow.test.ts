@@ -52,9 +52,12 @@ describe("發行工作流程契約", () => {
     expect(workflow).toContain("prerelease: ${{ contains(env.RELEASE_TAG, '-') }}");
   });
 
-  it("J-14 草稿說明會註明未提供作業系統程式碼簽章", () => {
-    expect(workflow).toContain("此版本預設未提供作業系統程式碼簽章。");
+  it("草稿說明會註明自動更新範圍與 SHA-256", () => {
+    expect(workflow).toContain("Windows 安裝程式與 Linux AppImage 可用應用程式內自動更新。");
+    expect(workflow).toContain("自動更新會驗證 latest.json 與安裝包簽章。");
     expect(workflow).toContain("DEB 與 RPM 請改從本頁下載。");
+    expect(workflow).toContain("所有發行檔仍可用隨附的 SHA-256 檔案驗證。");
+    expect(workflow).not.toContain("作業系統程式碼簽章");
   });
 
   it("G-15 簽署更新只涵蓋 Windows 安裝程式與 Linux AppImage", () => {

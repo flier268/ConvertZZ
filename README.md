@@ -383,8 +383,6 @@ GitHub Actions 會建立草稿 Release。
 
 每個發行檔會附帶 SHA-256。
 
-第一版安裝包不含作業系統程式碼簽章。
-
 Windows 安裝程式與 Linux AppImage 支援應用程式內自動更新。
 
 更新檔會以 minisign 公鑰驗證。

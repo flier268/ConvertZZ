@@ -2,10 +2,6 @@
 
 這份文件說明 ConvertZZ 應用程式內自動更新的金鑰怎麼產生、放到哪裡，以及發行時要注意什麼。
 
-這不是 Windows Authenticode，也不是 Apple 公證。
-
-使用者在檔案總管看到的「未知發行者」不會因為這組金鑰消失。
-
 這組金鑰只用來驗證 `latest.json` 指向的更新檔沒有被改過。
 
 官方步驟見 [Tauri updater 文件](https://v2.tauri.app/plugin/updater/)。

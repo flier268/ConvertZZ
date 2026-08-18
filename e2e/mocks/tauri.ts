@@ -128,6 +128,8 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
   switch (command) {
     case "core_request":
       return mockCoreRequest(String(args.operation ?? ""), args.payload) as T;
+    case "app_log":
+      return undefined as T;
     case "app_log_path":
       return null as T;
     case "startup_args":

@@ -63,6 +63,11 @@ fn app_log_path(app: AppHandle) -> Option<String> {
 }
 
 #[tauri::command]
+fn app_log(app: AppHandle, source: String, message: String) {
+    append_log(&app, &source, &message);
+}
+
+#[tauri::command]
 fn startup_args() -> Vec<String> {
     std::env::args().skip(1).collect()
 }
@@ -500,6 +505,13 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // Release webviews load local files immediately; this plugin must exist first.
+            if let Err(error) = app
+                .handle()
+                .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+            {
+                append_log(app.handle(), "global-shortcut", &error.to_string());
+            }
             create_configured_windows(app)?;
             hide_startup_windows(app);
             clear_overlay_window_backgrounds(app);
@@ -509,13 +521,12 @@ pub fn run() {
                 Ok(Err(error)) => append_log(app.handle(), "tray", &error.to_string()),
                 Ok(Ok(())) => {}
             }
-            app.handle()
-                .plugin(tauri_plugin_global_shortcut::Builder::new().build())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             core_request,
             app_log_path,
+            app_log,
             startup_args,
             legacy_settings_path,
             platform_capabilities,

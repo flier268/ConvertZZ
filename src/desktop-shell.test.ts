@@ -191,6 +191,19 @@ describe("Tauri desktop shell", () => {
     expect(rust).toContain("fn core_request");
   });
 
+  it("registers the global-shortcut plugin before creating release webviews", () => {
+    const rust = readProjectFile("src-tauri/src/lib.rs");
+    const setup = rust.slice(rust.indexOf(".setup(|app|"));
+
+    expect(setup.indexOf("tauri_plugin_global_shortcut")).toBeGreaterThanOrEqual(0);
+    expect(setup.indexOf("tauri_plugin_global_shortcut")).toBeLessThan(
+      setup.indexOf("create_configured_windows"),
+    );
+    expect(rust).toContain("fn app_log(");
+    expect(readProjectFile("src/App.vue")).toContain('invoke("app_log"');
+    expect(readProjectFile("src/lib/desktop.ts")).toContain("無法註冊全域快捷鍵");
+  });
+
   it("raises the production chunk size warning for Element Plus", () => {
     const vite = readProjectFile("vite.config.ts");
 

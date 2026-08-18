@@ -33,6 +33,7 @@ describe("floatingBallPosition", () => {
 describe("applyDesktopSettings", () => {
   it("registers enabled shortcuts and runs the action on press", async () => {
     vi.mocked(invoke).mockResolvedValue({ globalShortcuts: true });
+    vi.mocked(unregisterAll).mockResolvedValue(undefined);
     const settings = {
       floatingBall: { enabled: false, x: -1, y: -1 },
       hotkeys: {
@@ -79,6 +80,24 @@ describe("applyDesktopSettings", () => {
     const warnings = await applyDesktopSettings(settings);
     expect(warnings).toEqual([]);
     expect(unregisterAll).not.toHaveBeenCalled();
+    expect(register).not.toHaveBeenCalled();
+  });
+
+  it("treats a missing shortcut plugin as a warning instead of aborting", async () => {
+    vi.mocked(invoke).mockResolvedValue({ globalShortcuts: true });
+    vi.mocked(unregisterAll).mockRejectedValueOnce(new Error("plugin global-shortcut not found"));
+    vi.mocked(register).mockClear();
+    const settings = {
+      floatingBall: { enabled: false, x: -1, y: -1 },
+      hotkeys: {
+        autoCopy: true,
+        autoPaste: true,
+        shortcuts: [{ enabled: true, accelerator: "Alt+U", action: "a4" }],
+      },
+    } as SettingsV2;
+
+    const warnings = await applyDesktopSettings(settings);
+    expect(warnings).toEqual(["無法註冊全域快捷鍵：plugin global-shortcut not found"]);
     expect(register).not.toHaveBeenCalled();
   });
 });

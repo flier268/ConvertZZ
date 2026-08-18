@@ -115,6 +115,7 @@ onMounted(async () => {
     ready.value = true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    await invoke("app_log", { source: "startup", message }).catch(() => undefined);
     const logPath = await invoke<string | null>("app_log_path").catch(() => null);
     startupError.value = logPath ? `${message}\n記錄檔：${logPath}` : message;
     await invoke("show_main_window").catch(() => undefined);

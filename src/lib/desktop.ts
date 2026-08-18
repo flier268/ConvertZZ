@@ -42,7 +42,12 @@ export async function applyDesktopSettings(
   const capabilities = await invoke<PlatformCapabilities>("platform_capabilities");
   if (!capabilities.globalShortcuts) return warnings;
   warnings.push(...unregisteredAcceleratorWarnings(settings.hotkeys.shortcuts));
-  await unregisterAll();
+  try {
+    await unregisterAll();
+  } catch (error) {
+    warnings.push(`無法註冊全域快捷鍵：${error instanceof Error ? error.message : String(error)}`);
+    return warnings;
+  }
   for (const shortcut of registrableShortcuts(settings.hotkeys.shortcuts)) {
     try {
       await register(shortcut.accelerator, async (event) => {

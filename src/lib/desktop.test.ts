@@ -14,7 +14,12 @@ vi.mock("./toast", () => ({ showAppToast: vi.fn() }));
 const { invoke } = await import("@tauri-apps/api/core");
 const { register, unregisterAll } = await import("@tauri-apps/plugin-global-shortcut");
 const { executeLegacyAction } = await import("./legacyActions");
-const { applyDesktopSettings, floatingBallPosition } = await import("./desktop");
+const {
+  applyDesktopSettings,
+  applyStartupWindowVisibility,
+  floatingBallPosition,
+  shouldShowMainWindowOnStartup,
+} = await import("./desktop");
 
 function settingsWithBall(x: number, y: number): SettingsV2 {
   return { floatingBall: { enabled: true, x, y } } as SettingsV2;
@@ -27,6 +32,37 @@ describe("floatingBallPosition", () => {
 
   it("ignores the unset default coordinates", () => {
     expect(floatingBallPosition(settingsWithBall(-1, -1))).toBeUndefined();
+  });
+});
+
+describe("shouldShowMainWindowOnStartup", () => {
+  it("shows for first-run onboarding even when the setting is off", () => {
+    expect(
+      shouldShowMainWindowOnStartup({ showMainWindowOnStart: false }, { showForOnboarding: true }),
+    ).toBe(true);
+  });
+
+  it("keeps the tray-first default when onboarding is done", () => {
+    expect(
+      shouldShowMainWindowOnStartup({ showMainWindowOnStart: false }, { showForOnboarding: false }),
+    ).toBe(false);
+  });
+
+  it("still honors CLI force-show and the user setting", () => {
+    expect(
+      shouldShowMainWindowOnStartup({ showMainWindowOnStart: false }, { forceShow: true }),
+    ).toBe(true);
+    expect(shouldShowMainWindowOnStartup({ showMainWindowOnStart: true })).toBe(true);
+  });
+});
+
+describe("applyStartupWindowVisibility", () => {
+  it("invokes show_main_window for pending onboarding", async () => {
+    vi.mocked(invoke).mockClear();
+    await applyStartupWindowVisibility({ showMainWindowOnStart: false } as SettingsV2, {
+      showForOnboarding: true,
+    });
+    expect(invoke).toHaveBeenCalledWith("show_main_window");
   });
 });
 

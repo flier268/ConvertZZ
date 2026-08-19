@@ -23,7 +23,7 @@ import SettingsPage from "./pages/SettingsPage.vue";
 import AboutPage from "./pages/AboutPage.vue";
 import OnboardingTour from "./OnboardingTour.vue";
 import BrandMark from "./BrandMark.vue";
-import { loadSettings } from "./lib/settings";
+import { isOnboardingComplete, loadSettings } from "./lib/settings";
 import { core } from "./lib/coreClient";
 import { setCliInvocation } from "./lib/cli";
 import type { ParsedCli } from "@shared/contracts";
@@ -64,14 +64,18 @@ onMounted(async () => {
   try {
     step = "loadSettings";
     const settings = await loadSettings();
-    step = "applyDesktopSettings";
-    const desktopWarnings = await applyDesktopSettings(settings, { revealFloating: false });
-    for (const warning of desktopWarnings) await showAppToast(warning);
     step = "startup_args";
     const args = await invoke<string[]>("startup_args");
     hasCliArgs.value = args.length > 0;
+    // 首次導覽需要主視窗；要在其他啟動作業前先顯示，避免只看到閃一下就被藏進托盤。
     step = "applyStartupWindowVisibility";
-    await applyStartupWindowVisibility(settings, args.length > 0);
+    await applyStartupWindowVisibility(settings, {
+      forceShow: args.length > 0,
+      showForOnboarding: !hasCliArgs.value && !(await isOnboardingComplete()),
+    });
+    step = "applyDesktopSettings";
+    const desktopWarnings = await applyDesktopSettings(settings, { revealFloating: false });
+    for (const warning of desktopWarnings) await showAppToast(warning);
     step = "load_zhconvert_api_key";
     const savedApiKey = await invoke<string | null>("load_zhconvert_api_key").catch(() => null);
     if (savedApiKey) {

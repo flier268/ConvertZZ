@@ -42,4 +42,15 @@ describe("第一次啟動導覽", () => {
     expect(tour).toContain("importStepNextLabel(settingsImported)");
     expect(tour).not.toContain("children: '略過匯入'");
   });
+
+  it("開始導覽時會顯示主視窗，避免開在已隱藏的視窗上", () => {
+    const tour = readFileSync(
+      fileURLToPath(new URL("../OnboardingTour.vue", import.meta.url)),
+      "utf8",
+    );
+    const app = readFileSync(fileURLToPath(new URL("../App.vue", import.meta.url)), "utf8");
+    expect(tour).toContain('invoke("show_main_window")');
+    expect(app).toContain("showForOnboarding");
+    expect(app).toContain("isOnboardingComplete");
+  });
 });

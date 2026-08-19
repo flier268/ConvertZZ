@@ -53,6 +53,8 @@ async function startTour(): Promise<void> {
   await invoke("show_main_window").catch(() => undefined);
   emit("started");
   open.value = true;
+  // 再開一次，蓋過啟動階段可能晚到的 hide，確保導覽不會開在已隱藏的主視窗上。
+  await invoke("show_main_window").catch(() => undefined);
 }
 
 async function finishTour(): Promise<void> {

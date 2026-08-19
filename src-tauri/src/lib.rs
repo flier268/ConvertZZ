@@ -386,7 +386,9 @@ fn install_tray(app: &tauri::App) -> tauri::Result<()> {
 }
 
 fn hide_startup_windows(app: &tauri::App) {
-    for label in ["main", "floating", "toast"] {
+    // main 在設定裡已是 visible:false。啟動時再 hide 一次，會與前端首次導覽的
+    // show_main_window 在 Windows 上競態，造成主視窗閃過後被藏起、只剩懸浮球。
+    for label in ["floating", "toast"] {
         if let Some(window) = app.get_webview_window(label) {
             let _ = window.hide();
         }

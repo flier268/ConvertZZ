@@ -14,11 +14,19 @@ export function floatingBallPosition(settings: SettingsV2): { x: number; y: numb
   return undefined;
 }
 
+export function shouldShowMainWindowOnStartup(
+  settings: Pick<SettingsV2, "showMainWindowOnStart">,
+  options: { forceShow?: boolean; showForOnboarding?: boolean } = {},
+): boolean {
+  return Boolean(options.forceShow || options.showForOnboarding || settings.showMainWindowOnStart);
+}
+
 export async function applyStartupWindowVisibility(
   settings: SettingsV2,
-  forceShow = false,
+  options: { forceShow?: boolean; showForOnboarding?: boolean } | boolean = {},
 ): Promise<void> {
-  if (forceShow || settings.showMainWindowOnStart) await invoke("show_main_window");
+  const resolved = typeof options === "boolean" ? { forceShow: options } : options;
+  if (shouldShowMainWindowOnStartup(settings, resolved)) await invoke("show_main_window");
 }
 
 export async function applyFloatingBallWindow(

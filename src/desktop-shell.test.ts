@@ -104,18 +104,25 @@ describe("Tauri desktop shell", () => {
     expect(rust).toContain("fn quit_app");
   });
 
-  it("hides the main window on startup unless the setting is enabled", () => {
+  it("hides the main window on startup unless the setting or first-run tour needs it", () => {
     const app = readProjectFile("src/App.vue");
     const settings = readProjectFile("src/pages/SettingsPage.vue");
     const desktop = readProjectFile("src/lib/desktop.ts");
     const rust = readProjectFile("src-tauri/src/lib.rs");
+    const tour = readProjectFile("src/OnboardingTour.vue");
 
     expect(desktop).toContain("applyStartupWindowVisibility");
+    expect(desktop).toContain("showForOnboarding");
     expect(app).toContain("applyStartupWindowVisibility");
+    expect(app).toContain("showForOnboarding");
+    expect(app).toContain("isOnboardingComplete");
     expect(app).toContain("args.length > 0");
     expect(settings).toContain("showMainWindowOnStart");
     expect(settings).toContain("啟動時顯示主視窗");
+    expect(tour).toContain('invoke("show_main_window")');
     expect(rust).toContain("fn hide_startup_windows");
+    expect(rust).toContain('"floating", "toast"');
+    expect(rust).not.toContain('for label in ["main", "floating", "toast"]');
     expect(rust).toContain("fn create_configured_windows");
     expect(rust).toContain("CoreState::new");
   });

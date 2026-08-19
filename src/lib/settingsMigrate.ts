@@ -1,6 +1,7 @@
 import type { EngineKind, SettingsV2 } from "@shared/contracts";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { DEFAULT_FILE_TYPE_FILTER } from "./fileFilters";
 
 type LegacySettings = Record<string, unknown>;
 
@@ -45,8 +46,7 @@ export function defaultSettings(): SettingsV2 {
     },
     files: {
       defaultPath: "!",
-      typeFilter:
-        "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音訊文件|*.mp3;*.ape;*.ogg;*.oga;*.opus>",
+      typeFilter: DEFAULT_FILE_TYPE_FILTER,
       fixCharsetExtensions: [".htm", ".html", ".shtm", ".shtml", ".asp", ".aspx", ".php", ".css"],
       unicodeAddBom: false,
     },

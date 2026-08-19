@@ -80,7 +80,10 @@ describe("已匯入 SettingsV2 欄位會影響實際行為", () => {
       previewMaxBytes: 12 * 1024,
       fixCharsetExtensions: [".html", ".php"],
       defaultPath: "/tmp/books",
-      fileFilters: [{ name: "文字", extensions: ["txt", "log"] }],
+      fileFilters: [
+        { name: "支援的檔案", extensions: ["txt", "log"] },
+        { name: "文字", extensions: ["txt", "log"] },
+      ],
       promptAfterConversion: false,
       dictionaryPath: "/tmp/Dictionary.csv",
     });

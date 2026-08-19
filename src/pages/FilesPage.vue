@@ -12,6 +12,7 @@ import type {
 import { core } from "../lib/coreClient";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { cliInvocation } from "../lib/cli";
+import { ensureSupportedFilesFilter } from "../lib/fileFilters";
 import { fileConversionDefaults } from "../lib/settingsApply";
 
 const paths = ref<string[]>([]);
@@ -22,12 +23,14 @@ const busy = ref(false);
 const promptAfterConversion = ref(true);
 const backup = ref(true);
 const defaultPath = ref<string>();
-const fileFilters = ref([
-  {
-    name: "文字與網頁文件",
-    extensions: ["txt", "log", "ini", "srt", "ass", "html", "htm", "css", "js", "php", "asp"],
-  },
-]);
+const fileFilters = ref(
+  ensureSupportedFilesFilter([
+    {
+      name: "文字與網頁文件",
+      extensions: ["txt", "log", "ini", "srt", "ass", "html", "htm", "css", "js", "php", "asp"],
+    },
+  ]),
+);
 const previewMaxBytes = ref(6 * 1024);
 const fixCharsetExtensions = ref<string[]>([]);
 const progress = ref<{ current: number; total: number; message: string }>();

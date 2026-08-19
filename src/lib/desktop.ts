@@ -3,6 +3,7 @@ import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getAllWindows } from "@tauri-apps/api/window";
 import { register, unregisterAll } from "@tauri-apps/plugin-global-shortcut";
 import type { PlatformCapabilities, SettingsV2 } from "@shared/contracts";
+import { formatUnknownError } from "./errors";
 import { executeLegacyAction } from "./legacyActions";
 import { registrableShortcuts, unregisteredAcceleratorWarnings } from "./hotkey";
 import { showAppToast } from "./toast";
@@ -37,7 +38,12 @@ export async function applyDesktopSettings(
   options: { revealFloating?: boolean } = {},
 ): Promise<string[]> {
   const warnings: string[] = [];
-  await applyFloatingBallWindow(settings, { reveal: options.revealFloating });
+  try {
+    await applyFloatingBallWindow(settings, { reveal: options.revealFloating });
+  } catch (error) {
+    // 首次啟動時浮動視窗可能尚未就緒；不應中止整個主程式啟動。
+    warnings.push(`無法套用浮動球：${formatUnknownError(error)}`);
+  }
 
   const capabilities = await invoke<PlatformCapabilities>("platform_capabilities");
   if (!capabilities.globalShortcuts) return warnings;
@@ -45,7 +51,7 @@ export async function applyDesktopSettings(
   try {
     await unregisterAll();
   } catch (error) {
-    warnings.push(`無法註冊全域快捷鍵：${error instanceof Error ? error.message : String(error)}`);
+    warnings.push(`無法註冊全域快捷鍵：${formatUnknownError(error)}`);
     return warnings;
   }
   for (const shortcut of registrableShortcuts(settings.hotkeys.shortcuts)) {
@@ -58,13 +64,11 @@ export async function applyDesktopSettings(
             paste: settings.hotkeys.autoPaste,
           });
         } catch (error) {
-          await showAppToast(error instanceof Error ? error.message : String(error));
+          await showAppToast(formatUnknownError(error));
         }
       });
     } catch (error) {
-      warnings.push(
-        `無法註冊快捷鍵 ${shortcut.accelerator}：${error instanceof Error ? error.message : String(error)}`,
-      );
+      warnings.push(`無法註冊快捷鍵 ${shortcut.accelerator}：${formatUnknownError(error)}`);
     }
   }
   return warnings;

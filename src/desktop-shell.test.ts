@@ -200,8 +200,12 @@ describe("Tauri desktop shell", () => {
       setup.indexOf("create_configured_windows"),
     );
     expect(rust).toContain("fn app_log(");
+    expect(rust).toContain("(empty message)");
     expect(readProjectFile("src/App.vue")).toContain('invoke("app_log"');
+    expect(readProjectFile("src/App.vue")).toContain("啟動失敗於");
+    expect(readProjectFile("src/App.vue")).toContain("formatUnknownError");
     expect(readProjectFile("src/lib/desktop.ts")).toContain("無法註冊全域快捷鍵");
+    expect(readProjectFile("src/lib/desktop.ts")).toContain("無法套用浮動球");
   });
 
   it("raises the production chunk size warning for Element Plus", () => {

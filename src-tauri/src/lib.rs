@@ -262,9 +262,12 @@ fn log_file_path(app: &AppHandle) -> Option<std::path::PathBuf> {
 }
 
 fn append_log(app: &AppHandle, source: &str, message: &str) {
-    if message.is_empty() {
-        return;
-    }
+    // 空訊息仍要落盤，否則首次啟動失敗時 log 會完全沒有線索。
+    let message = if message.trim().is_empty() {
+        "(empty message)"
+    } else {
+        message
+    };
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();

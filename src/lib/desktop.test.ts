@@ -3,7 +3,7 @@ import type { SettingsV2 } from "@shared/contracts";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/dpi", () => ({ LogicalPosition: class {} }));
-vi.mock("@tauri-apps/api/window", () => ({ getAllWindows: async () => [] }));
+vi.mock("@tauri-apps/api/window", () => ({ getAllWindows: vi.fn(async () => []) }));
 vi.mock("@tauri-apps/plugin-global-shortcut", () => ({
   register: vi.fn(),
   unregisterAll: vi.fn(),
@@ -99,5 +99,22 @@ describe("applyDesktopSettings", () => {
     const warnings = await applyDesktopSettings(settings);
     expect(warnings).toEqual(["無法註冊全域快捷鍵：plugin global-shortcut not found"]);
     expect(register).not.toHaveBeenCalled();
+  });
+
+  it("treats floating ball setup failure as a warning instead of aborting", async () => {
+    const { getAllWindows } = await import("@tauri-apps/api/window");
+    vi.mocked(getAllWindows).mockRejectedValueOnce("");
+    vi.mocked(invoke).mockResolvedValue({ globalShortcuts: false });
+    const settings = {
+      floatingBall: { enabled: true, x: -1, y: -1 },
+      hotkeys: {
+        autoCopy: true,
+        autoPaste: true,
+        shortcuts: [] as SettingsV2["hotkeys"]["shortcuts"],
+      },
+    } as SettingsV2;
+
+    const warnings = await applyDesktopSettings(settings);
+    expect(warnings).toEqual(["無法套用浮動球：未知錯誤（空字串）"]);
   });
 });

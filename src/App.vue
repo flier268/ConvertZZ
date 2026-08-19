@@ -28,6 +28,7 @@ import { core } from "./lib/coreClient";
 import { setCliInvocation } from "./lib/cli";
 import type { ParsedCli } from "@shared/contracts";
 import { applyDesktopSettings, applyStartupWindowVisibility } from "./lib/desktop";
+import { formatUnknownError } from "./lib/errors";
 import { executeLegacyAction } from "./lib/legacyActions";
 import { showAppToast } from "./lib/toast";
 import { promptForAppUpdate } from "./lib/appUpdate";
@@ -59,15 +60,25 @@ function onTourStarted(): void {
 provide("replayOnboarding", () => tour.value?.replay());
 
 onMounted(async () => {
+  let step = "init";
   try {
+    step = "loadSettings";
     const settings = await loadSettings();
+    step = "applyDesktopSettings";
     const desktopWarnings = await applyDesktopSettings(settings, { revealFloating: false });
     for (const warning of desktopWarnings) await showAppToast(warning);
+    step = "startup_args";
     const args = await invoke<string[]>("startup_args");
     hasCliArgs.value = args.length > 0;
+    step = "applyStartupWindowVisibility";
     await applyStartupWindowVisibility(settings, args.length > 0);
+    step = "load_zhconvert_api_key";
     const savedApiKey = await invoke<string | null>("load_zhconvert_api_key").catch(() => null);
-    if (savedApiKey) await core.request("zhconvert.configure", { apiKey: savedApiKey });
+    if (savedApiKey) {
+      step = "zhconvert.configure";
+      await core.request("zhconvert.configure", { apiKey: savedApiKey });
+    }
+    step = "health";
     const currentHealth = await core.request<{ engine?: string; version: string }>("health", {});
     health.value = currentHealth;
     if (settings.checkVersionOnStart) {
@@ -78,6 +89,7 @@ onMounted(async () => {
       }).catch(() => undefined);
     }
     if (args.length) {
+      step = "cli.parse";
       const parsed = await core.request<ParsedCli>("cli.parse", {
         args,
         defaultEngine: settings.engine,
@@ -86,20 +98,23 @@ onMounted(async () => {
       if (parsed.mode === "audio") active.value = "audio";
       else if (parsed.mode === "file") active.value = "files";
     }
+    step = "listen:navigate";
     unlisten.push(
       await listen<string>("app://navigate", ({ payload }) => {
         active.value = payload;
       }),
     );
+    step = "listen:legacy-action";
     unlisten.push(
       await listen<string>("app://legacy-action", async ({ payload }) => {
         try {
           await executeLegacyAction(payload, await loadSettings());
         } catch (error) {
-          await showAppToast(error instanceof Error ? error.message : String(error));
+          await showAppToast(formatUnknownError(error));
         }
       }),
     );
+    step = "listen:second-instance";
     unlisten.push(
       await listen<string[]>("app://second-instance", async ({ payload }) => {
         const currentSettings = await loadSettings();
@@ -114,7 +129,8 @@ onMounted(async () => {
     );
     ready.value = true;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const detail = formatUnknownError(error);
+    const message = `啟動失敗於 ${step}：${detail}`;
     await invoke("app_log", { source: "startup", message }).catch(() => undefined);
     const logPath = await invoke<string | null>("app_log_path").catch(() => null);
     startupError.value = logPath ? `${message}\n記錄檔：${logPath}` : message;

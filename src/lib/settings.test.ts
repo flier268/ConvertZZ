@@ -89,6 +89,19 @@ describe("設定持久化", () => {
     expect(storeSave).not.toHaveBeenCalled();
   });
 
+  it("AppData 目錄尚未建立時（Windows os error 3）仍可載入預設值", async () => {
+    vi.resetModules();
+    const { loadSettings } = await import("./settings");
+    storeGet.mockResolvedValue(undefined);
+    storeReload.mockRejectedValue(new Error("系统找不到指定的路径。 (os error 3)"));
+    const migrated = { version: 2, engine: "segmented" };
+    request.mockResolvedValue(migrated);
+    await expect(loadSettings()).resolves.toMatchObject(migrated);
+    expect(request).toHaveBeenCalledWith("settings.migrate", { input: undefined });
+    expect(storeSet).not.toHaveBeenCalled();
+    expect(storeSave).not.toHaveBeenCalled();
+  });
+
   it("設定檔讀取失敗且不是缺檔時仍要中止啟動", async () => {
     vi.resetModules();
     const { loadSettings } = await import("./settings");

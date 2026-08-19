@@ -2,6 +2,7 @@ import { reactive, readonly } from "vue";
 import { load, type Store } from "@tauri-apps/plugin-store";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { Direction, SettingsV2, ZhConvertOptions } from "@shared/contracts";
+import { formatUnknownError } from "./errors";
 import { ONBOARDING_STORE_KEY } from "./onboarding";
 import { core } from "./coreClient";
 
@@ -27,8 +28,9 @@ async function settingsStore(): Promise<Store> {
 }
 
 function isMissingStoreFile(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /os error 2|ENOENT|cannot find the file specified|no such file or directory|系統找不到指定的檔案/i.test(
+  const message = formatUnknownError(error);
+  // Windows 首次啟動常是 os error 3（AppData 目錄尚未建立），不是只有缺檔的 os error 2。
+  return /os error [23]|ENOENT|cannot find the (file|path) specified|no such file or directory|系統找不到指定的(檔案|路徑)|系统找不到指定的(文件|路径)|找不到檔案|file not found|path not found/i.test(
     message,
   );
 }

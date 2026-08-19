@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { CoreOperation } from "@shared/contracts";
+import { formatUnknownError } from "./errors";
 
 type Progress = { current: number; total: number; message: string };
 
@@ -70,14 +71,24 @@ class CoreClient {
 function normalizeCoreError(error: unknown): Error {
   if (error && typeof error === "object") {
     const record = error as { message?: unknown; code?: unknown; details?: unknown };
-    if (typeof record.message === "string") {
-      return Object.assign(new Error(record.message), {
+    if (typeof record.message === "string" || record.code != null || record.details != null) {
+      const message =
+        typeof record.message === "string" && record.message.trim()
+          ? record.message
+          : formatUnknownError(error);
+      return Object.assign(new Error(message), {
         code: record.code,
         details: record.details,
       });
     }
   }
-  return error instanceof Error ? error : new Error(String(error));
+  if (error instanceof Error) {
+    if (error.message.trim()) return error;
+    return Object.assign(new Error(formatUnknownError(error)), {
+      cause: error,
+    });
+  }
+  return new Error(formatUnknownError(error));
 }
 
 export const core = new CoreClient();

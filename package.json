@@ -1,6 +1,6 @@
 {
   "name": "convertzz",
-  "version": "2.0.0-beta3",
+  "version": "2.0.0-beta4",
   "private": true,
   "packageManager": "pnpm@11.21.0",
   "description": "ConvertZZ cross-platform Chinese text conversion desktop application",

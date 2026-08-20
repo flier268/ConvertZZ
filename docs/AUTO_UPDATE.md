@@ -129,6 +129,7 @@ cat ~/.tauri/convertzz.key
 | Windows NSIS | 先詢問，確認後下載、驗證簽章、安裝並重啟 |
 | Linux AppImage | 同上 |
 | Linux DEB / RPM | 無法就地覆寫。程式會改開啟 GitHub Releases |
+| Windows 免安裝 zip | 不納入自動更新產物。請改從 GitHub Releases 下載。設定寫在程式目錄的 `settings-v2.json`，可整包帶走 |
 
 本機 `pnpm run tauri:build` 預設不產生更新簽章。
 

@@ -1,13 +1,21 @@
 import { reactive, readonly } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 import { load, type Store } from "@tauri-apps/plugin-store";
 import { confirm } from "@tauri-apps/plugin-dialog";
-import type { Direction, SettingsV2, ZhConvertOptions } from "@shared/contracts";
+import type {
+  Direction,
+  PlatformCapabilities,
+  SettingsV2,
+  ZhConvertOptions,
+} from "@shared/contracts";
 import { formatUnknownError } from "./errors";
 import { ONBOARDING_STORE_KEY } from "./onboarding";
 import { core } from "./coreClient";
 
 const state = reactive<{ ready: boolean; value?: SettingsV2 }>({ ready: false });
 let store: Store | undefined;
+let portableMode: boolean | undefined;
+let portableDocument: Record<string, unknown> | undefined;
 const replacedListeners = new Set<() => void>();
 
 function notifySettingsReplaced(): void {
@@ -20,6 +28,13 @@ export function onSettingsReplaced(listener: () => void): () => void {
   return () => {
     replacedListeners.delete(listener);
   };
+}
+
+async function isPortableMode(): Promise<boolean> {
+  if (portableMode !== undefined) return portableMode;
+  const capabilities = await invoke<PlatformCapabilities>("platform_capabilities");
+  portableMode = Boolean(capabilities.portable);
+  return portableMode;
 }
 
 async function settingsStore(): Promise<Store> {
@@ -35,7 +50,23 @@ function isMissingStoreFile(error: unknown): boolean {
   );
 }
 
-async function readStoredSettings(): Promise<SettingsV2 | undefined> {
+async function readPortableDocument(): Promise<Record<string, unknown>> {
+  if (portableDocument) return portableDocument;
+  const loaded = await invoke<Record<string, unknown> | null>("load_portable_settings_store");
+  portableDocument = loaded ?? {};
+  return portableDocument;
+}
+
+async function writePortableDocument(document: Record<string, unknown>): Promise<void> {
+  portableDocument = document;
+  await invoke("save_portable_settings_store", { document });
+}
+
+async function readStoreValue<T>(key: string): Promise<T | undefined> {
+  if (await isPortableMode()) {
+    const document = await readPortableDocument();
+    return document[key] as T | undefined;
+  }
   const currentStore = await settingsStore();
   try {
     await currentStore.reload();
@@ -43,7 +74,22 @@ async function readStoredSettings(): Promise<SettingsV2 | undefined> {
     // plugin-store 初次 load 會忽略缺檔，但 reload 會把 NotFound 丟回前端。
     if (!isMissingStoreFile(error)) throw error;
   }
-  return currentStore.get<SettingsV2>("settings");
+  return currentStore.get<T>(key);
+}
+
+async function writeStoreValue(key: string, value: unknown): Promise<void> {
+  if (await isPortableMode()) {
+    const document = { ...(await readPortableDocument()), [key]: value };
+    await writePortableDocument(document);
+    return;
+  }
+  const currentStore = await settingsStore();
+  await currentStore.set(key, value);
+  await currentStore.save();
+}
+
+async function readStoredSettings(): Promise<SettingsV2 | undefined> {
+  return readStoreValue<SettingsV2>("settings");
 }
 
 function putSettings(value: SettingsV2): SettingsV2 {
@@ -66,9 +112,7 @@ export async function reloadSettings(): Promise<SettingsV2> {
 
 export async function saveSettings(): Promise<void> {
   if (!state.value) return;
-  const currentStore = await settingsStore();
-  await currentStore.set("settings", JSON.parse(JSON.stringify(state.value)));
-  await currentStore.save();
+  await writeStoreValue("settings", JSON.parse(JSON.stringify(state.value)));
 }
 
 export async function patchSavedSettings(
@@ -81,20 +125,15 @@ export async function patchSavedSettings(
 }
 
 export async function isOnboardingComplete(): Promise<boolean> {
-  const currentStore = await settingsStore();
-  return Boolean(await currentStore.get(ONBOARDING_STORE_KEY));
+  return Boolean(await readStoreValue(ONBOARDING_STORE_KEY));
 }
 
 export async function markOnboardingComplete(): Promise<void> {
-  const currentStore = await settingsStore();
-  await currentStore.set(ONBOARDING_STORE_KEY, true);
-  await currentStore.save();
+  await writeStoreValue(ONBOARDING_STORE_KEY, true);
 }
 
 export async function clearOnboardingComplete(): Promise<void> {
-  const currentStore = await settingsStore();
-  await currentStore.set(ONBOARDING_STORE_KEY, false);
-  await currentStore.save();
+  await writeStoreValue(ONBOARDING_STORE_KEY, false);
 }
 
 export async function replaceSettings(input: unknown): Promise<SettingsV2> {

@@ -47,7 +47,12 @@ const { isDialogCancelled, promptForAppUpdate, rememberSkippedUpdateVersion } =
 describe("更新對話框", () => {
   beforeEach(() => {
     getVersion.mockReset().mockResolvedValue("2.0.0");
-    invoke.mockReset().mockResolvedValue(undefined);
+    invoke.mockReset().mockImplementation(async (command: string) => {
+      if (command === "platform_capabilities") {
+        return { portable: false, automaticUpdates: true, limitations: [] };
+      }
+      return undefined;
+    });
     openUrl.mockReset();
     relaunch.mockReset();
     check.mockReset();
@@ -95,7 +100,28 @@ describe("更新對話框", () => {
     });
     await promptForAppUpdate({ silentWhenCurrent: true, skippedVersion: "2.1.0" });
     expect(confirm).not.toHaveBeenCalled();
-    expect(invoke).not.toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledWith("platform_capabilities");
+    expect(invoke.mock.calls.some(([command]) => command === "show_main_window")).toBe(false);
+  });
+
+  it("可攜模式不走簽署安裝更新通道", async () => {
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "platform_capabilities") {
+        return { portable: true, automaticUpdates: false, limitations: [] };
+      }
+      return undefined;
+    });
+    resolveUpdate.mockResolvedValue({
+      kind: "none",
+      currentVersion: "2.0.0",
+      latestVersion: "2.0.0",
+    });
+    await promptForAppUpdate();
+    expect(resolveUpdate).toHaveBeenCalledWith(
+      "2.0.0",
+      expect.objectContaining({ checkInstallable: undefined }),
+    );
+    expect(check).not.toHaveBeenCalled();
   });
 
   it("手動檢查仍會詢問已略過的版本", async () => {

@@ -373,7 +373,7 @@ pnpm run tauri:build
 
 ## 發行
 
-Windows x64 會產生 NSIS 安裝程式。預發行版本（例如 `2.0.0-beta1`）不產 MSI：WiX 只接受純數字預發行號。
+Windows x64 會產生 NSIS 安裝程式，以及解壓即可執行的免安裝 zip。免安裝 zip 內含 `portable` 標記，設定會寫在程式目錄的 `settings-v2.json`，可整包帶走；不支援應用程式內自動更新。預發行版本（例如 `2.0.0-beta1`）不產 MSI：WiX 只接受純數字預發行號。
 
 Linux x64 會產生 AppImage、DEB 與 RPM。
 

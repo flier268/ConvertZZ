@@ -6,12 +6,17 @@ use enigo::{Enigo, Mouse, Settings};
 use keyring::Entry;
 use serde::Serialize;
 use serde_json::Value;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{
     menu::{MenuBuilder, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindowBuilder, WindowEvent,
 };
+
+const PORTABLE_MARKER: &str = "portable";
+const PORTABLE_SETTINGS_FILE: &str = "settings-v2.json";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -24,7 +29,55 @@ struct PlatformCapabilities {
     tray: bool,
     send_to_shortcut: bool,
     credential_storage: bool,
+    portable: bool,
+    automatic_updates: bool,
     limitations: Vec<&'static str>,
+}
+
+fn executable_directory() -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+}
+
+fn directory_is_portable(directory: &Path) -> bool {
+    directory.join(PORTABLE_MARKER).is_file()
+}
+
+fn is_portable_mode() -> bool {
+    executable_directory()
+        .map(|directory| directory_is_portable(&directory))
+        .unwrap_or(false)
+}
+
+fn portable_settings_path() -> Result<PathBuf, String> {
+    let directory = executable_directory().ok_or_else(|| "找不到執行檔目錄。".to_string())?;
+    if !directory_is_portable(&directory) {
+        return Err("目前不是免安裝可攜模式。".into());
+    }
+    Ok(directory.join(PORTABLE_SETTINGS_FILE))
+}
+
+fn write_portable_settings_document(path: &Path, document: &Value) -> Result<(), String> {
+    let payload =
+        serde_json::to_vec_pretty(document).map_err(|error| format!("序列化設定失敗：{error}"))?;
+    let temporary = path.with_extension("json.tmp");
+    fs::write(&temporary, &payload).map_err(|error| format!("寫入暫存設定失敗：{error}"))?;
+    if path.exists() {
+        let backup = path.with_extension("json.bak");
+        let _ = fs::remove_file(&backup);
+        fs::rename(path, &backup).map_err(|error| format!("備份舊設定失敗：{error}"))?;
+        if let Err(error) = fs::rename(&temporary, path) {
+            let _ = fs::rename(&backup, path);
+            let _ = fs::remove_file(&temporary);
+            return Err(format!("取代設定檔失敗：{error}"));
+        }
+        let _ = fs::remove_file(&backup);
+    } else if let Err(error) = fs::rename(&temporary, path) {
+        let _ = fs::remove_file(&temporary);
+        return Err(format!("寫入設定檔失敗：{error}"));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -91,8 +144,15 @@ fn legacy_settings_path() -> Option<String> {
 
 #[tauri::command]
 fn platform_capabilities() -> PlatformCapabilities {
+    let portable = is_portable_mode();
+    let automatic_updates = !portable;
     #[cfg(target_os = "windows")]
     {
+        let mut limitations = Vec::new();
+        if portable {
+            limitations.push("免安裝版設定寫在程式目錄，可整包帶走。");
+            limitations.push("免安裝版不支援應用程式內自動更新，請改從 GitHub Releases 下載。");
+        }
         return PlatformCapabilities {
             platform: "windows",
             display_server: "windows",
@@ -102,7 +162,9 @@ fn platform_capabilities() -> PlatformCapabilities {
             tray: true,
             send_to_shortcut: true,
             credential_storage: true,
-            limitations: vec![],
+            portable,
+            automatic_updates,
+            limitations,
         };
     }
 
@@ -118,6 +180,8 @@ fn platform_capabilities() -> PlatformCapabilities {
             tray: true,
             send_to_shortcut: false,
             credential_storage: std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some(),
+            portable,
+            automatic_updates,
             limitations: {
                 let mut items = if wayland {
                     vec![
@@ -130,6 +194,10 @@ fn platform_capabilities() -> PlatformCapabilities {
                 };
                 if std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_none() {
                     items.push("缺少 Secret Service 時 ZhConvert API 金鑰只保留於目前工作階段。");
+                }
+                if portable {
+                    items.push("免安裝版設定寫在程式目錄，可整包帶走。");
+                    items.push("免安裝版不支援應用程式內自動更新，請改從 GitHub Releases 下載。");
                 }
                 items
             },
@@ -147,6 +215,8 @@ fn platform_capabilities() -> PlatformCapabilities {
             tray: true,
             send_to_shortcut: false,
             credential_storage: true,
+            portable,
+            automatic_updates,
             limitations: vec!["自動複製貼上需要輔助使用（Accessibility）權限。"],
         };
     }
@@ -161,8 +231,34 @@ fn platform_capabilities() -> PlatformCapabilities {
         tray: false,
         send_to_shortcut: false,
         credential_storage: false,
+        portable,
+        automatic_updates,
         limitations: vec!["目前平台不在正式支援範圍。"],
     }
+}
+
+#[tauri::command]
+fn load_portable_settings_store() -> Result<Option<Value>, String> {
+    let path = portable_settings_path()?;
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let bytes = fs::read(&path).map_err(|error| format!("讀取可攜設定失敗：{error}"))?;
+    let document: Value =
+        serde_json::from_slice(&bytes).map_err(|error| format!("可攜設定格式無效：{error}"))?;
+    if !document.is_object() {
+        return Err("可攜設定必須是 JSON 物件。".into());
+    }
+    Ok(Some(document))
+}
+
+#[tauri::command]
+fn save_portable_settings_store(document: Value) -> Result<(), String> {
+    if !document.is_object() {
+        return Err("可攜設定必須是 JSON 物件。".into());
+    }
+    let path = portable_settings_path()?;
+    write_portable_settings_document(&path, &document)
 }
 
 #[tauri::command]
@@ -535,6 +631,8 @@ pub fn run() {
             startup_args,
             legacy_settings_path,
             platform_capabilities,
+            load_portable_settings_store,
+            save_portable_settings_store,
             capture_selection,
             replace_selection,
             save_zhconvert_api_key,
@@ -546,4 +644,49 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("ConvertZZ failed to start");
+}
+
+#[cfg(test)]
+mod portable_settings_tests {
+    use super::{directory_is_portable, write_portable_settings_document, PORTABLE_MARKER};
+    use serde_json::json;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(label: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("convertzz-portable-{label}-{nanos}"));
+        fs::create_dir_all(&path).expect("temp dir");
+        path
+    }
+
+    #[test]
+    fn detects_portable_marker_beside_executable_dir() {
+        let directory = temp_dir("marker");
+        assert!(!directory_is_portable(&directory));
+        fs::write(directory.join(PORTABLE_MARKER), "").expect("marker");
+        assert!(directory_is_portable(&directory));
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn writes_settings_document_atomically() {
+        let directory = temp_dir("write");
+        let path = directory.join("settings-v2.json");
+        write_portable_settings_document(&path, &json!({ "settings": { "version": 2 } }))
+            .expect("first write");
+        write_portable_settings_document(
+            &path,
+            &json!({ "settings": { "version": 2 }, "onboardingCompleted": true }),
+        )
+        .expect("second write");
+        let text = fs::read_to_string(&path).expect("read");
+        assert!(text.contains("onboardingCompleted"));
+        assert!(!directory.join("settings-v2.json.tmp").exists());
+        assert!(!directory.join("settings-v2.json.bak").exists());
+        let _ = fs::remove_dir_all(directory);
+    }
 }

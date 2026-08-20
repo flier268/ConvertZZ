@@ -26,6 +26,17 @@ describe("發行工作流程契約", () => {
     expect(tauri).toContain('"wix"');
   });
 
+  it("Windows 發行會另外打包免安裝 zip", () => {
+    expect(workflow).toContain("建立 Windows 免安裝版");
+    expect(workflow).toContain("package-windows-portable.mjs");
+    expect(workflow).toContain("src-tauri/target/release/bundle/portable");
+    expect(workflow).toContain("**/*.zip");
+    expect(workflow).toContain("$_.Extension -in '.exe', '.zip'");
+    const packager = readProjectFile("scripts/package-windows-portable.mjs");
+    expect(packager).toContain('PORTABLE_MARKER = "portable"');
+    expect(packager).toContain("writeFileSync(join(stagedApp, PORTABLE_MARKER)");
+  });
+
   it("J-05 Linux matrix 產出 AppImage、DEB 與 RPM", () => {
     expect(workflow).toContain("os: ubuntu-22.04");
     expect(workflow).toContain("artifact: linux-x64");
@@ -52,10 +63,19 @@ describe("發行工作流程契約", () => {
     expect(workflow).toContain("prerelease: ${{ contains(env.RELEASE_TAG, '-') }}");
   });
 
-  it("草稿說明會註明自動更新範圍與 SHA-256", () => {
+  it("草稿說明會註明各平台下載檔與自動更新範圍", () => {
+    expect(workflow).toContain("## 下載說明");
+    expect(workflow).toContain("ConvertZZ_${{ env.RELEASE_VERSION }}_x64-setup.exe");
+    expect(workflow).toContain("ConvertZZ_${{ env.RELEASE_VERSION }}_x64-portable.zip");
+    expect(workflow).toContain("settings-v2.json");
+    expect(workflow).toContain("可整包帶走");
+    expect(workflow).toContain("ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.AppImage");
+    expect(workflow).toContain("ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.deb");
+    expect(workflow).toContain("ConvertZZ-${{ env.RELEASE_VERSION }}-1.x86_64.rpm");
+    expect(workflow).toContain("RELEASE_VERSION=${RELEASE_TAG#v}");
     expect(workflow).toContain("Windows 安裝程式與 Linux AppImage 可用應用程式內自動更新。");
     expect(workflow).toContain("自動更新會驗證 latest.json 與安裝包簽章。");
-    expect(workflow).toContain("DEB 與 RPM 請改從本頁下載。");
+    expect(workflow).toContain("DEB、RPM 與 Windows 免安裝 zip 請改從本頁下載。");
     expect(workflow).toContain("所有發行檔仍可用隨附的 SHA-256 檔案驗證。");
     expect(workflow).not.toContain("作業系統程式碼簽章");
   });

@@ -65,6 +65,16 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm tauri build --bundles ${{ matrix.bundles }} --config src-tauri/tauri.updater.conf.json
+      - name: 建立 Windows 免安裝版
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          node scripts/package-windows-portable.mjs \
+            --release-dir src-tauri/target/release \
+            --version "$version" \
+            --out-dir src-tauri/target/release/bundle/portable
       - name: 離線驗證 AppImage 內的轉換核心
         if: runner.os == 'Linux'
         shell: bash
@@ -113,7 +123,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $files = Get-ChildItem src-tauri/target/release/bundle -File -Recurse | Where-Object { $_.Extension -eq '.exe' }
+          $files = Get-ChildItem src-tauri/target/release/bundle -File -Recurse | Where-Object {
+            $_.Extension -in '.exe', '.zip'
+          }
           $lines = foreach ($file in $files) {
             $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $file.FullName).Hash.ToLowerInvariant()
             "$hash  $($file.Name)"
@@ -127,6 +139,7 @@ jobs:
             src-tauri/target/release/bundle/**/*.deb
             src-tauri/target/release/bundle/**/*.rpm
             src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.zip
             src-tauri/target/release/bundle/**/*.sig
             SHA256SUMS-*.txt
             RUNTIME-DEPENDENCIES-*.txt
@@ -141,6 +154,8 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      - name: 設定版本字串
+        run: echo "RELEASE_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
       - name: 建立 latest.json
         run: |
           node scripts/write-latest-json.mjs \
@@ -157,11 +172,21 @@ jobs:
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           generate_release_notes: true
           body: |
+            ## 下載說明
+
+            | 平台 | 建議檔案 | 說明 |
+            | --- | --- | --- |
+            | Windows x64（安裝版） | `ConvertZZ_${{ env.RELEASE_VERSION }}_x64-setup.exe` | NSIS 安裝程式；支援應用程式內自動更新 |
+            | Windows x64（免安裝版） | `ConvertZZ_${{ env.RELEASE_VERSION }}_x64-portable.zip` | 解壓後執行 `ConvertZZ/ConvertZZ.exe`；`settings-v2.json` 與程式同目錄可整包帶走；不支援應用程式內自動更新 |
+            | Linux x64（建議） | `ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.AppImage` | 免安裝；支援應用程式內自動更新 |
+            | Linux x64（DEB） | `ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.deb` | 以 APT 安裝；請改從本頁下載更新 |
+            | Linux x64（RPM） | `ConvertZZ-${{ env.RELEASE_VERSION }}-1.x86_64.rpm` | 以 DNF 安裝；請改從本頁下載更新 |
+
             Windows 安裝程式與 Linux AppImage 可用應用程式內自動更新。
 
             自動更新會驗證 latest.json 與安裝包簽章。
 
-            DEB 與 RPM 請改從本頁下載。
+            DEB、RPM 與 Windows 免安裝 zip 請改從本頁下載。
 
             所有發行檔仍可用隨附的 SHA-256 檔案驗證。
           files: artifacts/**/*

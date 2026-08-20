@@ -6,7 +6,11 @@ const storeReload = vi.fn();
 const storeSave = vi.fn();
 const confirm = vi.fn();
 const request = vi.fn();
+const invoke = vi.fn();
 
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: (...args: unknown[]) => invoke(...args),
+}));
 vi.mock("@tauri-apps/plugin-store", () => ({
   load: vi.fn(async () => ({
     get: storeGet,
@@ -22,6 +26,20 @@ vi.mock("./coreClient", () => ({
   core: { request: (...args: unknown[]) => request(...args) },
 }));
 
+function mockInstalledMode() {
+  invoke.mockImplementation(async (command: string) => {
+    if (command === "platform_capabilities") {
+      return {
+        platform: "windows",
+        portable: false,
+        automaticUpdates: true,
+        limitations: [],
+      };
+    }
+    throw new Error(`未預期的 invoke：${command}`);
+  });
+}
+
 const { importLegacySettings } = await import("./settings");
 
 describe("匯入舊版設定", () => {
@@ -32,6 +50,8 @@ describe("匯入舊版設定", () => {
     storeSet.mockReset();
     storeReload.mockReset();
     storeSave.mockReset();
+    invoke.mockReset();
+    mockInstalledMode();
   });
 
   it("只讀取舊設定並另存為 2.0", async () => {
@@ -74,6 +94,8 @@ describe("設定持久化", () => {
     storeReload.mockReset();
     storeSave.mockReset();
     request.mockReset();
+    invoke.mockReset();
+    mockInstalledMode();
   });
 
   it("設定檔不存在時仍可載入遷移後的預設值，且不寫回磁碟", async () => {
@@ -172,5 +194,75 @@ describe("設定持久化", () => {
       }),
     );
     expect(storeSave).toHaveBeenCalled();
+  });
+});
+
+describe("可攜模式設定", () => {
+  beforeEach(() => {
+    storeGet.mockReset();
+    storeSet.mockReset();
+    storeReload.mockReset();
+    storeSave.mockReset();
+    request.mockReset();
+    invoke.mockReset();
+  });
+
+  it("讀寫 settings-v2.json 走執行檔旁，不經 plugin-store", async () => {
+    vi.resetModules();
+    let document: Record<string, unknown> = {
+      settings: {
+        version: 2,
+        hotkeys: { autoCopy: true, autoPaste: true, shortcuts: [] },
+      },
+    };
+    invoke.mockImplementation(async (command: string, args?: { document?: unknown }) => {
+      if (command === "platform_capabilities") {
+        return { platform: "windows", portable: true, automaticUpdates: false, limitations: [] };
+      }
+      if (command === "load_portable_settings_store") return document;
+      if (command === "save_portable_settings_store") {
+        document = args?.document as Record<string, unknown>;
+        return undefined;
+      }
+      throw new Error(`未預期的 invoke：${command}`);
+    });
+    const { loadSettings, saveSettings } = await import("./settings");
+    request.mockImplementation(
+      async (_operation: string, payload: { input?: unknown }) => payload.input,
+    );
+    const settings = await loadSettings();
+    expect(settings).toMatchObject({ version: 2 });
+    expect(storeGet).not.toHaveBeenCalled();
+    settings.floatingBall = { enabled: true, x: 1, y: 2 };
+    await saveSettings();
+    expect(storeSet).not.toHaveBeenCalled();
+    expect(storeSave).not.toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledWith(
+      "save_portable_settings_store",
+      expect.objectContaining({
+        document: expect.objectContaining({
+          settings: expect.objectContaining({
+            floatingBall: { enabled: true, x: 1, y: 2 },
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("可攜模式缺檔時仍可載入預設且不寫回", async () => {
+    vi.resetModules();
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "platform_capabilities") {
+        return { platform: "windows", portable: true, automaticUpdates: false, limitations: [] };
+      }
+      if (command === "load_portable_settings_store") return null;
+      throw new Error(`未預期的 invoke：${command}`);
+    });
+    const { loadSettings } = await import("./settings");
+    const migrated = { version: 2, engine: "segmented" };
+    request.mockResolvedValue(migrated);
+    await expect(loadSettings()).resolves.toMatchObject(migrated);
+    expect(request).toHaveBeenCalledWith("settings.migrate", { input: undefined });
+    expect(invoke).not.toHaveBeenCalledWith("save_portable_settings_store", expect.anything());
   });
 });

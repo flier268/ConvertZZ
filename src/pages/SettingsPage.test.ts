@@ -103,6 +103,8 @@ const linuxCapabilities: PlatformCapabilities = {
   tray: true,
   sendToShortcut: false,
   credentialStorage: true,
+  portable: false,
+  automaticUpdates: true,
   limitations: [],
 };
 

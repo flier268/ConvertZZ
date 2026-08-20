@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
+import type { PlatformCapabilities } from "@shared/contracts";
 import { ElLoading, ElMessage, ElMessageBox } from "element-plus";
 import { h } from "vue";
 import { patchSavedSettings } from "./settings";
@@ -26,19 +27,22 @@ export async function promptForAppUpdate(
   } = {},
 ): Promise<void> {
   const currentVersion = await getVersion();
+  const capabilities = await invoke<PlatformCapabilities>("platform_capabilities");
   const pending: { update: Update | null } = { update: null };
   try {
     const resolved = await resolveUpdate(currentVersion, {
       includePreRelease: options.includePreRelease,
-      checkInstallable: async () => {
-        pending.update = await check();
-        if (!pending.update) return null;
-        return {
-          currentVersion: pending.update.currentVersion,
-          version: pending.update.version,
-          body: pending.update.body,
-        };
-      },
+      checkInstallable: capabilities.automaticUpdates
+        ? async () => {
+            pending.update = await check();
+            if (!pending.update) return null;
+            return {
+              currentVersion: pending.update.currentVersion,
+              version: pending.update.version,
+              body: pending.update.body,
+            };
+          }
+        : undefined,
     });
 
     if (resolved.kind === "none") {

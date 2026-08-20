@@ -148,8 +148,14 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
         tray: true,
         sendToShortcut: false,
         credentialStorage: true,
+        portable: false,
+        automaticUpdates: true,
         limitations: [],
       } as T;
+    case "load_portable_settings_store":
+      return null as T;
+    case "save_portable_settings_store":
+      return undefined as T;
     case "capture_selection":
       return clipboard as T;
     case "show_main_window":

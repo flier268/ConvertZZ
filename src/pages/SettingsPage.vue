@@ -224,6 +224,10 @@ async function saveApiKey() {
               >清除略過</el-button
             >
           </p>
+          <p v-if="capabilities?.portable" class="settings-note muted">
+            免安裝版：設定寫在程式目錄的 settings-v2.json，可整包帶走。ZhConvert
+            金鑰仍存於系統憑證庫；檢查更新會開啟 GitHub Releases。
+          </p>
           <div v-if="capabilities?.sendToShortcut" class="settings-windows">
             <div class="section-title">Windows 整合</div>
             <el-button

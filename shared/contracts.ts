@@ -155,6 +155,10 @@ export interface PlatformCapabilities {
   tray: boolean;
   sendToShortcut: boolean;
   credentialStorage: boolean;
+  /** 執行檔旁有 `portable` 標記時為 true（Windows 免安裝 zip）。 */
+  portable: boolean;
+  /** 是否可用應用程式內簽署更新（免安裝 zip 為 false）。 */
+  automaticUpdates: boolean;
   limitations: string[];
 }
 

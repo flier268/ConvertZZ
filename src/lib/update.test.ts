@@ -13,11 +13,11 @@ describe("版本檢查", () => {
     expect(compareVersions("2.1.0", "2.0.9")).toBe(1);
     expect(compareVersions("2.0.0", "2.0.0")).toBe(0);
     expect(compareVersions("1.9.9", "2.0.0")).toBe(-1);
-    expect(compareVersions("2.0.0", "2.0.0-beta4")).toBe(1);
-    expect(compareVersions("2.0.0-beta4", "2.0.0-beta3")).toBe(1);
+    expect(compareVersions("2.0.0", "2.0.0-beta5")).toBe(1);
+    expect(compareVersions("2.0.0-beta5", "2.0.0-beta4")).toBe(1);
     expect(compareVersions("2.0.0-beta1", "2.0.0-alpha9")).toBe(1);
     expect(compareVersions("2.0.0-alpha9", "2.0.0-beta1")).toBe(-1);
-    expect(compareVersions("v2.0.0-beta4", "2.0.0-beta3")).toBe(1);
+    expect(compareVersions("v2.0.0-beta5", "2.0.0-beta4")).toBe(1);
     expect(compareVersions("2.0.0-rc.1", "2.0.0-beta.9")).toBe(1);
     expect(compareVersions("2.0.0-beta.2", "2.0.0-beta.10")).toBe(-1);
   });
@@ -59,14 +59,14 @@ describe("版本檢查", () => {
         new Response(
           JSON.stringify([
             {
-              tag_name: "v2.0.0-beta3",
-              html_url: "https://github.com/flier268/ConvertZZ/releases/tag/v2.0.0-beta3",
+              tag_name: "v2.0.0-beta4",
+              html_url: "https://github.com/flier268/ConvertZZ/releases/tag/v2.0.0-beta4",
               prerelease: true,
               draft: false,
             },
             {
-              tag_name: "v2.0.0-beta4",
-              html_url: "https://github.com/flier268/ConvertZZ/releases/tag/v2.0.0-beta4",
+              tag_name: "v2.0.0-beta5",
+              html_url: "https://github.com/flier268/ConvertZZ/releases/tag/v2.0.0-beta5",
               prerelease: true,
               draft: false,
             },
@@ -81,11 +81,11 @@ describe("版本檢查", () => {
         ),
     );
     await expect(
-      checkLatestRelease("2.0.0-beta3", fetcher as typeof fetch, { includePreRelease: true }),
+      checkLatestRelease("2.0.0-beta4", fetcher as typeof fetch, { includePreRelease: true }),
     ).resolves.toMatchObject({
-      latestVersion: "2.0.0-beta4",
+      latestVersion: "2.0.0-beta5",
       updateAvailable: true,
-      url: "https://github.com/flier268/ConvertZZ/releases/tag/v2.0.0-beta4",
+      url: "https://github.com/flier268/ConvertZZ/releases/tag/v2.0.0-beta5",
     });
     expect(fetcher).toHaveBeenCalledWith(
       "https://api.github.com/repos/flier268/ConvertZZ/releases?per_page=30",

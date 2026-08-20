@@ -682,6 +682,7 @@ dependencies = [
  "tauri-plugin-updater",
  "thiserror 2.0.20",
  "tokio",
+ "url",
  "uuid",
  "windows 0.62.2",
  "ws-segment-rs",

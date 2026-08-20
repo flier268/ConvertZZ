@@ -114,9 +114,11 @@ cat ~/.tauri/convertzz.key
 
 `/releases/latest` **只看已發佈、且不是預發佈的最新 Release**。
 
-程式預設只檢查正式版。設定中的「檢查開發／預發佈版本」開啟後，才會一併比較 alpha、beta、rc 等標籤（例如 `v2.0.0-beta1`），排序為 `2.0.0 > 2.0.0-beta5 > 2.0.0-beta4 > 2.0.0-alpha9`。
+程式預設只檢查正式版。設定中的「檢查開發／預發佈版本」開啟後，會另外讀取 GitHub 上的 `alpha`、`beta`、`rc` 通道標籤（附註訊息為實際版本，例如 `v2.0.0-beta1`），再與正式版比較，取 SemVer 較新者。排序為 `2.0.0 > 2.0.0-rc.1 > 2.0.0-beta5 > 2.0.0-beta4 > 2.0.0-alpha9`。因此若正式版已經比目前的開發版新，仍會提示下載正式版。
 
-含 `-` 的發行標籤（如 `v2.0.0-beta1`）會在 GitHub Release 標成 Pre-release，因此不會成為 `/releases/latest`。
+含 `-` 的發行標籤（如 `v2.0.0-beta1`）會在 GitHub Release 標成 Pre-release，因此不會成為 `/releases/latest`。發佈這類 Release 後，工作流程會把 `alpha`、`beta` 或 `rc` 標籤強制移到該 commit；標籤已存在時會覆蓋。
+
+開啟開發／預發佈檢查時，簽署自動更新會改查該目標版本的 `latest.json`（例如 `.../releases/download/v2.1.0-beta1/latest.json`），不再只看 `/releases/latest`。Windows 安裝程式與 Linux AppImage 可直接下載安裝開發版；該版本沒有簽署清單時才改開下載頁。
 
 草稿 Release 不會被程式查到。
 
@@ -151,7 +153,7 @@ Tauri 不會讀 `.env` 來找這把私鑰。
 
 啟動時若勾選「啟動時檢查更新」，或在關於頁按「檢查更新」：
 
-1. 程式向 `latest.json` 查詢。
+1. 程式先向 GitHub 決定目標版本，再向對應的 `latest.json` 查詢。未開啟開發／預發佈檢查時，目標是最新正式版。
 2. 有可安裝的新版本時，先詢問使用者。
 3. 確認後才下載。
 4. 用內建公鑰驗證簽章。
@@ -183,9 +185,7 @@ Secret 還沒建，或名稱拼錯。
 
 **程式說已是最新版本，但 GitHub 已有更新。**
 
-Release 可能還是草稿，或標成 Pre-release。
-
-先發佈成正式版。
+Release 可能還是草稿。正式版請發佈成非 Pre-release。開發版請確認標籤含 `alpha`、`beta` 或 `rc`，且已發佈，對應通道標籤才會移過去。
 
 **簽章驗證失敗。**
 

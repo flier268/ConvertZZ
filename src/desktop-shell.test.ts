@@ -201,6 +201,7 @@ describe("Tauri desktop shell", () => {
     ]);
     expect(updaterConfig.bundle?.createUpdaterArtifacts).toBe(true);
     expect(rust).toContain("tauri_plugin_updater::Builder");
+    expect(rust).toContain("check_signed_update");
     expect(rust).toContain("tauri_plugin_process::init");
     expect(app).toContain("promptForAppUpdate");
     expect(app).toContain("skippedVersion: settings.skippedUpdateVersion");

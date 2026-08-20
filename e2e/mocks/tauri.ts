@@ -169,6 +169,18 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
       return undefined as T;
     case "capture_selection":
       return clipboard as T;
+    case "check_signed_update": {
+      if (e2e().update !== "install") return null as T;
+      const endpoint = String(args.endpoint ?? "");
+      const version = /\/download\/v([^/]+)\/latest\.json/u.exec(endpoint)?.[1] ?? "2.1.0";
+      return {
+        rid: 1,
+        currentVersion: "2.0.0-beta5",
+        version,
+        body: "測試更新",
+        rawJson: {},
+      } as T;
+    }
     case "show_main_window":
     case "show_toast":
     case "quit_app":
@@ -398,15 +410,26 @@ export async function openUrl(url: string): Promise<void> {
 
 export async function relaunch(): Promise<void> {}
 
+export class Update {
+  currentVersion: string;
+  version: string;
+  body?: string;
+  constructor(metadata: { currentVersion: string; version: string; body?: string }) {
+    this.currentVersion = metadata.currentVersion;
+    this.version = metadata.version;
+    this.body = metadata.body;
+  }
+  async close(): Promise<void> {}
+  async downloadAndInstall(): Promise<void> {}
+}
+
 export async function check() {
   if (e2e().update !== "install") return null;
-  return {
+  return new Update({
     currentVersion: "2.0.0-beta5",
     version: "2.1.0",
     body: "測試更新",
-    close: async () => undefined,
-    downloadAndInstall: async () => undefined,
-  };
+  });
 }
 
 export async function register(): Promise<void> {}

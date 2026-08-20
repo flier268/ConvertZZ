@@ -22,8 +22,22 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 vi.mock("@tauri-apps/plugin-process", () => ({
   relaunch: (...args: unknown[]) => relaunch(...args),
 }));
+class MockUpdate {
+  currentVersion: string;
+  version: string;
+  body?: string;
+  constructor(metadata: { currentVersion: string; version: string; body?: string }) {
+    this.currentVersion = metadata.currentVersion;
+    this.version = metadata.version;
+    this.body = metadata.body;
+  }
+  async close(): Promise<void> {}
+  async downloadAndInstall(): Promise<void> {}
+}
+
 vi.mock("@tauri-apps/plugin-updater", () => ({
   check: (...args: unknown[]) => check(...args),
+  Update: MockUpdate,
 }));
 vi.mock("element-plus", () => ({
   ElLoading: { service: () => ({ close: vi.fn() }) },
@@ -102,6 +116,34 @@ describe("更新對話框", () => {
     expect(confirm).not.toHaveBeenCalled();
     expect(invoke).toHaveBeenCalledWith("platform_capabilities");
     expect(invoke.mock.calls.some(([command]) => command === "show_main_window")).toBe(false);
+  });
+
+  it("開發版檢查會查詢目標版本的簽署清單", async () => {
+    resolveUpdate.mockImplementation(
+      async (_version, options: { checkInstallable?: (target?: string) => Promise<unknown> }) => {
+        await options.checkInstallable?.("2.1.0-rc.1");
+        return { kind: "none", currentVersion: "2.0.0", latestVersion: "2.0.0" };
+      },
+    );
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "platform_capabilities") {
+        return { portable: false, automaticUpdates: true, limitations: [] };
+      }
+      if (command === "check_signed_update") {
+        return {
+          rid: 1,
+          currentVersion: "2.0.0",
+          version: "2.1.0-rc.1",
+          rawJson: {},
+        };
+      }
+      return undefined;
+    });
+    await promptForAppUpdate({ includePreRelease: true });
+    expect(invoke).toHaveBeenCalledWith("check_signed_update", {
+      endpoint: "https://github.com/flier268/ConvertZZ/releases/download/v2.1.0-rc.1/latest.json",
+    });
+    expect(check).not.toHaveBeenCalled();
   });
 
   it("可攜模式不走簽署安裝更新通道", async () => {

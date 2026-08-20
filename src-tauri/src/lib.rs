@@ -14,6 +14,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindowBuilder, WindowEvent,
 };
+use tauri_plugin_updater::UpdaterExt;
 
 const PORTABLE_MARKER: &str = "portable";
 const PORTABLE_SETTINGS_FILE: &str = "settings-v2.json";
@@ -593,6 +594,41 @@ fn quit_app(app: AppHandle) {
     app.exit(0);
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SignedUpdateMetadata {
+    rid: tauri::ResourceId,
+    current_version: String,
+    version: String,
+    body: Option<String>,
+    raw_json: Value,
+}
+
+#[tauri::command]
+async fn check_signed_update(
+    webview: tauri::Webview,
+    endpoint: Option<String>,
+) -> Result<Option<SignedUpdateMetadata>, String> {
+    let mut builder = webview.updater_builder();
+    if let Some(endpoint) = endpoint {
+        let url = url::Url::parse(&endpoint).map_err(|error| format!("更新端點無效：{error}"))?;
+        builder = builder
+            .endpoints(vec![url])
+            .map_err(|error| error.to_string())?;
+    }
+    let updater = builder.build().map_err(|error| error.to_string())?;
+    let Some(update) = updater.check().await.map_err(|error| error.to_string())? else {
+        return Ok(None);
+    };
+    Ok(Some(SignedUpdateMetadata {
+        current_version: update.current_version.clone(),
+        version: update.version.clone(),
+        body: update.body.clone(),
+        raw_json: update.raw_json.clone(),
+        rid: webview.resources_table().add(update),
+    }))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -645,6 +681,7 @@ pub fn run() {
             show_main_window,
             show_toast,
             quit_app,
+            check_signed_update,
         ])
         .run(tauri::generate_context!())
         .expect("ConvertZZ failed to start");

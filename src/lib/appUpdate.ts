@@ -2,12 +2,12 @@ import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { check, type Update } from "@tauri-apps/plugin-updater";
+import { check, Update } from "@tauri-apps/plugin-updater";
 import type { PlatformCapabilities } from "@shared/contracts";
 import { ElLoading, ElMessage, ElMessageBox } from "element-plus";
 import { h } from "vue";
 import { patchSavedSettings } from "./settings";
-import { isUpdateVersionSkipped, resolveUpdate } from "./update";
+import { isUpdateVersionSkipped, resolveUpdate, signedUpdateManifestUrl } from "./update";
 
 export function isDialogCancelled(error: unknown): boolean {
   return error === "cancel" || error === "close";
@@ -17,6 +17,19 @@ export async function rememberSkippedUpdateVersion(version: string): Promise<voi
   await patchSavedSettings((settings) => {
     settings.skippedUpdateVersion = version;
   });
+}
+
+async function checkInstallableUpdate(targetVersion?: string): Promise<Update | null> {
+  if (!targetVersion) return check();
+  const metadata = await invoke<{
+    rid: number;
+    currentVersion: string;
+    version: string;
+    date?: string;
+    body?: string;
+    rawJson: Record<string, unknown>;
+  } | null>("check_signed_update", { endpoint: signedUpdateManifestUrl(targetVersion) });
+  return metadata ? new Update(metadata) : null;
 }
 
 export async function promptForAppUpdate(
@@ -33,8 +46,8 @@ export async function promptForAppUpdate(
     const resolved = await resolveUpdate(currentVersion, {
       includePreRelease: options.includePreRelease,
       checkInstallable: capabilities.automaticUpdates
-        ? async () => {
-            pending.update = await check();
+        ? async (targetVersion?: string) => {
+            pending.update = await checkInstallableUpdate(targetVersion);
             if (!pending.update) return null;
             return {
               currentVersion: pending.update.currentVersion,

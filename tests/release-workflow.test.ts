@@ -93,6 +93,16 @@ describe("發行工作流程契約", () => {
     expect(workflow).not.toContain("作業系統程式碼簽章");
   });
 
+  it("發佈含 alpha／beta／rc 的標籤時會強制移動通道標籤", () => {
+    const channelWorkflow = readProjectFile(".github/workflows/prerelease-channel.yml");
+    expect(channelWorkflow).toContain("types: [published]");
+    expect(channelWorkflow).toContain("prerelease-channel.mjs");
+    expect(channelWorkflow).toContain("alpha／beta／rc");
+    expect(channelWorkflow).toContain('git tag -f -a "$channel" -m "$VERSION_TAG"');
+    expect(channelWorkflow).toContain('git push origin "refs/tags/$channel" --force');
+    expect(channelWorkflow).not.toContain("per_page=30");
+  });
+
   it("G-15 簽署更新只涵蓋 Windows 安裝程式與 Linux AppImage", () => {
     expect(updater).toContain('"createUpdaterArtifacts": true');
     expect(workflow).toContain("tauri.updater.conf.json");

@@ -259,12 +259,18 @@ describe("驗收項目的自動化契約", () => {
     expect(update).toContain('kind: "install"');
     expect(update).toContain('kind: "open"');
     expect(update).toContain("includePreRelease");
+    expect(update).not.toContain("per_page=30");
+    expect(update).toContain("/git/ref/tags/");
+    expect(update).toContain("PRE_RELEASE_CHANNEL_TAGS");
     expect(update).toContain("簽署更新通道不可用時改走 GitHub Release");
     expect(appUpdate).toContain("是否下載並安裝");
     expect(appUpdate).toContain("此安裝方式無法自動更新");
     expect(appUpdate).toContain("downloadAndInstall");
     expect(appUpdate).toContain("openUrl(resolved.url)");
     expect(appUpdate).toContain("includePreRelease");
+    expect(appUpdate).toContain("check_signed_update");
+    expect(appUpdate).toContain("signedUpdateManifestUrl");
+    expect(update).toContain('"rc"');
     expect(contracts).toContain("checkPreReleaseUpdates");
     expect(settings).toContain("checkPreReleaseUpdates");
     expect(settings).toContain("檢查開發／預發佈版本");

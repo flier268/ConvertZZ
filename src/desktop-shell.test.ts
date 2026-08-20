@@ -104,6 +104,27 @@ describe("Tauri desktop shell", () => {
     expect(rust).toContain("fn quit_app");
   });
 
+  it("accepts OS file drops on the floating ball and asks for an action in the main window", () => {
+    const floating = readProjectFile("src/FloatingBall.vue");
+    const app = readProjectFile("src/App.vue");
+    const dialog = readProjectFile("src/components/DropActionDialog.vue");
+    const actions = readProjectFile("src/lib/dropActions.ts");
+
+    expect(floating).toContain("onDragDropEvent");
+    expect(floating).toContain('emit("app://file-drop"');
+    expect(floating).toContain('invoke("show_main_window")');
+    expect(app).toContain('listen<FileDropPayload>("app://file-drop"');
+    expect(app).toContain("DropActionDialog");
+    expect(app).toContain("buildDropCliInvocation");
+    expect(dialog).toContain("檔案與檔名轉換");
+    expect(dialog).toContain("音訊標籤");
+    expect(dialog).toContain("轉換內容");
+    expect(dialog).toContain("lastChoice");
+    expect(actions).toContain("buildDropCliInvocation");
+    expect(actions).toContain("normalizeDropActionChoice");
+    expect(app).toContain("lastDropAction");
+  });
+
   it("hides the main window on startup unless the setting or first-run tour needs it", () => {
     const app = readProjectFile("src/App.vue");
     const settings = readProjectFile("src/pages/SettingsPage.vue");

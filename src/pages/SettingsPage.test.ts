@@ -91,6 +91,11 @@ function settingsFixture(): SettingsV2 {
     checkPreReleaseUpdates: false,
     skippedUpdateVersion: "",
     showMainWindowOnStart: false,
+    lastDropAction: {
+      kind: "file",
+      operation: "content",
+      direction: "s2t",
+    },
   };
 }
 

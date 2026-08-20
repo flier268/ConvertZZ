@@ -452,6 +452,20 @@ html.floating-window * {
 .floating-orb.busy {
   animation: pulse 0.8s infinite alternate;
 }
+.floating-orb.drop-target {
+  outline: 2px solid #1f9d87;
+  outline-offset: -4px;
+  border-radius: 50%;
+}
+.floating-orb.drop-target .brand-mark-svg {
+  transform: scale(1.06);
+}
+.drop-dialog-summary {
+  margin: 0 0 12px;
+  color: #4a6561;
+  line-height: 1.5;
+  word-break: break-all;
+}
 .floating-context-menu {
   position: fixed;
   z-index: 20;

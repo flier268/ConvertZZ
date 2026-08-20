@@ -23,10 +23,19 @@ import SettingsPage from "./pages/SettingsPage.vue";
 import AboutPage from "./pages/AboutPage.vue";
 import OnboardingTour from "./OnboardingTour.vue";
 import BrandMark from "./BrandMark.vue";
-import { isOnboardingComplete, loadSettings } from "./lib/settings";
+import DropActionDialog from "./components/DropActionDialog.vue";
+import { isOnboardingComplete, loadSettings, patchSavedSettings } from "./lib/settings";
 import { core } from "./lib/coreClient";
 import { setCliInvocation } from "./lib/cli";
 import type { ParsedCli } from "@shared/contracts";
+import {
+  buildDropCliInvocation,
+  DEFAULT_DROP_ACTION,
+  dropTargetPage,
+  normalizeDropActionChoice,
+  type DropActionChoice,
+  type FileDropPayload,
+} from "./lib/dropActions";
 import { applyDesktopSettings, applyStartupWindowVisibility } from "./lib/desktop";
 import { formatUnknownError } from "./lib/errors";
 import { executeLegacyAction } from "./lib/legacyActions";
@@ -38,6 +47,28 @@ const ready = ref(false);
 const health = ref<{ engine?: string; version: string }>();
 const startupError = ref("");
 const unlisten: Array<() => void> = [];
+const dropDialogVisible = ref(false);
+const dropPaths = ref<string[]>([]);
+const dropLastChoice = ref<DropActionChoice>({ ...DEFAULT_DROP_ACTION });
+
+async function openDropActionDialog(paths: string[]): Promise<void> {
+  if (!paths.length) return;
+  const settings = await loadSettings();
+  dropPaths.value = paths;
+  dropLastChoice.value = normalizeDropActionChoice(settings.lastDropAction, settings.direction);
+  dropDialogVisible.value = true;
+  await invoke("show_main_window").catch(() => undefined);
+}
+
+async function confirmDropAction(choice: DropActionChoice): Promise<void> {
+  const settings = await patchSavedSettings((current) => {
+    current.lastDropAction = { ...choice };
+  });
+  dropLastChoice.value = { ...choice };
+  const parsed = buildDropCliInvocation(dropPaths.value, choice, settings);
+  active.value = dropTargetPage(choice.kind);
+  setCliInvocation(parsed);
+}
 
 const pages = {
   quick: QuickPage,
@@ -131,6 +162,12 @@ onMounted(async () => {
           parsed.mode === "audio" ? "audio" : parsed.mode === "file" ? "files" : "quick";
       }),
     );
+    step = "listen:file-drop";
+    unlisten.push(
+      await listen<FileDropPayload>("app://file-drop", async ({ payload }) => {
+        await openDropActionDialog(payload.paths ?? []);
+      }),
+    );
     ready.value = true;
   } catch (error) {
     const detail = formatUnknownError(error);
@@ -211,6 +248,12 @@ onBeforeUnmount(() => unlisten.forEach((dispose) => dispose()));
       :auto-start="!hasCliArgs"
       @navigate="active = $event"
       @started="onTourStarted"
+    />
+    <DropActionDialog
+      v-model="dropDialogVisible"
+      :paths="dropPaths"
+      :last-choice="dropLastChoice"
+      @confirm="confirmDropAction"
     />
   </el-container>
 </template>

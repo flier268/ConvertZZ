@@ -69,7 +69,12 @@ pub fn default_settings() -> Value {
         "checkVersionOnStart": true,
         "checkPreReleaseUpdates": false,
         "skippedUpdateVersion": "",
-        "showMainWindowOnStart": false
+        "showMainWindowOnStart": false,
+        "lastDropAction": {
+            "kind": "file",
+            "operation": "content",
+            "direction": "s2t"
+        }
     })
 }
 
@@ -166,7 +171,8 @@ pub fn migrate(input: Value) -> Value {
         "checkVersionOnStart": boolean_value(input.get("CheckVersion"), true),
         "checkPreReleaseUpdates": false,
         "skippedUpdateVersion": "",
-        "showMainWindowOnStart": false
+        "showMainWindowOnStart": false,
+        "lastDropAction": defaults["lastDropAction"].clone()
     })
 }
 
@@ -176,7 +182,8 @@ fn merge_v2(input: Value) -> Value {
     if let Some(object) = input.as_object() {
         for (key, value) in object {
             match key.as_str() {
-                "floatingBall" | "hotkeys" | "quickActions" | "files" | "zhconvert" => {
+                "floatingBall" | "hotkeys" | "quickActions" | "files" | "zhconvert"
+                | "lastDropAction" => {
                     merged.insert(key.clone(), merge_object(defaults.get(key), value));
                 }
                 "autoBackupBeforeConversion" => {

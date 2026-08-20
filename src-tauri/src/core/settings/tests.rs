@@ -164,6 +164,29 @@ fn missing_backup_flag_defaults_true() {
 }
 
 #[test]
+fn missing_last_drop_action_defaults() {
+    assert_eq!(
+        migrate(Value::Null)["lastDropAction"],
+        json!({
+            "kind": "file",
+            "operation": "content",
+            "direction": "s2t"
+        })
+    );
+    assert_eq!(
+        migrate(json!({
+            "version": 2,
+            "lastDropAction": { "kind": "audio", "direction": "t2s" }
+        }))["lastDropAction"],
+        json!({
+            "kind": "audio",
+            "operation": "content",
+            "direction": "t2s"
+        })
+    );
+}
+
+#[test]
 fn preserves_raw_saved_paths() {
     let result = migrate(json!({
         "version": 2,

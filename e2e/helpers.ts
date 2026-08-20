@@ -17,3 +17,14 @@ export async function openPage(page: Page, id: string, heading: string): Promise
   await page.locator(id).click();
   await expect(page.getByRole("heading", { name: heading })).toBeVisible();
 }
+
+export async function emitAppEvent(page: Page, event: string, payload?: unknown): Promise<void> {
+  await page.evaluate(
+    async ([name, data]) => {
+      const emit = window.__convertzzEmit;
+      if (!emit) throw new Error("e2e Tauri emit mock is missing");
+      await emit(name, data);
+    },
+    [event, payload] as const,
+  );
+}

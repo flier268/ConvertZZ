@@ -61,6 +61,11 @@ const defaultSettings: SettingsV2 = {
   checkPreReleaseUpdates: false,
   skippedUpdateVersion: "",
   showMainWindowOnStart: true,
+  lastDropAction: {
+    kind: "file",
+    operation: "content",
+    direction: "s2t",
+  },
 };
 
 export interface ConvertzzE2eConfig {
@@ -78,6 +83,7 @@ export interface ConvertzzE2eConfig {
 declare global {
   interface Window {
     __convertzzE2e?: ConvertzzE2eConfig;
+    __convertzzEmit?: (event: string, payload?: unknown) => Promise<void>;
   }
 }
 
@@ -122,6 +128,10 @@ export async function listen<T>(
 
 export async function emit(event: string, payload?: unknown): Promise<void> {
   for (const handler of listeners.get(event) ?? []) handler({ payload });
+}
+
+if (typeof window !== "undefined") {
+  window.__convertzzEmit = emit;
 }
 
 export async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {

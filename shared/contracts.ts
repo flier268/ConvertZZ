@@ -197,6 +197,13 @@ export interface QuickActionSettings {
   rightDropShift: string;
 }
 
+/** 懸浮球拖入檔案後，上次確認的轉換動作選項。 */
+export interface LastDropActionSettings {
+  kind: "file" | "audio";
+  operation: "content" | "filename" | "both";
+  direction: Direction;
+}
+
 export interface SettingsV2 {
   version: 2;
   engine: EngineKind;
@@ -244,6 +251,8 @@ export interface SettingsV2 {
   checkPreReleaseUpdates: boolean;
   skippedUpdateVersion: string;
   showMainWindowOnStart: boolean;
+  /** 懸浮球拖放詢問對話框記住的上次選項。 */
+  lastDropAction: LastDropActionSettings;
 }
 
 export type CoreOperation =

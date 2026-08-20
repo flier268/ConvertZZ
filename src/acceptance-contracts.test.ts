@@ -219,6 +219,27 @@ describe("驗收項目的自動化契約", () => {
     expect(page).toContain("await createPlan()");
   });
 
+  it("懸浮球拖入檔案會詢問動作後再開啟預覽流程", () => {
+    const floating = readProjectFile("src/FloatingBall.vue");
+    const app = readProjectFile("src/App.vue");
+    const dialog = readProjectFile("src/components/DropActionDialog.vue");
+    const files = readProjectFile("src/pages/FilesPage.vue");
+    const audio = readProjectFile("src/pages/AudioPage.vue");
+    const contracts = readProjectFile("shared/contracts.ts");
+    expect(floating).toContain("onDragDropEvent");
+    expect(floating).toContain('emit("app://file-drop"');
+    expect(app).toContain('listen<FileDropPayload>("app://file-drop"');
+    expect(app).toContain("setCliInvocation(parsed)");
+    expect(app).toContain("current.lastDropAction = { ...choice }");
+    expect(dialog).toContain("選擇轉換動作");
+    expect(dialog).toContain("檔案與檔名轉換");
+    expect(dialog).toContain("音訊標籤");
+    expect(dialog).toContain("lastChoice");
+    expect(contracts).toContain("lastDropAction");
+    expect(files).toContain('invocation?.options.mode !== "file"');
+    expect(audio).toContain('invocation?.options.mode !== "audio"');
+  });
+
   it("H-06 SendTo 只在 Windows 出現", () => {
     const rust = readProjectFile("src-tauri/src/lib.rs");
     const settings = readProjectFile("src/pages/SettingsPage.vue");

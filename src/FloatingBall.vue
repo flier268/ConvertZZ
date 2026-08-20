@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { PhysicalPosition } from "@tauri-apps/api/dpi";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import { emit, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { FLOATING_CONTEXT_MENU } from "./lib/appMenu";
 import { popupAppMenu } from "./lib/appMenuPopup";
@@ -20,9 +20,11 @@ import { showAppToast } from "./lib/toast";
 import BrandMark from "./BrandMark.vue";
 
 const busy = ref(false);
+const dropTarget = ref(false);
 const htmlMenu = ref<{ x: number; y: number }>();
 let floatingWindow: ReturnType<typeof getCurrentWindow> | undefined;
 let unlistenMoved: UnlistenFn | undefined;
+let unlistenDragDrop: UnlistenFn | undefined;
 let savePositionTimer: ReturnType<typeof setTimeout> | undefined;
 let lastDropButton: "left" | "right" = "left";
 
@@ -36,6 +38,17 @@ async function persistPosition(position: PhysicalPosition) {
   });
 }
 
+async function handOffDroppedPaths(paths: string[]): Promise<void> {
+  if (!paths.length) return;
+  dropTarget.value = false;
+  try {
+    await invoke("show_main_window");
+    await emit("app://file-drop", { paths });
+  } catch (error) {
+    await showAppToast(error instanceof Error ? error.message : String(error));
+  }
+}
+
 onMounted(async () => {
   if (!isTauri()) return;
   floatingWindow = getCurrentWindow();
@@ -44,11 +57,23 @@ onMounted(async () => {
     if (savePositionTimer) clearTimeout(savePositionTimer);
     savePositionTimer = setTimeout(() => void persistPosition(payload), 180);
   });
+  unlistenDragDrop = await floatingWindow.onDragDropEvent(({ payload }) => {
+    if (payload.type === "enter" || payload.type === "over") {
+      dropTarget.value = true;
+      return;
+    }
+    if (payload.type === "leave") {
+      dropTarget.value = false;
+      return;
+    }
+    if (payload.type === "drop") void handOffDroppedPaths(payload.paths);
+  });
 });
 
 onBeforeUnmount(() => {
   if (savePositionTimer) clearTimeout(savePositionTimer);
   unlistenMoved?.();
+  unlistenDragDrop?.();
 });
 
 async function runAction(action: string, input?: string) {
@@ -125,7 +150,7 @@ async function handleDrop(event: DragEvent) {
 <template>
   <div
     class="floating-shell"
-    title="拖曳移動 · 右鍵開啟選單 · 輔助鍵加點擊執行設定動作"
+    title="拖入檔案轉換 · 拖曳移動 · 右鍵開啟選單 · 輔助鍵加點擊執行設定動作"
     @mousedown="handlePointerDown"
     @mouseup="handlePointerUp"
     @contextmenu="handleContextMenu"
@@ -134,7 +159,11 @@ async function handleDrop(event: DragEvent) {
     @dragover.prevent="trackDropButton"
     @drop.prevent="handleDrop"
   >
-    <div class="floating-orb" :class="{ busy }" aria-label="ConvertZZ 浮動球">
+    <div
+      class="floating-orb"
+      :class="{ busy, 'drop-target': dropTarget }"
+      aria-label="ConvertZZ 浮動球"
+    >
       <BrandMark />
     </div>
     <nav

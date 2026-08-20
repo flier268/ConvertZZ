@@ -99,6 +99,11 @@ function settingsFixture(overrides: Partial<SettingsV2> = {}): SettingsV2 {
     checkPreReleaseUpdates: false,
     skippedUpdateVersion: "",
     showMainWindowOnStart: true,
+    lastDropAction: {
+      kind: "file",
+      operation: "content",
+      direction: "s2t",
+    },
     ...overrides,
   };
 }

@@ -8,7 +8,7 @@ const loadSettings = vi.fn();
 
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => false, invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/dpi", () => ({ LogicalPosition: class {} }));
-vi.mock("@tauri-apps/api/event", () => ({}));
+vi.mock("@tauri-apps/api/event", () => ({ emit: vi.fn() }));
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({}) }));
 vi.mock("./lib/appMenuPopup", () => ({ popupAppMenu: vi.fn() }));
 vi.mock("./lib/legacyActions", () => ({

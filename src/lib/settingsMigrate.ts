@@ -71,6 +71,11 @@ export function defaultSettings(): SettingsV2 {
     checkPreReleaseUpdates: false,
     skippedUpdateVersion: "",
     showMainWindowOnStart: false,
+    lastDropAction: {
+      kind: "file",
+      operation: "content",
+      direction: "s2t",
+    },
   };
 }
 
@@ -88,6 +93,7 @@ export function migrateSettings(input: unknown): SettingsV2 {
       quickActions: { ...defaults.quickActions, ...input.quickActions },
       files: { ...defaults.files, ...input.files },
       zhconvert: { ...defaults.zhconvert, ...input.zhconvert },
+      lastDropAction: { ...defaults.lastDropAction, ...input.lastDropAction },
     };
   }
   const legacy = (input && typeof input === "object" ? input : {}) as LegacySettings;

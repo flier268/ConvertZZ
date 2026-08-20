@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { e2eState, openApp, openPage } from "../helpers";
+import { emitAppEvent, e2eState, openApp, openPage } from "../helpers";
 
 test.describe("ConvertZZ 前端", () => {
   test("啟動後顯示快速轉換並連上轉換核心", async ({ page }) => {
@@ -20,6 +20,56 @@ test.describe("ConvertZZ 前端", () => {
     await expect(page.getByText("來源檔不會被修改")).toBeVisible();
     await expect(page.getByRole("button", { name: "匯入找到的設定" })).toBeVisible();
     await expect(page.getByRole("button", { name: "略過匯入" })).toBeVisible();
+  });
+
+  test("拖入檔案後會詢問動作並可進入檔案預覽", async ({ page }) => {
+    await openApp(page);
+    await emitAppEvent(page, "app://file-drop", {
+      paths: ["/tmp/里面.txt", "/tmp/notes.txt"],
+    });
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText("選擇轉換動作")).toBeVisible();
+    await expect(dialog.getByText("已拖入 2 項")).toBeVisible();
+    await expect(dialog.getByText("檔案與檔名轉換")).toBeVisible();
+    await expect(dialog.getByText("音訊標籤")).toBeVisible();
+    await dialog.getByText("轉換檔名", { exact: true }).click();
+    await dialog.getByRole("button", { name: "繼續" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole("heading", { name: "檔案與檔名" })).toBeVisible();
+    await expect(page.getByText("/tmp/里面.txt", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "確認執行" })).toBeVisible();
+  });
+
+  test("拖入檔案後可改選音訊標籤", async ({ page }) => {
+    await openApp(page);
+    await emitAppEvent(page, "app://file-drop", { paths: ["/tmp/song.mp3"] });
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await dialog.getByText("音訊標籤", { exact: true }).click();
+    await dialog.getByRole("button", { name: "繼續" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole("heading", { name: "音訊標籤" })).toBeVisible();
+    await expect(page.getByText("song.mp3", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "建立標籤預覽" })).toBeVisible();
+  });
+
+  test("拖放詢問會記住上次選項", async ({ page }) => {
+    await openApp(page);
+    await emitAppEvent(page, "app://file-drop", { paths: ["/tmp/remember.txt"] });
+    let dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await dialog.getByText("轉換檔名", { exact: true }).click();
+    await dialog.getByText("繁轉簡", { exact: true }).click();
+    await dialog.getByRole("button", { name: "繼續" }).click();
+    await expect(dialog).toBeHidden();
+
+    await emitAppEvent(page, "app://file-drop", { paths: ["/tmp/remember-again.txt"] });
+    dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("radio", { name: "轉換檔名" })).toBeChecked();
+    await expect(dialog.getByRole("radio", { name: "繁轉簡" })).toBeChecked();
+    await dialog.getByRole("button", { name: "取消" }).click();
   });
 
   test("覆寫需要第二次確認", async ({ page }) => {

@@ -6,6 +6,7 @@ import type {
   Direction,
   EngineKind,
   FileConversionPlan,
+  FilePlanItem,
   FilePlanRequest,
   TextEncoding,
 } from "@shared/contracts";
@@ -14,12 +15,18 @@ import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { cliInvocation } from "../lib/cli";
 import { ensureSupportedFilesFilter } from "../lib/fileFilters";
 import { fileConversionDefaults } from "../lib/settingsApply";
+import { buildFileDiffSections, type DiffSection } from "../lib/fileDiff";
+import PreviewDiffDialog from "../components/PreviewDiffDialog.vue";
 
 const paths = ref<string[]>([]);
 const outputPath = ref<string>();
 const outputDirectory = ref<string>();
 const plan = ref<FileConversionPlan>();
 const busy = ref(false);
+const diffVisible = ref(false);
+const diffTitle = ref("差異");
+const diffMeta = ref<Array<{ label: string; value: string }>>([]);
+const diffSections = ref<DiffSection[]>([]);
 const promptAfterConversion = ref(true);
 const backup = ref(true);
 const defaultPath = ref<string>();
@@ -209,6 +216,25 @@ async function cancelPlan() {
   if (!plan.value) return;
   await core.request("files.cancel", { planId: plan.value.planId });
   plan.value = undefined;
+  diffVisible.value = false;
+  diffSections.value = [];
+  diffMeta.value = [];
+}
+
+function openDiff(item: FilePlanItem) {
+  const sections = buildFileDiffSections(item);
+  diffSections.value = sections;
+  diffTitle.value =
+    sections.length === 1 && sections[0]?.title === "檔名" ? "檔名差異" : "內容差異";
+  if (sections.some((section) => section.title === "檔名") && sections.length > 1) {
+    diffTitle.value = "檔名與內容差異";
+  }
+  diffMeta.value = [
+    { label: "來源", value: item.sourcePath },
+    { label: "輸出", value: item.outputPath },
+    ...(item.detectedEncoding ? [{ label: "編碼", value: item.detectedEncoding }] : []),
+  ];
+  diffVisible.value = true;
 }
 
 watch(
@@ -344,17 +370,34 @@ watch(
         <el-table-column
           prop="sourcePreview"
           label="來源預覽"
-          min-width="200"
+          min-width="160"
           show-overflow-tooltip
         />
         <el-table-column
           prop="outputPreview"
           label="輸出預覽"
-          min-width="200"
+          min-width="160"
           show-overflow-tooltip
         />
-        <el-table-column prop="warning" label="警告" min-width="220" show-overflow-tooltip />
+        <el-table-column label="差異" width="90" fixed="right"
+          ><template #default="scope"
+            ><el-button
+              link
+              type="primary"
+              :disabled="!scope.row.sourcePreview && !scope.row.outputPreview"
+              @click="openDiff(scope.row)"
+              >檢視</el-button
+            ></template
+          ></el-table-column
+        >
+        <el-table-column prop="warning" label="警告" min-width="180" show-overflow-tooltip />
       </el-table>
+      <PreviewDiffDialog
+        v-model="diffVisible"
+        :title="diffTitle"
+        :meta="diffMeta"
+        :sections="diffSections"
+      />
     </el-card>
   </section>
 </template>

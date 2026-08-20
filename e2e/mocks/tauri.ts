@@ -74,6 +74,7 @@ export interface ConvertzzE2eConfig {
   skippedUpdateVersion?: string;
   checkVersionOnStart?: boolean;
   selectedFiles?: string | string[];
+  clipboardText?: string;
   confirmResult?: boolean;
   update?: "none" | "install";
   confirms?: string[];
@@ -381,11 +382,14 @@ export async function open(): Promise<string | string[] | null> {
 }
 
 export async function readText(): Promise<string> {
+  const seeded = e2e().clipboardText;
+  if (!clipboard && seeded) clipboard = seeded;
   return clipboard;
 }
 
 export async function writeText(value: string): Promise<void> {
   clipboard = value;
+  e2e().clipboardText = value;
 }
 
 export async function openUrl(url: string): Promise<void> {

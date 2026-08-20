@@ -6,6 +6,7 @@ import type { Direction, EngineKind, TextEncoding, UtilityConvertRequest } from 
 import { convertText } from "../lib/actions";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { core } from "../lib/coreClient";
+import SideBySideDiffView from "../components/SideBySideDiffView.vue";
 
 const source = ref("");
 const output = ref("");
@@ -151,14 +152,21 @@ onBeforeUnmount(() => {
         ><el-button type="primary" :disabled="!output" @click="copy">寫回剪貼簿</el-button>
       </div></el-card
     >
-    <div class="editor-grid">
-      <el-card shadow="never" class="editor-card"
-        ><template #header>剪貼簿文字</template
-        ><el-input v-model="source" type="textarea" :rows="20" resize="none" /></el-card
-      ><el-card shadow="never" class="editor-card result-card"
-        ><template #header>轉換預覽</template
-        ><el-input v-model="output" type="textarea" :rows="20" resize="none" readonly
-      /></el-card>
-    </div>
+    <el-card shadow="never">
+      <template #header
+        ><div class="card-title">
+          <span>轉換差異</span>
+        </div></template
+      >
+      <SideBySideDiffView
+        v-model:source="source"
+        :output="output"
+        editable
+        source-label="剪貼簿文字"
+        output-label="轉換預覽"
+        source-placeholder="剪貼簿文字會顯示於此"
+        output-placeholder="轉換預覽會顯示於此"
+      />
+    </el-card>
   </section>
 </template>

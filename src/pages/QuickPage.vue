@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import { ElMessage } from "element-plus";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import type { Direction, EngineKind, ZhConvertOptions } from "@shared/contracts";
 import { convertText } from "../lib/actions";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
+import SideBySideDiffView from "../components/SideBySideDiffView.vue";
 
 const source = ref("");
 const output = ref("");
@@ -13,7 +14,6 @@ const engine = ref<EngineKind>("segmented");
 const vocabularyCorrection = ref(true);
 const busy = ref(false);
 const duration = ref<number>();
-const sourceCount = computed(() => Array.from(source.value).length);
 const promptAfterConversion = ref(true);
 const zhconvert = ref<ZhConvertOptions>();
 
@@ -89,37 +89,23 @@ async function copy() {
         <el-button type="primary" :loading="busy" @click="convert">開始轉換</el-button>
       </div>
     </el-card>
-    <div class="editor-grid">
-      <el-card shadow="never" class="editor-card">
-        <template #header
-          ><div class="card-title">
-            <span>原始文字</span><small>{{ sourceCount }} 字</small>
-          </div></template
-        >
-        <el-input
-          v-model="source"
-          type="textarea"
-          resize="none"
-          :autosize="{ minRows: 17, maxRows: 28 }"
-          placeholder="在此輸入或貼上文字"
-        />
-      </el-card>
-      <el-card shadow="never" class="editor-card result-card">
-        <template #header
-          ><div class="card-title">
-            <span>轉換結果</span><small v-if="duration !== undefined">{{ duration }} ms</small>
-          </div></template
-        >
-        <el-input
-          v-model="output"
-          type="textarea"
-          resize="none"
-          :autosize="{ minRows: 17, maxRows: 28 }"
-          readonly
-          placeholder="結果會顯示於此"
-        />
-        <el-button class="copy-button" :disabled="!output" @click="copy">複製結果</el-button>
-      </el-card>
-    </div>
+    <el-card shadow="never">
+      <template #header
+        ><div class="card-title">
+          <span>轉換差異</span>
+          <div class="header-actions">
+            <small v-if="duration !== undefined">{{ duration }} ms</small>
+            <el-button :disabled="!output" @click="copy">複製結果</el-button>
+          </div>
+        </div></template
+      >
+      <SideBySideDiffView
+        v-model:source="source"
+        :output="output"
+        editable
+        source-label="原始文字"
+        output-label="轉換結果"
+      />
+    </el-card>
   </section>
 </template>

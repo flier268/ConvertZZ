@@ -530,3 +530,10 @@ html.floating-window * {
     grid-template-columns: 1fr;
   }
 }
+
+/* PreviewDiffDialog：el-dialog teleport 後需全域覆寫寬度 */
+.preview-diff-dialog.el-dialog {
+  --el-dialog-width: min(920px, 96vw) !important;
+  width: min(920px, 96vw) !important;
+  max-width: 96vw !important;
+}

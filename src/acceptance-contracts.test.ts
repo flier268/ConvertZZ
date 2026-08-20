@@ -50,12 +50,57 @@ describe("驗收項目的自動化契約", () => {
 
   it("E-01／E-02 預覽會顯示來源、輸出、編碼與差異", () => {
     const page = readProjectFile("src/pages/FilesPage.vue");
+    const dialog = readProjectFile("src/components/PreviewDiffDialog.vue");
+    const diffView = readProjectFile("src/components/SideBySideDiffView.vue");
+    const fileDiff = readProjectFile("src/lib/fileDiff.ts");
     expect(page).toContain('label="來源"');
     expect(page).toContain('label="輸出"');
     expect(page).toContain('label="編碼"');
     expect(page).toContain('prop="sourcePreview"');
     expect(page).toContain('prop="outputPreview"');
     expect(page).toContain('label="轉換檔名"');
+    expect(page).toContain("PreviewDiffDialog");
+    expect(page).toContain("buildFileDiffSections");
+    expect(page).toContain(">檢視</el-button");
+    expect(dialog).toContain("SideBySideDiffView");
+    expect(diffView).toContain("syncScroll");
+    expect(diffView).toContain("buildSideBySideDiff");
+    expect(diffView).toContain("sideBySideToHtml");
+    expect(diffView).toContain("v-html");
+    expect(fileDiff).toContain('title: "檔名"');
+    expect(fileDiff).toContain('title: "內容"');
+  });
+
+  it("快速轉換固定並排差異檢視且來源可編輯", () => {
+    const page = readProjectFile("src/pages/QuickPage.vue");
+    const diffView = readProjectFile("src/components/SideBySideDiffView.vue");
+    expect(page).toContain("SideBySideDiffView");
+    expect(page).toContain("轉換差異");
+    expect(page).toContain("v-model:source");
+    expect(page).toContain("editable");
+    expect(page).not.toContain("viewMode");
+    expect(diffView).toContain("update:source");
+    expect(diffView).toContain("preview-diff-input");
+  });
+
+  it("剪貼簿轉換固定並排差異檢視", () => {
+    const page = readProjectFile("src/pages/ClipboardPage.vue");
+    expect(page).toContain("SideBySideDiffView");
+    expect(page).toContain("轉換差異");
+    expect(page).toContain("v-model:source");
+    expect(page).toContain("editable");
+    expect(page).toContain('source-label="剪貼簿文字"');
+    expect(page).toContain('output-label="轉換預覽"');
+    expect(page).not.toContain("editor-grid");
+  });
+
+  it("音訊標籤預覽可檢視欄位差異", () => {
+    const page = readProjectFile("src/pages/AudioPage.vue");
+    expect(page).toContain("PreviewDiffDialog");
+    expect(page).toContain("openFieldDiff");
+    expect(page).toContain('label="差異"');
+    expect(page).toContain(">檢視</el-button");
+    expect(page).toContain("convertedValues");
   });
 
   it("E-05 覆寫需要額外確認", () => {

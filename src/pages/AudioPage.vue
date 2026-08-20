@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from "vue";
 import { open, confirm } from "@tauri-apps/plugin-dialog";
 import { ElMessage } from "element-plus";
 import type {
+  AudioTagField,
   AudioTagFile,
   AudioTagPlan,
   AudioTagPlanRequest,
@@ -13,11 +14,17 @@ import type {
 import { core } from "../lib/coreClient";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { cliInvocation } from "../lib/cli";
+import type { DiffSection } from "../lib/fileDiff";
+import PreviewDiffDialog from "../components/PreviewDiffDialog.vue";
 
 const paths = ref<string[]>([]);
 const files = ref<AudioTagFile[]>([]);
 const plan = ref<AudioTagPlan>();
 const busy = ref(false);
+const diffVisible = ref(false);
+const diffTitle = ref("標籤差異");
+const diffMeta = ref<Array<{ label: string; value: string }>>([]);
+const diffSections = ref<DiffSection[]>([]);
 const promptAfterConversion = ref(true);
 const backup = ref(true);
 const conflictPolicy = ref<AudioTagPlanRequest["conflictPolicy"]>("skip");
@@ -202,7 +209,31 @@ async function cancelPlan() {
   if (!plan.value) return;
   await core.request("audio.cancel", { planId: plan.value.planId });
   plan.value = undefined;
+  diffVisible.value = false;
+  diffSections.value = [];
+  diffMeta.value = [];
   await scan();
+}
+
+function openFieldDiff(file: AudioTagFile, field: AudioTagField) {
+  const source = field.values.join("\n");
+  const output = (field.convertedValues ?? field.values).join("\n");
+  diffTitle.value = "標籤差異";
+  diffMeta.value = [
+    { label: "檔案", value: file.path },
+    { label: "標籤", value: field.container },
+    { label: "欄位", value: field.label },
+  ];
+  diffSections.value = [
+    {
+      title: field.label,
+      sourceLabel: "目前內容",
+      outputLabel: "轉換預覽",
+      source,
+      output,
+    },
+  ];
+  diffVisible.value = true;
 }
 
 watch(
@@ -404,15 +435,32 @@ function fieldEnabled(
         ></el-table-column>
         <el-table-column prop="container" label="標籤" width="150" />
         <el-table-column prop="label" label="欄位" width="160" />
-        <el-table-column label="目前內容" min-width="240"
+        <el-table-column label="目前內容" min-width="200"
           ><template #default="scope">{{ scope.row.values.join(" / ") }}</template></el-table-column
         >
-        <el-table-column v-if="plan" label="轉換預覽" min-width="240"
+        <el-table-column v-if="plan" label="轉換預覽" min-width="200"
           ><template #default="scope">{{
             scope.row.convertedValues?.join(" / ")
           }}</template></el-table-column
         >
+        <el-table-column v-if="plan" label="差異" width="90" fixed="right"
+          ><template #default="scope"
+            ><el-button
+              link
+              type="primary"
+              :disabled="!scope.row.convertedValues?.length"
+              @click="openFieldDiff(file, scope.row)"
+              >檢視</el-button
+            ></template
+          ></el-table-column
+        >
       </el-table>
     </el-card>
+    <PreviewDiffDialog
+      v-model="diffVisible"
+      :title="diffTitle"
+      :meta="diffMeta"
+      :sections="diffSections"
+    />
   </section>
 </template>

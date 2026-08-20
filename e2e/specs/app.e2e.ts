@@ -145,6 +145,13 @@ test.describe("ConvertZZ 前端", () => {
     await expect(page.getByRole("cell", { name: "/tmp/裡面.txt", exact: true })).toBeVisible();
     await expect(page.getByRole("cell", { name: "里面.txt", exact: true })).toBeVisible();
     await expect(page.getByRole("cell", { name: "裡面.txt", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "檢視" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("檔名差異")).toBeVisible();
+    await expect(dialog.locator(".preview-diff-body").nth(0)).toContainText("里面.txt");
+    await expect(dialog.locator(".preview-diff-body").nth(1)).toContainText("裡面.txt");
+    await expect(dialog.locator(".diff-remove").first()).toBeVisible();
+    await expect(dialog.locator(".diff-add").first()).toBeVisible();
   });
 
   test("H-06 Linux 設定頁不顯示 SendTo，並可匯入舊設定", async ({ page }) => {
@@ -186,6 +193,34 @@ test.describe("ConvertZZ 前端", () => {
     await expect(page.getByText("變更預覽")).toBeVisible();
     await expect(page.getByRole("cell", { name: "里面开发头发", exact: true })).toBeVisible();
     await expect(page.getByRole("cell", { name: "裡面開發頭髮", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "檢視" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("內容差異")).toBeVisible();
+    await expect(dialog.locator(".preview-diff-body").nth(0)).toContainText("里面开发头发");
+    await expect(dialog.locator(".preview-diff-body").nth(1)).toContainText("裡面開發頭髮");
+    await expect(dialog.locator(".diff-remove").first()).toBeVisible();
+    await expect(dialog.locator(".diff-add").first()).toBeVisible();
+  });
+
+  test("快速轉換固定並排差異檢視", async ({ page }) => {
+    await openApp(page);
+    await expect(page.getByRole("heading", { name: "快速轉換" })).toBeVisible();
+    await expect(page.getByText("轉換差異")).toBeVisible();
+    await page.getByPlaceholder("在此輸入或貼上文字").fill("里面开发头发");
+    await page.getByRole("button", { name: "開始轉換" }).click();
+    await expect(page.locator(".preview-diff-body").nth(1)).toContainText("裡面開發頭髮");
+    await expect(page.locator(".diff-add").first()).toBeVisible();
+    await expect(page.getByPlaceholder("在此輸入或貼上文字")).toHaveValue("里面开发头发");
+  });
+
+  test("剪貼簿轉換固定並排差異檢視", async ({ page }) => {
+    await openApp(page, { clipboardText: "里面开发头发" });
+    await openPage(page, "#tour-clipboard", "剪貼簿");
+    await expect(page.getByText("轉換差異")).toBeVisible();
+    await page.getByRole("button", { name: "立即讀取" }).click();
+    await expect(page.getByPlaceholder("剪貼簿文字會顯示於此")).toHaveValue("里面开发头发");
+    await expect(page.locator(".preview-diff-body").nth(1)).toContainText("裡面開發頭髮");
+    await expect(page.locator(".diff-add").first()).toBeVisible();
   });
 
   test("E-03 取消計畫不會進入確認寫入", async ({ page }) => {
@@ -210,6 +245,15 @@ test.describe("ConvertZZ 前端", () => {
     await expect(page.getByRole("cell", { name: "/tmp/裡面.txt", exact: true })).toBeVisible();
     await expect(page.getByRole("cell", { name: "里面开发头发", exact: true })).toBeVisible();
     await expect(page.getByRole("cell", { name: "裡面開發頭髮", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "檢視" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("檔名與內容差異")).toBeVisible();
+    await expect(dialog.getByText("檔名", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("內容", { exact: true })).toBeVisible();
+    await expect(dialog.locator(".preview-diff-body").nth(0)).toContainText("里面.txt");
+    await expect(dialog.locator(".preview-diff-body").nth(1)).toContainText("裡面.txt");
+    await expect(dialog.locator(".preview-diff-body").nth(2)).toContainText("里面开发头发");
+    await expect(dialog.locator(".preview-diff-body").nth(3)).toContainText("裡面開發頭髮");
   });
 
   test("音訊頁可掃描、預覽並在確認後寫入", async ({ page }) => {
@@ -224,6 +268,12 @@ test.describe("ConvertZZ 前端", () => {
     await page.getByRole("button", { name: "建立標籤預覽" }).click();
     await expect(page.getByRole("columnheader", { name: "轉換預覽" })).toBeVisible();
     await expect(page.getByRole("cell", { name: "裡面", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "檢視" }).first().click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("標籤差異")).toBeVisible();
+    await expect(dialog.locator(".preview-diff-body").nth(0)).toContainText("里面");
+    await expect(dialog.locator(".preview-diff-body").nth(1)).toContainText("裡面");
+    await dialog.getByRole("button", { name: "關閉此對話框" }).click();
     await page.getByRole("button", { name: "確認寫入" }).click();
     await expect
       .poll(async () => (await e2eState(page)).confirms ?? [])

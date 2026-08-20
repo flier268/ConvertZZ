@@ -1,10 +1,10 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import {
   listPortablePayload,
+  listZipEntries,
   packageWindowsPortable,
 } from "../scripts/package-windows-portable.mjs";
 
@@ -58,22 +58,18 @@ describe("Windows 免安裝 zip 打包", () => {
       expect(result.zipName).toBe("ConvertZZ_2.0.0-beta5_x64-portable.zip");
       expect(result.zipPath).toBe(join(outDir, result.zipName));
 
-      const listed = spawnSync("tar", ["-tf", result.zipName], {
-        cwd: outDir,
-        encoding: "utf8",
-      });
-      expect(listed.status).toBe(0);
-      const entries = listed.stdout
-        .split(/\r?\n/u)
-        .map((line) => line.trim())
-        .filter(Boolean);
+      const bytes = readFileSync(result.zipPath);
+      expect([...bytes.subarray(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04]);
+      expect(bytes.subarray(257, 262).toString("utf8")).not.toBe("ustar");
+
+      const entries = listZipEntries(result.zipPath);
       expect(entries).toContain("ConvertZZ/ConvertZZ.exe");
       expect(entries).toContain("ConvertZZ/Dictionary.csv");
       expect(entries).toContain("ConvertZZ/helper.dll");
       expect(entries).toContain("ConvertZZ/portable");
       expect(entries.some((entry) => entry.includes("segment-dict/segment/dict.txt"))).toBe(true);
       expect(entries.some((entry) => entry.includes("licenses/THIRD_PARTY_NOTICES.md"))).toBe(true);
-      expect(readFileSync(result.zipPath).byteLength).toBeGreaterThan(0);
+      expect(bytes.byteLength).toBeGreaterThan(0);
     } finally {
       rmSync(releaseDir, { recursive: true, force: true });
       rmSync(outDir, { recursive: true, force: true });

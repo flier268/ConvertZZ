@@ -35,7 +35,8 @@ describe("發行工作流程契約", () => {
     const packager = readProjectFile("scripts/package-windows-portable.mjs");
     expect(packager).toContain('PORTABLE_MARKER = "portable"');
     expect(packager).toContain("writeFileSync(join(stagedApp, PORTABLE_MARKER)");
-    expect(packager).toContain("cwd: outDir");
+    expect(packager).not.toMatch(/spawnSync\(\s*"tar"/u);
+    expect(packager).toContain("0x04034b50");
   });
 
   it("J-05 Linux matrix 產出 AppImage、DEB 與 RPM", () => {

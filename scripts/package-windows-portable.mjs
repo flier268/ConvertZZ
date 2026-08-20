@@ -51,7 +51,8 @@ export function packageWindowsPortable({ releaseDir, version, outDir }) {
 
   const zipName = `ConvertZZ_${normalizedVersion}_x64-portable.zip`;
   const zipPath = join(outDir, zipName);
-  const stageRoot = join(outDir, `.portable-stage-${normalizedVersion}`);
+  const stageDirName = `.portable-stage-${normalizedVersion}`;
+  const stageRoot = join(outDir, stageDirName);
   const stagedApp = join(stageRoot, "ConvertZZ");
 
   rmSync(stageRoot, { recursive: true, force: true });
@@ -64,7 +65,9 @@ export function packageWindowsPortable({ releaseDir, version, outDir }) {
   writeFileSync(join(stagedApp, PORTABLE_MARKER), "");
 
   rmSync(zipPath, { force: true });
-  const archive = spawnSync("tar", ["-a", "-cf", zipPath, "-C", stageRoot, "ConvertZZ"], {
+  // Windows tar 會把絕對路徑的磁碟代號（如 D:）當成遠端主機，改在 outDir 用相對路徑。
+  const archive = spawnSync("tar", ["-a", "-cf", zipName, "-C", stageDirName, "ConvertZZ"], {
+    cwd: outDir,
     encoding: "utf8",
   });
   if (archive.status !== 0) {

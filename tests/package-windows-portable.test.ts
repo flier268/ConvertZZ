@@ -58,7 +58,10 @@ describe("Windows 免安裝 zip 打包", () => {
       expect(result.zipName).toBe("ConvertZZ_2.0.0-beta5_x64-portable.zip");
       expect(result.zipPath).toBe(join(outDir, result.zipName));
 
-      const listed = spawnSync("tar", ["-tf", result.zipPath], { encoding: "utf8" });
+      const listed = spawnSync("tar", ["-tf", result.zipName], {
+        cwd: outDir,
+        encoding: "utf8",
+      });
       expect(listed.status).toBe(0);
       const entries = listed.stdout
         .split(/\r?\n/u)

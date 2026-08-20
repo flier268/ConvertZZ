@@ -67,7 +67,7 @@ pub fn default_settings() -> Value {
             "jpTextStyles": ""
         },
         "checkVersionOnStart": true,
-        "checkPreReleaseUpdates": false,
+        "checkPreReleaseUpdates": default_check_pre_release_updates(),
         "skippedUpdateVersion": "",
         "showMainWindowOnStart": false,
         "lastDropAction": {
@@ -169,7 +169,7 @@ pub fn migrate(input: Value) -> Value {
             "jpTextStyles": string_value(fanhuaji.get("JpTextStyles"))
         },
         "checkVersionOnStart": boolean_value(input.get("CheckVersion"), true),
-        "checkPreReleaseUpdates": false,
+        "checkPreReleaseUpdates": default_check_pre_release_updates(),
         "skippedUpdateVersion": "",
         "showMainWindowOnStart": false,
         "lastDropAction": defaults["lastDropAction"].clone()
@@ -188,6 +188,14 @@ fn merge_v2(input: Value) -> Value {
                 }
                 "autoBackupBeforeConversion" => {
                     merged.insert(key.clone(), json!(value.as_bool().unwrap_or(true)));
+                }
+                "checkPreReleaseUpdates" => {
+                    merged.insert(
+                        key.clone(),
+                        json!(value
+                            .as_bool()
+                            .unwrap_or_else(default_check_pre_release_updates)),
+                    );
                 }
                 "engine" => {
                     merged.insert(key.clone(), value.clone());
@@ -215,6 +223,23 @@ fn merge_object(defaults: Option<&Value>, value: &Value) -> Value {
         }
     }
     Value::Object(merged)
+}
+
+fn default_check_pre_release_updates() -> bool {
+    is_pre_release_version(env!("CARGO_PKG_VERSION"))
+}
+
+fn is_pre_release_version(version: &str) -> bool {
+    let trimmed = version.trim();
+    let without_prefix = trimmed
+        .strip_prefix('v')
+        .or_else(|| trimmed.strip_prefix('V'))
+        .unwrap_or(trimmed);
+    let normalized = without_prefix
+        .split_once('+')
+        .map(|(base, _)| base)
+        .unwrap_or(without_prefix);
+    normalized.contains('-')
 }
 
 fn object_value(value: Option<&Value>) -> Map<String, Value> {

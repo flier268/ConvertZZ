@@ -209,7 +209,7 @@ async function saveApiKey() {
             ><el-checkbox v-model="settings.showMainWindowOnStart">啟動時顯示主視窗</el-checkbox
             ><el-checkbox v-model="settings.checkVersionOnStart">啟動時檢查更新</el-checkbox>
             <el-tooltip
-              content="預設只提示正式版。開啟後會一併檢查 alpha、beta、rc 通道並可自動更新；若正式版較新則下載正式版。"
+              content="正式版預設只提示正式版。目前執行的不是正式版時，會預設一併檢查開發／預發佈通道。開啟後會檢查 alpha、beta、rc 通道並可自動更新；若正式版較新則下載正式版。"
               placement="top"
               :show-after="300"
             >

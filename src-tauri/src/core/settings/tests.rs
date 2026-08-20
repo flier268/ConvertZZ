@@ -133,16 +133,36 @@ fn missing_v2_fields_default_skipped_update() {
 }
 
 #[test]
-fn missing_v2_fields_default_pre_release_updates_off() {
-    assert_eq!(migrate(Value::Null)["checkPreReleaseUpdates"], false);
+fn missing_v2_fields_default_pre_release_updates_follow_current_version() {
+    let expected = json!(is_pre_release_version(env!("CARGO_PKG_VERSION")));
+    assert_eq!(default_settings()["checkPreReleaseUpdates"], expected);
+    assert_eq!(migrate(Value::Null)["checkPreReleaseUpdates"], expected);
     assert_eq!(
         migrate(json!({ "version": 2, "engine": "legacy" }))["checkPreReleaseUpdates"],
-        false
+        expected
     );
     assert_eq!(
         migrate(json!({ "version": 2, "checkPreReleaseUpdates": true }))["checkPreReleaseUpdates"],
         true
     );
+    assert_eq!(
+        migrate(json!({ "version": 2, "checkPreReleaseUpdates": false }))["checkPreReleaseUpdates"],
+        false
+    );
+    assert_eq!(
+        migrate(json!({ "version": 2, "checkPreReleaseUpdates": null }))["checkPreReleaseUpdates"],
+        expected
+    );
+}
+
+#[test]
+fn pre_release_version_detection() {
+    assert!(!is_pre_release_version("2.0.0"));
+    assert!(!is_pre_release_version("v2.0.0"));
+    assert!(!is_pre_release_version("2.0.0+build.1"));
+    assert!(is_pre_release_version("2.0.0-beta5"));
+    assert!(is_pre_release_version("v2.0.0-rc.1"));
+    assert!(is_pre_release_version("2.0.0-alpha.1+build.1"));
 }
 
 #[test]

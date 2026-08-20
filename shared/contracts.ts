@@ -247,7 +247,7 @@ export interface SettingsV2 {
     serviceInfoCachedAt?: string;
   };
   checkVersionOnStart: boolean;
-  /** 是否檢查 alpha／beta／rc 通道並自動更新；若正式版較新則仍使用正式版。預設只檢查正式版。 */
+  /** 是否檢查 alpha／beta／rc 通道並自動更新；若正式版較新則仍使用正式版。正式版預設只檢查正式版；目前版本不是正式版時預設檢查開發通道。 */
   checkPreReleaseUpdates: boolean;
   skippedUpdateVersion: string;
   showMainWindowOnStart: boolean;

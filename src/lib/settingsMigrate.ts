@@ -1,7 +1,9 @@
 import type { EngineKind, SettingsV2 } from "@shared/contracts";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { version as appVersion } from "../../package.json";
 import { DEFAULT_FILE_TYPE_FILTER } from "./fileFilters";
+import { isPreReleaseVersion } from "./update";
 
 type LegacySettings = Record<string, unknown>;
 
@@ -10,7 +12,11 @@ export async function migrateSettingsFromPath(inputPath: string): Promise<Settin
   return migrateSettings(JSON.parse(raw.replace(/^\uFEFF/, "")));
 }
 
-export function defaultSettings(): SettingsV2 {
+export function defaultCheckPreReleaseUpdates(currentVersion = appVersion): boolean {
+  return isPreReleaseVersion(currentVersion);
+}
+
+export function defaultSettings(currentVersion = appVersion): SettingsV2 {
   return {
     version: 2,
     engine: "segmented",
@@ -68,7 +74,7 @@ export function defaultSettings(): SettingsV2 {
       jpTextStyles: "",
     },
     checkVersionOnStart: true,
-    checkPreReleaseUpdates: false,
+    checkPreReleaseUpdates: defaultCheckPreReleaseUpdates(currentVersion),
     skippedUpdateVersion: "",
     showMainWindowOnStart: false,
     lastDropAction: {
@@ -79,15 +85,19 @@ export function defaultSettings(): SettingsV2 {
   };
 }
 
-export function migrateSettings(input: unknown): SettingsV2 {
+export function migrateSettings(input: unknown, currentVersion = appVersion): SettingsV2 {
   if (isSettingsV2(input)) {
-    const defaults = defaultSettings();
+    const defaults = defaultSettings(currentVersion);
     return {
       ...defaults,
       ...input,
       engine: input.engine ?? "segmented",
       // 舊版 2.0／匯入設定若尚無此欄，預設啟用轉換前備份。
       autoBackupBeforeConversion: booleanValue(input.autoBackupBeforeConversion, true),
+      checkPreReleaseUpdates: booleanValue(
+        input.checkPreReleaseUpdates,
+        defaultCheckPreReleaseUpdates(currentVersion),
+      ),
       floatingBall: { ...defaults.floatingBall, ...input.floatingBall },
       hotkeys: { ...defaults.hotkeys, ...input.hotkeys },
       quickActions: { ...defaults.quickActions, ...input.quickActions },
@@ -97,7 +107,7 @@ export function migrateSettings(input: unknown): SettingsV2 {
     };
   }
   const legacy = (input && typeof input === "object" ? input : {}) as LegacySettings;
-  const defaults = defaultSettings();
+  const defaults = defaultSettings(currentVersion);
   const hotkey = objectValue(legacy.HotKey);
   const fileConvert = objectValue(legacy.FileConvert);
   const quickStart = objectValue(legacy.QuickStart);
@@ -176,6 +186,7 @@ export function migrateSettings(input: unknown): SettingsV2 {
       jpTextStyles: stringValue(fanhuaji.JpTextStyles),
     },
     checkVersionOnStart: booleanValue(legacy.CheckVersion, true),
+    checkPreReleaseUpdates: defaultCheckPreReleaseUpdates(currentVersion),
   };
 }
 

@@ -274,6 +274,13 @@ describe("驗收項目的自動化契約", () => {
     expect(contracts).toContain("checkPreReleaseUpdates");
     expect(settings).toContain("checkPreReleaseUpdates");
     expect(settings).toContain("檢查開發／預發佈版本");
+    expect(settings).toContain("目前執行的不是正式版時");
+    expect(readProjectFile("src/lib/settingsMigrate.ts")).toContain(
+      "defaultCheckPreReleaseUpdates",
+    );
+    expect(readProjectFile("src-tauri/src/core/settings.rs")).toContain(
+      "default_check_pre_release_updates",
+    );
   });
 
   it("H-03 /file 會自動建立檔案預覽", () => {

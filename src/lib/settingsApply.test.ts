@@ -106,7 +106,7 @@ describe("已匯入 SettingsV2 欄位會影響實際行為", () => {
     expect(effects.floatingBall).toEqual({ enabled: false, position: { x: 88, y: 44 } });
     expect(effects.showMainWindowOnStart).toBe(true);
     expect(effects.checkVersionOnStart).toBe(false);
-    expect(effects.checkPreReleaseUpdates).toBe(false);
+    expect(effects.checkPreReleaseUpdates).toBe(defaultSettings().checkPreReleaseUpdates);
     expect(effects.hotkeys).toEqual({
       autoCopy: false,
       autoPaste: false,
@@ -237,7 +237,7 @@ describe("已匯入 SettingsV2 欄位會影響實際行為", () => {
       },
       {
         name: "checkPreReleaseUpdates",
-        change: (value) => (value.checkPreReleaseUpdates = true),
+        change: (value) => (value.checkPreReleaseUpdates = !value.checkPreReleaseUpdates),
         path: ["checkPreReleaseUpdates"],
       },
       {

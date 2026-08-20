@@ -194,6 +194,18 @@ describe("驗收項目的自動化契約", () => {
     expect(rust).toContain("startup_args");
   });
 
+  it("托盤／選單／第二實例叫出主視窗時，已最小化會先還原再顯示與聚焦", () => {
+    const rust = readProjectFile("src-tauri/src/lib.rs");
+    const showMain = rust.slice(
+      rust.indexOf("fn show_main("),
+      rust.indexOf("fn show_main_window("),
+    );
+    expect(showMain).toContain("is_minimized()");
+    expect(showMain).toContain("unminimize()");
+    expect(showMain).toContain("show()");
+    expect(showMain).toContain("set_focus()");
+  });
+
   it("G-15／G-16 更新先確認；簽署通道不可用時改開 Releases", () => {
     const update = readProjectFile("src/lib/update.ts");
     const appUpdate = readProjectFile("src/lib/appUpdate.ts");

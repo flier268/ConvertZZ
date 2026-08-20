@@ -516,6 +516,10 @@ fn keep_main_available_from_tray(app: &tauri::App) {
 
 fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        // 僅 show() 無法還原已最小化的視窗（Linux／Windows）。
+        if window.is_minimized().unwrap_or(false) {
+            let _ = window.unminimize();
+        }
         let _ = window.show();
         let _ = window.set_focus();
     }

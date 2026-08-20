@@ -171,7 +171,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          name: ConvertZZ ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
           draft: true
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           generate_release_notes: true
@@ -180,11 +180,11 @@ jobs:
 
             | 平台 | 建議檔案 | 說明 |
             | --- | --- | --- |
-            | Windows x64（安裝版） | `ConvertZZ_${{ env.RELEASE_VERSION }}_x64-setup.exe` | NSIS 安裝程式；支援應用程式內自動更新 |
-            | Windows x64（免安裝版） | `ConvertZZ_${{ env.RELEASE_VERSION }}_x64-portable.zip` | 解壓後執行 `ConvertZZ/ConvertZZ.exe`；`settings-v2.json` 與程式同目錄可整包帶走；不支援應用程式內自動更新 |
-            | Linux x64（建議） | `ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.AppImage` | 免安裝；支援應用程式內自動更新 |
-            | Linux x64（DEB） | `ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.deb` | 以 APT 安裝；請改從本頁下載更新 |
-            | Linux x64（RPM） | `ConvertZZ-${{ env.RELEASE_VERSION }}-1.x86_64.rpm` | 以 DNF 安裝；請改從本頁下載更新 |
+            | Windows x64（安裝版） | [`ConvertZZ_${{ env.RELEASE_VERSION }}_x64-setup.exe`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_x64-setup.exe) | NSIS 安裝程式；支援應用程式內自動更新 |
+            | Windows x64（免安裝版） | [`ConvertZZ_${{ env.RELEASE_VERSION }}_x64-portable.zip`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_x64-portable.zip) | 解壓後執行 `ConvertZZ/ConvertZZ.exe`；`settings-v2.json` 與程式同目錄可整包帶走；不支援應用程式內自動更新 |
+            | Linux x64（建議） | [`ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.AppImage`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.AppImage) | 免安裝；支援應用程式內自動更新 |
+            | Linux x64（DEB） | [`ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.deb`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.deb) | 以 APT 安裝；請改從本頁下載更新 |
+            | Linux x64（RPM） | [`ConvertZZ-${{ env.RELEASE_VERSION }}-1.x86_64.rpm`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ-${{ env.RELEASE_VERSION }}-1.x86_64.rpm) | 以 DNF 安裝；請改從本頁下載更新 |
 
             Windows 安裝程式與 Linux AppImage 可用應用程式內自動更新。
 

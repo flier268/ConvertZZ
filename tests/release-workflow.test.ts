@@ -59,6 +59,8 @@ describe("發行工作流程契約", () => {
     expect(workflow).toContain("draft-release:");
     expect(workflow).toContain("draft: true");
     expect(workflow).toContain("softprops/action-gh-release");
+    expect(workflow).toContain("name: ${{ env.RELEASE_TAG }}");
+    expect(workflow).not.toContain("name: ConvertZZ ${{ env.RELEASE_TAG }}");
     expect(workflow).toContain("files: artifacts/**/*");
     expect(workflow).toContain("write-latest-json.mjs");
     expect(workflow).toContain("prerelease: ${{ contains(env.RELEASE_TAG, '-') }}");
@@ -66,13 +68,23 @@ describe("發行工作流程契約", () => {
 
   it("草稿說明會註明各平台下載檔與自動更新範圍", () => {
     expect(workflow).toContain("## 下載說明");
-    expect(workflow).toContain("ConvertZZ_${{ env.RELEASE_VERSION }}_x64-setup.exe");
-    expect(workflow).toContain("ConvertZZ_${{ env.RELEASE_VERSION }}_x64-portable.zip");
+    expect(workflow).toContain(
+      "[`ConvertZZ_${{ env.RELEASE_VERSION }}_x64-setup.exe`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_x64-setup.exe)",
+    );
+    expect(workflow).toContain(
+      "[`ConvertZZ_${{ env.RELEASE_VERSION }}_x64-portable.zip`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_x64-portable.zip)",
+    );
     expect(workflow).toContain("settings-v2.json");
     expect(workflow).toContain("可整包帶走");
-    expect(workflow).toContain("ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.AppImage");
-    expect(workflow).toContain("ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.deb");
-    expect(workflow).toContain("ConvertZZ-${{ env.RELEASE_VERSION }}-1.x86_64.rpm");
+    expect(workflow).toContain(
+      "[`ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.AppImage`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.AppImage)",
+    );
+    expect(workflow).toContain(
+      "[`ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.deb`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.deb)",
+    );
+    expect(workflow).toContain(
+      "[`ConvertZZ-${{ env.RELEASE_VERSION }}-1.x86_64.rpm`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ-${{ env.RELEASE_VERSION }}-1.x86_64.rpm)",
+    );
     expect(workflow).toContain("RELEASE_VERSION=${RELEASE_TAG#v}");
     expect(workflow).toContain("Windows 安裝程式與 Linux AppImage 可用應用程式內自動更新。");
     expect(workflow).toContain("自動更新會驗證 latest.json 與安裝包簽章。");

@@ -40,6 +40,10 @@ jobs:
           node-version: 24
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: release
       - name: 安裝 Linux 建置套件
         if: runner.os == 'Linux'
         run: |

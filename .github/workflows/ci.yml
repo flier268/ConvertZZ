@@ -22,6 +22,11 @@ jobs:
       - name: 安裝相依套件
         run: pnpm install --frozen-lockfile
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: ci
+          save-if: ${{ github.event_name != 'pull_request' }}
       - name: 安裝 Linux 建置套件
         run: |
           sudo apt-get update

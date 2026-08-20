@@ -15,11 +15,11 @@ describe("版本檢查", () => {
     expect(compareVersions("2.1.0", "2.0.9")).toBe(1);
     expect(compareVersions("2.0.0", "2.0.0")).toBe(0);
     expect(compareVersions("1.9.9", "2.0.0")).toBe(-1);
-    expect(compareVersions("2.0.0", "2.0.0-beta5")).toBe(1);
-    expect(compareVersions("2.0.0-beta5", "2.0.0-beta4")).toBe(1);
+    expect(compareVersions("2.0.0", "2.0.0-beta6")).toBe(1);
+    expect(compareVersions("2.0.0-beta6", "2.0.0-beta5")).toBe(1);
     expect(compareVersions("2.0.0-beta1", "2.0.0-alpha9")).toBe(1);
     expect(compareVersions("2.0.0-alpha9", "2.0.0-beta1")).toBe(-1);
-    expect(compareVersions("v2.0.0-beta5", "2.0.0-beta4")).toBe(1);
+    expect(compareVersions("v2.0.0-beta6", "2.0.0-beta5")).toBe(1);
     expect(compareVersions("2.0.0-rc.1", "2.0.0-beta.9")).toBe(1);
     expect(compareVersions("2.0.0-beta.2", "2.0.0-beta.10")).toBe(-1);
   });
@@ -58,7 +58,7 @@ describe("版本檢查", () => {
 
   it("辨識 alpha／beta／rc 通道標籤", () => {
     expect(channelFromReleaseTag("v2.0.0-beta1")).toBe("beta");
-    expect(channelFromReleaseTag("2.0.0-beta5")).toBe("beta");
+    expect(channelFromReleaseTag("2.0.0-beta6")).toBe("beta");
     expect(channelFromReleaseTag("v2.1.0-alpha.9")).toBe("alpha");
     expect(channelFromReleaseTag("v2.0.0-rc.1")).toBe("rc");
     expect(channelFromReleaseTag("v2.0.0")).toBeNull();
@@ -80,14 +80,14 @@ describe("版本檢查", () => {
       },
       "/git/ref/tags/alpha": 404,
       "/git/ref/tags/beta": { object: { type: "tag", sha: "beta-tag-sha" } },
-      "/git/tags/beta-tag-sha": { message: "v2.0.0-beta5\n" },
+      "/git/tags/beta-tag-sha": { message: "v2.0.0-beta6\n" },
     });
     await expect(
-      checkLatestRelease("2.0.0-beta4", fetcher, { includePreRelease: true }),
+      checkLatestRelease("2.0.0-beta5", fetcher, { includePreRelease: true }),
     ).resolves.toMatchObject({
-      latestVersion: "2.0.0-beta5",
+      latestVersion: "2.0.0-beta6",
       updateAvailable: true,
-      url: "https://github.com/flier268/ConvertZZ/releases/tag/v2.0.0-beta5",
+      url: "https://github.com/flier268/ConvertZZ/releases/tag/v2.0.0-beta6",
     });
     expect(fetcher).not.toHaveBeenCalledWith(
       expect.stringContaining("per_page=30"),
@@ -136,10 +136,10 @@ describe("版本檢查", () => {
       },
       "/git/ref/tags/alpha": 404,
       "/git/ref/tags/beta": { object: { type: "tag", sha: "beta-tag-sha" } },
-      "/git/tags/beta-tag-sha": { message: "v2.0.0-beta5\n" },
+      "/git/tags/beta-tag-sha": { message: "v2.0.0-beta6\n" },
     });
     await expect(
-      checkLatestRelease("2.0.0-beta5", fetcher, { includePreRelease: true }),
+      checkLatestRelease("2.0.0-beta6", fetcher, { includePreRelease: true }),
     ).resolves.toMatchObject({
       latestVersion: "2.1.0",
       updateAvailable: true,
@@ -152,12 +152,12 @@ describe("版本檢查", () => {
       "/releases/latest": 404,
       "/git/ref/tags/alpha": 404,
       "/git/ref/tags/beta": { object: { type: "tag", sha: "beta-tag-sha" } },
-      "/git/tags/beta-tag-sha": { message: "v2.0.0-beta5\n" },
+      "/git/tags/beta-tag-sha": { message: "v2.0.0-beta6\n" },
     });
     await expect(
-      checkLatestRelease("2.0.0-beta4", fetcher, { includePreRelease: true }),
+      checkLatestRelease("2.0.0-beta5", fetcher, { includePreRelease: true }),
     ).resolves.toMatchObject({
-      latestVersion: "2.0.0-beta5",
+      latestVersion: "2.0.0-beta6",
       updateAvailable: true,
     });
   });

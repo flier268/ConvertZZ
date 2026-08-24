@@ -130,13 +130,14 @@ APEv2 與 Vorbis Comment 固定使用 UTF-8。
 | 功能 | Windows | Linux X11 | Linux Wayland |
 | --- | --- | --- | --- |
 | 文字、檔案與檔名轉換 | 完整 | 完整 | 完整 |
-| ID3、APEv2、OGG 與 Opus | 完整 | 完整 | 完整 |
+| ID3、APEv2、OGG、Opus 標籤 | 完整 | 完整 | 完整 |
 | 全域快捷鍵 | 完整 | 完整 | 本版停用 |
 | 自動複製與貼上 | 完整 | 完整 | 停用 |
-| 浮動球置頂 | 完整 | 完整 | 依合成器能力 |
+| 浮動球置頂 | 完整 | 完整 | 依合成器 |
 | SendTo 捷徑 | 完整 | 不適用 | 不適用 |
-| 系統托盤 | 左鍵與選單完整 | 需要 AppIndicator；使用選單開啟主視窗 | 需要 AppIndicator；使用選單開啟主視窗 |
+| 系統托盤 | 左鍵與選單完整 | 需 AppIndicator；使用選單開啟 | 需 AppIndicator；使用選單開啟 |
 | 憑證庫 | Windows Credential Manager | Secret Service | Secret Service |
+| 自動更新 | 安裝程式可下載安裝 | AppImage 可下載安裝；DEB／RPM 開啟下載頁 | AppImage 可下載安裝；DEB／RPM 開啟下載頁 |
 
 Wayland 不允許一般應用程式注入鍵盤事件。
 

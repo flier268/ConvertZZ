@@ -169,32 +169,18 @@ AppIndicator 開發套件只存在於建置環境。
 | F | 音訊標籤（F-01～F-15） |
 | G | 桌面整合（G-01～G-16） |
 | H | 命令列相容（H-01～H-06） |
-| I | 平台差異（I-01～I-02、I-06～I-07、I-09） |
+| I | 平台差異（I-01～I-09） |
 | J | 測試與發行（J-01～J-13） |
-| K | 退場閘門（K-02） |
+| K | 退場閘門（K-01～K-06） |
 
 ## 未完成與待確認項目
 
 項目通過並補齊指定證據後，應將列移至 [MIGRATION_COMPLETED.md](MIGRATION_COMPLETED.md)，並更新上方摘要表。
 
-### I. 平台差異
-
-| 編號 | 驗收條件 | 判定方式 | 必要證據 | 目前狀態 |
-| --- | --- | --- | --- | --- |
-| I-03 | Wayland 不會嘗試鍵盤注入。 | 在 Wayland 執行剪貼簿動作。 | 日誌與操作錄影。 | 待人工驗收 |
-| I-04 | Wayland 全域快捷鍵會顯示為停用或受限。 | 在 Wayland 開啟設定與關於頁。 | 畫面截圖。 | 待人工驗收 |
-| I-05 | Wayland 浮動球置頂限制會清楚顯示。 | 在 Wayland 開啟平台差異。 | 畫面截圖。 | 待人工驗收 |
-| I-08 | README 差異表與實際能力一致。 | 完成三平台矩陣後逐列比對。 | 簽核後的差異表。 | 待人工驗收 |
-
 ### K. 最終退場閘門
 
 | 編號 | 驗收條件 | 判定方式 | 必要證據 | 目前狀態 |
 | --- | --- | --- | --- | --- |
-| K-01 | A 至 J 的必要項目全部為 `已通過`。 | 檢查本文件與封存文件狀態。 | 完整驗收紀錄。 | 未完成（見下方細項） |
-| K-03 | Windows x64 驗收人完成簽核。 | 填寫簽核紀錄。 | 姓名、版本與日期。 | 未完成（見下方細項） |
-| K-04 | Linux X11 驗收人完成簽核。 | 填寫簽核紀錄。 | 姓名、版本與日期。 | 未完成（見下方細項） |
-| K-05 | Linux Wayland 驗收人完成簽核。 | 填寫簽核紀錄。 | 姓名、版本與日期。 | 未完成（見下方細項） |
-| K-06 | 舊 WPF 專案已建立可回復的最後版本標記。 | 建立版本標籤並驗證來源。 | 標籤與來源雜湊。 | 未完成（見下方細項） |
 | K-07 | 舊 WPF 專案只在 K-01 至 K-06 通過後移除。 | 檢查移除變更。 | 變更審查紀錄。 | 未完成（見下方細項） |
 
 ## 未完成細項（K 退場閘門）
@@ -203,12 +189,7 @@ AppIndicator 開發套件只存在於建置環境。
 
 | 編號 | 卡關原因 | 已有什麼 | 仍缺什麼 |
 | --- | --- | --- | --- |
-| K-01 | 彙整閘門 | A～J 多數已通過並封存 | 上方 I 所有必要項都變成 `已通過` 後才能勾選 |
-| K-03 | 平台簽核 | Windows 功能多已實作；G-15 Windows 已於外部環境驗收 | Windows x64 驗收人姓名、版本、日期與證據欄 |
-| K-04 | 平台簽核 | Linux X11 本機已補多項人工證據（含 G-15／J-11／I-06／I-07） | Linux X11 驗收人正式簽核（姓名、版本、日期） |
-| K-05 | 平台簽核 | README／關於頁有 Wayland 能力說明 | 真實 Wayland 工作階段驗收與簽核；亦依賴 I-03～I-05 |
-| K-06 | 退場前置 | 舊 WPF 原始碼仍在倉庫 | 建立可回復的最後版本 git 標籤，並記錄來源雜湊 |
-| K-07 | 退場動作 | 尚未刪除舊專案（符合目前規則） | 僅在 K-01～K-06 全部通過後才可移除，並留下變更審查紀錄 |
+| K-07 | 退場動作 | K-01～K-06 已通過；標籤 `legacy-wpf-final` 指向 `9425ab8`（見 `~/Desktop/ConvertZZ-acceptance/2026-08-24-k-signoff/`） | 明確指示後移除 `ConvertZZ/` 舊專案，並留下變更審查紀錄 |
 
 ## 待人工驗收：缺什麼（摘要）
 
@@ -216,10 +197,9 @@ AppIndicator 開發套件只存在於建置環境。
 
 | 編號 | 仍缺 |
 | --- | --- |
-| I-03～I-05 | Linux Wayland 工作階段上的日誌／截圖／錄影 |
-| I-08 | Windows／X11／Wayland 三欄能力表逐列簽核 |
+| K-07 | 移除舊 WPF 目錄的變更審查（需另一次明確指示） |
 
-Linux X11：2026-08-18 本機已補 D-07、D-11、E-02、E-05、G-12、G-13、G-16，以及 J-06／J-12；2026-08-19 補齊 G-15 Linux AppImage、J-11 Fedora QEMU／DNF（`~/Desktop/ConvertZZ-acceptance/2026-08-19-linux-update/`），以及 I-06／I-07 受控環境驗收（`~/Desktop/ConvertZZ-acceptance/2026-08-19-i06-i07/`）。G-15 Windows NSIS 與 J-08（Windows 無 Node.js 可安裝啟動）已驗收通過。媒體證據不進倉庫（見 skill `linux-desktop-acceptance`）。J-14（作業系統程式碼簽章缺失說明）已撤銷，不再要求。
+Linux X11：2026-08-18 本機已補 D-07、D-11、E-02、E-05、G-12、G-13、G-16，以及 J-06／J-12；2026-08-19 補齊 G-15 Linux AppImage、J-11 Fedora QEMU／DNF（`~/Desktop/ConvertZZ-acceptance/2026-08-19-linux-update/`），以及 I-06／I-07 受控環境驗收（`~/Desktop/ConvertZZ-acceptance/2026-08-19-i06-i07/`）。Linux Wayland：2026-08-24 本機 cinnamon-wayland 補齊 I-03～I-05 與 I-08（`~/Desktop/ConvertZZ-acceptance/2026-08-24-wayland/`）。K 簽核：2026-08-24 由 `flier268` 完成 K-03～K-06（`~/Desktop/ConvertZZ-acceptance/2026-08-24-k-signoff/`；標籤 `legacy-wpf-final`）。G-15 Windows NSIS 與 J-08 已驗收通過。媒體證據不進倉庫（見 skill `linux-desktop-acceptance`）。J-14（作業系統程式碼簽章缺失說明）已撤銷，不再要求。
 
 ## 驗收紀錄格式
 
@@ -242,8 +222,8 @@ Linux X11：2026-08-18 本機已補 D-07、D-11、E-02、E-05、G-12、G-13、G-
 
 | 平台 | 版本 | 結果 | 驗收人 | 日期 | 證據 |
 | --- | --- | --- | --- | --- | --- |
-| Windows x64 |  |  |  |  |  |
-| Linux x64 X11 |  |  |  |  |  |
-| Linux x64 Wayland |  |  |  |  |  |
+| Windows x64 | 2.0.0-beta6 | 通過 | flier268 | 2026-08-24 | 使用者確認可用；I-01、G-15 Windows NSIS、J-08 |
+| Linux x64 X11 | 2.0.0-beta6 | 通過 | flier268 | 2026-08-24 | `~/Desktop/ConvertZZ-acceptance/2026-08-18-*`、`2026-08-19-linux-update/`、`2026-08-19-i06-i07/` |
+| Linux x64 Wayland | 2.0.0-beta6 | 通過 | flier268 | 2026-08-24 | `~/Desktop/ConvertZZ-acceptance/2026-08-24-wayland/` |
 
-三個平台完成簽核前，ConvertZZ 2.0 不視為完成遷移。
+三平台已完成簽核。舊 WPF 可回復標記為 `legacy-wpf-final`（commit `9425ab8a230faf8b573201ef72a6c71dfd17ea7d`）。僅剩 K-07（移除舊專案）待明確指示後執行。

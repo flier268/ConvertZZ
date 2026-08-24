@@ -165,7 +165,7 @@ Linux 使用者可從托盤選單開啟主視窗。
 | 舊版文字工具 | 已完成 | HTML、Unicode 跳脫、編碼與全半形工具已接通。 |
 | 核心進度事件 | 已完成 | 檔案與音訊作業會送出中間進度與最終結果。 |
 | 發行包乾淨環境驗收 | 部分完成 | 仍需乾淨虛擬機與 Windows 驗收。 |
-| 舊 WPF 專案移除 | 尚未執行 | 會在上述驗收完成後移除。 |
+| 舊 WPF 專案移除 | 已完成 | 已自倉庫移除；可自標籤 `legacy-wpf-final` 回復。 |
 
 ## Linux 使用者相依
 
@@ -396,9 +396,7 @@ DEB 與 RPM 不會自動覆寫，程式會改開啟 GitHub Releases。
 
 第三方授權請見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-舊 WPF 原始碼會保留至 2.0 驗收完成。
-
-驗收完成後才會移除舊專案。
+舊 WPF 原始碼已自倉庫移除。若需回復，請自標籤 `legacy-wpf-final` 取出 `ConvertZZ/`。
 
 ## 授權
 

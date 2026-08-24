@@ -8,7 +8,7 @@
 
 所有必要項目通過後，遷移才算完成。
 
-舊 WPF 專案會保留至最終驗收完成。
+舊 WPF 專案已於 K-07 自倉庫移除；可自標籤 `legacy-wpf-final` 回復。
 
 ## 目標
 
@@ -48,8 +48,6 @@
 檔案安全項目必須保留輸入、輸出與雜湊紀錄。
 
 發行項目必須以乾淨環境產生證據。
-
-任何必要項目失敗時，不得移除舊 WPF 專案。
 
 ## 目標架構
 
@@ -171,35 +169,13 @@ AppIndicator 開發套件只存在於建置環境。
 | H | 命令列相容（H-01～H-06） |
 | I | 平台差異（I-01～I-09） |
 | J | 測試與發行（J-01～J-13） |
-| K | 退場閘門（K-01～K-06） |
+| K | 退場閘門（K-01～K-07） |
 
 ## 未完成與待確認項目
 
-項目通過並補齊指定證據後，應將列移至 [MIGRATION_COMPLETED.md](MIGRATION_COMPLETED.md)，並更新上方摘要表。
+目前**無**尚未通過的必要驗收項目。歷史與證據見 [MIGRATION_COMPLETED.md](MIGRATION_COMPLETED.md) 與 `~/Desktop/ConvertZZ-acceptance/`。
 
-### K. 最終退場閘門
-
-| 編號 | 驗收條件 | 判定方式 | 必要證據 | 目前狀態 |
-| --- | --- | --- | --- | --- |
-| K-07 | 舊 WPF 專案只在 K-01 至 K-06 通過後移除。 | 檢查移除變更。 | 變更審查紀錄。 | 未完成（見下方細項） |
-
-## 未完成細項（K 退場閘門）
-
-這些不是「功能沒寫完」，而是**最終簽核與退場順序**尚未走到；任一未完成時不得移除舊 WPF 專案。
-
-| 編號 | 卡關原因 | 已有什麼 | 仍缺什麼 |
-| --- | --- | --- | --- |
-| K-07 | 退場動作 | K-01～K-06 已通過；標籤 `legacy-wpf-final` 指向 `9425ab8`（見 `~/Desktop/ConvertZZ-acceptance/2026-08-24-k-signoff/`） | 明確指示後移除 `ConvertZZ/` 舊專案，並留下變更審查紀錄 |
-
-## 待人工驗收：缺什麼（摘要）
-
-功能多已實作；下列只列**仍缺的證據／環境**，細節見各列判定方式。
-
-| 編號 | 仍缺 |
-| --- | --- |
-| K-07 | 移除舊 WPF 目錄的變更審查（需另一次明確指示） |
-
-Linux X11：2026-08-18 本機已補 D-07、D-11、E-02、E-05、G-12、G-13、G-16，以及 J-06／J-12；2026-08-19 補齊 G-15 Linux AppImage、J-11 Fedora QEMU／DNF（`~/Desktop/ConvertZZ-acceptance/2026-08-19-linux-update/`），以及 I-06／I-07 受控環境驗收（`~/Desktop/ConvertZZ-acceptance/2026-08-19-i06-i07/`）。Linux Wayland：2026-08-24 本機 cinnamon-wayland 補齊 I-03～I-05 與 I-08（`~/Desktop/ConvertZZ-acceptance/2026-08-24-wayland/`）。K 簽核：2026-08-24 由 `flier268` 完成 K-03～K-06（`~/Desktop/ConvertZZ-acceptance/2026-08-24-k-signoff/`；標籤 `legacy-wpf-final`）。G-15 Windows NSIS 與 J-08 已驗收通過。媒體證據不進倉庫（見 skill `linux-desktop-acceptance`）。J-14（作業系統程式碼簽章缺失說明）已撤銷，不再要求。
+Linux X11：2026-08-18／19 本機證據見各日期目錄。Linux Wayland：2026-08-24（`2026-08-24-wayland/`）。K 簽核與舊 WPF 移除：2026-08-24（`2026-08-24-k-signoff/`、`2026-08-24-k07-remove-wpf/`；標籤 `legacy-wpf-final`）。媒體證據不進倉庫（見 skill `linux-desktop-acceptance`）。
 
 ## 驗收紀錄格式
 
@@ -226,4 +202,4 @@ Linux X11：2026-08-18 本機已補 D-07、D-11、E-02、E-05、G-12、G-13、G-
 | Linux x64 X11 | 2.0.0-beta6 | 通過 | flier268 | 2026-08-24 | `~/Desktop/ConvertZZ-acceptance/2026-08-18-*`、`2026-08-19-linux-update/`、`2026-08-19-i06-i07/` |
 | Linux x64 Wayland | 2.0.0-beta6 | 通過 | flier268 | 2026-08-24 | `~/Desktop/ConvertZZ-acceptance/2026-08-24-wayland/` |
 
-三平台已完成簽核。舊 WPF 可回復標記為 `legacy-wpf-final`（commit `9425ab8a230faf8b573201ef72a6c71dfd17ea7d`）。僅剩 K-07（移除舊專案）待明確指示後執行。
+三平台已完成簽核。舊 WPF 可回復標記為 `legacy-wpf-final`（commit `9425ab8a230faf8b573201ef72a6c71dfd17ea7d`）。K-07 已於 2026-08-24 移除倉庫內 `ConvertZZ/`；字典資源改由 `resources/Dictionary.csv` 提供。

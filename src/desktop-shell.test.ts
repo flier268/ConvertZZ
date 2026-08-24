@@ -354,7 +354,7 @@ describe("Tauri desktop shell", () => {
     expect(existsSync(binariesDir)).toBe(false);
     expect(config.bundle?.externalBin).toBeUndefined();
     expect(config.bundle?.resources).toMatchObject({
-      "../ConvertZZ/Dictionary.csv": "Dictionary.csv",
+      "../resources/Dictionary.csv": "Dictionary.csv",
       "resources/segment-dict": "segment-dict",
     });
     expect(rust).toContain("fn core_request");

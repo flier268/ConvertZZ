@@ -65,7 +65,7 @@
     "active": true,
     "targets": ["nsis", "appimage", "deb", "rpm"],
     "resources": {
-      "../ConvertZZ/Dictionary.csv": "Dictionary.csv",
+      "../resources/Dictionary.csv": "Dictionary.csv",
       "resources/segment-dict": "segment-dict",
       "../THIRD_PARTY_NOTICES.md": "licenses/THIRD_PARTY_NOTICES.md"
     },

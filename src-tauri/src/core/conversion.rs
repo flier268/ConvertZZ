@@ -321,7 +321,7 @@ pub(crate) fn shared_conversion() -> &'static ConversionService {
     SERVICE.get_or_init(|| {
         ConversionService::new(Some(
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../ConvertZZ/Dictionary.csv"),
+                .join("../resources/Dictionary.csv"),
         ))
         .unwrap()
     })

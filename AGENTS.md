@@ -15,7 +15,7 @@ ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程
 | `src-tauri/` | 視窗、托盤、快捷鍵、憑證庫、轉換核心與平台能力 |
 | `shared/contracts.ts` | 前後端共用的操作與型別 |
 | `scripts/` | git hook 與 Linux 驗證 |
-| `ConvertZZ/` | 舊 WPF 原始碼。驗收完成前不得刪除 |
+| `resources/Dictionary.csv` | 舊版六欄字典資源（由安裝包一併封入） |
 | `tests/fixtures/` | 音訊與發行驗證樣本 |
 | `e2e/` | Playwright 前端端對端測試 |
 
@@ -99,7 +99,8 @@ Vitest 涵蓋 `src/**/*.test.ts` 與 `tests/**/*.test.ts`。轉換核心單元�
 - 內容先寫入同目錄暫存檔，驗證成功後才取代原檔。
 - 檔名衝突預設略過。覆寫需要額外確認。音訊 `.bak` 備份衝突同樣預設略過；選擇覆寫時需額外確認。
 - 舊版 `ConvertZZ.json` 只讀取，結果另存為 2.0 設定，不得修改來源。`Dictionary.csv` 必須先詢問，再建立不覆蓋的時間戳備份。備份失敗時不得寫入或覆寫。
-- `Dictionary.csv` 維持 UTF-8 BOM 六欄格式。
+- `Dictionary.csv` 維持 UTF-8 BOM 六欄格式；倉庫來源為 `resources/Dictionary.csv`。
+- 舊 WPF 原始碼已於 K-07 移除；可自 git 標籤 `legacy-wpf-final` 回復 `ConvertZZ/`。
 - 命令列保持舊參數語意，但檔案作業仍要先預覽。不要恢復無確認寫入。
 - 自動更新只簽署 Windows 安裝程式與 Linux AppImage。公鑰放在 `tauri.conf.json`，私鑰只存在 GitHub Secrets `TAURI_SIGNING_PRIVATE_KEY`。
 - 授權維持 GPL-3.0-only。第三方授權聲明必須同步更新。

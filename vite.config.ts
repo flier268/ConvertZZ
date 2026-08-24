@@ -31,7 +31,7 @@ export default defineConfig({
     strictPort: true,
     host: process.env.CONVERTZZ_E2E === "1" ? "127.0.0.1" : host || false,
     hmr: host ? { protocol: "ws", host, port: 1421 } : undefined,
-    watch: { ignored: ["**/src-tauri/**", "**/ConvertZZ/**"] },
+    watch: { ignored: ["**/src-tauri/**"] },
   },
   envPrefix: ["VITE_", "TAURI_ENV_*"],
   build: {

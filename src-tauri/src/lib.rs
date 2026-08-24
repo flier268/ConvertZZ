@@ -345,9 +345,10 @@ fn discover_dictionary(app: Option<&AppHandle>) -> Option<std::path::PathBuf> {
         }
     }
     candidates.push(
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ConvertZZ/Dictionary.csv"),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/Dictionary.csv"),
     );
-    candidates.push(std::path::PathBuf::from("ConvertZZ/Dictionary.csv"));
+    candidates.push(std::path::PathBuf::from("resources/Dictionary.csv"));
+    candidates.push(std::path::PathBuf::from("Dictionary.csv"));
     candidates.into_iter().find(|path| path.is_file())
 }
 

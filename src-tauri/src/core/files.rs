@@ -6,7 +6,8 @@ use super::encoding::{can_roundtrip, decode_text, encode_text};
 use super::error::CoreError;
 use super::types::{
     ApplyFailure, ApplyResult, ConflictPolicy, ConversionOptions, FileConversionPlan, FileItemKind,
-    FileMode, FilePlanItem, FilePlanRequest, PlanStatus, ProgressReporter, TextEncoding,
+    FileMode, FilePlanItem, FilePlanRequest, FilePreviewRequest, PlanStatus, ProgressReporter,
+    TextEncoding,
 };
 use chrono::Utc;
 use cjk_convert_rs::cjk2zht;
@@ -31,6 +32,7 @@ struct StoredPlan {
     files: Vec<PreparedFile>,
     backup: bool,
     backup_roots: Vec<BackupRoot>,
+    request: FilePlanRequest,
 }
 
 struct TransactionEntry {
@@ -139,16 +141,9 @@ impl FileService {
         };
         let mut files = Vec::new();
         let mut warnings = Vec::new();
-        let preview_max_bytes = request
-            .preview_max_bytes
-            .unwrap_or(6 * 1024)
-            .clamp(1024, 1024 * 1024) as usize;
 
         for (index, source_path) in paths.iter().enumerate() {
-            match self
-                .prepare_file(conversion, &request, source_path, preview_max_bytes)
-                .await
-            {
+            match self.enumerate_file(conversion, &request, source_path).await {
                 Ok((file, extra_warnings)) => {
                     warnings.extend(extra_warnings);
                     files.push(file);
@@ -162,6 +157,7 @@ impl FileService {
                         detected_encoding: None,
                         source_preview: String::new(),
                         output_preview: String::new(),
+                        preview_loaded: false,
                         status: PlanStatus::Error,
                         warning: Some(error.message),
                     },
@@ -172,7 +168,7 @@ impl FileService {
             progress(super::types::ProgressEvent {
                 current: (index + 1) as u64,
                 total: paths.len() as u64,
-                message: format!("正在建立預覽：{}", file_name(source_path)),
+                message: format!("正在掃描：{}", file_name(source_path)),
             });
         }
 
@@ -198,6 +194,7 @@ impl FileService {
                         detected_encoding: None,
                         source_preview: file_name(&source_path),
                         output_preview: converted_name,
+                        preview_loaded: true,
                         status: if conflict && request.conflict_policy == ConflictPolicy::Skip {
                             PlanStatus::Conflict
                         } else {
@@ -225,10 +222,140 @@ impl FileService {
                     files,
                     backup: request.backup != Some(false),
                     backup_roots: resolve_backup_roots(&request.paths)?,
+                    request,
                 },
             );
         }
         Ok(public)
+    }
+
+    pub async fn preview(
+        &self,
+        conversion: &ConversionService,
+        request: FilePreviewRequest,
+    ) -> Result<FilePlanItem, CoreError> {
+        let (plan_request, source_path, existing) = {
+            let plans = self
+                .plans
+                .lock()
+                .map_err(|_| CoreError::new("PLAN_LOCK", "無法讀取檔案轉換計畫。"))?;
+            let plan = plans.get(&request.plan_id).ok_or_else(|| {
+                CoreError::new("PLAN_NOT_FOUND", "檔案轉換計畫已失效。請重新預覽。")
+            })?;
+            let file = plan
+                .files
+                .iter()
+                .find(|file| {
+                    resolve_path(&file.item.source_path) == resolve_path(&request.source_path)
+                })
+                .ok_or_else(|| CoreError::new("PLAN_PATH", "預覽路徑不在目前的檔案轉換計畫內。"))?;
+            (
+                plan.request.clone(),
+                PathBuf::from(&file.item.source_path),
+                file.item.clone(),
+            )
+        };
+
+        if existing.kind == FileItemKind::Directory || plan_request.mode == FileMode::Filename {
+            return Ok(existing);
+        }
+
+        let preview_max_bytes = plan_request
+            .preview_max_bytes
+            .unwrap_or(6 * 1024)
+            .clamp(1024, 1024 * 1024) as usize;
+        let buffer = fs::read(&source_path)?;
+        let (text, encoding) = decode_text(&buffer, plan_request.input_encoding)?;
+        let source_preview = truncate(&text, preview_max_bytes);
+        let converted = self
+            .convert_text(conversion, &plan_request.conversion, source_preview.clone())
+            .await?;
+        let output_encoding = resolve_output_encoding(plan_request.output_encoding, Some(encoding));
+        let mut output_text = converted.text;
+        if plan_request.fix_charset_declaration {
+            output_text = fix_charset_declaration(
+                &output_text,
+                output_encoding,
+                source_path
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or(""),
+                plan_request.fix_charset_extensions.as_deref(),
+            );
+        }
+        if plan_request.conversion.direction == super::types::Direction::None
+            && output_encoding == TextEncoding::Big5
+        {
+            output_text = repair_unrepresentable_big5(&output_text);
+        }
+
+        let mut plans = self
+            .plans
+            .lock()
+            .map_err(|_| CoreError::new("PLAN_LOCK", "無法更新檔案轉換計畫。"))?;
+        let plan = plans
+            .get_mut(&request.plan_id)
+            .ok_or_else(|| CoreError::new("PLAN_NOT_FOUND", "檔案轉換計畫已失效。請重新預覽。"))?;
+        let file = plan
+            .files
+            .iter_mut()
+            .find(|file| resolve_path(&file.item.source_path) == resolve_path(&request.source_path))
+            .ok_or_else(|| CoreError::new("PLAN_PATH", "預覽路徑不在目前的檔案轉換計畫內。"))?;
+        file.item.detected_encoding = Some(encoding);
+        file.item.source_preview = source_preview;
+        file.item.output_preview = output_text;
+        file.item.preview_loaded = true;
+        Ok(file.item.clone())
+    }
+
+    /// 僅列舉路徑、檔名轉換與衝突；內容轉換延後到 preview／apply。
+    async fn enumerate_file(
+        &self,
+        conversion: &ConversionService,
+        request: &FilePlanRequest,
+        source_path: &Path,
+    ) -> Result<(PreparedFile, Vec<String>), CoreError> {
+        assert_source_writable(source_path)?;
+        let converted_name = if request.mode == FileMode::Content {
+            file_name(source_path)
+        } else {
+            self.convert_text(conversion, &request.conversion, file_name(source_path))
+                .await?
+                .text
+        };
+        let output_path = self
+            .resolve_item_output_path(conversion, request, source_path, &converted_name)
+            .await?;
+        let conflict = output_path != source_path && output_path.exists();
+        let (source_preview, output_preview, preview_loaded) = if request.mode == FileMode::Filename
+        {
+            (file_name(source_path), converted_name, true)
+        } else {
+            (String::new(), String::new(), false)
+        };
+        Ok((
+            PreparedFile {
+                item: FilePlanItem {
+                    source_path: source_path.to_string_lossy().into_owned(),
+                    output_path: output_path.to_string_lossy().into_owned(),
+                    kind: FileItemKind::File,
+                    selected: true,
+                    detected_encoding: None,
+                    source_preview,
+                    output_preview,
+                    preview_loaded,
+                    status: if conflict && request.conflict_policy == ConflictPolicy::Skip {
+                        PlanStatus::Conflict
+                    } else {
+                        PlanStatus::Ready
+                    },
+                    warning: conflict.then(|| "輸出路徑已存在。".into()),
+                },
+                content: None,
+                conflict_policy: request.conflict_policy,
+            },
+            Vec::new(),
+        ))
     }
 
     async fn prepare_file(
@@ -236,7 +363,8 @@ impl FileService {
         conversion: &ConversionService,
         request: &FilePlanRequest,
         source_path: &Path,
-        preview_max_bytes: usize,
+        selected: bool,
+        existing_item: Option<&FilePlanItem>,
     ) -> Result<(PreparedFile, Vec<String>), CoreError> {
         assert_source_writable(source_path)?;
         let source_buffer = if request.mode == FileMode::Filename {
@@ -263,33 +391,9 @@ impl FileService {
                 .await?
                 .text
         };
-        let default_output = source_path
-            .parent()
-            .unwrap_or(Path::new("."))
-            .join(&converted_name);
-        let output_path = if let Some(directory) = &request.output_directory {
-            resolve_output_directory_path(
-                self,
-                conversion,
-                source_path,
-                &request.paths,
-                directory,
-                &converted_name,
-                request.mode,
-                &request.conversion,
-            )
-            .await?
-        } else if let Some(pattern) = &request.output_path {
-            resolve_requested_output_path(
-                source_path,
-                request.paths.first().map(String::as_str).unwrap_or(""),
-                pattern,
-                &converted_name,
-                request.mode,
-            )
-        } else {
-            default_output
-        };
+        let output_path = self
+            .resolve_item_output_path(conversion, request, source_path, &converted_name)
+            .await?;
         let output_encoding =
             resolve_output_encoding(request.output_encoding, decoded.as_ref().map(|item| item.1));
         let mut output_text = converted_content
@@ -323,31 +427,61 @@ impl FileService {
         } else {
             None
         };
-        let preview_source = decoded
-            .as_ref()
-            .map(|(text, _)| truncate(text, preview_max_bytes))
-            .unwrap_or_else(|| file_name(source_path));
-        let preview_output = if converted_content.is_some() {
-            truncate(&output_text, preview_max_bytes)
+        let preview_max_bytes = request
+            .preview_max_bytes
+            .unwrap_or(6 * 1024)
+            .clamp(1024, 1024 * 1024) as usize;
+        let (source_preview, output_preview, preview_loaded) =
+            if let Some(item) = existing_item.filter(|item| item.preview_loaded) {
+                (
+                    item.source_preview.clone(),
+                    item.output_preview.clone(),
+                    true,
+                )
+            } else if converted_content.is_some() {
+                (
+                    decoded
+                        .as_ref()
+                        .map(|(text, _)| truncate(text, preview_max_bytes))
+                        .unwrap_or_default(),
+                    truncate(&output_text, preview_max_bytes),
+                    true,
+                )
+            } else {
+                (file_name(source_path), converted_name, true)
+            };
+        let status = if let Some(item) = existing_item {
+            if item.status == PlanStatus::Conflict
+                || (conflict && request.conflict_policy == ConflictPolicy::Skip)
+            {
+                PlanStatus::Conflict
+            } else {
+                PlanStatus::Ready
+            }
+        } else if conflict && request.conflict_policy == ConflictPolicy::Skip {
+            PlanStatus::Conflict
         } else {
-            converted_name
+            PlanStatus::Ready
         };
+        let warning = existing_item
+            .and_then(|item| item.warning.clone())
+            .or_else(|| conflict.then(|| "輸出路徑已存在。".into()));
         Ok((
             PreparedFile {
                 item: FilePlanItem {
                     source_path: source_path.to_string_lossy().into_owned(),
                     output_path: output_path.to_string_lossy().into_owned(),
                     kind: FileItemKind::File,
-                    selected: true,
-                    detected_encoding: decoded.map(|item| item.1),
-                    source_preview: preview_source,
-                    output_preview: preview_output,
-                    status: if conflict && request.conflict_policy == ConflictPolicy::Skip {
-                        PlanStatus::Conflict
-                    } else {
-                        PlanStatus::Ready
-                    },
-                    warning: conflict.then(|| "輸出路徑已存在。".into()),
+                    selected,
+                    detected_encoding: decoded
+                        .as_ref()
+                        .map(|item| item.1)
+                        .or_else(|| existing_item.and_then(|item| item.detected_encoding)),
+                    source_preview,
+                    output_preview,
+                    preview_loaded,
+                    status,
+                    warning,
                 },
                 content,
                 conflict_policy: request.conflict_policy,
@@ -356,8 +490,45 @@ impl FileService {
         ))
     }
 
+    async fn resolve_item_output_path(
+        &self,
+        conversion: &ConversionService,
+        request: &FilePlanRequest,
+        source_path: &Path,
+        converted_name: &str,
+    ) -> Result<PathBuf, CoreError> {
+        let default_output = source_path
+            .parent()
+            .unwrap_or(Path::new("."))
+            .join(converted_name);
+        if let Some(directory) = &request.output_directory {
+            resolve_output_directory_path(
+                self,
+                conversion,
+                source_path,
+                &request.paths,
+                directory,
+                converted_name,
+                request.mode,
+                &request.conversion,
+            )
+            .await
+        } else if let Some(pattern) = &request.output_path {
+            Ok(resolve_requested_output_path(
+                source_path,
+                request.paths.first().map(String::as_str).unwrap_or(""),
+                pattern,
+                converted_name,
+                request.mode,
+            ))
+        } else {
+            Ok(default_output)
+        }
+    }
+
     pub async fn apply(
         &self,
+        conversion: &ConversionService,
         plan_id: &str,
         selected_paths: Option<&[String]>,
         progress: ProgressReporter,
@@ -379,6 +550,56 @@ impl FileService {
                 .map(|path| resolve_path(path))
                 .collect::<HashSet<_>>()
         });
+        let request = plan.request.clone();
+        let materialize_targets = plan
+            .files
+            .iter()
+            .enumerate()
+            .filter(|(_, file)| {
+                file.item.kind == FileItemKind::File
+                    && file.item.status == PlanStatus::Ready
+                    && request.mode != FileMode::Filename
+                    && file.content.is_none()
+                    && selection
+                        .as_ref()
+                        .is_none_or(|set| set.contains(&resolve_path(&file.item.source_path)))
+            })
+            .map(|(index, file)| (index, file.item.clone()))
+            .collect::<Vec<_>>();
+        let materialize_total = materialize_targets.len().max(1) as u64;
+        for (offset, (index, item)) in materialize_targets.into_iter().enumerate() {
+            self.throw_if_cancelled(plan_id)?;
+            progress(super::types::ProgressEvent {
+                current: (offset + 1) as u64,
+                total: materialize_total,
+                message: format!("正在轉換：{}", file_name(Path::new(&item.source_path))),
+            });
+            match self
+                .prepare_file(
+                    conversion,
+                    &request,
+                    Path::new(&item.source_path),
+                    item.selected,
+                    Some(&item),
+                )
+                .await
+            {
+                Ok((prepared, _)) => {
+                    plan.files[index] = prepared;
+                }
+                Err(error) => {
+                    plan.files[index].item.status = PlanStatus::Error;
+                    plan.files[index].item.selected = false;
+                    plan.files[index].item.warning = Some(error.message.clone());
+                    plan.files[index].content = None;
+                    result.failed.push(ApplyFailure {
+                        path: item.source_path,
+                        message: error.message,
+                    });
+                }
+            }
+        }
+
         let mut transaction = Vec::new();
         let mut directory_transaction = Vec::new();
         let apply_result = (|| -> Result<(), CoreError> {
@@ -414,6 +635,9 @@ impl FileService {
                 self.throw_if_cancelled(plan_id)?;
                 if file.item.kind == FileItemKind::Directory {
                     remaining.push(file);
+                    continue;
+                }
+                if file.item.status == PlanStatus::Error {
                     continue;
                 }
                 if file.item.status != PlanStatus::Ready

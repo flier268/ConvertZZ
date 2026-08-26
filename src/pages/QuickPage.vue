@@ -7,6 +7,8 @@ import { convertText } from "../lib/actions";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import SideBySideDiffView from "../components/SideBySideDiffView.vue";
 
+defineOptions({ name: "QuickPage" });
+
 const source = ref("");
 const output = ref("");
 const direction = ref<Direction>("s2t");

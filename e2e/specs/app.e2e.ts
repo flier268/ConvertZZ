@@ -37,8 +37,94 @@ test.describe("ConvertZZ 前端", () => {
     await dialog.getByRole("button", { name: "繼續" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByRole("heading", { name: "檔案與檔名" })).toBeVisible();
-    await expect(page.getByText("/tmp/里面.txt", { exact: true })).toBeVisible();
+    await expect(
+      page.locator(".file-plan-list").getByText("/tmp/里面.txt", { exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole("button", { name: "確認執行" })).toBeVisible();
+  });
+
+  test("切換到設定再回來會保留檔案預覽狀態", async ({ page }) => {
+    await openApp(page);
+    await openPage(page, "#nav-files", "檔案與檔名");
+    await page.locator(".el-form-item", { hasText: "作業" }).locator(".el-select").click();
+    await page.getByRole("option", { name: "轉換檔名" }).click();
+    await page.getByRole("button", { name: "選取檔案" }).click();
+    await page.getByRole("button", { name: "建立預覽" }).click();
+    await expect(
+      page.locator(".file-plan-list").getByText("/tmp/里面.txt", { exact: true }),
+    ).toBeVisible();
+    await openPage(page, "#nav-settings", "設定");
+    await openPage(page, "#nav-files", "檔案與檔名");
+    await expect(
+      page.locator(".file-plan-list").getByText("/tmp/里面.txt", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "確認執行" })).toBeVisible();
+  });
+
+  test("檔案清單與預覽可用分隔線調整寬度，表格欄也可拖曳", async ({ page }) => {
+    await openApp(page);
+    await openPage(page, "#nav-files", "檔案與檔名");
+    await page.locator(".el-form-item", { hasText: "作業" }).locator(".el-select").click();
+    await page.getByRole("option", { name: "轉換檔名" }).click();
+    await page.getByRole("button", { name: "選取檔案" }).click();
+    await page.getByRole("button", { name: "建立預覽" }).click();
+    await expect(
+      page.locator(".file-plan-list").getByText("/tmp/里面.txt", { exact: true }),
+    ).toBeVisible();
+
+    const statusHeader = page.locator(".el-table-v2__header-cell", { hasText: "狀態" });
+    const statusResizer = statusHeader.locator(".file-plan-col-resizer");
+    await expect(statusResizer).toBeAttached();
+    const beforeHeader = await statusHeader.boundingBox();
+    expect(beforeHeader).toBeTruthy();
+    expect(beforeHeader!.width).toBeGreaterThan(60);
+    const resized = await page.evaluate(async () => {
+      const findStatus = () =>
+        [...document.querySelectorAll(".el-table-v2__header-cell")].find((el) =>
+          el.textContent?.includes("狀態"),
+        );
+      const status = findStatus();
+      const resizer = status?.querySelector(".file-plan-col-resizer");
+      if (!status || !resizer) return { before: 0, after: 0 };
+      const before = status.getBoundingClientRect().width;
+      const rect = resizer.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      resizer.dispatchEvent(
+        new MouseEvent("mousedown", { bubbles: true, clientX: cx, clientY: cy }),
+      );
+      window.dispatchEvent(
+        new MouseEvent("mousemove", { bubbles: true, clientX: cx + 48, clientY: cy }),
+      );
+      window.dispatchEvent(
+        new MouseEvent("mouseup", { bubbles: true, clientX: cx + 48, clientY: cy }),
+      );
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      return { before, after: findStatus()?.getBoundingClientRect().width ?? 0 };
+    });
+    expect(resized.after).toBeGreaterThan(resized.before + 20);
+
+    const layoutSplitter = page
+      .locator(".file-plan-splitter .el-splitter-bar__dragger-horizontal")
+      .first();
+    await expect(layoutSplitter).toBeVisible();
+    const listBox = page.locator(".file-plan-list");
+    const beforeList = await listBox.boundingBox();
+    expect(beforeList).toBeTruthy();
+    const barBox = await layoutSplitter.boundingBox();
+    expect(barBox).toBeTruthy();
+    await page.mouse.move(barBox!.x + barBox!.width / 2, barBox!.y + barBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(barBox!.x + barBox!.width / 2 - 80, barBox!.y + barBox!.height / 2, {
+      steps: 6,
+    });
+    await page.mouse.up();
+    const afterList = await listBox.boundingBox();
+    expect(afterList!.width).toBeLessThan(beforeList!.width - 20);
+
+    await expect(
+      page.locator(".file-plan-preview .el-splitter-bar__dragger-horizontal").first(),
+    ).toBeVisible();
   });
 
   test("拖入檔案後可改選音訊標籤", async ({ page }) => {
@@ -135,23 +221,26 @@ test.describe("ConvertZZ 前端", () => {
 
   test("E-02 檔名作業預覽會顯示來源與輸出", async ({ page }) => {
     await openApp(page);
-    await openPage(page, "#tour-files", "檔案與檔名");
+    await openPage(page, "#nav-files", "檔案與檔名");
     await page.locator(".el-form-item", { hasText: "作業" }).locator(".el-select").click();
     await page.getByRole("option", { name: "轉換檔名" }).click();
     await page.getByRole("button", { name: "選取檔案" }).click();
     await page.getByRole("button", { name: "建立預覽" }).click();
     await expect(page.getByText("變更預覽")).toBeVisible();
-    await expect(page.getByRole("cell", { name: "/tmp/里面.txt", exact: true })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "/tmp/裡面.txt", exact: true })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "里面.txt", exact: true })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "裡面.txt", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "檢視" }).click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.getByText("檔名差異")).toBeVisible();
-    await expect(dialog.locator(".preview-diff-body").nth(0)).toContainText("里面.txt");
-    await expect(dialog.locator(".preview-diff-body").nth(1)).toContainText("裡面.txt");
-    await expect(dialog.locator(".diff-remove").first()).toBeVisible();
-    await expect(dialog.locator(".diff-add").first()).toBeVisible();
+    await expect(
+      page.locator(".file-plan-list").getByText("/tmp/里面.txt", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".file-plan-list").getByText("/tmp/裡面.txt", { exact: true }),
+    ).toBeVisible();
+    await expect(page.locator(".file-plan-preview .preview-diff-body").nth(0)).toContainText(
+      "里面.txt",
+    );
+    await expect(page.locator(".file-plan-preview .preview-diff-body").nth(1)).toContainText(
+      "裡面.txt",
+    );
+    await expect(page.locator(".file-plan-preview .diff-remove").first()).toBeVisible();
+    await expect(page.locator(".file-plan-preview .diff-add").first()).toBeVisible();
   });
 
   test("H-06 Linux 設定頁不顯示 SendTo，並可匯入舊設定", async ({ page }) => {
@@ -187,19 +276,19 @@ test.describe("ConvertZZ 前端", () => {
 
   test("E-01 內容預覽會顯示來源與輸出文字", async ({ page }) => {
     await openApp(page);
-    await openPage(page, "#tour-files", "檔案與檔名");
+    await openPage(page, "#nav-files", "檔案與檔名");
     await page.getByRole("button", { name: "選取檔案" }).click();
     await page.getByRole("button", { name: "建立預覽" }).click();
     await expect(page.getByText("變更預覽")).toBeVisible();
-    await expect(page.getByRole("cell", { name: "里面开发头发", exact: true })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "裡面開發頭髮", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "檢視" }).click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.getByText("內容差異")).toBeVisible();
-    await expect(dialog.locator(".preview-diff-body").nth(0)).toContainText("里面开发头发");
-    await expect(dialog.locator(".preview-diff-body").nth(1)).toContainText("裡面開發頭髮");
-    await expect(dialog.locator(".diff-remove").first()).toBeVisible();
-    await expect(dialog.locator(".diff-add").first()).toBeVisible();
+    await expect(page.getByText("檔案預覽")).toBeVisible();
+    await expect(page.locator(".file-plan-preview .preview-diff-body").nth(0)).toContainText(
+      "里面开发头发",
+    );
+    await expect(page.locator(".file-plan-preview .preview-diff-body").nth(1)).toContainText(
+      "裡面開發頭髮",
+    );
+    await expect(page.locator(".file-plan-preview .diff-remove").first()).toBeVisible();
+    await expect(page.locator(".file-plan-preview .diff-add").first()).toBeVisible();
   });
 
   test("快速轉換固定並排差異檢視", async ({ page }) => {
@@ -236,24 +325,24 @@ test.describe("ConvertZZ 前端", () => {
 
   test("內容與檔名預覽會同時顯示路徑與內容", async ({ page }) => {
     await openApp(page);
-    await openPage(page, "#tour-files", "檔案與檔名");
+    await openPage(page, "#nav-files", "檔案與檔名");
     await page.locator(".el-form-item", { hasText: "作業" }).locator(".el-select").click();
     await page.getByRole("option", { name: "內容與檔名" }).click();
     await page.getByRole("button", { name: "選取檔案" }).click();
     await page.getByRole("button", { name: "建立預覽" }).click();
-    await expect(page.getByRole("cell", { name: "/tmp/里面.txt", exact: true })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "/tmp/裡面.txt", exact: true })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "里面开发头发", exact: true })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "裡面開發頭髮", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "檢視" }).click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.getByText("檔名與內容差異")).toBeVisible();
-    await expect(dialog.getByText("檔名", { exact: true })).toBeVisible();
-    await expect(dialog.getByText("內容", { exact: true })).toBeVisible();
-    await expect(dialog.locator(".preview-diff-body").nth(0)).toContainText("里面.txt");
-    await expect(dialog.locator(".preview-diff-body").nth(1)).toContainText("裡面.txt");
-    await expect(dialog.locator(".preview-diff-body").nth(2)).toContainText("里面开发头发");
-    await expect(dialog.locator(".preview-diff-body").nth(3)).toContainText("裡面開發頭髮");
+    await expect(
+      page.locator(".file-plan-list").getByText("/tmp/里面.txt", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".file-plan-list").getByText("/tmp/裡面.txt", { exact: true }),
+    ).toBeVisible();
+    const preview = page.locator(".file-plan-preview");
+    await expect(preview.getByText("檔名", { exact: true })).toBeVisible();
+    await expect(preview.getByText("內容", { exact: true })).toBeVisible();
+    await expect(preview.locator(".preview-diff-body").nth(0)).toContainText("里面.txt");
+    await expect(preview.locator(".preview-diff-body").nth(1)).toContainText("裡面.txt");
+    await expect(preview.locator(".preview-diff-body").nth(2)).toContainText("里面开发头发");
+    await expect(preview.locator(".preview-diff-body").nth(3)).toContainText("裡面開發頭髮");
   });
 
   test("音訊頁可掃描、預覽並在確認後寫入", async ({ page }) => {

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from "vue";
+import { computed, h, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { open, confirm } from "@tauri-apps/plugin-dialog";
-import { ElMessage } from "element-plus";
+import { ElCheckbox, ElMessage } from "element-plus";
+import type { CheckboxValueType, Column, RowEventHandlers } from "element-plus";
 import type {
   Direction,
   EngineKind,
@@ -16,17 +17,21 @@ import { cliInvocation } from "../lib/cli";
 import { ensureSupportedFilesFilter } from "../lib/fileFilters";
 import { fileConversionDefaults } from "../lib/settingsApply";
 import { buildFileDiffSections, type DiffSection } from "../lib/fileDiff";
-import PreviewDiffDialog from "../components/PreviewDiffDialog.vue";
+import SideBySideDiffView from "../components/SideBySideDiffView.vue";
+
+defineOptions({ name: "FilesPage" });
 
 const paths = ref<string[]>([]);
 const outputPath = ref<string>();
 const outputDirectory = ref<string>();
 const plan = ref<FileConversionPlan>();
 const busy = ref(false);
-const diffVisible = ref(false);
-const diffTitle = ref("差異");
-const diffMeta = ref<Array<{ label: string; value: string }>>([]);
-const diffSections = ref<DiffSection[]>([]);
+const previewBusy = ref(false);
+const previewDiffReady = ref(false);
+const currentItem = ref<FilePlanItem>();
+const previewSections = ref<DiffSection[]>([]);
+const previewMeta = ref<Array<{ label: string; value: string }>>([]);
+const previewRequestId = ref(0);
 const promptAfterConversion = ref(true);
 const backup = ref(true);
 const defaultPath = ref<string>();
@@ -41,6 +46,17 @@ const fileFilters = ref(
 const previewMaxBytes = ref(6 * 1024);
 const fixCharsetExtensions = ref<string[]>([]);
 const progress = ref<{ current: number; total: number; message: string }>();
+const listPaneSize = ref<string | number>("55%");
+const previewPaneSize = ref<string | number>("45%");
+const columnWidths = reactive<Record<string, number>>({
+  selected: 64,
+  kind: 88,
+  status: 88,
+  sourcePath: 260,
+  outputPath: 260,
+  detectedEncoding: 100,
+  warning: 160,
+});
 const options = reactive({
   mode: "content" as FilePlanRequest["mode"],
   recursive: true,
@@ -53,6 +69,9 @@ const options = reactive({
   engine: "segmented" as EngineKind,
   vocabularyCorrection: true,
 });
+
+let previewTimer: ReturnType<typeof setTimeout> | undefined;
+let columnResizeCleanup: (() => void) | undefined;
 
 loadSettings().then((settings) => {
   const defaults = fileConversionDefaults(settings);
@@ -82,6 +101,158 @@ const encodings = [
   "iso-2022-jp",
   "hz-gb-2312",
 ];
+
+const selectedCount = computed(
+  () => plan.value?.items.filter((item) => item.status === "ready" && item.selected).length ?? 0,
+);
+
+const readyCount = computed(
+  () => plan.value?.items.filter((item) => item.status === "ready").length ?? 0,
+);
+
+const allReadySelected = computed(
+  () => readyCount.value > 0 && selectedCount.value === readyCount.value,
+);
+
+const someReadySelected = computed(() => selectedCount.value > 0 && !allReadySelected.value);
+
+const pathSummary = computed(() => {
+  if (!paths.value.length) return "尚未選取路徑";
+  if (paths.value.length <= 2) return paths.value.join("、");
+  return `${paths.value.slice(0, 2).join("、")} 等 ${paths.value.length} 項`;
+});
+
+const activeSection = computed(
+  () =>
+    previewSections.value.find((section) => section.title === "內容") ?? previewSections.value[0],
+);
+
+function startColumnResize(key: string, event: MouseEvent) {
+  event.preventDefault();
+  event.stopPropagation();
+  columnResizeCleanup?.();
+  const startX = event.clientX;
+  const startWidth = columnWidths[key] ?? 80;
+  const previousUserSelect = document.body.style.userSelect;
+  document.body.style.userSelect = "none";
+  document.body.classList.add("file-plan-col-resizing");
+
+  const onMove = (moveEvent: MouseEvent) => {
+    columnWidths[key] = Math.max(48, Math.round(startWidth + (moveEvent.clientX - startX)));
+  };
+  const onUp = () => {
+    document.body.style.userSelect = previousUserSelect;
+    document.body.classList.remove("file-plan-col-resizing");
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+    columnResizeCleanup = undefined;
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+  columnResizeCleanup = onUp;
+}
+
+function resizableHeader(key: string, content: string | ReturnType<typeof h>) {
+  return () =>
+    h("div", { class: "file-plan-header-cell" }, [
+      typeof content === "string"
+        ? h("span", { class: "file-plan-header-label" }, content)
+        : content,
+      h("span", {
+        class: "file-plan-col-resizer",
+        title: "拖曳調整欄寬",
+        onMousedown: (event: MouseEvent) => startColumnResize(key, event),
+      }),
+    ]);
+}
+
+const planColumns = computed<Column<FilePlanItem>[]>(() => [
+  {
+    key: "selected",
+    title: "執行",
+    width: columnWidths.selected,
+    align: "center",
+    cellRenderer: ({ rowData }) =>
+      h(ElCheckbox, {
+        modelValue: rowData.selected,
+        disabled: rowData.status !== "ready",
+        "onUpdate:modelValue": (value: CheckboxValueType) => {
+          rowData.selected = Boolean(value);
+        },
+        onClick: (event: MouseEvent) => event.stopPropagation(),
+      }),
+    headerCellRenderer: resizableHeader(
+      "selected",
+      h(ElCheckbox, {
+        modelValue: allReadySelected.value,
+        indeterminate: someReadySelected.value,
+        disabled: readyCount.value === 0,
+        "onUpdate:modelValue": (value: CheckboxValueType) => {
+          setAllSelected(Boolean(value));
+        },
+      }),
+    ),
+  },
+  {
+    key: "kind",
+    dataKey: "kind",
+    title: "類型",
+    width: columnWidths.kind,
+    headerCellRenderer: resizableHeader("kind", "類型"),
+  },
+  {
+    key: "status",
+    dataKey: "status",
+    title: "狀態",
+    width: columnWidths.status,
+    headerCellRenderer: resizableHeader("status", "狀態"),
+  },
+  {
+    key: "sourcePath",
+    dataKey: "sourcePath",
+    title: "來源",
+    width: columnWidths.sourcePath,
+    headerCellRenderer: resizableHeader("sourcePath", "來源"),
+  },
+  {
+    key: "outputPath",
+    dataKey: "outputPath",
+    title: "輸出",
+    width: columnWidths.outputPath,
+    headerCellRenderer: resizableHeader("outputPath", "輸出"),
+  },
+  {
+    key: "detectedEncoding",
+    dataKey: "detectedEncoding",
+    title: "編碼",
+    width: columnWidths.detectedEncoding,
+    headerCellRenderer: resizableHeader("detectedEncoding", "編碼"),
+    cellRenderer: ({ cellData }) => h("span", null, cellData ? String(cellData) : ""),
+  },
+  {
+    key: "warning",
+    dataKey: "warning",
+    title: "警告",
+    width: columnWidths.warning,
+    headerCellRenderer: resizableHeader("warning", "警告"),
+    cellRenderer: ({ cellData }) =>
+      h(
+        "span",
+        { class: "file-plan-warning", title: cellData ? String(cellData) : "" },
+        cellData ? String(cellData) : "",
+      ),
+  },
+]);
+
+const rowEventHandlers: RowEventHandlers = {
+  onClick: ({ rowData }) => {
+    scheduleItemPreview(rowData as FilePlanItem);
+  },
+};
+
+function rowClass({ rowData }: { rowData: FilePlanItem }) {
+  return rowData.sourcePath === currentItem.value?.sourcePath ? "is-current-row" : "";
+}
 
 async function chooseFiles() {
   const selected = await open({
@@ -117,10 +288,100 @@ async function chooseOutputFolder() {
   if (selected) outputDirectory.value = selected as string;
 }
 
+function clearPreviewState() {
+  if (previewTimer) {
+    clearTimeout(previewTimer);
+    previewTimer = undefined;
+  }
+  currentItem.value = undefined;
+  previewSections.value = [];
+  previewMeta.value = [];
+  previewBusy.value = false;
+  previewDiffReady.value = false;
+}
+
+function updatePreviewPanel(item: FilePlanItem) {
+  currentItem.value = item;
+  previewDiffReady.value = false;
+  const sections = buildFileDiffSections(item);
+  previewSections.value = item.previewLoaded
+    ? sections
+    : sections.filter((section) => section.title === "檔名");
+  previewMeta.value = [
+    { label: "來源", value: item.sourcePath },
+    { label: "輸出", value: item.outputPath },
+    ...(item.detectedEncoding ? [{ label: "編碼", value: item.detectedEncoding }] : []),
+  ];
+  void nextTick(() => {
+    requestAnimationFrame(() => {
+      if (currentItem.value?.sourcePath === item.sourcePath) previewDiffReady.value = true;
+    });
+  });
+}
+
+function setAllSelected(selected: boolean) {
+  if (!plan.value) return;
+  for (const item of plan.value.items) {
+    if (item.status === "ready") item.selected = selected;
+  }
+}
+
+function scheduleItemPreview(item: FilePlanItem | undefined) {
+  if (previewTimer) clearTimeout(previewTimer);
+  if (!item) {
+    clearPreviewState();
+    return;
+  }
+  currentItem.value = item;
+  previewTimer = setTimeout(() => {
+    previewTimer = undefined;
+    void loadItemPreview(item);
+  }, 100);
+}
+
+async function loadItemPreview(item: FilePlanItem | undefined) {
+  if (!plan.value || !item) {
+    clearPreviewState();
+    return;
+  }
+  if (item.previewLoaded || item.kind === "directory" || options.mode === "filename") {
+    if (!item.previewLoaded && (item.kind === "directory" || options.mode === "filename")) {
+      item.previewLoaded = true;
+    }
+    updatePreviewPanel(item);
+    return;
+  }
+  const requestId = ++previewRequestId.value;
+  previewBusy.value = true;
+  previewDiffReady.value = false;
+  currentItem.value = item;
+  previewMeta.value = [
+    { label: "來源", value: item.sourcePath },
+    { label: "輸出", value: item.outputPath },
+  ];
+  previewSections.value = buildFileDiffSections(item).filter((section) => section.title === "檔名");
+  try {
+    const previewed = await core.request<FilePlanItem>("files.preview", {
+      planId: plan.value.planId,
+      sourcePath: item.sourcePath,
+    });
+    if (requestId !== previewRequestId.value || !plan.value) return;
+    const index = plan.value.items.findIndex((entry) => entry.sourcePath === item.sourcePath);
+    if (index >= 0) plan.value.items[index] = { ...plan.value.items[index], ...previewed };
+    updatePreviewPanel(plan.value.items[index] ?? previewed);
+  } catch (error) {
+    if (requestId !== previewRequestId.value) return;
+    ElMessage.error(error instanceof Error ? error.message : String(error));
+  } finally {
+    if (requestId === previewRequestId.value) previewBusy.value = false;
+  }
+}
+
 async function createPlan() {
   if (!paths.value.length) return ElMessage.warning("請先選取檔案或資料夾。");
   busy.value = true;
   progress.value = undefined;
+  clearPreviewState();
   try {
     const settings = await loadSettings();
     const allowedExtensions = Array.from(
@@ -160,6 +421,10 @@ async function createPlan() {
         progress.value = value;
       },
     );
+    // 大型清單先讓虛擬表格掛上，再載入第一筆預覽，避免主執行緒連續長任務。
+    await nextTick();
+    const first = plan.value.items.find((item) => item.status === "ready") ?? plan.value.items[0];
+    await loadItemPreview(first);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
@@ -169,10 +434,10 @@ async function createPlan() {
 
 async function applyPlan() {
   if (!plan.value) return;
-  const accepted = await confirm(
-    `將執行 ${plan.value.items.filter((item) => item.status === "ready" && item.selected).length} 個檔案操作。`,
-    { title: "確認檔案轉換", kind: "warning" },
-  );
+  const accepted = await confirm(`將執行 ${selectedCount.value} 個檔案操作。`, {
+    title: "確認檔案轉換",
+    kind: "warning",
+  });
   if (!accepted) return;
   if (
     options.conflictPolicy === "overwrite" &&
@@ -205,6 +470,7 @@ async function applyPlan() {
           .join("\n"),
       );
     plan.value = undefined;
+    clearPreviewState();
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
@@ -216,26 +482,13 @@ async function cancelPlan() {
   if (!plan.value) return;
   await core.request("files.cancel", { planId: plan.value.planId });
   plan.value = undefined;
-  diffVisible.value = false;
-  diffSections.value = [];
-  diffMeta.value = [];
+  clearPreviewState();
 }
 
-function openDiff(item: FilePlanItem) {
-  const sections = buildFileDiffSections(item);
-  diffSections.value = sections;
-  diffTitle.value =
-    sections.length === 1 && sections[0]?.title === "檔名" ? "檔名差異" : "內容差異";
-  if (sections.some((section) => section.title === "檔名") && sections.length > 1) {
-    diffTitle.value = "檔名與內容差異";
-  }
-  diffMeta.value = [
-    { label: "來源", value: item.sourcePath },
-    { label: "輸出", value: item.outputPath },
-    ...(item.detectedEncoding ? [{ label: "編碼", value: item.detectedEncoding }] : []),
-  ];
-  diffVisible.value = true;
-}
+onBeforeUnmount(() => {
+  if (previewTimer) clearTimeout(previewTimer);
+  columnResizeCleanup?.();
+});
 
 watch(
   cliInvocation,
@@ -264,7 +517,7 @@ watch(
       <div>
         <p class="eyebrow">BATCH</p>
         <h1>檔案與檔名</h1>
-        <p>所有變更都會先建立預覽計畫。</p>
+        <p>先建立檔案清單，點選後才載入內容預覽；勾選後才會轉換寫入。</p>
       </div>
       <div class="header-actions">
         <el-button @click="chooseOutputFolder">選取輸出目錄</el-button
@@ -323,7 +576,7 @@ watch(
         ><el-checkbox v-model="backup">轉換前備份（.bak）</el-checkbox>
       </div>
       <div class="path-summary">
-        <span>{{ paths.length ? paths.join("、") : "尚未選取路徑" }}</span
+        <span>{{ pathSummary }}</span
         ><el-button :loading="busy" @click="createPlan">建立預覽</el-button>
       </div>
       <div v-if="outputDirectory" class="path-summary">
@@ -336,18 +589,18 @@ watch(
         :format="() => progress?.message ?? ''"
       />
     </el-card>
-    <el-card v-if="plan" shadow="never">
-      <template #header
-        ><div class="card-title">
-          <span>變更預覽</span>
-          <div>
-            <el-button @click="cancelPlan">{{ busy ? "停止作業" : "取消計畫" }}</el-button
-            ><el-button type="primary" :loading="busy" :disabled="busy" @click="applyPlan"
-              >確認執行</el-button
-            >
-          </div>
-        </div></template
-      >
+    <section v-if="plan" class="file-plan-panel">
+      <header class="file-plan-panel-header">
+        <span>變更預覽（{{ plan.items.length }}）</span>
+        <div class="file-plan-panel-actions">
+          <el-button @click="setAllSelected(true)">全選</el-button>
+          <el-button @click="setAllSelected(false)">取消全選</el-button>
+          <el-button @click="cancelPlan">{{ busy ? "停止作業" : "取消計畫" }}</el-button
+          ><el-button type="primary" :loading="busy" :disabled="busy" @click="applyPlan"
+            >確認執行</el-button
+          >
+        </div>
+      </header>
       <el-alert
         v-for="warning in plan.warnings"
         :key="warning"
@@ -355,49 +608,274 @@ watch(
         type="warning"
         :closable="false"
       />
-      <el-table :data="plan.items" height="390">
-        <el-table-column label="執行" width="70"
-          ><template #default="scope"
-            ><el-checkbox
-              v-model="scope.row.selected"
-              :disabled="scope.row.status !== 'ready'" /></template
-        ></el-table-column>
-        <el-table-column prop="kind" label="類型" width="90" />
-        <el-table-column prop="status" label="狀態" width="90" />
-        <el-table-column prop="sourcePath" label="來源" min-width="260" show-overflow-tooltip />
-        <el-table-column prop="outputPath" label="輸出" min-width="260" show-overflow-tooltip />
-        <el-table-column prop="detectedEncoding" label="編碼" width="120" />
-        <el-table-column
-          prop="sourcePreview"
-          label="來源預覽"
-          min-width="160"
-          show-overflow-tooltip
-        />
-        <el-table-column
-          prop="outputPreview"
-          label="輸出預覽"
-          min-width="160"
-          show-overflow-tooltip
-        />
-        <el-table-column label="差異" width="90" fixed="right"
-          ><template #default="scope"
-            ><el-button
-              link
-              type="primary"
-              :disabled="!scope.row.sourcePreview && !scope.row.outputPreview"
-              @click="openDiff(scope.row)"
-              >檢視</el-button
-            ></template
-          ></el-table-column
-        >
-        <el-table-column prop="warning" label="警告" min-width="180" show-overflow-tooltip />
-      </el-table>
-      <PreviewDiffDialog
-        v-model="diffVisible"
-        :title="diffTitle"
-        :meta="diffMeta"
-        :sections="diffSections"
-      />
-    </el-card>
+      <div class="file-plan-layout">
+        <el-splitter class="file-plan-splitter">
+          <el-splitter-panel v-model:size="listPaneSize" :min="280">
+            <div class="file-plan-list">
+              <el-auto-resizer>
+                <template #default="{ height, width }">
+                  <el-table-v2
+                    :columns="planColumns"
+                    :data="plan.items"
+                    :width="width"
+                    :height="height"
+                    :row-height="44"
+                    :header-height="44"
+                    row-key="sourcePath"
+                    fixed
+                    :cache="6"
+                    :row-class="rowClass"
+                    :row-event-handlers="rowEventHandlers"
+                  />
+                </template>
+              </el-auto-resizer>
+            </div>
+          </el-splitter-panel>
+          <el-splitter-panel v-model:size="previewPaneSize" :min="260">
+            <aside class="file-plan-preview">
+              <div class="file-plan-preview-header">
+                <strong>檔案預覽</strong>
+                <small v-if="previewBusy">載入中…</small>
+              </div>
+              <el-empty v-if="!currentItem" description="選取左側檔案以載入預覽" />
+              <template v-else>
+                <div v-if="previewMeta.length" class="file-plan-preview-meta">
+                  <div v-for="entry in previewMeta" :key="entry.label">
+                    <span>{{ entry.label }}</span>
+                    <code>{{ entry.value }}</code>
+                  </div>
+                </div>
+                <el-empty
+                  v-if="!previewBusy && !currentItem.previewLoaded && options.mode !== 'filename'"
+                  description="正在準備內容預覽…"
+                />
+                <p
+                  v-else-if="previewSections.length && !previewDiffReady"
+                  class="file-plan-preview-pending"
+                >
+                  正在繪製差異…
+                </p>
+                <div
+                  v-for="section in previewDiffReady ? previewSections : []"
+                  :key="section.title"
+                  class="file-plan-section"
+                >
+                  <h3 v-if="previewSections.length > 1">{{ section.title }}</h3>
+                  <SideBySideDiffView
+                    :source="section.source"
+                    :output="section.output"
+                    :source-label="section.sourceLabel"
+                    :output-label="section.outputLabel"
+                    compact
+                  />
+                </div>
+                <el-empty
+                  v-if="
+                    currentItem.previewLoaded &&
+                    previewDiffReady &&
+                    !previewSections.length &&
+                    !previewBusy &&
+                    !activeSection
+                  "
+                  description="沒有可顯示的差異內容"
+                />
+              </template>
+            </aside>
+          </el-splitter-panel>
+        </el-splitter>
+      </div>
+    </section>
   </section>
 </template>
+
+<style scoped>
+.file-plan-panel {
+  display: grid;
+  gap: 12px;
+}
+.file-plan-panel-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 600;
+}
+.file-plan-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.file-plan-layout {
+  min-height: 420px;
+}
+.file-plan-splitter {
+  height: 420px;
+}
+.file-plan-splitter :deep(.el-splitter-bar) {
+  width: 10px;
+}
+.file-plan-splitter :deep(.el-splitter-bar__dragger-horizontal) {
+  width: 10px;
+  height: 100%;
+}
+.file-plan-splitter :deep(.el-splitter-bar__dragger-horizontal::before) {
+  width: 3px;
+  height: 56px;
+  border-radius: 999px;
+  background-color: #9bb8b1;
+}
+.file-plan-list {
+  height: 100%;
+  min-width: 0;
+  margin-right: 6px;
+  border: 1px solid #d7e4e0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+.file-plan-list :deep(.el-table-v2__row.is-current-row) {
+  background: #e8f5f1;
+}
+.file-plan-list :deep(.el-table-v2__row) {
+  cursor: pointer;
+}
+.file-plan-list :deep(.el-table-v2__header-cell) {
+  position: relative;
+  overflow: visible;
+}
+/* headerCellRenderer 在 table-v2 內渲染，需 :deep 才吃得到 scoped 樣式 */
+.file-plan-list :deep(.file-plan-header-cell) {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding-right: 10px;
+  box-sizing: border-box;
+}
+.file-plan-list :deep(.file-plan-header-label) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-plan-list :deep(.file-plan-col-resizer) {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 10px;
+  cursor: col-resize;
+  z-index: 3;
+}
+.file-plan-list :deep(.file-plan-col-resizer::after) {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  right: 3px;
+  width: 2px;
+  border-radius: 999px;
+  background: #c5d6d1;
+}
+.file-plan-list :deep(.file-plan-col-resizer:hover::after) {
+  background: var(--el-color-primary);
+}
+.file-plan-warning {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-plan-preview {
+  height: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-left: 6px;
+  padding: 12px 14px;
+  overflow: auto;
+  box-sizing: border-box;
+  border: 1px solid #d7e4e0;
+  border-radius: 12px;
+  background: #fff;
+}
+.file-plan-preview-header {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 2px;
+}
+.file-plan-preview-header strong {
+  font-size: 14px;
+}
+.file-plan-preview-header small {
+  color: #5b746f;
+}
+.file-plan-preview-meta {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f4f8f7;
+}
+.file-plan-preview-meta > div {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+.file-plan-preview-meta span {
+  color: #5b746f;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.file-plan-preview-meta code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+  white-space: pre-wrap;
+  color: #17302d;
+}
+.file-plan-preview-pending {
+  flex: 0 0 auto;
+  margin: 0;
+  color: #5b746f;
+  font-size: 13px;
+}
+.file-plan-section {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.file-plan-section h3 {
+  margin: 0;
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: #5b746f;
+  font-weight: 600;
+}
+.file-plan-preview :deep(.preview-diff-root.compact) {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.file-plan-preview :deep(.preview-diff-root.compact .preview-diff-pane) {
+  padding: 0 10px;
+  border-radius: 8px;
+  background: #f7faf9;
+}
+</style>
+
+<style>
+body.file-plan-col-resizing,
+body.file-plan-col-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+</style>

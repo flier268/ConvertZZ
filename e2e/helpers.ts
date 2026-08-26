@@ -13,8 +13,21 @@ export async function e2eState(page: Page): Promise<ConvertzzE2eConfig> {
   return page.evaluate(() => window.__convertzzE2e ?? {});
 }
 
+const navLabels: Record<string, string> = {
+  "#nav-quick": "快速轉換",
+  "#nav-files": "檔案與檔名",
+  "#nav-clipboard": "剪貼簿",
+  "#nav-audio": "音訊標籤",
+  "#nav-tools": "文字工具",
+  "#nav-dictionary": "舊版字典",
+  "#nav-settings": "設定",
+  "#nav-about": "關於與差異",
+};
+
 export async function openPage(page: Page, id: string, heading: string): Promise<void> {
-  await page.locator(id).click();
+  const label = navLabels[id];
+  if (label) await page.getByRole("menuitem", { name: label }).click();
+  else await page.locator(id).click();
   await expect(page.getByRole("heading", { name: heading })).toBeVisible();
 }
 

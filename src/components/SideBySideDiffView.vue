@@ -1,3 +1,11 @@
+<script lang="ts">
+/** 工作階段內共用左右比例，切換頁或重掛載差異檢視時仍保留。 */
+const sessionPaneSizes = {
+  left: "50%" as string | number,
+  right: "50%" as string | number,
+};
+</script>
+
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import { buildSideBySideDiff, escapeHtml, sideBySideToHtml } from "../lib/textDiff";
@@ -27,6 +35,8 @@ const emit = defineEmits<{
   "update:source": [value: string];
 }>();
 
+const leftSize = ref<string | number>(sessionPaneSizes.left);
+const rightSize = ref<string | number>(sessionPaneSizes.right);
 const leftPane = ref<HTMLElement>();
 const rightPane = ref<HTMLElement>();
 let syncing = false;
@@ -41,6 +51,11 @@ const rightHtml = computed(() =>
 const sourceCount = computed(() => Array.from(props.source ?? "").length);
 const outputCount = computed(() => Array.from(props.output ?? "").length);
 const empty = computed(() => !props.editable && !props.source && !props.output);
+
+function rememberPaneSizes() {
+  sessionPaneSizes.left = leftSize.value;
+  sessionPaneSizes.right = rightSize.value;
+}
 
 function syncScroll(from: "left" | "right") {
   const source = from === "left" ? leftPane.value : rightPane.value;
@@ -76,72 +91,112 @@ watch(
 
 <template>
   <el-empty v-if="empty" description="沒有可顯示的差異內容" />
-  <div v-else class="preview-diff-grid" :class="{ compact }">
-    <section class="preview-diff-pane">
-      <header>
-        <span>{{ sourceLabel }}</span>
-        <small>{{ sourceCount }} 字</small>
-      </header>
-      <textarea
-        v-if="editable"
-        ref="leftPane"
-        class="preview-diff-body preview-diff-input"
-        :value="source"
-        :placeholder="sourcePlaceholder"
-        spellcheck="false"
-        @input="emit('update:source', ($event.target as HTMLTextAreaElement).value)"
-        @scroll="syncScroll('left')"
-      />
-      <pre
-        v-else
-        ref="leftPane"
-        class="preview-diff-body"
-        @scroll="syncScroll('left')"
-        v-html="leftHtml"
-      />
-    </section>
-    <section class="preview-diff-pane">
-      <header>
-        <span>{{ outputLabel }}</span>
-        <small>{{ outputCount }} 字</small>
-      </header>
-      <pre
-        ref="rightPane"
-        class="preview-diff-body"
-        @scroll="syncScroll('right')"
-        v-html="rightHtml"
-      />
-    </section>
+  <div v-else class="preview-diff-root" :class="{ compact }">
+    <el-splitter class="preview-diff-grid" @resize-end="rememberPaneSizes">
+      <el-splitter-panel v-model:size="leftSize" min="20%" max="80%">
+        <section class="preview-diff-pane">
+          <header>
+            <span>{{ sourceLabel }}</span>
+            <small>{{ sourceCount }} 字</small>
+          </header>
+          <textarea
+            v-if="editable"
+            ref="leftPane"
+            class="preview-diff-body preview-diff-input"
+            :value="source"
+            :placeholder="sourcePlaceholder"
+            spellcheck="false"
+            @input="emit('update:source', ($event.target as HTMLTextAreaElement).value)"
+            @scroll="syncScroll('left')"
+          />
+          <pre
+            v-else
+            ref="leftPane"
+            class="preview-diff-body"
+            @scroll="syncScroll('left')"
+            v-html="leftHtml"
+          />
+        </section>
+      </el-splitter-panel>
+      <el-splitter-panel v-model:size="rightSize" min="20%" max="80%">
+        <section class="preview-diff-pane">
+          <header>
+            <span>{{ outputLabel }}</span>
+            <small>{{ outputCount }} 字</small>
+          </header>
+          <pre
+            ref="rightPane"
+            class="preview-diff-body"
+            @scroll="syncScroll('right')"
+            v-html="rightHtml"
+          />
+        </section>
+      </el-splitter-panel>
+    </el-splitter>
   </div>
 </template>
 
 <style scoped>
-.preview-diff-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+.preview-diff-root {
   min-height: 420px;
 }
-.preview-diff-grid.compact {
-  min-height: 0;
+.preview-diff-root.compact {
+  display: flex;
+  flex-direction: column;
+  min-height: 112px;
+  height: 100%;
+}
+.preview-diff-grid {
+  height: 100%;
+  min-height: inherit;
+}
+.preview-diff-root:not(.compact) .preview-diff-grid {
+  min-height: 420px;
+}
+.preview-diff-root.compact .preview-diff-grid {
+  /* el-splitter 需明確高度；由外層 flex 分配剩餘空間 */
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 112px;
+}
+.preview-diff-grid :deep(.el-splitter-bar) {
+  width: 10px;
+}
+.preview-diff-grid :deep(.el-splitter-bar__dragger-horizontal) {
+  width: 10px;
+  height: 100%;
+}
+.preview-diff-grid :deep(.el-splitter-bar__dragger-horizontal::before) {
+  width: 3px;
+  height: 40px;
+  border-radius: 999px;
+  background-color: #9bb8b1;
 }
 .preview-diff-pane {
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-width: 0;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 12px;
+  min-height: 0;
   overflow: hidden;
-  background: var(--el-bg-color);
+}
+.preview-diff-root:not(.compact) .preview-diff-pane {
+  margin: 0 4px;
+  background: #f7faf9;
+  border-radius: 8px;
+  padding: 0 12px;
+}
+.preview-diff-root.compact .preview-diff-pane {
+  margin: 0 4px;
 }
 .preview-diff-pane header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  background: var(--el-fill-color-blank);
+  padding: 10px 0 8px;
+  border-bottom: 1px solid #e3eeea;
+  font-size: 13px;
   font-weight: 600;
 }
 .preview-diff-pane header small {
@@ -150,7 +205,8 @@ watch(
 }
 .preview-diff-body {
   margin: 0;
-  padding: 14px;
+  padding: 12px 0;
+  flex: 1 1 auto;
   height: 52vh;
   overflow: auto;
   white-space: pre-wrap;
@@ -171,10 +227,16 @@ watch(
 .preview-diff-body :deep(.preview-diff-placeholder) {
   color: var(--el-text-color-placeholder);
 }
+.compact .preview-diff-pane {
+  height: 100%;
+  min-height: 0;
+}
 .compact .preview-diff-body {
+  flex: 1 1 auto;
   height: auto;
-  max-height: 28vh;
-  min-height: 4.5rem;
+  max-height: none;
+  min-height: 0;
+  padding: 8px 0 10px;
 }
 .preview-diff-body :deep(.diff-change) {
   border-radius: 3px;
@@ -190,15 +252,14 @@ watch(
 }
 
 @media (max-width: 800px) {
-  .preview-diff-grid {
-    grid-template-columns: 1fr;
+  .preview-diff-root:not(.compact) {
     min-height: 0;
   }
   .preview-diff-body {
     height: 28vh;
   }
   .compact .preview-diff-body {
-    max-height: 22vh;
+    max-height: none;
   }
 }
 </style>

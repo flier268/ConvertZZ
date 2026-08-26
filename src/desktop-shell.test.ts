@@ -274,12 +274,20 @@ describe("Tauri desktop shell", () => {
     expect(toast.windows).toEqual(["toast"]);
   });
 
-  it("reuses the settings page instead of remounting it on every visit", () => {
+  it("reuses work pages instead of remounting them on every visit", () => {
     const app = readProjectFile("src/App.vue");
     const settings = readProjectFile("src/pages/SettingsPage.vue");
+    const files = readProjectFile("src/pages/FilesPage.vue");
+    const clipboard = readProjectFile("src/pages/ClipboardPage.vue");
 
-    expect(app).toContain('<keep-alive include="SettingsPage">');
+    expect(app).toContain(
+      'include="QuickPage,FilesPage,ClipboardPage,AudioPage,ToolsPage,DictionaryPage,SettingsPage"',
+    );
     expect(settings).toContain('defineOptions({ name: "SettingsPage" })');
+    expect(files).toContain('defineOptions({ name: "FilesPage" })');
+    expect(clipboard).toContain('defineOptions({ name: "ClipboardPage" })');
+    expect(clipboard).toContain("onActivated");
+    expect(clipboard).toContain("onDeactivated");
     expect(settings).toContain("getLoadedSettings");
     expect(settings).toContain('<el-tabs v-model="activeTab" class="settings-tabs">');
     expect(settings).toContain('name="general" lazy');

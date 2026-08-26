@@ -77,6 +77,8 @@ export interface FilePlanItem {
   detectedEncoding?: TextEncoding;
   sourcePreview: string;
   outputPreview: string;
+  /** 內容預覽是否已依目前計畫載入；檔名模式可在列舉時即為 true。 */
+  previewLoaded?: boolean;
   status: "ready" | "skipped" | "conflict" | "error";
   warning?: string;
 }
@@ -86,6 +88,12 @@ export interface FileConversionPlan {
   createdAt: string;
   items: FilePlanItem[];
   warnings: string[];
+}
+
+/** 對計畫內單一檔案載入截斷後的內容預覽。 */
+export interface FilePreviewRequest {
+  planId: string;
+  sourcePath: string;
 }
 
 export interface AudioTagField {
@@ -259,6 +267,7 @@ export type CoreOperation =
   | "health"
   | "convert.preview"
   | "files.plan"
+  | "files.preview"
   | "files.apply"
   | "files.cancel"
   | "audio.scan"

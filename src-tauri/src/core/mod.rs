@@ -68,13 +68,17 @@ pub async fn dispatch(
                     .await?,
             )
         }
+        "files.preview" => {
+            let request = serde_json::from_value(payload)?;
+            to_value(state.files.preview(&state.conversion, request).await?)
+        }
         "files.apply" => {
             let plan_id = required_string(&payload, "planId")?;
             let selected = selected_paths(&payload);
             to_value(
                 state
                     .files
-                    .apply(&plan_id, selected.as_deref(), progress)
+                    .apply(&state.conversion, &plan_id, selected.as_deref(), progress)
                     .await?,
             )
         }

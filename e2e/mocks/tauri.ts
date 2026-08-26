@@ -111,6 +111,7 @@ const store = new Map<string, unknown>([
 ]);
 const listeners = new Map<string, Set<(event: { payload: unknown }) => void>>();
 let clipboard = "";
+let lastFilePlanItem: Record<string, unknown> | undefined;
 
 export function isTauri(): boolean {
   return true;
@@ -204,23 +205,40 @@ function mockCoreRequest(operation: string, rawPayload: unknown): unknown {
     const mode = String(payload.mode ?? "content");
     const rename = mode === "filename" || mode === "both";
     const content = mode === "content" || mode === "both";
+    lastFilePlanItem = {
+      sourcePath: "/tmp/里面.txt",
+      outputPath: rename ? "/tmp/裡面.txt" : "/tmp/里面.txt",
+      kind: "file",
+      selected: true,
+      detectedEncoding: content ? undefined : "utf8",
+      sourcePreview: content ? "" : "里面.txt",
+      outputPreview: content ? "" : "裡面.txt",
+      previewLoaded: !content,
+      status: "ready",
+    };
     return {
       planId: "plan-1",
       createdAt: "2026-08-15T00:00:00.000Z",
       warnings: [],
-      items: [
-        {
-          sourcePath: "/tmp/里面.txt",
-          outputPath: rename ? "/tmp/裡面.txt" : "/tmp/里面.txt",
-          kind: rename && !content ? "filename" : "file",
-          selected: true,
-          detectedEncoding: "utf8",
-          sourcePreview: content ? "里面开发头发" : "里面.txt",
-          outputPreview: content ? "裡面開發頭髮" : "裡面.txt",
-          status: "ready",
-        },
-      ],
+      items: [lastFilePlanItem],
     };
+  }
+  if (operation === "files.preview") {
+    const base = lastFilePlanItem ?? {
+      sourcePath: "/tmp/里面.txt",
+      outputPath: "/tmp/里面.txt",
+      kind: "file",
+      selected: true,
+      status: "ready",
+    };
+    lastFilePlanItem = {
+      ...base,
+      detectedEncoding: "utf8",
+      sourcePreview: "里面开发头发",
+      outputPreview: "裡面開發頭髮",
+      previewLoaded: true,
+    };
+    return lastFilePlanItem;
   }
   if (operation === "files.apply") {
     return { succeeded: ["/tmp/里面.txt"], skipped: [], failed: [] };

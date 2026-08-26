@@ -5,6 +5,8 @@ import { ElMessage } from "element-plus";
 import { core } from "../lib/coreClient";
 import { loadSettings, saveSettings } from "../lib/settings";
 
+defineOptions({ name: "DictionaryPage" });
+
 interface Entry {
   index: number;
   enabled: boolean;

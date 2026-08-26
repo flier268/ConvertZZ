@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from "vue";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { ElMessage } from "element-plus";
 import type { Direction, EngineKind, TextEncoding, UtilityConvertRequest } from "@shared/contracts";
@@ -7,6 +7,8 @@ import { convertText } from "../lib/actions";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { core } from "../lib/coreClient";
 import SideBySideDiffView from "../components/SideBySideDiffView.vue";
+
+defineOptions({ name: "ClipboardPage" });
 
 const source = ref("");
 const output = ref("");
@@ -89,16 +91,29 @@ async function copy() {
 }
 
 onMounted(async () => {
-  mounted = true;
   await refresh();
-  toggleWatch(true);
 });
+
+onActivated(() => {
+  mounted = true;
+  if (watching.value) toggleWatch(true);
+});
+
+onDeactivated(() => {
+  mounted = false;
+  if (timer) {
+    clearInterval(timer);
+    timer = undefined;
+  }
+});
+
 watch(
   [direction, engine, vocabularyCorrection, reinterpretEncoding, sourceEncoding, targetEncoding],
   () => {
     if (mounted) void refresh(true).catch(() => undefined);
   },
 );
+
 onBeforeUnmount(() => {
   mounted = false;
   if (timer) clearInterval(timer);

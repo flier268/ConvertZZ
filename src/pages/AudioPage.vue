@@ -17,6 +17,8 @@ import { cliInvocation } from "../lib/cli";
 import type { DiffSection } from "../lib/fileDiff";
 import PreviewDiffDialog from "../components/PreviewDiffDialog.vue";
 
+defineOptions({ name: "AudioPage" });
+
 const paths = ref<string[]>([]);
 const files = ref<AudioTagFile[]>([]);
 const plan = ref<AudioTagPlan>();

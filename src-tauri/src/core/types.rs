@@ -206,9 +206,18 @@ pub struct FilePlanItem {
     pub detected_encoding: Option<TextEncoding>,
     pub source_preview: String,
     pub output_preview: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub preview_loaded: bool,
     pub status: PlanStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FilePreviewRequest {
+    pub plan_id: String,
+    pub source_path: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

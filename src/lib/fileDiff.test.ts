@@ -48,6 +48,7 @@ describe("fileDiff", () => {
         item({
           sourcePreview: "里面开发",
           outputPreview: "裡面開發",
+          previewLoaded: true,
         }),
       ),
     ).toEqual([
@@ -61,6 +62,18 @@ describe("fileDiff", () => {
     ]);
   });
 
+  it("內容尚未載入時不顯示空白內容區段", () => {
+    expect(
+      buildFileDiffSections(
+        item({
+          previewLoaded: false,
+          sourcePreview: "",
+          outputPreview: "",
+        }),
+      ),
+    ).toEqual([]);
+  });
+
   it("內容與檔名作業同時顯示兩段差異", () => {
     expect(
       buildFileDiffSections(
@@ -68,6 +81,7 @@ describe("fileDiff", () => {
           outputPath: "/tmp/裡面.txt",
           sourcePreview: "里面开发",
           outputPreview: "裡面開發",
+          previewLoaded: true,
         }),
       ),
     ).toEqual([

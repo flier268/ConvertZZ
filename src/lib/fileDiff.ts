@@ -30,6 +30,20 @@ export function buildFileDiffSections(item: FilePlanItem): DiffSection[] {
     });
   }
 
+  // 內容尚未載入時不要塞空白內容區段。
+  if (!item.previewLoaded && !previewIsFilename) {
+    if (!renamed && (item.sourcePreview || item.outputPreview)) {
+      sections.push({
+        title: "檔名",
+        sourceLabel: "來源檔名",
+        outputLabel: "輸出檔名",
+        source: item.sourcePreview ?? "",
+        output: item.outputPreview ?? "",
+      });
+    }
+    return sections;
+  }
+
   if (!previewIsFilename) {
     sections.push({
       title: "內容",

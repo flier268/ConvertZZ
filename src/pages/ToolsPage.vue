@@ -4,6 +4,8 @@ import { ElMessage } from "element-plus";
 import type { TextEncoding, UtilityConvertRequest } from "@shared/contracts";
 import { core } from "../lib/coreClient";
 
+defineOptions({ name: "ToolsPage" });
+
 const source = ref("");
 const output = ref("");
 const kind = ref<UtilityConvertRequest["kind"]>("html-decimal-encode");

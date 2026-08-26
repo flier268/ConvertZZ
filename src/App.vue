@@ -226,7 +226,9 @@ onBeforeUnmount(() => unlisten.forEach((dispose) => dispose()));
     </el-aside>
     <el-main class="content">
       <template v-if="ready">
-        <keep-alive include="SettingsPage">
+        <keep-alive
+          include="QuickPage,FilesPage,ClipboardPage,AudioPage,ToolsPage,DictionaryPage,SettingsPage"
+        >
           <component :is="currentPage" />
         </keep-alive>
       </template>

@@ -204,7 +204,7 @@ async fn legacy_dictionary_reloads_after_same_mtime_replace() {
 async fn vocabulary_off_uses_glyph_only() {
     let result = service()
         .convert(ConversionRequest {
-            text: "里面".into(),
+            text: "里面开发面对表面钟表简繁转换".into(),
             direction: Direction::S2t,
             engine: EngineKind::Segmented,
             dictionary_path: None,
@@ -213,8 +213,20 @@ async fn vocabulary_off_uses_glyph_only() {
         })
         .await
         .unwrap();
-    assert_eq!(result.text, "里麵");
+    // cn2tw_min → cjk2zht: 里→裡, 钟→鐘, 换→換; 面 stays 面 (not 麵).
+    assert_eq!(result.text, "裡面開發面對表面鐘表簡繁轉換");
     assert!(result.warnings[0].contains("詞彙修正已停用"));
+}
+
+#[test]
+fn glyph_s2t_runs_min_before_zht() {
+    // Order matters for 钟: min→鐘, zht alone would yield 鍾.
+    assert_eq!(super::glyph_s2t("钟表"), "鐘表");
+    assert_eq!(super::glyph_s2t("秒钟"), "秒鐘");
+    assert_eq!(super::glyph_s2t("里面"), "裡面");
+    assert_eq!(super::glyph_s2t("面对表面"), "面對表面");
+    assert_eq!(super::glyph_s2t("简繁转换"), "簡繁轉換");
+    assert_eq!(super::glyph_s2t("説明書"), "說明書");
 }
 
 #[tokio::test]

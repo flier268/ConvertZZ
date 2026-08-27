@@ -2,7 +2,7 @@ use super::dictionary::LegacyDictionary;
 use super::error::CoreError;
 use super::types::{ConversionRequest, ConversionResult, Direction};
 use super::zhconvert::ZhConvertClient;
-use cjk_convert_rs::{cjk2zht, cn2tw, tw2cn};
+use cjk_convert_rs::{cjk2zht, cn2tw_min_with, tw2cn, ConvertOptions};
 use novel_segment::{DoSegmentOptions, Segment, SegmentOptions};
 use std::collections::HashMap;
 use std::fs::Metadata;
@@ -184,7 +184,7 @@ impl ConversionService {
                     },
                 )
                 .into_iter()
-                .map(|word| cjk2zht(&word))
+                .map(|word| glyph_s2t(&word))
                 .collect::<String>()
         } else {
             chunk.to_string()
@@ -202,7 +202,7 @@ impl ConversionService {
         );
         let segmented = words.join("");
         if direction == Direction::S2t {
-            cjk2zht(&segmented)
+            glyph_s2t(&segmented)
         } else {
             base_convert(&segmented, direction)
         }
@@ -225,9 +225,22 @@ impl ConversionService {
     }
 }
 
+/// S2T glyphs: `cn2tw_min` (safe: false) first, then `cjk2zht`.
+/// Min avoids 面→麵-style over-conversion and prefers 鐘 over 鍾; zht then fills
+/// CJK／日文變體 and ambiguous forms such as 里→裡. T2S keeps full `tw2cn`.
+/// Vocabulary fixes stay with `ZhtSynonymOptimizer`.
+const GLYPH_S2T_OPTS: ConvertOptions<'static> = ConvertOptions {
+    safe: false,
+    ..ConvertOptions::DEFAULT
+};
+
+fn glyph_s2t(text: &str) -> String {
+    cjk2zht(&cn2tw_min_with(text, &GLYPH_S2T_OPTS))
+}
+
 pub fn base_convert(text: &str, direction: Direction) -> String {
     match direction {
-        Direction::S2t => cn2tw(text),
+        Direction::S2t => glyph_s2t(text),
         Direction::T2s => tw2cn(text),
         Direction::None => text.to_string(),
     }

@@ -1,16 +1,15 @@
 use super::backup::{
     create_user_backups, resolve_backup_roots, resolve_path, wildcard_matcher, BackupRoot,
 };
-use super::conversion::ConversionService;
+use super::conversion::{base_convert, ConversionService};
 use super::encoding::{can_roundtrip, decode_text, encode_text};
 use super::error::CoreError;
 use super::types::{
-    ApplyFailure, ApplyResult, ConflictPolicy, ConversionOptions, FileConversionPlan, FileItemKind,
-    FileMode, FilePlanItem, FilePlanRequest, FilePreviewRequest, PlanStatus, ProgressReporter,
-    TextEncoding,
+    ApplyFailure, ApplyResult, ConflictPolicy, ConversionOptions, Direction, FileConversionPlan,
+    FileItemKind, FileMode, FilePlanItem, FilePlanRequest, FilePreviewRequest, PlanStatus,
+    ProgressReporter, TextEncoding,
 };
 use chrono::Utc;
-use cjk_convert_rs::cjk2zht;
 use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
@@ -1122,7 +1121,7 @@ fn repair_unrepresentable_big5(text: &str) -> String {
             if can_roundtrip(&value, TextEncoding::Big5) {
                 value
             } else {
-                cjk2zht(&value)
+                base_convert(&value, Direction::S2t)
             }
         })
         .collect()

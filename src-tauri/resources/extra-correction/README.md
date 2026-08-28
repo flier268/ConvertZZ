@@ -11,4 +11,4 @@ cp data/roundtrip-correction/zht.corpus.dict.txt \
    src-tauri/resources/extra-correction/zht.corpus.dict.txt
 ```
 
-只放這兩個檔。不要把檔案寫入 `../segment-dict`。那個目錄屬於套件，不屬這層修正。
+只放這兩個檔。不要 `cp -r` 整個 `data/roundtrip-correction`（內含 `checkpoint.json` 與 `state/`）。不要把檔案寫入 `../segment-dict`。那個目錄屬於套件，不屬這層修正。也不要把 `--output` 指到本目錄。

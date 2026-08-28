@@ -1,23 +1,32 @@
+mod aggregator;
+mod checkpoint;
+mod memory;
+mod run;
+
+pub use aggregator::{
+    finish_from_shards, merge_sorted_shard_files, FinishStats, PairAggregator, PairStat,
+    TEST_MAX_IN_MEMORY_KEYS, TEST_PEAK_IN_MEMORY_KEYS,
+};
+pub use checkpoint::{atomic_write, build_fingerprint, Checkpoint, Fingerprint};
+pub use memory::{
+    default_sampler, FakeSampler, MemoryPolicy, MemorySample, MemorySampler, ResolvedMemory,
+};
+pub use run::{run_roundtrip, RoundtripRunConfig, RoundtripRunStatus, RunStatus};
+
 use super::conversion::{base_convert, is_cjk_char, ConversionService};
 use super::types::Direction;
 use serde::Serialize;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
-const MIN_WORD_CHARS: usize = 2;
-const MAX_WORD_CHARS: usize = 8;
-const MAX_LINE_CHARS: usize = 20_000;
-const MAX_TOKEN_COUNT: usize = 800;
-const MAX_EXAMPLES: usize = 3;
+pub(crate) const MIN_WORD_CHARS: usize = 2;
+pub(crate) const MAX_WORD_CHARS: usize = 8;
+pub(crate) const MAX_LINE_CHARS: usize = 20_000;
+pub(crate) const MAX_TOKEN_COUNT: usize = 800;
+pub(crate) const MAX_EXAMPLES: usize = 3;
 const DEFAULT_POS: &str = "0x100000";
-
-#[derive(Clone, Debug, Default)]
-pub struct PairStat {
-    pub count: u64,
-    pub examples: Vec<String>,
-}
 
 #[derive(Clone, Debug)]
 pub struct LineResult {
@@ -58,144 +67,15 @@ pub struct ReportPair {
     pub examples: Vec<String>,
 }
 
-#[derive(Clone, Default)]
-pub struct PairAggregator {
-    stats: HashMap<(String, String), PairStat>,
-}
-
-impl PairAggregator {
-    pub fn add(&mut self, variant: String, canonical: String, example: &str) {
-        let stat = self.stats.entry((variant, canonical)).or_default();
-        stat.count += 1;
-        if stat.examples.len() < MAX_EXAMPLES && !stat.examples.iter().any(|item| item == example) {
-            stat.examples.push(truncate_example(example));
-        }
-    }
-
-    pub fn merge(&mut self, other: Self) {
-        for (key, incoming) in other.stats {
-            let stat = self.stats.entry(key).or_default();
-            stat.count += incoming.count;
-            for example in incoming.examples {
-                if stat.examples.len() >= MAX_EXAMPLES {
-                    break;
-                }
-                if !stat.examples.contains(&example) {
-                    stat.examples.push(example);
-                }
-            }
-        }
-    }
-
-    pub fn raw_occurrences(&self) -> u64 {
-        self.stats.values().map(|stat| stat.count).sum()
-    }
-
-    pub fn unique_raw_pairs(&self) -> usize {
-        self.stats.len()
-    }
-
-    pub fn finish(
-        self,
-        min_count: u64,
-        min_dominance: f64,
-        skip_variants: &HashSet<String>,
-    ) -> (Vec<CorrectionEntry>, FinishStats) {
-        let mut by_variant: HashMap<String, Vec<(String, PairStat)>> = HashMap::new();
-        for ((variant, canonical), stat) in self.stats {
-            by_variant
-                .entry(variant)
-                .or_default()
-                .push((canonical, stat));
-        }
-
-        let mut skipped_existing = 0;
-        let mut skipped_low_count = 0;
-        let mut skipped_ambiguous = 0;
-        let mut grouped: HashMap<String, Vec<(String, u64)>> = HashMap::new();
-        let mut top_pairs = Vec::new();
-
-        for (variant, mut candidates) in by_variant {
-            if skip_variants.contains(&variant) {
-                skipped_existing += 1;
-                continue;
-            }
-            candidates.sort_by(|left, right| {
-                right
-                    .1
-                    .count
-                    .cmp(&left.1.count)
-                    .then_with(|| left.0.cmp(&right.0))
-            });
-            let total: u64 = candidates.iter().map(|item| item.1.count).sum();
-            let (canonical, best) = &candidates[0];
-            if best.count < min_count {
-                skipped_low_count += 1;
-                continue;
-            }
-            if total == 0 || (best.count as f64 / total as f64) < min_dominance {
-                skipped_ambiguous += 1;
-                continue;
-            }
-            if canonical == &variant {
-                continue;
-            }
-            top_pairs.push(ReportPair {
-                canonical: canonical.clone(),
-                variant: variant.clone(),
-                count: best.count,
-                examples: best.examples.clone(),
-            });
-            grouped
-                .entry(canonical.clone())
-                .or_default()
-                .push((variant, best.count));
-        }
-
-        top_pairs.sort_by(|left, right| {
-            right
-                .count
-                .cmp(&left.count)
-                .then_with(|| left.canonical.cmp(&right.canonical))
-                .then_with(|| left.variant.cmp(&right.variant))
-        });
-
-        let mut entries: Vec<CorrectionEntry> = grouped
-            .into_iter()
-            .map(|(canonical, mut variants)| {
-                variants
-                    .sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
-                CorrectionEntry {
-                    canonical,
-                    variants,
-                }
-            })
-            .collect();
-        entries.sort_by(|left, right| left.canonical.cmp(&right.canonical));
-
-        let kept_variants = entries.iter().map(|entry| entry.variants.len()).sum();
-        (
-            entries,
-            FinishStats {
-                skipped_existing,
-                skipped_low_count,
-                skipped_ambiguous,
-                kept_variants,
-                top_pairs,
-            },
-        )
-    }
-}
-
-pub struct FinishStats {
-    pub skipped_existing: usize,
-    pub skipped_low_count: usize,
-    pub skipped_ambiguous: usize,
-    pub kept_variants: usize,
-    pub top_pairs: Vec<ReportPair>,
-}
-
 pub fn process_line(service: &ConversionService, line: &str) -> LineResult {
+    process_line_with_buf(service, line, None)
+}
+
+pub(crate) fn process_line_with_buf(
+    service: &ConversionService,
+    line: &str,
+    lcs_buf: Option<&mut Vec<u32>>,
+) -> LineResult {
     let line = line.trim();
     if !should_process(line) {
         return LineResult {
@@ -225,7 +105,7 @@ pub fn process_line(service: &ConversionService, line: &str) -> LineResult {
     LineResult {
         skipped: false,
         mismatched: true,
-        pairs: extract_pairs(&original_tokens, &reconstructed_tokens),
+        pairs: extract_pairs_with_buf(&original_tokens, &reconstructed_tokens, lcs_buf),
     }
 }
 
@@ -236,14 +116,21 @@ pub fn should_process(line: &str) -> bool {
     cjk_char_count(line) >= MIN_WORD_CHARS
 }
 
-/// Align segmented original tokens with round-tripped tokens.
-/// Pairs are word-level; single characters and non-CJK spans are ignored.
 pub fn extract_pairs(original: &[String], reconstructed: &[String]) -> Vec<(String, String)> {
+    extract_pairs_with_buf(original, reconstructed, None)
+}
+
+fn extract_pairs_with_buf(
+    original: &[String],
+    reconstructed: &[String],
+    lcs_buf: Option<&mut Vec<u32>>,
+) -> Vec<(String, String)> {
     if original == reconstructed {
         return Vec::new();
     }
     let mut pairs = Vec::new();
-    for (original_hunk, reconstructed_hunk) in token_replace_hunks(original, reconstructed) {
+    for (original_hunk, reconstructed_hunk) in token_replace_hunks(original, reconstructed, lcs_buf)
+    {
         pairs.extend(pairs_from_hunk(&original_hunk, &reconstructed_hunk));
     }
     pairs
@@ -324,16 +211,28 @@ fn same_conversion_family(left: &str, right: &str) -> bool {
 fn token_replace_hunks(
     original: &[String],
     reconstructed: &[String],
+    lcs_buf: Option<&mut Vec<u32>>,
 ) -> Vec<(Vec<String>, Vec<String>)> {
     let n = original.len();
     let m = reconstructed.len();
-    let mut dp = vec![vec![0u32; m + 1]; n + 1];
+    let cols = m + 1;
+    let needed = (n + 1) * cols;
+    let mut owned;
+    let buf: &mut Vec<u32> = match lcs_buf {
+        Some(buf) => buf,
+        None => {
+            owned = Vec::new();
+            &mut owned
+        }
+    };
+    buf.clear();
+    buf.resize(needed, 0);
     for i in 0..n {
         for j in 0..m {
-            dp[i + 1][j + 1] = if original[i] == reconstructed[j] {
-                dp[i][j] + 1
+            buf[(i + 1) * cols + j + 1] = if original[i] == reconstructed[j] {
+                buf[i * cols + j] + 1
             } else {
-                dp[i + 1][j].max(dp[i][j + 1])
+                buf[(i + 1) * cols + j].max(buf[i * cols + j + 1])
             };
         }
     }
@@ -351,7 +250,7 @@ fn token_replace_hunks(
             ops.push(Op::Equal);
             i -= 1;
             j -= 1;
-        } else if j > 0 && (i == 0 || dp[i][j - 1] >= dp[i - 1][j]) {
+        } else if j > 0 && (i == 0 || buf[i * cols + (j - 1)] >= buf[(i - 1) * cols + j]) {
             ops.push(Op::Insert(reconstructed[j - 1].clone()));
             j -= 1;
         } else {
@@ -403,7 +302,7 @@ fn join_cjk_words(tokens: &[String]) -> String {
         .collect()
 }
 
-fn truncate_example(line: &str) -> String {
+pub(crate) fn truncate_example(line: &str) -> String {
     const LIMIT: usize = 80;
     let mut count = 0;
     let mut end = 0;
@@ -610,6 +509,15 @@ pub fn is_package_data_path(path: &Path) -> bool {
     })
 }
 
+pub fn is_extra_correction_path(path: &Path) -> bool {
+    path.components().any(|component| {
+        component
+            .as_os_str()
+            .to_str()
+            .is_some_and(|name| name == "extra-correction")
+    })
+}
+
 pub fn assert_output_outside_sources(output: &Path, sources: &Path) -> Result<(), String> {
     let output_abs = normalize_for_compare(output);
     let sources_abs = normalize_for_compare(sources);
@@ -630,7 +538,23 @@ pub fn assert_output_outside_package_data(output: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn normalize_for_compare(path: &Path) -> PathBuf {
+pub fn assert_output_outside_extra_correction(output: &Path) -> Result<(), String> {
+    let output_abs = normalize_for_compare(output);
+    if is_extra_correction_path(&output_abs) {
+        return Err(
+            "輸出目錄不可位於 extra-correction 內。檢查點與 state/ 不得寫入套用目錄。".into(),
+        );
+    }
+    Ok(())
+}
+
+pub fn assert_paths(output: &Path, sources: &Path) -> Result<(), String> {
+    assert_output_outside_sources(output, sources)?;
+    assert_output_outside_package_data(output)?;
+    assert_output_outside_extra_correction(output)
+}
+
+pub(crate) fn normalize_for_compare(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| {
         if path.is_absolute() {
             path.to_path_buf()
@@ -653,228 +577,4 @@ pub fn read_text_lines(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::core::conversion::shared_conversion;
-
-    fn tokens(items: &[&str]) -> Vec<String> {
-        items.iter().map(|item| (*item).to_string()).collect()
-    }
-
-    #[test]
-    fn extract_pairs_uses_original_word_boundaries() {
-        let pairs = extract_pairs(&tokens(&["裡面"]), &tokens(&["裏", "面"]));
-        assert_eq!(pairs, vec![("裏面".into(), "裡面".into())]);
-        assert!(!pairs.iter().any(|(variant, canonical)| {
-            variant.chars().count() == 1 || canonical.chars().count() == 1
-        }));
-    }
-
-    #[test]
-    fn extract_pairs_skips_identical_tokens() {
-        assert!(extract_pairs(
-            &tokens(&["我們", "在", "這裡"]),
-            &tokens(&["我們", "在", "這裡"])
-        )
-        .is_empty());
-    }
-
-    #[test]
-    fn extract_pairs_aligns_multiple_words() {
-        let pairs = extract_pairs(
-            &tokens(&["我們", "在", "這裡", "裡面"]),
-            &tokens(&["我們", "在", "這裏", "裏面"]),
-        );
-        assert_eq!(
-            pairs,
-            vec![
-                ("這裏".into(), "這裡".into()),
-                ("裏面".into(), "裡面".into()),
-            ]
-        );
-    }
-
-    #[test]
-    fn extract_pairs_ignores_single_character_and_non_cjk() {
-        let pairs = extract_pairs(&tokens(&["裡", "A"]), &tokens(&["裏", "A"]));
-        assert!(pairs.is_empty());
-    }
-
-    #[test]
-    fn extract_pairs_does_not_emit_character_replace_across_word_boundary() {
-        let pairs = extract_pairs(&tokens(&["皇后", "裡面"]), &tokens(&["皇后", "裏面"]));
-        assert_eq!(pairs, vec![("裏面".into(), "裡面".into())]);
-        assert!(!pairs.iter().any(|(variant, _)| variant.contains("皇后")));
-    }
-
-    #[test]
-    fn aggregator_keeps_dominant_canonical() {
-        let mut aggregator = PairAggregator::default();
-        for _ in 0..10 {
-            aggregator.add("裏面".into(), "裡面".into(), "冰箱裡面");
-        }
-        aggregator.add("裏面".into(), "裏麵".into(), "noise");
-        let skip = HashSet::new();
-        let (entries, stats) = aggregator.finish(3, 0.7, &skip);
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].canonical, "裡面");
-        assert_eq!(entries[0].variants, vec![("裏面".into(), 10)]);
-        assert_eq!(stats.skipped_ambiguous, 0);
-    }
-
-    #[test]
-    fn aggregator_drops_ambiguous_variant() {
-        let mut aggregator = PairAggregator::default();
-        aggregator.add("裏面".into(), "裡面".into(), "a");
-        aggregator.add("裏面".into(), "裏麵".into(), "b");
-        let skip = HashSet::new();
-        let (entries, stats) = aggregator.finish(1, 0.7, &skip);
-        assert!(entries.is_empty());
-        assert_eq!(stats.skipped_ambiguous, 1);
-    }
-
-    #[test]
-    fn synonym_format_is_canonical_then_variants() {
-        let text = format_synonym_file(&[CorrectionEntry {
-            canonical: "裡面".into(),
-            variants: vec![("裏面".into(), 4), ("里边".into(), 2)],
-        }]);
-        assert!(text.contains("裡面,裏面,里边\n"));
-        assert!(text.contains("分詞"));
-    }
-
-    #[test]
-    fn parse_synonym_line_skips_comments() {
-        assert!(parse_synonym_line("// comment").is_none());
-        assert_eq!(
-            parse_synonym_line("裡面,裏面"),
-            Some(("裡面".into(), vec!["裏面".into()]))
-        );
-    }
-
-    #[test]
-    fn process_line_pairs_are_segmented_words() {
-        let service = shared_conversion();
-        let result = process_line(service, "冰箱裡面大概就剩幾顆蛋跟半盒牛奶");
-        for (variant, canonical) in &result.pairs {
-            assert!(is_cjk_word(variant), "{variant}");
-            assert!(is_cjk_word(canonical), "{canonical}");
-            assert!(variant.chars().count() >= 2);
-            assert!(canonical.chars().count() >= 2);
-            assert_ne!(variant, canonical);
-        }
-    }
-
-    #[test]
-    fn corpus_files_requires_txt_files() {
-        let err = corpus_files(
-            Path::new("/tmp/convertzz-missing-corpus"),
-            &CorpusSelect::default(),
-        )
-        .unwrap_err();
-        assert!(err.contains("必須是目錄") || err.contains("找不到"));
-    }
-
-    #[test]
-    fn corpus_files_scans_nested_txt() {
-        let root = std::env::temp_dir().join(format!("convertzz-corpus-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(root.join("a")).unwrap();
-        fs::create_dir_all(root.join("b/nested")).unwrap();
-        fs::write(root.join("a/one.txt"), "甲\n").unwrap();
-        fs::write(root.join("b/two.txt"), "乙\n").unwrap();
-        fs::write(root.join("b/nested/three.txt"), "丙\n").unwrap();
-        fs::write(root.join("b/skip.json"), "{}\n").unwrap();
-        let files = corpus_files(&root, &CorpusSelect::default()).expect("corpus");
-        let names: Vec<String> = files
-            .iter()
-            .map(|path| {
-                path.strip_prefix(&root)
-                    .unwrap()
-                    .to_string_lossy()
-                    .replace('\\', "/")
-            })
-            .collect();
-        let _ = fs::remove_dir_all(&root);
-        assert_eq!(names, vec!["a/one.txt", "b/nested/three.txt", "b/two.txt"]);
-    }
-
-    #[test]
-    fn corpus_files_include_only_named_top_level() {
-        let root =
-            std::env::temp_dir().join(format!("convertzz-corpus-include-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(root.join("keep")).unwrap();
-        fs::create_dir_all(root.join("skip")).unwrap();
-        fs::write(root.join("keep/one.txt"), "甲\n").unwrap();
-        fs::write(root.join("skip/two.txt"), "乙\n").unwrap();
-        let files = corpus_files(
-            &root,
-            &CorpusSelect {
-                include: vec!["keep".into()],
-                exclude: Vec::new(),
-            },
-        )
-        .expect("corpus");
-        let names: Vec<String> = files
-            .iter()
-            .map(|path| {
-                path.strip_prefix(&root)
-                    .unwrap()
-                    .to_string_lossy()
-                    .replace('\\', "/")
-            })
-            .collect();
-        let _ = fs::remove_dir_all(&root);
-        assert_eq!(names, vec!["keep/one.txt"]);
-    }
-
-    #[test]
-    fn corpus_files_exclude_named_top_level() {
-        let root =
-            std::env::temp_dir().join(format!("convertzz-corpus-exclude-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(root.join("keep")).unwrap();
-        fs::create_dir_all(root.join("skip")).unwrap();
-        fs::write(root.join("keep/one.txt"), "甲\n").unwrap();
-        fs::write(root.join("skip/two.txt"), "乙\n").unwrap();
-        let files = corpus_files(
-            &root,
-            &CorpusSelect {
-                include: Vec::new(),
-                exclude: vec!["skip".into()],
-            },
-        )
-        .expect("corpus");
-        let names: Vec<String> = files
-            .iter()
-            .map(|path| {
-                path.strip_prefix(&root)
-                    .unwrap()
-                    .to_string_lossy()
-                    .replace('\\', "/")
-            })
-            .collect();
-        let _ = fs::remove_dir_all(&root);
-        assert_eq!(names, vec!["keep/one.txt"]);
-    }
-
-    #[test]
-    fn output_must_not_sit_inside_sources() {
-        let sources = Path::new("/tmp/convertzz-sources-root");
-        let output = sources.join("nested");
-        let err = assert_output_outside_sources(&output, sources).unwrap_err();
-        assert!(err.contains("只讀"));
-    }
-
-    #[test]
-    fn output_must_not_sit_inside_package_dicts() {
-        let output = Path::new("/tmp/app/segment-dict/synonym");
-        let err = assert_output_outside_package_data(output).unwrap_err();
-        assert!(err.contains("套件"));
-        assert!(is_package_data_path(output));
-        assert!(!is_package_data_path(Path::new(
-            "/tmp/app/extra-correction"
-        )));
-    }
-}
+mod tests;

@@ -73,6 +73,19 @@ async fn preserves_whitespace_and_punctuation() {
 }
 
 #[test]
+fn extra_correction_candidates_stay_outside_package_dicts() {
+    let exe = Path::new("/tmp/squashfs-root/usr/bin/convertzz");
+    let appdir = Path::new("/tmp/squashfs-root");
+    let candidates = super::extra_correction_candidates(Some(exe), Some(appdir));
+    assert!(candidates
+        .iter()
+        .all(|path| !super::super::roundtrip_dict::is_package_data_path(path)));
+    assert!(candidates.iter().any(|path| {
+        path.ends_with("extra-correction") && !path.ends_with("segment-dict/extra-correction")
+    }));
+}
+
+#[test]
 fn segment_dict_candidates_include_linux_bundle_layout() {
     let exe = Path::new("/tmp/squashfs-root/usr/bin/convertzz");
     let appdir = Path::new("/tmp/squashfs-root");

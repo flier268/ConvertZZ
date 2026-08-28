@@ -1,6 +1,9 @@
 mod core;
 mod selection;
 
+pub use core::roundtrip_dict;
+pub use core::{ConversionService, Direction};
+
 use core::{CoreError, CoreState, ProgressEvent};
 use enigo::{Enigo, Mouse, Settings};
 use keyring::Entry;

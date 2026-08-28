@@ -10,6 +10,8 @@ ConvertZZ 是跨平台中文轉換工具。
 
 問題請回報至 [GitHub Issues](https://github.com/flier268/ConvertZZ/issues)。
 
+教學與開發文件在 [GitHub Wiki](https://github.com/flier268/ConvertZZ/wiki)，本倉庫以 submodule 掛在 [`wiki/`](wiki/)。
+
 ## 主要功能
 
 - 快速簡繁轉換。
@@ -276,6 +278,14 @@ AppImage 會封裝建置時收集到的對應執行函式庫。
 檔案、檔名與音訊標籤寫入前預設會建立 `.bak` 備份；選取資料夾時備份整份資料夾為 `資料夾.bak`。可在設定中關閉「轉換前自動備份」，或於命令列使用 `/b:f`。
 
 ## 開發與建置環境
+
+Clone 時一併取得 Wiki submodule：
+
+```bash
+git clone --recurse-submodules https://github.com/flier268/ConvertZZ.git
+```
+
+已經 clone 過時執行 `git submodule update --init --recursive`。Wiki 維護步驟見 [wiki/Wiki維護.md](wiki/Wiki維護.md)。語料回環詞典工具見 [wiki/語料回環修正詞典.md](wiki/語料回環修正詞典.md)。
 
 需要 Node.js 24。
 

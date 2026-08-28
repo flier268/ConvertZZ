@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程見 [README.md](README.md)。遷移範圍與未完成驗收條件見 [docs/MIGRATION_PLAN.md](docs/MIGRATION_PLAN.md)；已通過項目見 [docs/MIGRATION_COMPLETED.md](docs/MIGRATION_COMPLETED.md)。
+ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程見 [README.md](README.md)。使用者與開發 Wiki 掛在 [wiki/](wiki/)（git submodule，遠端為 `ConvertZZ.wiki.git`）。遷移範圍與未完成驗收條件見 [docs/MIGRATION_PLAN.md](docs/MIGRATION_PLAN.md)；已通過項目見 [docs/MIGRATION_COMPLETED.md](docs/MIGRATION_COMPLETED.md)。
 
 使用繁體中文與使用者溝通。使用者介面字串也使用繁體中文。
 
@@ -12,6 +12,10 @@ ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程
 | `src/pages/` | 快速轉換、檔案、剪貼簿、音訊、工具、字典、設定、關於 |
 | `src/lib/` | 前端動作、設定、核心客戶端、CLI、托盤與快捷鍵協調 |
 | `src-tauri/src/core/` | 文字、編碼、檔案、字典、音訊標籤與舊設定匯入 |
+| `src-tauri/src/bin/roundtrip-dict.rs` | 語料回環比較，產出套件外的額外分詞修正；來源語料只讀 |
+| `src-tauri/resources/extra-correction/` | ConvertZZ 額外修正層；與 `segment-dict` 分開，不得寫入套件字典 |
+| `data/roundtrip-correction/` | 回環工具產出（產生檔，不進 git、不進套件字典） |
+| `wiki/` | GitHub Wiki submodule（`ConvertZZ.wiki.git`）；教學與開發文件 |
 | `src-tauri/` | 視窗、托盤、快捷鍵、憑證庫、轉換核心與平台能力 |
 | `shared/contracts.ts` | 前後端共用的操作與型別 |
 | `scripts/` | git hook 與 Linux 驗證 |
@@ -29,12 +33,14 @@ ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程
 - 變更通訊協定時，先改 `shared/contracts.ts`，再同步 `src-tauri/src/core` dispatch 與前端客戶端。
 - 前端不得取得任意 Shell。檔案路徑只可來自選擇器或已驗證的工作項目。
 - 新式引擎只使用 `ws-segment-rs` 的分詞與 `ZhtSynonymOptimizer`，字形只交給 `cjk-convert-rs`。不要新增硬編碼語意取代清單。
+- 分詞與簡轉繁套件字典維持 `resources/segment-dict`（來自套件）。語料回環修正是 ConvertZZ 額外層，只放 `extra-correction` 或 `data/roundtrip-correction`，不得寫入、覆寫或併入套件詞典。
 
 ## 建置與檢查
 
 需要 Node.js 24、Rust stable，以及 `package.json` 的 `packageManager` 所指定的 pnpm。Linux 建置套件見 README，不要自行加入 `libxdo-dev` 或 `libssl-dev`。
 
 ```bash
+git submodule update --init --recursive
 pnpm install --frozen-lockfile
 pnpm run dev
 pnpm run check
@@ -42,6 +48,8 @@ pnpm test
 pnpm fmt
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
+
+Wiki 在 `wiki/`。修改後先於 `wiki/` 內 commit 並 `git push origin master`，再於主倉庫更新 submodule 指標。說明見 [wiki/Wiki維護.md](wiki/Wiki維護.md)。`roundtrip-dict` 用法見 [wiki/語料回環修正詞典.md](wiki/語料回環修正詞典.md)。
 
 - `pnpm run dev` = `tauri dev`。`beforeDevCommand` 只跑 `dev:web`（Vite）。
 - 改 Rust 核心後若 dev 已在跑，請重啟 `tauri dev`。

@@ -12,6 +12,10 @@ rust-version = "1.89"
 name = "convertzz_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[[bin]]
+name = "roundtrip-dict"
+path = "src/bin/roundtrip-dict.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -25,6 +29,7 @@ enigo = "0.6.1"
 id3 = "1.17.1"
 keyring = "4.1.6"
 lofty = "0.25.1"
+rayon = "1.12.0"
 regex = "1.13.1"
 reqwest = { version = "0.13.4", default-features = false, features = ["form", "json", "rustls"] }
 serde = { version = "1", features = ["derive"] }

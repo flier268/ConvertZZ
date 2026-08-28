@@ -67,6 +67,7 @@
     "resources": {
       "../resources/Dictionary.csv": "Dictionary.csv",
       "resources/segment-dict": "segment-dict",
+      "resources/extra-correction": "extra-correction",
       "../THIRD_PARTY_NOTICES.md": "licenses/THIRD_PARTY_NOTICES.md"
     },
     "icon": ["icons/icon.png", "icons/icon.ico"],

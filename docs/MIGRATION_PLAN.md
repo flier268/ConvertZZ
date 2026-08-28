@@ -143,6 +143,7 @@ AppIndicator 開發套件只存在於建置環境。
 - 專案不維護額外的硬編碼語意取代清單。
 - 轉換核心在 Tauri 同程序內執行，不另外封裝外部 Node.js 程序。
 - 分詞字典以 `resources/segment-dict` 封入安裝包。
+- 語料回環修正是 ConvertZZ 額外層，以 `resources/extra-correction` 與套件字典分開封入；不得寫入 `segment-dict`。
 - Linux 的 Tauri 托盤不提供左鍵事件。
 - Linux 使用者需從托盤選單開啟主視窗。
 - 舊版 `Encoding.Default` 會隨 Windows 系統碼頁改變。

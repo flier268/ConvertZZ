@@ -7,16 +7,17 @@ mod dictionary_service;
 mod encoding;
 mod error;
 mod files;
+pub mod roundtrip_dict;
 mod settings;
 mod types;
 mod utility;
 mod zhconvert;
 
+pub use conversion::ConversionService;
 pub use error::CoreError;
-pub use types::{ProgressEvent, ProgressReporter};
+pub use types::{Direction, ProgressEvent, ProgressReporter};
 
 use audio::AudioService;
-use conversion::ConversionService;
 use dictionary_service::DictionaryService;
 use files::FileService;
 use serde_json::Value;

@@ -1,5 +1,6 @@
 use super::dictionary::LegacyDictionary;
 use super::error::CoreError;
+use super::roundtrip_dict::{is_package_data_path, parse_synonym_line};
 use super::types::{ConversionRequest, ConversionResult, Direction};
 use super::zhconvert::ZhConvertClient;
 use cjk_convert_rs::{cjk2zht, cn2tw_min_with, tw2cn, ConvertOptions};
@@ -92,8 +93,79 @@ fn configure_segment_dict_root() {
     }
 }
 
+fn extra_correction_candidates(executable: Option<&Path>, appdir: Option<&Path>) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(path) = std::env::var_os("CONVERTZZ_EXTRA_CORRECTION") {
+        candidates.push(PathBuf::from(path));
+    }
+    candidates.extend([
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/extra-correction"),
+        PathBuf::from("src-tauri/resources/extra-correction"),
+    ]);
+    if let Some(directory) = executable.and_then(Path::parent) {
+        candidates.push(directory.join("extra-correction"));
+        candidates.push(directory.join("resources/extra-correction"));
+        candidates.push(directory.join("../lib/ConvertZZ/extra-correction"));
+    }
+    if let Some(appdir) = appdir {
+        candidates.push(appdir.join("usr/lib/ConvertZZ/extra-correction"));
+        candidates.push(appdir.join("extra-correction"));
+    }
+    candidates
+        .into_iter()
+        .filter(|path| !is_package_data_path(path))
+        .collect()
+}
+
+fn load_extra_correction(segmenter: &mut Segment) -> Result<(), CoreError> {
+    let executable = std::env::current_exe().ok();
+    let appdir = std::env::var_os("APPDIR").map(PathBuf::from);
+    let Some(root) = extra_correction_candidates(executable.as_deref(), appdir.as_deref())
+        .into_iter()
+        .find(|path| path.is_dir())
+    else {
+        return Ok(());
+    };
+    if is_package_data_path(&root) {
+        return Err(CoreError::new(
+            "EXTRA_CORRECTION",
+            "額外修正目錄不可位於分詞或簡轉繁套件資料內。",
+        ));
+    }
+    let dict = root.join("zht.corpus.dict.txt");
+    if dict.is_file() {
+        segmenter.load_dict_file(&dict).map_err(|error| {
+            CoreError::new("EXTRA_CORRECTION", format!("無法載入額外分詞表：{error}"))
+        })?;
+    }
+    let synonym = root.join("zht.corpus.synonym.txt");
+    if synonym.is_file() {
+        let text = std::fs::read_to_string(&synonym).map_err(|error| {
+            CoreError::new("EXTRA_CORRECTION", format!("無法讀取額外同義詞：{error}"))
+        })?;
+        for line in text.lines() {
+            if let Some((canonical, variants)) = parse_synonym_line(line) {
+                let refs: Vec<&str> = variants.iter().map(String::as_str).collect();
+                let _ = segmenter.add_word(&canonical, Some(0x100000), Some(1000.0));
+                segmenter.add_synonym(&canonical, &refs);
+            }
+        }
+    }
+    Ok(())
+}
+
 impl ConversionService {
     pub fn new(default_dictionary: Option<PathBuf>) -> Result<Self, CoreError> {
+        Self::build(default_dictionary, true)
+    }
+
+    pub fn without_extra_correction(
+        default_dictionary: Option<PathBuf>,
+    ) -> Result<Self, CoreError> {
+        Self::build(default_dictionary, false)
+    }
+
+    fn build(default_dictionary: Option<PathBuf>, load_extra: bool) -> Result<Self, CoreError> {
         configure_segment_dict_root();
         let mut segmenter = Segment::new(SegmentOptions {
             auto_cjk: true,
@@ -103,12 +175,39 @@ impl ConversionService {
         segmenter
             .use_default()
             .map_err(|error| CoreError::new("SEGMENTER", format!("無法初始化分詞引擎：{error}")))?;
+        if load_extra {
+            load_extra_correction(&mut segmenter)?;
+        }
         Ok(Self {
             segmenter,
             dictionaries: Mutex::new(HashMap::new()),
             default_dictionary,
             zhconvert: ZhConvertClient::new(),
         })
+    }
+
+    pub fn convert_segmented(&self, text: &str, direction: Direction) -> String {
+        if text.is_empty() || direction == Direction::None {
+            return text.to_string();
+        }
+        self.segmented_convert(text, direction)
+    }
+
+    pub fn segment_tokens(&self, text: &str) -> Vec<String> {
+        if text.is_empty() {
+            return Vec::new();
+        }
+        self.segmenter.do_segment_simple(
+            text,
+            DoSegmentOptions {
+                simple: Some(true),
+                strip_punctuation: Some(false),
+                strip_stopword: Some(false),
+                strip_space: Some(false),
+                convert_synonym: Some(false),
+                disable_modules: Vec::new(),
+            },
+        )
     }
 
     pub async fn convert(&self, request: ConversionRequest) -> Result<ConversionResult, CoreError> {

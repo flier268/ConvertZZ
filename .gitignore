@@ -277,3 +277,8 @@ playwright-report/
 blob-report/
 playwright/.cache/
 *.log
+data/roundtrip-correction/
+
+# Visual Studio 規則會忽略 [Bb]in/，但 Tauri 的 extra binary 在這裡。
+!src-tauri/src/bin/
+!src-tauri/src/bin/**

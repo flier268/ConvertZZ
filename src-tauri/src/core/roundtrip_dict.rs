@@ -1,6 +1,5 @@
-use super::conversion::ConversionService;
+use super::conversion::{base_convert, is_cjk_char, ConversionService};
 use super::types::Direction;
-use cjk_convert_rs::tw2cn;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -306,7 +305,7 @@ fn usable_pair(variant: &str, canonical: &str) -> Option<(String, String)> {
 }
 
 fn same_conversion_family(left: &str, right: &str) -> bool {
-    if tw2cn(left) == tw2cn(right) {
+    if base_convert(left, Direction::T2s) == base_convert(right, Direction::T2s) {
         return true;
     }
     let left_chars: Vec<char> = left.chars().collect();
@@ -390,21 +389,6 @@ pub fn is_cjk_word(text: &str) -> bool {
     !text.is_empty() && text.chars().all(is_cjk_char)
 }
 
-pub fn is_cjk_char(character: char) -> bool {
-    matches!(
-        character,
-        '\u{3400}'..='\u{4DBF}'
-            | '\u{4E00}'..='\u{9FFF}'
-            | '\u{F900}'..='\u{FAFF}'
-            | '\u{20000}'..='\u{2A6DF}'
-            | '\u{2A700}'..='\u{2B73F}'
-            | '\u{2B740}'..='\u{2B81F}'
-            | '\u{2B820}'..='\u{2CEAF}'
-            | '\u{2CEB0}'..='\u{2EBEF}'
-            | '\u{30000}'..='\u{3134F}'
-    )
-}
-
 fn cjk_char_count(text: &str) -> usize {
     text.chars()
         .filter(|character| is_cjk_char(*character))
@@ -437,20 +421,59 @@ fn truncate_example(line: &str) -> String {
     }
 }
 
-pub fn corpus_files(sources_root: &Path) -> Result<Vec<PathBuf>, String> {
+#[derive(Clone, Debug, Default)]
+pub struct CorpusSelect {
+    pub include: Vec<String>,
+    pub exclude: Vec<String>,
+}
+
+pub fn corpus_files(sources_root: &Path, select: &CorpusSelect) -> Result<Vec<PathBuf>, String> {
     if !sources_root.is_dir() {
         return Err(format!("來源必須是目錄：{}", sources_root.display()));
     }
     let mut files = Vec::new();
-    collect_txt_files(sources_root, &mut files)?;
+    let mut entries: Vec<_> = fs::read_dir(sources_root)
+        .map_err(|error| format!("無法讀取 {}：{error}", sources_root.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("無法讀取 {}：{error}", sources_root.display()))?;
+    entries.sort_by_key(|entry| entry.path());
+    for entry in entries {
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("無法判斷 {}：{error}", entry.path().display()))?;
+        if file_type.is_symlink() {
+            continue;
+        }
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if file_type.is_dir() {
+            if !allowed_top_level(&name, select) {
+                continue;
+            }
+            collect_txt_files(&path, &mut files)?;
+        } else if file_type.is_file()
+            && is_txt_file(&path)
+            && select.include.is_empty()
+            && !select.exclude.iter().any(|item| item == &name)
+        {
+            files.push(path);
+        }
+    }
     files.sort();
     if files.is_empty() {
         return Err(format!(
-            "在 {} 找不到 .txt 語料檔。",
+            "在 {} 找不到符合選取條件的 .txt 語料檔。",
             sources_root.display()
         ));
     }
     Ok(files)
+}
+
+fn allowed_top_level(name: &str, select: &CorpusSelect) -> bool {
+    if select.exclude.iter().any(|item| item == name) {
+        return false;
+    }
+    select.include.is_empty() || select.include.iter().any(|item| item == name)
 }
 
 fn collect_txt_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
@@ -744,7 +767,11 @@ mod tests {
 
     #[test]
     fn corpus_files_requires_txt_files() {
-        let err = corpus_files(Path::new("/tmp/convertzz-missing-corpus")).unwrap_err();
+        let err = corpus_files(
+            Path::new("/tmp/convertzz-missing-corpus"),
+            &CorpusSelect::default(),
+        )
+        .unwrap_err();
         assert!(err.contains("必須是目錄") || err.contains("找不到"));
     }
 
@@ -758,7 +785,7 @@ mod tests {
         fs::write(root.join("b/two.txt"), "乙\n").unwrap();
         fs::write(root.join("b/nested/three.txt"), "丙\n").unwrap();
         fs::write(root.join("b/skip.json"), "{}\n").unwrap();
-        let files = corpus_files(&root).expect("corpus");
+        let files = corpus_files(&root, &CorpusSelect::default()).expect("corpus");
         let names: Vec<String> = files
             .iter()
             .map(|path| {
@@ -770,6 +797,66 @@ mod tests {
             .collect();
         let _ = fs::remove_dir_all(&root);
         assert_eq!(names, vec!["a/one.txt", "b/nested/three.txt", "b/two.txt"]);
+    }
+
+    #[test]
+    fn corpus_files_include_only_named_top_level() {
+        let root =
+            std::env::temp_dir().join(format!("convertzz-corpus-include-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("keep")).unwrap();
+        fs::create_dir_all(root.join("skip")).unwrap();
+        fs::write(root.join("keep/one.txt"), "甲\n").unwrap();
+        fs::write(root.join("skip/two.txt"), "乙\n").unwrap();
+        let files = corpus_files(
+            &root,
+            &CorpusSelect {
+                include: vec!["keep".into()],
+                exclude: Vec::new(),
+            },
+        )
+        .expect("corpus");
+        let names: Vec<String> = files
+            .iter()
+            .map(|path| {
+                path.strip_prefix(&root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect();
+        let _ = fs::remove_dir_all(&root);
+        assert_eq!(names, vec!["keep/one.txt"]);
+    }
+
+    #[test]
+    fn corpus_files_exclude_named_top_level() {
+        let root =
+            std::env::temp_dir().join(format!("convertzz-corpus-exclude-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("keep")).unwrap();
+        fs::create_dir_all(root.join("skip")).unwrap();
+        fs::write(root.join("keep/one.txt"), "甲\n").unwrap();
+        fs::write(root.join("skip/two.txt"), "乙\n").unwrap();
+        let files = corpus_files(
+            &root,
+            &CorpusSelect {
+                include: Vec::new(),
+                exclude: vec!["skip".into()],
+            },
+        )
+        .expect("corpus");
+        let names: Vec<String> = files
+            .iter()
+            .map(|path| {
+                path.strip_prefix(&root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect();
+        let _ = fs::remove_dir_all(&root);
+        assert_eq!(names, vec!["keep/one.txt"]);
     }
 
     #[test]

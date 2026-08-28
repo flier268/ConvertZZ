@@ -1,7 +1,7 @@
 use convertzz_lib::roundtrip_dict::{
     assert_output_outside_package_data, assert_output_outside_sources, corpus_files,
     default_segment_dict_root, format_pairs_tsv, format_segment_dict, format_synonym_file,
-    load_existing_synonym_variants, process_line, PairAggregator, RoundtripReport,
+    load_existing_synonym_variants, process_line, CorpusSelect, PairAggregator, RoundtripReport,
 };
 use convertzz_lib::ConversionService;
 use rayon::prelude::*;
@@ -11,12 +11,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-const BATCH_SIZE: usize = 256;
+const BATCH_SIZE: usize = 4_096;
 const PROGRESS_EVERY: u64 = 10_000;
 
 struct Args {
     sources: PathBuf,
     output: PathBuf,
+    select: CorpusSelect,
     min_count: u64,
     min_dominance: f64,
     limit: Option<u64>,
@@ -38,13 +39,19 @@ fn run() -> Result<(), String> {
         return Err("輸出路徑必須是目錄。".into());
     }
 
-    let files = corpus_files(&args.sources)?;
+    let files = corpus_files(&args.sources, &args.select)?;
     eprintln!(
         "語料來源（只讀）：{}\n檔案數：{}\n執行緒：{}",
         args.sources.display(),
         files.len(),
         args.jobs
     );
+    if !args.select.include.is_empty() {
+        eprintln!("只讀頂層目錄：{}", args.select.include.join("、"));
+    }
+    if !args.select.exclude.is_empty() {
+        eprintln!("略過頂層目錄：{}", args.select.exclude.join("、"));
+    }
     for path in &files {
         if !path.starts_with(&args.sources) {
             return Err(format!("拒絕讀取來源目錄以外的檔案：{}", path.display()));
@@ -251,12 +258,14 @@ fn process_batch(
     aggregator.merge(outcome.aggregator);
 
     if *lines_read % PROGRESS_EVERY < slice.len() as u64 {
+        let elapsed = started.elapsed().as_secs_f64().max(0.001);
         eprintln!(
-            "已處理 {} 行，回環差異 {}，候選 {}，{:.1}s",
+            "已處理 {} 行，回環差異 {}，候選 {}，{:.0} 行/s，{:.1}s",
             *lines_read,
             *lines_mismatched,
             aggregator.unique_raw_pairs(),
-            started.elapsed().as_secs_f64()
+            *lines_read as f64 / elapsed,
+            elapsed
         );
     }
 }
@@ -287,6 +296,7 @@ fn write_output(directory: &Path, name: &str, contents: &str) -> Result<(), Stri
 fn parse_args() -> Result<Args, String> {
     let mut sources = None;
     let mut output = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/roundtrip-correction");
+    let mut select = CorpusSelect::default();
     let mut min_count = 5u64;
     let mut min_dominance = 0.7f64;
     let mut limit = None;
@@ -302,6 +312,8 @@ fn parse_args() -> Result<Args, String> {
             }
             "--sources" => sources = Some(required_path(&mut args, "--sources")?),
             "--output" => output = required_path(&mut args, "--output")?,
+            "--include" => push_names(&mut select.include, &mut args, "--include")?,
+            "--exclude" => push_names(&mut select.exclude, &mut args, "--exclude")?,
             "--min-count" => min_count = required_u64(&mut args, "--min-count")?,
             "--min-dominance" => min_dominance = required_f64(&mut args, "--min-dominance")?,
             "--limit" => limit = Some(required_u64(&mut args, "--limit")?),
@@ -319,11 +331,38 @@ fn parse_args() -> Result<Args, String> {
     Ok(Args {
         sources,
         output,
+        select,
         min_count,
         min_dominance,
         limit,
         jobs,
     })
+}
+
+fn push_names(
+    target: &mut Vec<String>,
+    args: &mut impl Iterator<Item = String>,
+    flag: &str,
+) -> Result<(), String> {
+    let value = args.next().ok_or_else(|| format!("{flag} 需要名稱。"))?;
+    let mut parsed = 0;
+    for name in value.split(',') {
+        let name = name.trim();
+        if name.is_empty() {
+            continue;
+        }
+        if name.contains('/') || name.contains('\\') {
+            return Err(format!("{flag} 只接受頂層目錄名稱，不可含路徑分隔。"));
+        }
+        parsed += 1;
+        if !target.iter().any(|item| item == name) {
+            target.push(name.to_string());
+        }
+    }
+    if parsed == 0 {
+        return Err(format!("{flag} 需要名稱。"));
+    }
+    Ok(())
 }
 
 fn required_path(args: &mut impl Iterator<Item = String>, name: &str) -> Result<PathBuf, String> {
@@ -359,6 +398,8 @@ roundtrip-dict — 以套件分詞／簡轉繁做回環，產出 ConvertZZ 額�
 選項：
   --sources DIR         語料根目錄（必填，只讀）
   --output DIR          輸出目錄（預設：data/roundtrip-correction）
+  --include NAME        只讀這些頂層目錄，可重複或逗號分隔
+  --exclude NAME        略過這些頂層目錄，可重複或逗號分隔
   --min-count N         異體最少出現次數（預設：5）
   --min-dominance F     主對應佔比下限 0.5–1.0（預設：0.7）
   --limit N             最多處理行數（測試用）

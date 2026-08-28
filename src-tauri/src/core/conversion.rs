@@ -197,17 +197,8 @@ impl ConversionService {
         if text.is_empty() {
             return Vec::new();
         }
-        self.segmenter.do_segment_simple(
-            text,
-            DoSegmentOptions {
-                simple: Some(true),
-                strip_punctuation: Some(false),
-                strip_stopword: Some(false),
-                strip_space: Some(false),
-                convert_synonym: Some(false),
-                disable_modules: Vec::new(),
-            },
-        )
+        self.segmenter
+            .do_segment_simple(text, segment_plain_options(false))
     }
 
     pub async fn convert(&self, request: ConversionRequest) -> Result<ConversionResult, CoreError> {
@@ -220,7 +211,7 @@ impl ConversionService {
                 warnings.push("詞彙修正已停用。本次只執行 cjk-convert-rs 字形轉換。".into());
             } else if request.engine == super::types::EngineKind::Segmented {
                 // Segmenting is CPU-bound; keep multi-thread runtimes responsive.
-                text = run_cpu_bound(|| self.segmented_convert(&text, request.direction));
+                text = run_cpu_bound(|| self.convert_segmented(&text, request.direction));
             } else if request.engine == super::types::EngineKind::Legacy {
                 let path = request
                     .dictionary_path
@@ -271,40 +262,18 @@ impl ConversionService {
     fn segmented_convert_chunk(&self, chunk: &str, direction: Direction) -> String {
         let source = if direction == Direction::S2t {
             self.segmenter
-                .do_segment_simple(
-                    chunk,
-                    DoSegmentOptions {
-                        simple: Some(true),
-                        strip_punctuation: Some(false),
-                        strip_stopword: Some(false),
-                        strip_space: Some(false),
-                        convert_synonym: Some(false),
-                        disable_modules: Vec::new(),
-                    },
-                )
+                .do_segment_simple(chunk, segment_plain_options(false))
                 .into_iter()
-                .map(|word| glyph_s2t(&word))
+                .map(|word| base_convert(&word, Direction::S2t))
                 .collect::<String>()
         } else {
             chunk.to_string()
         };
-        let words = self.segmenter.do_segment_simple(
-            &source,
-            DoSegmentOptions {
-                simple: Some(true),
-                strip_punctuation: Some(false),
-                strip_stopword: Some(false),
-                strip_space: Some(false),
-                convert_synonym: Some(direction == Direction::S2t),
-                disable_modules: Vec::new(),
-            },
-        );
-        let segmented = words.join("");
-        if direction == Direction::S2t {
-            glyph_s2t(&segmented)
-        } else {
-            base_convert(&segmented, direction)
-        }
+        let segmented = self
+            .segmenter
+            .do_segment_simple(&source, segment_plain_options(direction == Direction::S2t))
+            .join("");
+        base_convert(&segmented, direction)
     }
 
     fn dictionary(&self, path: &Path) -> Result<Arc<LegacyDictionary>, CoreError> {
@@ -333,6 +302,17 @@ const GLYPH_S2T_OPTS: ConvertOptions<'static> = ConvertOptions {
     ..ConvertOptions::DEFAULT
 };
 
+fn segment_plain_options(convert_synonym: bool) -> DoSegmentOptions {
+    DoSegmentOptions {
+        simple: Some(true),
+        strip_punctuation: Some(false),
+        strip_stopword: Some(false),
+        strip_space: Some(false),
+        convert_synonym: Some(convert_synonym),
+        disable_modules: Vec::new(),
+    }
+}
+
 fn glyph_s2t(text: &str) -> String {
     cjk2zht(&cn2tw_min_with(text, &GLYPH_S2T_OPTS))
 }
@@ -360,7 +340,7 @@ enum TextRun<'a> {
     Cjk(&'a str),
 }
 
-fn is_cjk_char(character: char) -> bool {
+pub(crate) fn is_cjk_char(character: char) -> bool {
     matches!(
         character,
         '\u{3400}'..='\u{4DBF}'

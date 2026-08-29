@@ -127,6 +127,38 @@ fn process_line_pairs_are_segmented_words() {
 }
 
 #[test]
+fn split_process_units_breaks_on_punctuation_and_caps_length() {
+    let units = split_process_units("甲乙。丙丁，戊己");
+    assert_eq!(units, vec!["甲乙。", "丙丁，", "戊己"]);
+    let long: String = "裡".repeat(MAX_UNIT_CHARS + 5);
+    let units = split_process_units(&long);
+    assert!(units.len() >= 2);
+    assert!(units
+        .iter()
+        .all(|unit| unit.chars().count() <= MAX_UNIT_CHARS));
+    assert_eq!(
+        units.iter().map(|unit| unit.chars().count()).sum::<usize>(),
+        long.chars().count()
+    );
+}
+
+#[test]
+fn process_line_keeps_pairs_across_clause_splits() {
+    let service = shared_conversion();
+    let short = process_line(service, "冰箱裡面大概就剩幾顆蛋跟半盒牛奶");
+    let long = process_line(
+        service,
+        "冰箱裡面大概就剩幾顆蛋跟半盒牛奶。另外制度本身沒問題。",
+    );
+    for pair in &short.pairs {
+        assert!(
+            long.pairs.contains(pair),
+            "clause split dropped {pair:?} from {short:?} vs {long:?}"
+        );
+    }
+}
+
+#[test]
 fn corpus_files_requires_txt_files() {
     let err = corpus_files(
         Path::new("/tmp/convertzz-missing-corpus"),
@@ -292,6 +324,7 @@ fn base_config(sources: PathBuf, output: PathBuf) -> RoundtripRunConfig {
         },
         reset: false,
         rebuild_outputs_only: false,
+        extra_correction: None,
         stop: Arc::new(AtomicBool::new(false)),
         sampler: default_sampler(),
         lines_processed: None,
@@ -495,6 +528,95 @@ fn fingerprint_rejects_changed_include() {
     config.select.include = vec!["other".into()];
     let err = run_roundtrip(&service, config).unwrap_err();
     assert!(err.contains("--reset"));
+    let _ = fs::remove_dir_all(sources.parent().unwrap());
+}
+
+fn write_extra_correction(dir: &Path, synonym: &str) {
+    fs::create_dir_all(dir).unwrap();
+    fs::write(dir.join("zht.corpus.synonym.txt"), synonym).unwrap();
+    let mut dict = String::from("// extra dict\n");
+    for line in synonym.lines() {
+        if let Some((canonical, variants)) = parse_synonym_line(line) {
+            dict.push_str(&format!("{canonical}|0x100000|1\n"));
+            for variant in variants {
+                dict.push_str(&format!("{variant}|0x100000|1\n"));
+            }
+        }
+    }
+    fs::write(dir.join("zht.corpus.dict.txt"), dict).unwrap();
+}
+
+#[test]
+fn extra_correction_must_not_sit_inside_sources() {
+    let (sources, output) = temp_pair("extra-in-src");
+    let extra = sources.join("extra");
+    write_extra_correction(&extra, "裡面,裏面\n");
+    let err = assert_extra_correction_paths(&extra, &output, &sources).unwrap_err();
+    assert!(err.contains("來源"));
+    let _ = fs::remove_dir_all(sources.parent().unwrap());
+}
+
+#[test]
+fn extra_correction_must_not_overlap_output() {
+    let (sources, output) = temp_pair("extra-out");
+    fs::create_dir_all(&output).unwrap();
+    write_extra_correction(&output, "裡面,裏面\n");
+    let err = assert_extra_correction_paths(&output, &output, &sources).unwrap_err();
+    assert!(err.contains("輸出"));
+    let _ = fs::remove_dir_all(sources.parent().unwrap());
+}
+
+#[test]
+fn extra_correction_missing_synonym_is_rejected() {
+    let (sources, output) = temp_pair("extra-missing");
+    let extra = sources.parent().unwrap().join("extra");
+    fs::create_dir_all(&extra).unwrap();
+    let err = assert_extra_correction_paths(&extra, &output, &sources).unwrap_err();
+    assert!(err.contains("zht.corpus.synonym.txt"));
+    let _ = fs::remove_dir_all(sources.parent().unwrap());
+}
+
+#[test]
+fn fingerprint_rejects_changed_extra_correction() {
+    let (sources, output) = temp_pair("fp-extra");
+    write_corpus(&sources, "a.txt", &LINE.repeat(3));
+    let extra = sources.parent().unwrap().join("extra");
+    write_extra_correction(&extra, "裡面,裏面\n");
+    let service = test_service();
+    run_roundtrip(&service, base_config(sources.clone(), output.clone())).unwrap();
+    let mut config = base_config(sources.clone(), output.clone());
+    config.extra_correction = Some(extra);
+    let err = run_roundtrip(&service, config).unwrap_err();
+    assert!(err.contains("--reset"));
+    let _ = fs::remove_dir_all(sources.parent().unwrap());
+}
+
+#[test]
+fn extra_correction_skips_known_variants_in_output() {
+    let (sources, output) = temp_pair("extra-skip");
+    write_corpus(
+        &sources,
+        "a.txt",
+        "這個制度已經實施三年了\n".repeat(3).as_str(),
+    );
+    let extra = sources.parent().unwrap().join("extra");
+    write_extra_correction(&extra, "制度,製度\n");
+    let probe = sources.parent().unwrap().join("probe");
+    let service = test_service();
+    run_roundtrip(&service, base_config(sources.clone(), output.clone())).unwrap();
+    let baseline = fs::read_to_string(output.join("zht.corpus.synonym.txt")).unwrap();
+    assert!(
+        baseline.lines().any(|line| line.contains("製度")),
+        "baseline should keep 制度/製度, got {baseline}"
+    );
+    let mut config = base_config(sources.clone(), probe.clone());
+    config.extra_correction = Some(extra);
+    run_roundtrip(&service, config).unwrap();
+    let synonym = fs::read_to_string(probe.join("zht.corpus.synonym.txt")).unwrap();
+    assert!(
+        !synonym.lines().any(|line| line.contains("製度")),
+        "probe should skip extra-correction variants, got {synonym}"
+    );
     let _ = fs::remove_dir_all(sources.parent().unwrap());
 }
 

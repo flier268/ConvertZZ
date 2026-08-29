@@ -24,6 +24,8 @@ use std::path::{Path, PathBuf};
 pub(crate) const MIN_WORD_CHARS: usize = 2;
 pub(crate) const MAX_WORD_CHARS: usize = 8;
 pub(crate) const MAX_LINE_CHARS: usize = 20_000;
+/// DictTokenizer `get_chunks` 對長 CJK 句是指數展開；超過此字數會先切開再分詞。
+pub(crate) const MAX_UNIT_CHARS: usize = 40;
 pub(crate) const MAX_TOKEN_COUNT: usize = 800;
 pub(crate) const MAX_EXAMPLES: usize = 3;
 const DEFAULT_POS: &str = "0x100000";
@@ -84,16 +86,61 @@ pub(crate) fn process_line_with_buf(
             pairs: Vec::new(),
         };
     }
-    let simplified = service.convert_segmented(line, Direction::T2s);
+    let units = split_process_units(line);
+    if units.len() == 1 {
+        return process_unit_with_buf(service, units[0], lcs_buf);
+    }
+    let mut owned_buf;
+    let buf: &mut Vec<u32> = match lcs_buf {
+        Some(buf) => buf,
+        None => {
+            owned_buf = Vec::new();
+            &mut owned_buf
+        }
+    };
+    let mut pairs = Vec::new();
+    let mut mismatched = false;
+    let mut any = false;
+    for unit in units {
+        if !should_process(unit) {
+            continue;
+        }
+        any = true;
+        let result = process_unit_with_buf(service, unit, Some(buf));
+        if result.mismatched {
+            mismatched = true;
+            pairs.extend(result.pairs);
+        }
+    }
+    if !any {
+        return LineResult {
+            skipped: true,
+            mismatched: false,
+            pairs: Vec::new(),
+        };
+    }
+    LineResult {
+        skipped: false,
+        mismatched,
+        pairs,
+    }
+}
+
+fn process_unit_with_buf(
+    service: &ConversionService,
+    unit: &str,
+    lcs_buf: Option<&mut Vec<u32>>,
+) -> LineResult {
+    let simplified = service.convert_segmented(unit, Direction::T2s);
     let reconstructed = service.convert_segmented(&simplified, Direction::S2t);
-    if reconstructed == line {
+    if reconstructed == unit {
         return LineResult {
             skipped: false,
             mismatched: false,
             pairs: Vec::new(),
         };
     }
-    let original_tokens = service.segment_tokens(line);
+    let original_tokens = service.segment_tokens(unit);
     let reconstructed_tokens = service.segment_tokens(&reconstructed);
     if original_tokens.len() > MAX_TOKEN_COUNT || reconstructed_tokens.len() > MAX_TOKEN_COUNT {
         return LineResult {
@@ -106,6 +153,66 @@ pub(crate) fn process_line_with_buf(
         skipped: false,
         mismatched: true,
         pairs: extract_pairs_with_buf(&original_tokens, &reconstructed_tokens, lcs_buf),
+    }
+}
+
+pub(crate) fn split_process_units(line: &str) -> Vec<&str> {
+    let mut pieces = Vec::new();
+    let mut start = 0;
+    for (idx, ch) in line.char_indices() {
+        if is_unit_break(ch) {
+            let end = idx + ch.len_utf8();
+            push_capped(&line[start..end], &mut pieces);
+            start = end;
+        }
+    }
+    if start < line.len() {
+        push_capped(&line[start..], &mut pieces);
+    }
+    if pieces.is_empty() {
+        vec![line]
+    } else {
+        pieces
+    }
+}
+
+fn is_unit_break(ch: char) -> bool {
+    matches!(
+        ch,
+        '。' | '！'
+            | '？'
+            | '；'
+            | '：'
+            | '，'
+            | '、'
+            | '.'
+            | '!'
+            | '?'
+            | ';'
+            | ':'
+            | ','
+            | '\n'
+            | '…'
+    )
+}
+
+fn push_capped<'a>(piece: &'a str, out: &mut Vec<&'a str>) {
+    if piece.is_empty() {
+        return;
+    }
+    let mut start = 0;
+    let mut count = 0;
+    for (i, ch) in piece.char_indices() {
+        count += 1;
+        if count == MAX_UNIT_CHARS {
+            let end = i + ch.len_utf8();
+            out.push(&piece[start..end]);
+            start = end;
+            count = 0;
+        }
+    }
+    if start < piece.len() {
+        out.push(&piece[start..]);
     }
 }
 
@@ -412,13 +519,26 @@ pub fn load_existing_synonym_variants(segment_dict_root: &Path) -> HashSet<Strin
         let Ok(text) = fs::read_to_string(&path) else {
             continue;
         };
-        for line in text.lines() {
-            if let Some((_, vars)) = parse_synonym_line(line) {
-                variants.extend(vars);
-            }
-        }
+        extend_synonym_variants(&mut variants, &text);
     }
     variants
+}
+
+pub fn load_extra_correction_variants(root: &Path) -> Result<HashSet<String>, String> {
+    let path = root.join("zht.corpus.synonym.txt");
+    let text = fs::read_to_string(&path)
+        .map_err(|error| format!("無法讀取額外同義詞 {}：{error}", path.display()))?;
+    let mut variants = HashSet::new();
+    extend_synonym_variants(&mut variants, &text);
+    Ok(variants)
+}
+
+fn extend_synonym_variants(variants: &mut HashSet<String>, text: &str) {
+    for line in text.lines() {
+        if let Some((_, vars)) = parse_synonym_line(line) {
+            variants.extend(vars);
+        }
+    }
 }
 
 pub fn parse_synonym_line(line: &str) -> Option<(String, Vec<String>)> {
@@ -552,6 +672,41 @@ pub fn assert_paths(output: &Path, sources: &Path) -> Result<(), String> {
     assert_output_outside_sources(output, sources)?;
     assert_output_outside_package_data(output)?;
     assert_output_outside_extra_correction(output)
+}
+
+pub fn assert_extra_correction_paths(
+    extra: &Path,
+    output: &Path,
+    sources: &Path,
+) -> Result<(), String> {
+    if is_package_data_path(extra) {
+        return Err("額外修正目錄不可位於分詞或簡轉繁套件資料內。".into());
+    }
+    if !extra.is_dir() {
+        return Err(format!("額外修正目錄不存在：{}", extra.display()));
+    }
+    let synonym = extra.join("zht.corpus.synonym.txt");
+    if !synonym.is_file() {
+        return Err(format!(
+            "額外修正目錄缺少 zht.corpus.synonym.txt：{}",
+            extra.display()
+        ));
+    }
+    let extra_abs = normalize_for_compare(extra);
+    let output_abs = normalize_for_compare(output);
+    let sources_abs = normalize_for_compare(sources);
+    if extra_abs.starts_with(&sources_abs) {
+        return Err("額外修正目錄不可位於語料來源目錄內，來源語料只讀。".into());
+    }
+    if extra_abs == output_abs
+        || extra_abs.starts_with(&output_abs)
+        || output_abs.starts_with(&extra_abs)
+    {
+        return Err(
+            "額外修正目錄不可與輸出目錄重疊。探針產出不得寫回正在參考的 extra-correction。".into(),
+        );
+    }
+    Ok(())
 }
 
 pub(crate) fn normalize_for_compare(path: &Path) -> PathBuf {

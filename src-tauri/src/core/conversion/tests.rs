@@ -73,6 +73,42 @@ async fn preserves_whitespace_and_punctuation() {
 }
 
 #[test]
+fn mixed_kana_does_not_panic_the_segmenter() {
+    let tokens = service().segment_tokens("こんにちはカタカナ");
+    assert!(
+        tokens.iter().any(|token| token.contains('こ'))
+            && tokens.iter().any(|token| token.contains('カ')),
+        "{tokens:?}"
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|token| token.contains('こ') && !token.contains('カ')),
+        "hiragana and katakana should split: {tokens:?}"
+    );
+}
+
+#[test]
+fn with_extra_correction_requires_synonym_file() {
+    let root = std::env::temp_dir().join(format!(
+        "convertzz-extra-svc-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let err = match super::ConversionService::with_extra_correction(None, &root) {
+        Ok(_) => panic!("expected missing synonym to fail"),
+        Err(error) => error,
+    };
+    assert!(err.to_string().contains("zht.corpus.synonym.txt"));
+    std::fs::write(root.join("zht.corpus.synonym.txt"), "制度,製度\n").unwrap();
+    super::ConversionService::with_extra_correction(None, &root).expect("load extra");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
 fn extra_correction_candidates_stay_outside_package_dicts() {
     let exe = Path::new("/tmp/squashfs-root/usr/bin/convertzz");
     let appdir = Path::new("/tmp/squashfs-root");

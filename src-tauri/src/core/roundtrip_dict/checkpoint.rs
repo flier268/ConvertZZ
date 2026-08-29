@@ -20,6 +20,12 @@ pub struct SynonymFingerprint {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ExtraCorrectionFingerprint {
+    pub path: String,
+    pub files: Vec<SynonymFingerprint>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Fingerprint {
     pub sources: String,
     pub include: Vec<String>,
@@ -27,6 +33,8 @@ pub struct Fingerprint {
     pub format: String,
     pub files: Vec<FileFingerprint>,
     pub synonym: Vec<SynonymFingerprint>,
+    #[serde(default)]
+    pub extra_correction: Option<ExtraCorrectionFingerprint>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -95,6 +103,7 @@ pub fn build_fingerprint(
     sources: &Path,
     select: &CorpusSelect,
     files: &[PathBuf],
+    extra_correction: Option<&Path>,
 ) -> Result<Fingerprint, String> {
     let sources_abs = super::normalize_for_compare(sources);
     let mut file_prints = Vec::new();
@@ -128,22 +137,42 @@ pub fn build_fingerprint(
         format: SHARD_FORMAT.to_string(),
         files: file_prints,
         synonym: synonym_fingerprints(),
+        extra_correction: extra_correction_fingerprint(extra_correction)?,
     })
 }
 
 pub fn fingerprint_mismatch_message() -> &'static str {
-    "檢查點與目前來源或套件詞典不符，請使用 --reset。"
+    "檢查點與目前來源、套件詞典或 extra-correction 不符，請使用 --reset。"
 }
 
 fn synonym_fingerprints() -> Vec<SynonymFingerprint> {
-    let root = default_segment_dict_root().join("synonym");
-    ["synonym.txt", "zht.synonym.txt", "zht.common.synonym.txt"]
-        .into_iter()
+    file_fingerprints(
+        &default_segment_dict_root().join("synonym"),
+        &["synonym.txt", "zht.synonym.txt", "zht.common.synonym.txt"],
+    )
+}
+
+fn extra_correction_fingerprint(
+    extra_correction: Option<&Path>,
+) -> Result<Option<ExtraCorrectionFingerprint>, String> {
+    let Some(root) = extra_correction else {
+        return Ok(None);
+    };
+    let path = super::normalize_for_compare(root);
+    Ok(Some(ExtraCorrectionFingerprint {
+        path: path.to_string_lossy().into_owned(),
+        files: file_fingerprints(&path, &["zht.corpus.synonym.txt", "zht.corpus.dict.txt"]),
+    }))
+}
+
+fn file_fingerprints(root: &Path, names: &[&str]) -> Vec<SynonymFingerprint> {
+    names
+        .iter()
         .map(|name| {
             let path = root.join(name);
             match fs::metadata(&path) {
                 Ok(meta) => SynonymFingerprint {
-                    name: name.to_string(),
+                    name: (*name).to_string(),
                     len: Some(meta.len()),
                     mtime: meta
                         .modified()
@@ -152,7 +181,7 @@ fn synonym_fingerprints() -> Vec<SynonymFingerprint> {
                         .map(|duration| duration.as_secs()),
                 },
                 Err(_) => SynonymFingerprint {
-                    name: name.to_string(),
+                    name: (*name).to_string(),
                     len: None,
                     mtime: None,
                 },

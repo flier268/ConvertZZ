@@ -12,8 +12,9 @@ use super::memory::{
     CountingSemaphore, LcsPool, MemoryPolicy, MemorySampler, SampleClock,
 };
 use super::{
-    assert_paths, corpus_files, default_segment_dict_root, load_existing_synonym_variants,
-    process_line_with_buf, read_text_lines, CorpusSelect, RoundtripReport,
+    assert_extra_correction_paths, assert_paths, corpus_files, default_segment_dict_root,
+    load_existing_synonym_variants, load_extra_correction_variants, process_line_with_buf,
+    read_text_lines, CorpusSelect, RoundtripReport,
 };
 use crate::core::conversion::ConversionService;
 use rayon::prelude::*;
@@ -38,6 +39,7 @@ pub struct RoundtripRunConfig {
     pub memory: MemoryPolicy,
     pub reset: bool,
     pub rebuild_outputs_only: bool,
+    pub extra_correction: Option<PathBuf>,
     pub stop: Arc<AtomicBool>,
     pub sampler: Arc<dyn MemorySampler>,
     pub lines_processed: Option<Arc<AtomicU64>>,
@@ -74,6 +76,9 @@ pub fn run_roundtrip(
     config: RoundtripRunConfig,
 ) -> Result<RoundtripRunStatus, String> {
     assert_paths(&config.output, &config.sources)?;
+    if let Some(extra) = config.extra_correction.as_deref() {
+        assert_extra_correction_paths(extra, &config.output, &config.sources)?;
+    }
     if config.output.exists() && config.output.is_file() {
         return Err("輸出路徑必須是目錄。".into());
     }
@@ -101,7 +106,12 @@ pub fn run_roundtrip(
             return Err(format!("拒絕讀取來源目錄以外的檔案：{}", path.display()));
         }
     }
-    let fingerprint = build_fingerprint(&config.sources, &config.select, &files)?;
+    let fingerprint = build_fingerprint(
+        &config.sources,
+        &config.select,
+        &files,
+        config.extra_correction.as_deref(),
+    )?;
     let existing = load_checkpoint(&config.output)?;
     let resumed = existing.is_some();
     let mut checkpoint = match existing {
@@ -164,7 +174,7 @@ pub fn run_roundtrip(
     }
     probe_jobs(&config, jobs_current);
 
-    let skip_variants = load_existing_synonym_variants(&default_segment_dict_root());
+    let skip_variants = skip_variants_for(&config)?;
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(config.jobs)
         .build()
@@ -442,6 +452,14 @@ pub fn run_roundtrip(
     )
 }
 
+fn skip_variants_for(config: &RoundtripRunConfig) -> Result<HashSet<String>, String> {
+    let mut skip = load_existing_synonym_variants(&default_segment_dict_root());
+    if let Some(extra) = config.extra_correction.as_deref() {
+        skip.extend(load_extra_correction_variants(extra)?);
+    }
+    Ok(skip)
+}
+
 fn rebuild_only(
     _service: &ConversionService,
     config: &RoundtripRunConfig,
@@ -452,7 +470,7 @@ fn rebuild_only(
     if checkpoint.shards.is_empty() {
         return Err("沒有已提交 shard 可重建產出。".into());
     }
-    let skip_variants = load_existing_synonym_variants(&default_segment_dict_root());
+    let skip_variants = skip_variants_for(config)?;
     let unique = write_outputs(_service, config, &checkpoint, &skip_variants)?;
     let mut result = status_from_checkpoint(
         &checkpoint,

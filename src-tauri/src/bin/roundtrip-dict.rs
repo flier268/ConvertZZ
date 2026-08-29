@@ -18,6 +18,7 @@ struct Args {
     memory: MemoryPolicy,
     reset: bool,
     rebuild_outputs_only: bool,
+    extra_correction: Option<PathBuf>,
 }
 
 fn main() {
@@ -53,6 +54,7 @@ fn run() -> Result<(), String> {
             memory: args.memory,
             reset: args.reset,
             rebuild_outputs_only: args.rebuild_outputs_only,
+            extra_correction: args.extra_correction.clone(),
             stop: Arc::clone(&stop),
             sampler: default_sampler(),
             lines_processed: None,
@@ -113,6 +115,7 @@ fn parse_args() -> Result<Args, String> {
     };
     let mut reset = false;
     let mut rebuild_outputs_only = false;
+    let mut extra_correction = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -142,6 +145,9 @@ fn parse_args() -> Result<Args, String> {
             }
             "--reset" => reset = true,
             "--rebuild-outputs" => rebuild_outputs_only = true,
+            "--extra-correction" => {
+                extra_correction = Some(required_path(&mut args, "--extra-correction")?)
+            }
             other => return Err(format!("未知參數：{other}\n使用 --help 查看用法。")),
         }
     }
@@ -175,6 +181,7 @@ fn parse_args() -> Result<Args, String> {
         memory,
         reset,
         rebuild_outputs_only,
+        extra_correction,
     })
 }
 
@@ -251,6 +258,10 @@ roundtrip-dict — 以套件分詞／簡轉繁做回環，產出 ConvertZZ 額�
   --lcs-inflight N      同時 LCS 數；省略=auto
   --reset               刪除檢查點、state/ 與衍生四檔後從頭跑
   --rebuild-outputs     只從已提交 shard 重寫衍生檔
+  --extra-correction DIR
+                        探針：聚合時略過該目錄 zht.corpus.synonym.txt 的錯詞。
+                        回環引擎仍用套件基線，避免自己修正自己。
+                        此模式產出是 QA 清單，不要複製進 extra-correction。
   -h, --help            顯示說明
 
 退出碼：

@@ -117,6 +117,12 @@ fn extra_correction_candidates(executable: Option<&Path>, appdir: Option<&Path>)
         .collect()
 }
 
+enum ExtraLoad {
+    Skip,
+    Discover,
+    Dir(PathBuf),
+}
+
 fn load_extra_correction(segmenter: &mut Segment) -> Result<(), CoreError> {
     let executable = std::env::current_exe().ok();
     let appdir = std::env::var_os("APPDIR").map(PathBuf::from);
@@ -126,19 +132,42 @@ fn load_extra_correction(segmenter: &mut Segment) -> Result<(), CoreError> {
     else {
         return Ok(());
     };
-    if is_package_data_path(&root) {
+    apply_extra_correction(segmenter, &root, false)
+}
+
+fn apply_extra_correction(
+    segmenter: &mut Segment,
+    root: &Path,
+    required: bool,
+) -> Result<(), CoreError> {
+    if is_package_data_path(root) {
         return Err(CoreError::new(
             "EXTRA_CORRECTION",
             "額外修正目錄不可位於分詞或簡轉繁套件資料內。",
         ));
     }
+    if !root.is_dir() {
+        return Err(CoreError::new(
+            "EXTRA_CORRECTION",
+            format!("額外修正目錄不存在：{}", root.display()),
+        ));
+    }
     let dict = root.join("zht.corpus.dict.txt");
+    let synonym = root.join("zht.corpus.synonym.txt");
+    if required && !synonym.is_file() {
+        return Err(CoreError::new(
+            "EXTRA_CORRECTION",
+            format!(
+                "額外修正目錄缺少 zht.corpus.synonym.txt：{}",
+                root.display()
+            ),
+        ));
+    }
     if dict.is_file() {
         segmenter.load_dict_file(&dict).map_err(|error| {
             CoreError::new("EXTRA_CORRECTION", format!("無法載入額外分詞表：{error}"))
         })?;
     }
-    let synonym = root.join("zht.corpus.synonym.txt");
     if synonym.is_file() {
         let text = std::fs::read_to_string(&synonym).map_err(|error| {
             CoreError::new("EXTRA_CORRECTION", format!("無法讀取額外同義詞：{error}"))
@@ -156,16 +185,23 @@ fn load_extra_correction(segmenter: &mut Segment) -> Result<(), CoreError> {
 
 impl ConversionService {
     pub fn new(default_dictionary: Option<PathBuf>) -> Result<Self, CoreError> {
-        Self::build(default_dictionary, true)
+        Self::build(default_dictionary, ExtraLoad::Discover)
     }
 
     pub fn without_extra_correction(
         default_dictionary: Option<PathBuf>,
     ) -> Result<Self, CoreError> {
-        Self::build(default_dictionary, false)
+        Self::build(default_dictionary, ExtraLoad::Skip)
     }
 
-    fn build(default_dictionary: Option<PathBuf>, load_extra: bool) -> Result<Self, CoreError> {
+    pub fn with_extra_correction(
+        default_dictionary: Option<PathBuf>,
+        extra_root: &Path,
+    ) -> Result<Self, CoreError> {
+        Self::build(default_dictionary, ExtraLoad::Dir(extra_root.to_path_buf()))
+    }
+
+    fn build(default_dictionary: Option<PathBuf>, extra: ExtraLoad) -> Result<Self, CoreError> {
         configure_segment_dict_root();
         let mut segmenter = Segment::new(SegmentOptions {
             auto_cjk: true,
@@ -175,8 +211,10 @@ impl ConversionService {
         segmenter
             .use_default()
             .map_err(|error| CoreError::new("SEGMENTER", format!("無法初始化分詞引擎：{error}")))?;
-        if load_extra {
-            load_extra_correction(&mut segmenter)?;
+        match extra {
+            ExtraLoad::Skip => {}
+            ExtraLoad::Discover => load_extra_correction(&mut segmenter)?,
+            ExtraLoad::Dir(root) => apply_extra_correction(&mut segmenter, &root, true)?,
         }
         Ok(Self {
             segmenter,

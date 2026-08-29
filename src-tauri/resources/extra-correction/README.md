@@ -12,3 +12,5 @@ cp data/roundtrip-correction/zht.corpus.dict.txt \
 ```
 
 只放這兩個檔。不要 `cp -r` 整個 `data/roundtrip-correction`（內含 `checkpoint.json` 與 `state/`）。不要把檔案寫入 `../segment-dict`。那個目錄屬於套件，不屬這層修正。也不要把 `--output` 指到本目錄。
+
+`roundtrip-dict --extra-correction` 讀本目錄的 synonym 錯詞，探針產出裡略過已知保護詞。請輸出到別的目錄（例如 `data/roundtrip-llm-probe`），不要把探針產出複製回來。產生產品層時不要加該旗標。

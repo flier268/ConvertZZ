@@ -1,12 +1,18 @@
 use convertzz_lib::roundtrip_dict::{
-    default_sampler, run_roundtrip, CorpusSelect, MemoryPolicy, RoundtripRunConfig, RunStatus,
+    audit_synonym_orientation, default_sampler, format_orientation_report, resolve_synonym_path,
+    run_roundtrip, CorpusSelect, MemoryPolicy, RoundtripRunConfig, RunStatus,
 };
 use convertzz_lib::ConversionService;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-struct Args {
+enum Command {
+    Roundtrip(RoundtripArgs),
+    CheckOrientation(OrientationArgs),
+}
+
+struct RoundtripArgs {
     sources: PathBuf,
     output: PathBuf,
     select: CorpusSelect,
@@ -21,6 +27,12 @@ struct Args {
     extra_correction: Option<PathBuf>,
 }
 
+struct OrientationArgs {
+    synonym: PathBuf,
+    output: Option<PathBuf>,
+    full: bool,
+}
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("{error}");
@@ -29,7 +41,13 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
-    let args = parse_args()?;
+    match parse_args()? {
+        Command::Roundtrip(args) => run_roundtrip_command(args),
+        Command::CheckOrientation(args) => run_orientation_command(args),
+    }
+}
+
+fn run_roundtrip_command(args: RoundtripArgs) -> Result<(), String> {
     let stop = Arc::new(AtomicBool::new(false));
     let sigint = Arc::new(AtomicBool::new(false));
     let sigterm = Arc::new(AtomicBool::new(false));
@@ -66,17 +84,53 @@ fn run() -> Result<(), String> {
         },
     )?;
     eprintln!(
-        "結束（{:?}）。已提交 {} 個檔，讀取 {} 行。\n輸出目錄：{}",
+        "結束（{:?}）。已提交 {} 個檔，讀取 {} 行。\n輸出目錄：{}\n同義詞導向：min={}／full={} 筆可疑",
         status.status,
         status.files_committed.len(),
         status.lines_read,
-        args.output.display()
+        args.output.display(),
+        status.orientation_min_hits,
+        status.orientation_full_hits
     );
     std::process::exit(exit_code(
         &status.status,
         sigint.load(Ordering::SeqCst),
         sigterm.load(Ordering::SeqCst),
     ));
+}
+
+fn run_orientation_command(args: OrientationArgs) -> Result<(), String> {
+    let synonym = resolve_synonym_path(&args.synonym)?;
+    let report = audit_synonym_orientation(&synonym, args.full)?;
+    let text = format_orientation_report(&report);
+    if let Some(output) = args.output.as_ref() {
+        if let Some(parent) = output.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|error| format!("無法建立輸出目錄 {}：{error}", parent.display()))?;
+            }
+        }
+        std::fs::write(output, text.as_bytes())
+            .map_err(|error| format!("無法寫入 {}：{error}", output.display()))?;
+        eprintln!(
+            "已掃描 {} 筆，疑似左簡右繁 {} 筆。\n報告：{}",
+            report.entries_scanned,
+            report.hits.len(),
+            output.display()
+        );
+    } else {
+        print!("{text}");
+        eprintln!(
+            "已掃描 {} 筆，疑似左簡右繁 {} 筆。",
+            report.entries_scanned,
+            report.hits.len()
+        );
+    }
+    if report.hits.is_empty() {
+        Ok(())
+    } else {
+        std::process::exit(2);
+    }
 }
 
 fn exit_code(status: &RunStatus, sigint: bool, sigterm: bool) -> i32 {
@@ -97,7 +151,53 @@ fn exit_code(status: &RunStatus, sigint: bool, sigterm: bool) -> i32 {
     }
 }
 
-fn parse_args() -> Result<Args, String> {
+fn parse_args() -> Result<Command, String> {
+    let mut argv = std::env::args().skip(1).peekable();
+    match argv.peek().map(String::as_str) {
+        Some("-h") | Some("--help") => {
+            print_help();
+            std::process::exit(0);
+        }
+        Some("check-synonym-orientation") => {
+            argv.next();
+            Ok(Command::CheckOrientation(parse_orientation_args(&mut argv)?))
+        }
+        _ => Ok(Command::Roundtrip(parse_roundtrip_args(&mut argv)?)),
+    }
+}
+
+fn parse_orientation_args(
+    args: &mut impl Iterator<Item = String>,
+) -> Result<OrientationArgs, String> {
+    let mut synonym = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../resources/extra-correction/zht.corpus.synonym.txt");
+    let mut output = None;
+    let mut full = false;
+    let mut args = args.peekable();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "-h" | "--help" => {
+                print_orientation_help();
+                std::process::exit(0);
+            }
+            "--synonym" => synonym = required_path(&mut args, "--synonym")?,
+            "--output" => output = Some(required_path(&mut args, "--output")?),
+            "--full" => full = true,
+            other => {
+                return Err(format!(
+                    "未知參數：{other}\n使用 check-synonym-orientation --help 查看用法。"
+                ))
+            }
+        }
+    }
+    Ok(OrientationArgs {
+        synonym,
+        output,
+        full,
+    })
+}
+
+fn parse_roundtrip_args(args: &mut impl Iterator<Item = String>) -> Result<RoundtripArgs, String> {
     let mut sources = None;
     let mut output =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/roundtrip-correction");
@@ -117,37 +217,36 @@ fn parse_args() -> Result<Args, String> {
     let mut reset = false;
     let mut rebuild_outputs_only = false;
     let mut extra_correction = None;
-    let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "-h" | "--help" => {
                 print_help();
                 std::process::exit(0);
             }
-            "--sources" => sources = Some(required_path(&mut args, "--sources")?),
-            "--output" => output = required_path(&mut args, "--output")?,
-            "--include" => push_names(&mut select.include, &mut args, "--include")?,
-            "--exclude" => push_names(&mut select.exclude, &mut args, "--exclude")?,
-            "--min-count" => min_count = required_u64(&mut args, "--min-count")?,
-            "--min-dominance" => min_dominance = required_f64(&mut args, "--min-dominance")?,
-            "--limit" => limit = Some(required_u64(&mut args, "--limit")?),
-            "--jobs" => jobs = required_u64(&mut args, "--jobs")? as usize,
-            "--batch-size" => batch_size = required_u64(&mut args, "--batch-size")? as usize,
+            "--sources" => sources = Some(required_path(args, "--sources")?),
+            "--output" => output = required_path(args, "--output")?,
+            "--include" => push_names(&mut select.include, args, "--include")?,
+            "--exclude" => push_names(&mut select.exclude, args, "--exclude")?,
+            "--min-count" => min_count = required_u64(args, "--min-count")?,
+            "--min-dominance" => min_dominance = required_f64(args, "--min-dominance")?,
+            "--limit" => limit = Some(required_u64(args, "--limit")?),
+            "--jobs" => jobs = required_u64(args, "--jobs")? as usize,
+            "--batch-size" => batch_size = required_u64(args, "--batch-size")? as usize,
             "--memory-soft-mb" => {
-                let mb = required_u64(&mut args, "--memory-soft-mb")?;
+                let mb = required_u64(args, "--memory-soft-mb")?;
                 memory.soft_bytes = Some(mb.saturating_mul(1024 * 1024));
             }
             "--memory-hard-mb" => {
-                let mb = required_u64(&mut args, "--memory-hard-mb")?;
+                let mb = required_u64(args, "--memory-hard-mb")?;
                 memory.hard_bytes = Some(mb.saturating_mul(1024 * 1024));
             }
             "--lcs-inflight" => {
-                memory.lcs_inflight = Some(required_u64(&mut args, "--lcs-inflight")? as usize);
+                memory.lcs_inflight = Some(required_u64(args, "--lcs-inflight")? as usize);
             }
             "--reset" => reset = true,
             "--rebuild-outputs" => rebuild_outputs_only = true,
             "--extra-correction" => {
-                extra_correction = Some(required_path(&mut args, "--extra-correction")?)
+                extra_correction = Some(required_path(args, "--extra-correction")?)
             }
             other => return Err(format!("未知參數：{other}\n使用 --help 查看用法。")),
         }
@@ -170,7 +269,7 @@ fn parse_args() -> Result<Args, String> {
             return Err("軟水位不可大於硬水位。".into());
         }
     }
-    Ok(Args {
+    Ok(RoundtripArgs {
         sources,
         output,
         select,
@@ -243,6 +342,12 @@ roundtrip-dict — 以套件分詞／簡轉繁做回環，產出 ConvertZZ 額�
 
 用法：
   cargo run --manifest-path src-tauri/Cargo.toml -p roundtrip-dict -- --sources DIR [選項]
+  cargo run --manifest-path src-tauri/Cargo.toml -p roundtrip-dict -- check-synonym-orientation [選項]
+
+子命令：
+  check-synonym-orientation
+                        找出同義詞檔疑似「左邊簡體、右邊繁體」的條目
+                        （詳見該子命令 --help）
 
 選項：
   --sources DIR         語料根目錄（必填，只讀）
@@ -277,8 +382,46 @@ roundtrip-dict — 以套件分詞／簡轉繁做回環，產出 ConvertZZ 額�
   zht.corpus.dict.txt      額外分詞表（詞|詞性|權值，含簡繁詞形）
   pairs.tsv                對應次數與例句
   report.json              統計
+  synonym-orientation-min.tsv
+                           自動檢查：疑似左簡右繁（cn2tw_min，優先處理）
+  synonym-orientation-full.tsv
+                           自動檢查：擴大召回（含一簡多繁，需人工覆核）
   checkpoint.json / state/ 檔級復原（勿套用）
 
+寫入產出後會自動跑導向檢查；回環成功時即使有可疑條目仍 exit 0。
+要單獨重跑檢查或讓可疑變成非零退出，用子命令 check-synonym-orientation。
+
 套用時只複製兩個 zht.corpus.* 到 extra-correction。"
+    );
+}
+
+fn print_orientation_help() {
+    println!(
+        "\
+roundtrip-dict check-synonym-orientation — 找出疑似左簡右繁的同義詞
+
+契約：正字,錯字|詞性（台灣常用寫法在左）。`一个,一個` 應寫成 `一個,一个`。
+
+預設只用 cn2tw_min（與引擎字形層相同），精準度高。
+加 --full 會一併用完整 cn2tw／tw2cn，召回 于／志／范 等一簡多繁，但也可能把
+`制度,製度` 這類合法回環保護列進來，只供人工覆核。
+
+用法：
+  cargo run --manifest-path src-tauri/Cargo.toml -p roundtrip-dict -- \\
+    check-synonym-orientation [--synonym PATH] [--output FILE] [--full]
+
+選項：
+  --synonym PATH   同義詞檔，或含 zht.corpus.synonym.txt 的目錄
+                   （預設：src-tauri/resources/extra-correction/zht.corpus.synonym.txt）
+  --output FILE    寫入報告；省略則印到 stdout
+  --full           擴大召回（含一簡多繁，需人工覆核）
+  -h, --help       顯示說明
+
+退出碼：
+  0    無可疑條目
+  1    參數或讀檔錯誤
+  2    有可疑條目
+
+報告欄位：line confidence reason canonical variant suggested_flip raw"
     );
 }

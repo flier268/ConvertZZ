@@ -210,6 +210,8 @@ pub fn derived_files() -> &'static [&'static str] {
         "zht.corpus.dict.txt",
         "pairs.tsv",
         "report.json",
+        super::ORIENTATION_MIN_REPORT,
+        super::ORIENTATION_FULL_REPORT,
     ]
 }
 

@@ -458,6 +458,8 @@ fn run_roundtrip_commits_files_and_resumes() {
     assert_eq!(first.status, RunStatus::Complete);
     assert_eq!(first.files_committed.len(), 2);
     assert_eq!(opened.load(Ordering::SeqCst), 2);
+    assert!(output.join(ORIENTATION_MIN_REPORT).is_file());
+    assert!(output.join(ORIENTATION_FULL_REPORT).is_file());
 
     opened.store(0, Ordering::SeqCst);
     let mut config = base_config(sources.clone(), output.clone());

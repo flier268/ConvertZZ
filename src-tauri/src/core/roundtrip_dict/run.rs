@@ -14,7 +14,8 @@ use super::memory::{
 use super::{
     assert_extra_correction_paths, assert_paths, corpus_files, default_segment_dict_root,
     load_existing_synonym_variants, load_extra_correction_variants, process_line_with_buf,
-    read_text_lines, CorpusSelect, RoundtripReport,
+    read_text_lines, write_orientation_audit_reports, CorpusSelect, RoundtripReport,
+    ORIENTATION_FULL_REPORT, ORIENTATION_MIN_REPORT,
 };
 use crate::core::conversion::ConversionService;
 use rayon::prelude::*;
@@ -69,6 +70,10 @@ pub struct RoundtripRunStatus {
     pub last_hard_file: Option<String>,
     pub jobs_final: usize,
     pub resumed_from_checkpoint: bool,
+    /// `synonym-orientation-min.tsv` 可疑筆數（寫入產出後自動檢查）。
+    pub orientation_min_hits: usize,
+    /// `synonym-orientation-full.tsv` 可疑筆數（含一簡多繁，需人工覆核）。
+    pub orientation_full_hits: usize,
 }
 
 pub fn run_roundtrip(
@@ -476,7 +481,7 @@ fn rebuild_only(
         return Err("沒有已提交 shard 可重建產出。".into());
     }
     let skip_variants = skip_variants_for(config)?;
-    let unique = write_outputs(_service, config, &checkpoint, &skip_variants)?;
+    let written = write_outputs(_service, config, &checkpoint, &skip_variants)?;
     let mut result = status_from_checkpoint(
         &checkpoint,
         match checkpoint.status.as_str() {
@@ -488,7 +493,7 @@ fn rebuild_only(
         config.jobs,
         true,
     );
-    result.unique_raw_pairs = unique;
+    apply_written_outputs(&mut result, written);
     Ok(result)
 }
 
@@ -508,10 +513,22 @@ fn finish_run(
         RunStatus::Limit => "limit".into(),
     };
     save_checkpoint(&config.output, checkpoint)?;
-    let unique = write_outputs(service, config, checkpoint, skip_variants)?;
+    let written = write_outputs(service, config, checkpoint, skip_variants)?;
     let mut result = status_from_checkpoint(checkpoint, status, jobs_final, resumed);
-    result.unique_raw_pairs = unique;
+    apply_written_outputs(&mut result, written);
     Ok(result)
+}
+
+struct WrittenOutputs {
+    unique_raw_pairs: usize,
+    orientation_min_hits: usize,
+    orientation_full_hits: usize,
+}
+
+fn apply_written_outputs(result: &mut RoundtripRunStatus, written: WrittenOutputs) {
+    result.unique_raw_pairs = written.unique_raw_pairs;
+    result.orientation_min_hits = written.orientation_min_hits;
+    result.orientation_full_hits = written.orientation_full_hits;
 }
 
 fn write_outputs(
@@ -519,7 +536,7 @@ fn write_outputs(
     config: &RoundtripRunConfig,
     checkpoint: &Checkpoint,
     skip_variants: &HashSet<String>,
-) -> Result<usize, String> {
+) -> Result<WrittenOutputs, String> {
     let paths: Vec<PathBuf> = checkpoint
         .shards
         .iter()
@@ -548,13 +565,33 @@ fn write_outputs(
     write_derived_outputs(&config.output, &entries, &stats, &report, &|word| {
         service.word_pos(word)
     })?;
+    let (orientation_min_hits, orientation_full_hits) =
+        write_orientation_audit_reports(&config.output)?;
     eprintln!(
         "已寫入產出：{} 行，保留 {} 個正字（{} 個異體）",
         checkpoint.lines_read,
         entries.len(),
         stats.kept_variants
     );
-    Ok(stats.unique_raw_pairs)
+    eprintln!(
+        "同義詞導向檢查：min={} 筆可疑 → {}；full={} 筆可疑 → {}{}",
+        orientation_min_hits,
+        config.output.join(ORIENTATION_MIN_REPORT).display(),
+        orientation_full_hits,
+        config.output.join(ORIENTATION_FULL_REPORT).display(),
+        if orientation_min_hits > 0 {
+            "（min 命中請優先人工翻轉）"
+        } else if orientation_full_hits > 0 {
+            "（full 含一簡多繁，需人工覆核）"
+        } else {
+            ""
+        }
+    );
+    Ok(WrittenOutputs {
+        unique_raw_pairs: stats.unique_raw_pairs,
+        orientation_min_hits,
+        orientation_full_hits,
+    })
 }
 
 fn durable_commit(
@@ -742,6 +779,8 @@ fn status_from_checkpoint(
         last_hard_file: checkpoint.last_hard_file.clone(),
         jobs_final,
         resumed_from_checkpoint: resumed,
+        orientation_min_hits: 0,
+        orientation_full_hits: 0,
     }
 }
 

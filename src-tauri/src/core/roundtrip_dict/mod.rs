@@ -2,6 +2,7 @@ mod aggregator;
 mod checkpoint;
 mod memory;
 mod run;
+mod synonym_audit;
 
 pub use aggregator::{
     finish_from_shards, merge_sorted_shard_files, FinishStats, PairAggregator, PairStat,
@@ -12,6 +13,11 @@ pub use memory::{
     default_sampler, FakeSampler, MemoryPolicy, MemorySample, MemorySampler, ResolvedMemory,
 };
 pub use run::{run_roundtrip, RoundtripRunConfig, RoundtripRunStatus, RunStatus};
+pub use synonym_audit::{
+    audit_synonym_orientation, format_orientation_report, is_left_simplified_right_traditional,
+    resolve_synonym_path, write_orientation_audit_reports, LeftSimpRightTradHit,
+    SimpTradConfidence, SynonymOrientationReport, ORIENTATION_FULL_REPORT, ORIENTATION_MIN_REPORT,
+};
 
 use super::conversion::{base_convert, is_cjk_char, ConversionService};
 use super::types::Direction;

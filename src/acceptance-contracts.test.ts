@@ -67,6 +67,11 @@ describe("驗收項目的自動化契約", () => {
     expect(page).toContain("el-table-v2");
     expect(page).toContain("el-auto-resizer");
     expect(page).toContain("SideBySideDiffView");
+    expect(page).toContain("PreviewDiffDialog");
+    expect(page).toContain("全視窗預覽");
+    expect(page).toContain("openFullscreenPreview");
+    expect(page).toContain("enable-nav");
+    expect(page).toContain("fullscreen");
     expect(page).not.toContain('<el-card v-if="plan"');
     expect(page).toContain("buildFileDiffSections");
     expect(page).toContain("setAllSelected");
@@ -76,8 +81,12 @@ describe("驗收項目的自動化契約", () => {
     expect(diffView).toContain("syncScroll");
     expect(diffView).toContain("el-splitter");
     expect(diffView).toContain("buildSideBySideDiff");
+    expect(diffView).toContain("buildPagedSideBySideDiff");
     expect(diffView).toContain("sideBySideToHtml");
     expect(diffView).toContain("v-html");
+    expect(diffView).toContain("上一個差異");
+    expect(diffView).toContain("下一個差異");
+    expect(diffView).toContain("goToChange");
     expect(fileDiff).toContain('title: "檔名"');
     expect(fileDiff).toContain('title: "內容"');
   });

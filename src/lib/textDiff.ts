@@ -44,6 +44,150 @@ export function buildSideBySideDiff(
   return { left, right };
 }
 
+/** 長文並排預覽預設每頁碼點數；過長時分頁避免一次捲動過深。 */
+export const DEFAULT_DIFF_PAGE_SIZE = 2_000;
+
+export interface DiffPage {
+  left: SideBySideSpan[];
+  right: SideBySideSpan[];
+  hasChanges: boolean;
+}
+
+type DiffSegment =
+  { kind: "equal"; text: string } | { kind: "change"; left: string; right: string };
+
+/** 依碼點預算切成多頁，變更段盡量整段放入同一頁，避免簡繁成對差異被拆開。 */
+export function buildPagedSideBySideDiff(
+  source: string,
+  output: string,
+  pageSize = DEFAULT_DIFF_PAGE_SIZE,
+): DiffPage[] {
+  if (pageSize <= 0) {
+    const sides = buildSideBySideDiff(source, output);
+    return [
+      {
+        left: sides.left,
+        right: sides.right,
+        hasChanges:
+          sides.left.some((span) => span.kind === "change") ||
+          sides.right.some((span) => span.kind === "change"),
+      },
+    ];
+  }
+
+  const segments = partsToSegments(diffText(source, output));
+  if (!segments.length) return [{ left: [], right: [], hasChanges: false }];
+
+  const pages: DiffPage[] = [];
+  let left: SideBySideSpan[] = [];
+  let right: SideBySideSpan[] = [];
+  let weight = 0;
+  let hasChanges = false;
+
+  const flush = () => {
+    if (!left.length && !right.length) return;
+    pages.push({ left, right, hasChanges });
+    left = [];
+    right = [];
+    weight = 0;
+    hasChanges = false;
+  };
+
+  const appendEqual = (text: string) => {
+    if (!text) return;
+    pushSpan(left, text, "equal");
+    pushSpan(right, text, "equal");
+  };
+
+  const appendChange = (leftText: string, rightText: string) => {
+    if (leftText) {
+      pushSpan(left, leftText, "change");
+      hasChanges = true;
+    }
+    if (rightText) {
+      pushSpan(right, rightText, "change");
+      hasChanges = true;
+    }
+  };
+
+  for (const segment of segments) {
+    if (segment.kind === "equal") {
+      const units = Array.from(segment.text);
+      let offset = 0;
+      while (offset < units.length) {
+        if (weight >= pageSize) flush();
+        const take = Math.min(pageSize - weight, units.length - offset);
+        appendEqual(units.slice(offset, offset + take).join(""));
+        weight += take;
+        offset += take;
+      }
+      continue;
+    }
+
+    const leftUnits = Array.from(segment.left);
+    const rightUnits = Array.from(segment.right);
+    const segmentWeight = Math.max(leftUnits.length, rightUnits.length);
+    if (!segmentWeight) continue;
+
+    if (segmentWeight <= pageSize) {
+      if (weight > 0 && weight + segmentWeight > pageSize) flush();
+      appendChange(segment.left, segment.right);
+      weight += segmentWeight;
+      continue;
+    }
+
+    if (weight > 0) flush();
+    let cursor = 0;
+    while (cursor < segmentWeight) {
+      if (weight >= pageSize) flush();
+      const take = Math.min(pageSize - weight, segmentWeight - cursor);
+      const next = cursor + take;
+      const leftFrom = mapProportion(cursor, segmentWeight, leftUnits.length);
+      const leftTo = mapProportion(next, segmentWeight, leftUnits.length);
+      const rightFrom = mapProportion(cursor, segmentWeight, rightUnits.length);
+      const rightTo = mapProportion(next, segmentWeight, rightUnits.length);
+      appendChange(
+        leftUnits.slice(leftFrom, leftTo).join(""),
+        rightUnits.slice(rightFrom, rightTo).join(""),
+      );
+      weight += take;
+      cursor = next;
+    }
+  }
+
+  flush();
+  return pages.length ? pages : [{ left: [], right: [], hasChanges: false }];
+}
+
+function partsToSegments(parts: DiffPart[]): DiffSegment[] {
+  const segments: DiffSegment[] = [];
+  let index = 0;
+  while (index < parts.length) {
+    const part = parts[index]!;
+    if (part.kind === "equal") {
+      segments.push({ kind: "equal", text: part.value });
+      index += 1;
+      continue;
+    }
+    let left = "";
+    let right = "";
+    while (index < parts.length && parts[index]!.kind !== "equal") {
+      const current = parts[index]!;
+      if (current.kind === "delete") left += current.value;
+      else right += current.value;
+      index += 1;
+    }
+    segments.push({ kind: "change", left, right });
+  }
+  return segments;
+}
+
+function mapProportion(position: number, total: number, length: number): number {
+  if (!total || !length) return 0;
+  if (position >= total) return length;
+  return Math.floor((position * length) / total);
+}
+
 export function escapeHtml(text: string): string {
   return text
     .replaceAll("&", "&amp;")
@@ -97,14 +241,8 @@ function diffByLines(source: string, output: string): DiffPart[] {
     }
     const deletedText = deleted.join("");
     const insertedText = inserted.join("");
-    const deletedUnits = Array.from(deletedText);
-    const insertedUnits = Array.from(insertedText);
-    if (deletedUnits.length + insertedUnits.length <= CHAR_DIFF_LIMIT) {
-      parts.push(...diffUnits(deletedUnits, insertedUnits));
-    } else {
-      if (deletedText) parts.push({ value: deletedText, kind: "delete" });
-      if (insertedText) parts.push({ value: insertedText, kind: "insert" });
-    }
+    // 長段也走 diffUnits（錨點／對齊），避免整行被標成單一變更。
+    parts.push(...diffUnits(Array.from(deletedText), Array.from(insertedText)));
   }
   return parts;
 }

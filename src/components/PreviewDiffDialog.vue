@@ -9,11 +9,16 @@ const props = withDefaults(
     title?: string;
     meta?: Array<{ label: string; value: string }>;
     sections?: DiffSection[];
+    fullscreen?: boolean;
+    /** 長文分頁與上下差異導航（全視窗檔案預覽用）。 */
+    enableNav?: boolean;
   }>(),
   {
     title: "差異",
     meta: () => [],
     sections: () => [],
+    fullscreen: false,
+    enableNav: false,
   },
 );
 
@@ -29,15 +34,17 @@ const visible = computed({
 const hasContent = computed(() =>
   props.sections.some((section) => section.source || section.output),
 );
-const compact = computed(() => props.sections.length > 1);
+const compact = computed(() => !props.fullscreen && props.sections.length > 1);
 </script>
 
 <template>
   <el-dialog
     v-model="visible"
     :title="title"
-    width="920px"
+    :width="fullscreen ? '100%' : '920px'"
+    :fullscreen="fullscreen"
     class="preview-diff-dialog"
+    :class="{ 'is-fullscreen': fullscreen }"
     destroy-on-close
     align-center
   >
@@ -48,8 +55,12 @@ const compact = computed(() => props.sections.length > 1);
       </div>
     </div>
     <el-empty v-if="!hasContent" description="此項目沒有可顯示的預覽內容" />
-    <div v-else class="preview-diff-sections">
-      <section v-for="(section, index) in sections" :key="`${section.title}-${index}`">
+    <div v-else class="preview-diff-sections" :class="{ fullscreen }">
+      <section
+        v-for="(section, index) in sections"
+        :key="`${section.title}-${index}`"
+        class="preview-diff-section"
+      >
         <h3 v-if="sections.length > 1">{{ section.title }}</h3>
         <SideBySideDiffView
           :source="section.source"
@@ -57,6 +68,9 @@ const compact = computed(() => props.sections.length > 1);
           :source-label="section.sourceLabel"
           :output-label="section.outputLabel"
           :compact="compact"
+          :paginated="enableNav"
+          :show-nav="enableNav"
+          :fill-height="fullscreen"
         />
       </section>
     </div>
@@ -89,9 +103,34 @@ const compact = computed(() => props.sections.length > 1);
   display: grid;
   gap: 18px;
 }
+.preview-diff-sections.fullscreen {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  height: calc(100vh - 160px);
+}
+.preview-diff-sections.fullscreen .preview-diff-section {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.preview-diff-sections.fullscreen .preview-diff-section:last-child {
+  flex: 1 1 auto;
+}
+.preview-diff-sections.fullscreen .preview-diff-section :deep(.preview-diff-root) {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .preview-diff-sections h3 {
   margin: 0 0 8px;
   color: var(--el-text-color-primary);
   font-size: 14px;
+}
+.preview-diff-sections.fullscreen h3 {
+  margin: 0;
+  flex: 0 0 auto;
 }
 </style>

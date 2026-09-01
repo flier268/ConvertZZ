@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildSideBySideDiff, diffText, escapeHtml, sideBySideToHtml } from "./textDiff";
+import {
+  buildPagedSideBySideDiff,
+  buildSideBySideDiff,
+  diffText,
+  escapeHtml,
+  sideBySideToHtml,
+} from "./textDiff";
 import { buildInterleavedDiffPair } from "./textDiff.fixtures";
 
 describe("textDiff", () => {
@@ -72,5 +78,45 @@ describe("textDiff", () => {
     expect(sideBySideToHtml([{ text: "<x>", kind: "change" }], "diff-add")).toBe(
       '<mark class="diff-change diff-add">&lt;x&gt;</mark>',
     );
+  });
+
+  it("長文會依碼點預算分頁且保留變更標記", () => {
+    const source = `${"甲".repeat(30)}简体${"乙".repeat(30)}开发${"丙".repeat(30)}`;
+    const output = `${"甲".repeat(30)}簡體${"乙".repeat(30)}開發${"丙".repeat(30)}`;
+    const pages = buildPagedSideBySideDiff(source, output, 40);
+    expect(pages.length).toBeGreaterThan(1);
+    expect(pages.some((page) => page.hasChanges)).toBe(true);
+    const leftText = pages.flatMap((page) => page.left.map((span) => span.text)).join("");
+    const rightText = pages.flatMap((page) => page.right.map((span) => span.text)).join("");
+    expect(leftText).toBe(source);
+    expect(rightText).toBe(output);
+  });
+
+  it("超過字元差限的單行長文仍只標出真正變更", () => {
+    const source = `${"甲".repeat(2200)}里面开发头发${"乙".repeat(2200)}`;
+    const output = `${"甲".repeat(2200)}裡面開發頭髮${"乙".repeat(2200)}`;
+    const sides = buildSideBySideDiff(source, output);
+    const leftChanges = sides.left
+      .filter((span) => span.kind === "change")
+      .map((span) => span.text);
+    const rightChanges = sides.right
+      .filter((span) => span.kind === "change")
+      .map((span) => span.text);
+    // 「面」簡繁相同，不會進變更；其餘簡繁字元應逐一標出。
+    expect(leftChanges.join("")).toBe("里开发头发");
+    expect(rightChanges.join("")).toBe("裡開發頭髮");
+    expect(sides.left.some((span) => span.kind === "equal" && span.text.includes("面"))).toBe(true);
+    expect(sides.left[0]).toEqual({ text: "甲".repeat(2200), kind: "equal" });
+    expect(sides.left.at(-1)).toEqual({ text: "乙".repeat(2200), kind: "equal" });
+  });
+
+  it("成對簡繁變更盡量留在同一頁", () => {
+    const source = `${"前".repeat(18)}里面`;
+    const output = `${"前".repeat(18)}裡面`;
+    const pages = buildPagedSideBySideDiff(source, output, 20);
+    const changePages = pages.filter((page) => page.hasChanges);
+    expect(changePages).toHaveLength(1);
+    expect(changePages[0]?.left.some((span) => span.kind === "change")).toBe(true);
+    expect(changePages[0]?.right.some((span) => span.kind === "change")).toBe(true);
   });
 });

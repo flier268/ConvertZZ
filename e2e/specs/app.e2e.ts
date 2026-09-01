@@ -291,6 +291,23 @@ test.describe("ConvertZZ 前端", () => {
     await expect(page.locator(".file-plan-preview .diff-add").first()).toBeVisible();
   });
 
+  test("檔案預覽可開全視窗並翻頁、跳上下差異", async ({ page }) => {
+    await openApp(page);
+    await openPage(page, "#nav-files", "檔案與檔名");
+    await page.getByRole("button", { name: "選取檔案" }).click();
+    await page.getByRole("button", { name: "建立預覽" }).click();
+    await expect(page.getByRole("button", { name: "全視窗預覽" })).toBeEnabled();
+    await page.getByRole("button", { name: "全視窗預覽" }).click();
+    const dialog = page.getByRole("dialog", { name: "檔案差異預覽" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "下一個差異" })).toBeVisible();
+    await expect(dialog.getByText(/\d+ \/ \d+ 頁/)).toBeVisible();
+    await dialog.getByRole("button", { name: "下一個差異" }).click();
+    await expect(dialog.locator("mark.diff-change.is-active").first()).toBeVisible();
+    await dialog.locator(".el-pager li").filter({ hasText: /^2$/ }).click();
+    await expect(dialog.getByText(/2 \/ \d+ 頁/)).toBeVisible();
+  });
+
   test("快速轉換固定並排差異檢視", async ({ page }) => {
     await openApp(page);
     await expect(page.getByRole("heading", { name: "快速轉換" })).toBeVisible();

@@ -231,11 +231,13 @@ function mockCoreRequest(operation: string, rawPayload: unknown): unknown {
       selected: true,
       status: "ready",
     };
+    const pad = (ch: string, n: number) => ch.repeat(n);
     lastFilePlanItem = {
       ...base,
       detectedEncoding: "utf8",
-      sourcePreview: "里面开发头发",
-      outputPreview: "裡面開發頭髮",
+      // 長文方便驗證全視窗分頁；仍保留既有短句供 e2e 斷言。
+      sourcePreview: `${pad("甲", 1100)}里面开发头发${pad("乙", 1100)}`,
+      outputPreview: `${pad("甲", 1100)}裡面開發頭髮${pad("乙", 1100)}`,
       previewLoaded: true,
     };
     return lastFilePlanItem;

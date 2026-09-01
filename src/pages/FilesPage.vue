@@ -18,6 +18,7 @@ import { ensureSupportedFilesFilter } from "../lib/fileFilters";
 import { fileConversionDefaults } from "../lib/settingsApply";
 import { buildFileDiffSections, type DiffSection } from "../lib/fileDiff";
 import { formatProgressLabel, progressPercentage, type ProgressSnapshot } from "../lib/progressEta";
+import PreviewDiffDialog from "../components/PreviewDiffDialog.vue";
 import SideBySideDiffView from "../components/SideBySideDiffView.vue";
 
 defineOptions({ name: "FilesPage" });
@@ -29,6 +30,7 @@ const plan = ref<FileConversionPlan>();
 const busy = ref(false);
 const previewBusy = ref(false);
 const previewDiffReady = ref(false);
+const previewFullscreenVisible = ref(false);
 const currentItem = ref<FilePlanItem>();
 const previewSections = ref<DiffSection[]>([]);
 const previewMeta = ref<Array<{ label: string; value: string }>>([]);
@@ -129,6 +131,19 @@ const activeSection = computed(
   () =>
     previewSections.value.find((section) => section.title === "內容") ?? previewSections.value[0],
 );
+
+const canOpenFullscreenPreview = computed(
+  () =>
+    Boolean(currentItem.value) &&
+    previewDiffReady.value &&
+    !previewBusy.value &&
+    previewSections.value.some((section) => section.source || section.output),
+);
+
+function openFullscreenPreview() {
+  if (!canOpenFullscreenPreview.value) return;
+  previewFullscreenVisible.value = true;
+}
 
 function startColumnResize(key: string, event: MouseEvent) {
   event.preventDefault();
@@ -301,6 +316,7 @@ function clearPreviewState() {
   previewMeta.value = [];
   previewBusy.value = false;
   previewDiffReady.value = false;
+  previewFullscreenVisible.value = false;
 }
 
 function updatePreviewPanel(item: FilePlanItem) {
@@ -702,7 +718,16 @@ watch(
             <aside class="file-plan-preview">
               <div class="file-plan-preview-header">
                 <strong>檔案預覽</strong>
-                <small v-if="previewBusy">載入中…</small>
+                <div class="file-plan-preview-header-actions">
+                  <small v-if="previewBusy">載入中…</small>
+                  <el-button
+                    size="small"
+                    :disabled="!canOpenFullscreenPreview"
+                    @click="openFullscreenPreview"
+                  >
+                    全視窗預覽
+                  </el-button>
+                </div>
               </div>
               <el-empty v-if="!currentItem" description="選取左側檔案以載入預覽" />
               <template v-else>
@@ -752,6 +777,14 @@ watch(
         </el-splitter>
       </div>
     </section>
+    <PreviewDiffDialog
+      v-model="previewFullscreenVisible"
+      title="檔案差異預覽"
+      :meta="previewMeta"
+      :sections="previewSections"
+      fullscreen
+      enable-nav
+    />
   </section>
 </template>
 
@@ -877,6 +910,11 @@ watch(
 }
 .file-plan-preview-header strong {
   font-size: 14px;
+}
+.file-plan-preview-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .file-plan-preview-header small {
   color: #5b746f;

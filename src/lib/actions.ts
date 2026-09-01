@@ -7,7 +7,7 @@ import type {
   EngineKind,
   ZhConvertOptions,
 } from "@shared/contracts";
-import { core } from "./coreClient";
+import { core, type CoreRequestOptions } from "./coreClient";
 
 export async function convertText(
   text: string,
@@ -16,15 +16,20 @@ export async function convertText(
   vocabularyCorrection = true,
   zhconvert?: ZhConvertOptions,
   dictionaryPath?: string,
+  requestOptions?: CoreRequestOptions,
 ): Promise<ConversionResult> {
-  return core.request<ConversionResult>("convert.preview", {
-    text,
-    direction,
-    engine,
-    vocabularyCorrection,
-    zhconvert,
-    dictionaryPath,
-  } satisfies ConversionRequest);
+  return core.request<ConversionResult>(
+    "convert.preview",
+    {
+      text,
+      direction,
+      engine,
+      vocabularyCorrection,
+      zhconvert,
+      dictionaryPath,
+    } satisfies ConversionRequest,
+    requestOptions,
+  );
 }
 
 export async function convertClipboard(

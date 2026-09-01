@@ -7,6 +7,7 @@ mod dictionary_service;
 mod encoding;
 mod error;
 mod files;
+mod parallelism;
 pub mod roundtrip_dict;
 mod settings;
 mod types;
@@ -15,14 +16,15 @@ mod zhconvert;
 
 pub use conversion::ConversionService;
 pub use error::CoreError;
-pub use types::{Direction, ProgressEvent, ProgressReporter};
+pub use types::{CancelCheck, Direction, ProgressEvent, ProgressReporter};
 
 use audio::AudioService;
 use dictionary_service::DictionaryService;
 use files::FileService;
 use serde_json::Value;
+use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use zhconvert::ZhConvertClient;
 
 pub struct CoreState {
@@ -30,6 +32,7 @@ pub struct CoreState {
     files: FileService,
     audio: AudioService,
     dictionary: DictionaryService,
+    cancelled_requests: Mutex<HashSet<String>>,
 }
 
 impl CoreState {
@@ -40,7 +43,40 @@ impl CoreState {
             files: FileService::new(),
             audio: AudioService::new(),
             dictionary: DictionaryService::new(dictionary_path),
+            cancelled_requests: Mutex::new(HashSet::new()),
         })
+    }
+
+    pub fn begin_request(&self, request_id: &str) {
+        if let Ok(mut set) = self.cancelled_requests.lock() {
+            set.remove(request_id);
+        }
+    }
+
+    pub fn cancel_request(&self, request_id: &str) -> bool {
+        self.cancelled_requests
+            .lock()
+            .map(|mut set| set.insert(request_id.to_string()))
+            .unwrap_or(false)
+    }
+
+    pub fn finish_request(&self, request_id: &str) {
+        if let Ok(mut set) = self.cancelled_requests.lock() {
+            set.remove(request_id);
+        }
+    }
+
+    pub fn is_request_cancelled(&self, request_id: &str) -> bool {
+        self.cancelled_requests
+            .lock()
+            .ok()
+            .is_some_and(|set| set.contains(request_id))
+    }
+
+    pub fn request_cancel_check(self: &Arc<Self>, request_id: &str) -> CancelCheck {
+        let state = Arc::clone(self);
+        let request_id = request_id.to_string();
+        Arc::new(move || state.is_request_cancelled(&request_id))
     }
 }
 
@@ -49,7 +85,9 @@ pub async fn dispatch(
     operation: &str,
     payload: Value,
     progress: ProgressReporter,
+    request_id: &str,
 ) -> Result<Value, CoreError> {
+    let is_cancelled = state.request_cancel_check(request_id);
     match operation {
         "health" => Ok(serde_json::json!({
             "version": env!("CARGO_PKG_VERSION"),
@@ -58,7 +96,17 @@ pub async fn dispatch(
         })),
         "convert.preview" => {
             let request = serde_json::from_value(payload)?;
-            to_value(state.conversion.convert(request).await?)
+            to_value(
+                state
+                    .conversion
+                    .convert_with_progress(request, Some(progress), Some(is_cancelled))
+                    .await?,
+            )
+        }
+        "core.cancel" => {
+            let id = required_string(&payload, "id")?;
+            let cancelled = state.cancel_request(&id);
+            Ok(serde_json::json!({ "cancelled": cancelled }))
         }
         "files.plan" => {
             let request = serde_json::from_value(payload)?;
@@ -71,7 +119,12 @@ pub async fn dispatch(
         }
         "files.preview" => {
             let request = serde_json::from_value(payload)?;
-            to_value(state.files.preview(&state.conversion, request).await?)
+            to_value(
+                state
+                    .files
+                    .preview(&state.conversion, request, progress, is_cancelled)
+                    .await?,
+            )
         }
         "files.apply" => {
             let plan_id = required_string(&payload, "planId")?;
@@ -79,7 +132,13 @@ pub async fn dispatch(
             to_value(
                 state
                     .files
-                    .apply(&state.conversion, &plan_id, selected.as_deref(), progress)
+                    .apply(
+                        &state.conversion,
+                        &plan_id,
+                        selected.as_deref(),
+                        progress,
+                        is_cancelled,
+                    )
                     .await?,
             )
         }
@@ -107,7 +166,7 @@ pub async fn dispatch(
         }
         "audio.apply" => {
             let plan_id = required_string(&payload, "planId")?;
-            to_value(state.audio.apply(&plan_id, progress).await?)
+            to_value(state.audio.apply(&plan_id, progress, is_cancelled).await?)
         }
         "audio.cancel" => {
             let plan_id = required_string(&payload, "planId")?;

@@ -11,10 +11,11 @@ import type {
   EngineKind,
   TextEncoding,
 } from "@shared/contracts";
-import { core } from "../lib/coreClient";
+import { core, isCancellationError } from "../lib/coreClient";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { cliInvocation } from "../lib/cli";
 import type { DiffSection } from "../lib/fileDiff";
+import { formatProgressLabel, progressPercentage, type ProgressSnapshot } from "../lib/progressEta";
 import PreviewDiffDialog from "../components/PreviewDiffDialog.vue";
 
 defineOptions({ name: "AudioPage" });
@@ -30,7 +31,9 @@ const diffSections = ref<DiffSection[]>([]);
 const promptAfterConversion = ref(true);
 const backup = ref(true);
 const conflictPolicy = ref<AudioTagPlanRequest["conflictPolicy"]>("skip");
-const progress = ref<{ current: number; total: number; message: string }>();
+const progress = ref<ProgressSnapshot>();
+const progressStartedAt = ref<number>();
+const activeRequestId = ref<string>();
 const options = reactive({
   direction: "s2t" as Direction,
   engine: "segmented" as EngineKind,
@@ -88,6 +91,7 @@ async function chooseFolder() {
 async function scan() {
   busy.value = true;
   progress.value = undefined;
+  progressStartedAt.value = Date.now();
   try {
     files.value = await core.request<AudioTagFile[]>(
       "audio.scan",
@@ -98,15 +102,23 @@ async function scan() {
         id3v2SourceEncoding: options.id3v2SourceEncoding,
         id3v2RepairSourceEncoding: options.id3v2RepairSourceEncoding,
       },
-      300_000,
-      (value) => {
-        progress.value = value;
+      {
+        onProgress: (value) => {
+          progress.value = value;
+        },
+        onRequestId: (id) => {
+          activeRequestId.value = id;
+        },
       },
     );
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : String(error));
+    if (isCancellationError(error)) ElMessage.info("已取消掃描。");
+    else ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     busy.value = false;
+    activeRequestId.value = undefined;
+    progress.value = undefined;
+    progressStartedAt.value = undefined;
   }
 }
 
@@ -124,6 +136,7 @@ async function createPlan() {
     .map((file) => file.path);
   busy.value = true;
   progress.value = undefined;
+  progressStartedAt.value = Date.now();
   try {
     const settings = await loadSettings();
     plan.value = await core.request<AudioTagPlan>(
@@ -155,16 +168,24 @@ async function createPlan() {
         id3v2Version: options.id3v2Version,
         id3v2Encoding: options.id3v2Encoding,
       } satisfies AudioTagPlanRequest,
-      600_000,
-      (value) => {
-        progress.value = value;
+      {
+        onProgress: (value) => {
+          progress.value = value;
+        },
+        onRequestId: (id) => {
+          activeRequestId.value = id;
+        },
       },
     );
     files.value = plan.value.files;
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : String(error));
+    if (isCancellationError(error)) ElMessage.info("已取消建立預覽。");
+    else ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     busy.value = false;
+    activeRequestId.value = undefined;
+    progress.value = undefined;
+    progressStartedAt.value = undefined;
   }
 }
 
@@ -188,13 +209,18 @@ async function applyPlan() {
     return;
   busy.value = true;
   progress.value = undefined;
+  progressStartedAt.value = Date.now();
   try {
     const result = await core.request<{ succeeded: string[]; failed: unknown[] }>(
       "audio.apply",
       { planId: plan.value.planId },
-      900_000,
-      (value) => {
-        progress.value = value;
+      {
+        onProgress: (value) => {
+          progress.value = value;
+        },
+        onRequestId: (id) => {
+          activeRequestId.value = id;
+        },
       },
     );
     if (promptAfterConversion.value)
@@ -202,19 +228,36 @@ async function applyPlan() {
     if (result.failed.length) ElMessage.warning(`${result.failed.length} 個檔案失敗。`);
     plan.value = undefined;
     await scan();
+  } catch (error) {
+    if (isCancellationError(error)) ElMessage.info("已取消音訊轉換。");
+    else ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     busy.value = false;
+    activeRequestId.value = undefined;
+    progress.value = undefined;
+    progressStartedAt.value = undefined;
   }
 }
 
 async function cancelPlan() {
-  if (!plan.value) return;
-  await core.request("audio.cancel", { planId: plan.value.planId });
-  plan.value = undefined;
-  diffVisible.value = false;
-  diffSections.value = [];
-  diffMeta.value = [];
-  await scan();
+  const requestId = activeRequestId.value;
+  const planId = plan.value?.planId;
+  if (requestId) {
+    try {
+      await core.cancel(requestId);
+    } catch {
+      // 仍嘗試以計畫 ID 取消。
+    }
+  }
+  if (planId) {
+    await core.request("audio.cancel", { planId });
+  }
+  if (!busy.value) {
+    plan.value = undefined;
+    diffVisible.value = false;
+    diffSections.value = [];
+    diffMeta.value = [];
+  }
 }
 
 function openFieldDiff(file: AudioTagFile, field: AudioTagField) {
@@ -401,15 +444,17 @@ function fieldEnabled(
           @click="createPlan"
           >建立標籤預覽</el-button
         >
-        <el-button v-if="plan" :disabled="busy" @click="cancelPlan">取消計畫</el-button>
+        <el-button v-if="plan || busy" @click="cancelPlan">{{
+          busy ? "停止作業" : "取消計畫"
+        }}</el-button>
         <el-button v-if="plan" type="primary" :loading="busy" @click="applyPlan"
           >確認寫入</el-button
         >
       </div>
       <el-progress
         v-if="busy && progress"
-        :percentage="Math.round((progress.current / Math.max(1, progress.total)) * 100)"
-        :format="() => progress?.message ?? ''"
+        :percentage="progressPercentage(progress)"
+        :format="() => formatProgressLabel(progress, progressStartedAt)"
       />
     </el-card>
     <el-empty v-if="!files.length" description="請選取 MP3、APE、OGG 或 Opus 檔案" />

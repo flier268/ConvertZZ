@@ -10,6 +10,10 @@ fn noop() -> ProgressReporter {
     Arc::new(|_| {})
 }
 
+fn never_cancel() -> CancelCheck {
+    Arc::new(|| false)
+}
+
 fn temp_dir() -> PathBuf {
     let path = std::env::temp_dir().join(format!("convertzz-files-{}", Uuid::new_v4()));
     std::fs::create_dir_all(&path).unwrap();
@@ -59,7 +63,8 @@ fn names(directory: &Path) -> Vec<String> {
 async fn preview_limit_and_unicode_bom() {
     let directory = temp_dir();
     let path = directory.join("note.txt");
-    let source = "里面".repeat(800);
+    // 用可穩定字形轉換的字，避免無標點長串「里面」依賴同義詞分詞。
+    let source = "软件".repeat(800);
     std::fs::write(&path, &source).unwrap();
     let service = FileService::new();
     let plan = service
@@ -95,6 +100,8 @@ async fn preview_limit_and_unicode_bom() {
                 plan_id: plan.plan_id.clone(),
                 source_path: path.to_string_lossy().into_owned(),
             },
+            noop(),
+            never_cancel(),
         )
         .await
         .unwrap();
@@ -105,15 +112,21 @@ async fn preview_limit_and_unicode_bom() {
     );
     assert_eq!(previewed.output_preview.chars().count(), 1024);
     let result = service
-        .apply(shared_conversion(), &plan.plan_id, None, noop())
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
         .await
         .unwrap();
-    assert!(result.failed.is_empty());
+    assert!(result.failed.is_empty(), "{result:?}");
     let written = std::fs::read(&path).unwrap();
     assert_eq!(&written[..3], &[0xef, 0xbb, 0xbf]);
     assert_eq!(
         String::from_utf8(written[3..].to_vec()).unwrap(),
-        "裡面".repeat(800)
+        "軟件".repeat(800)
     );
     let _ = std::fs::remove_dir_all(&directory);
 }
@@ -160,13 +173,21 @@ async fn preview_then_safe_write_and_fix_charset() {
                 plan_id: plan.plan_id.clone(),
                 source_path: path.to_string_lossy().into_owned(),
             },
+            noop(),
+            never_cancel(),
         )
         .await
         .unwrap();
     assert!(previewed.source_preview.contains("里面开发"));
     assert!(previewed.output_preview.contains("裡面開發"));
     let result = service
-        .apply(shared_conversion(), &plan.plan_id, None, noop())
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
         .await
         .unwrap();
     assert!(result.failed.is_empty());
@@ -194,7 +215,13 @@ async fn skips_same_name_conflicts_by_default() {
         .unwrap();
     assert_eq!(plan.items[0].status, PlanStatus::Conflict);
     let result = service
-        .apply(shared_conversion(), &plan.plan_id, None, noop())
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
         .await
         .unwrap();
     assert_eq!(result.skipped, [source.to_string_lossy().into_owned()]);
@@ -219,11 +246,63 @@ async fn cancel_rejects_old_plan() {
         .unwrap();
     assert_eq!(service.cancel(&plan.plan_id)["cancelled"], true);
     let error = service
-        .apply(shared_conversion(), &plan.plan_id, None, noop())
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
         .await
         .unwrap_err();
     assert_eq!(error.code, "PLAN_NOT_FOUND");
     assert_eq!(std::fs::read_to_string(&source).unwrap(), "來源");
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn request_cancel_stops_apply_before_write() {
+    let directory = temp_dir();
+    let source = directory.join("demo.txt");
+    std::fs::write(&source, "里面").unwrap();
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            FilePlanRequest {
+                paths: vec![source.to_string_lossy().into_owned()],
+                output_path: None,
+                output_directory: None,
+                mode: FileMode::Content,
+                recursive: false,
+                input_encoding: TextEncoding::Utf8,
+                output_encoding: TextEncoding::Utf8,
+                add_bom: false,
+                fix_charset_declaration: false,
+                fix_charset_extensions: None,
+                allowed_extensions: None,
+                preview_max_bytes: None,
+                conflict_policy: ConflictPolicy::Skip,
+                backup: Some(false),
+                conversion: conversion_s2t(),
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    let request_cancelled: CancelCheck = Arc::new(|| true);
+    let error = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            request_cancelled,
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, "PLAN_CANCELLED");
+    assert_eq!(std::fs::read_to_string(&source).unwrap(), "里面");
     let _ = std::fs::remove_dir_all(&directory);
 }
 
@@ -244,7 +323,13 @@ async fn overwrite_clears_transaction_temp_files() {
         .await
         .unwrap();
     let result = service
-        .apply(shared_conversion(), &plan.plan_id, None, noop())
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
         .await
         .unwrap();
     assert!(result.failed.is_empty());
@@ -303,7 +388,13 @@ async fn expands_wildcards_and_output_pattern() {
         output_directory.join("one.txt").to_string_lossy()
     );
     let result = service
-        .apply(shared_conversion(), &plan.plan_id, None, noop())
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
         .await
         .unwrap();
     assert!(result.failed.is_empty());
@@ -372,7 +463,13 @@ async fn recursive_rename_keeps_nested_files() {
             && item.kind == FileItemKind::File
     }));
     let result = service
-        .apply(shared_conversion(), &plan.plan_id, None, noop())
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
         .await
         .unwrap();
     assert!(result.failed.is_empty());
@@ -480,65 +577,132 @@ async fn recursive_scan_does_not_follow_symlinks() {
 }
 
 #[tokio::test]
-async fn second_phase_failure_rolls_back() {
+async fn later_file_failure_keeps_earlier_writes() {
     let directory = temp_dir();
-    let first = directory.join("里面一.txt");
-    let second = directory.join("里面二.txt");
-    std::fs::write(&first, "來源一").unwrap();
-    std::fs::write(&second, "來源二").unwrap();
-    let service = FileService::new();
-    let mut request = filename_request(&directory, ConflictPolicy::Overwrite);
-    request.recursive = false;
-    let plan = service
-        .plan(shared_conversion(), request, noop())
-        .await
-        .unwrap();
-    let outputs: Vec<_> = plan
-        .items
-        .iter()
-        .map(|item| item.output_path.clone())
-        .collect();
-    let removed = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let removed_flag = Arc::clone(&removed);
-    let dir = directory.clone();
-    let progress: ProgressReporter = Arc::new(move |event| {
-        if removed_flag.load(std::sync::atomic::Ordering::SeqCst)
-            || !event.message.starts_with("正在寫入：")
-        {
-            return;
-        }
-        if let Some(stage) = std::fs::read_dir(&dir)
-            .unwrap()
-            .filter_map(|entry| entry.ok())
-            .find(|entry| {
-                entry
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with(".convertzz-stage-")
-            })
-        {
-            let _ = std::fs::remove_file(stage.path());
-            removed_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+    let first = directory.join("甲.txt");
+    let second = directory.join("乙.txt");
+    std::fs::write(&first, "里面开发").unwrap();
+    std::fs::write(&second, "软件测试").unwrap();
+    let service = FileService::new().with_stage_validator({
+        let second = second.clone();
+        move |stage, _, source| {
+            if source == second {
+                let _ = std::fs::remove_file(stage);
+                return Err(CoreError::new("FILE_VERIFY", "受控第二檔失敗"));
+            }
+            Ok(())
         }
     });
-    let result = service
-        .apply(shared_conversion(), &plan.plan_id, None, progress)
+    let plan = service
+        .plan(
+            shared_conversion(),
+            FilePlanRequest {
+                paths: vec![
+                    first.to_string_lossy().into_owned(),
+                    second.to_string_lossy().into_owned(),
+                ],
+                output_path: None,
+                output_directory: None,
+                mode: FileMode::Content,
+                recursive: false,
+                input_encoding: TextEncoding::Utf8,
+                output_encoding: TextEncoding::Utf8,
+                add_bom: false,
+                fix_charset_declaration: false,
+                fix_charset_extensions: None,
+                allowed_extensions: None,
+                preview_max_bytes: None,
+                conflict_policy: ConflictPolicy::Skip,
+                backup: Some(false),
+                conversion: conversion_s2t(),
+            },
+            noop(),
+        )
         .await
         .unwrap();
-    assert!(removed.load(std::sync::atomic::Ordering::SeqCst));
-    assert_eq!(result.failed.len(), 1);
-    assert_eq!(std::fs::read_to_string(&first).unwrap(), "來源一");
-    assert_eq!(std::fs::read_to_string(&second).unwrap(), "來源二");
-    assert_eq!(names(&directory), ["里面一.txt", "里面二.txt"]);
-    assert!(outputs.iter().all(|path| {
-        !names(&directory).contains(
-            &Path::new(path)
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .into_owned(),
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
         )
-    }));
+        .await
+        .unwrap();
+    assert_eq!(result.succeeded.len(), 1, "{result:?}");
+    assert_eq!(result.failed.len(), 1, "{result:?}");
+    assert_eq!(result.failed[0].path, second.to_string_lossy().into_owned());
+    assert_eq!(std::fs::read_to_string(&first).unwrap(), "裡面開發");
+    assert_eq!(std::fs::read_to_string(&second).unwrap(), "软件测试");
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn cancel_after_first_file_keeps_written_changes() {
+    // 強制序列，才能在第一檔寫入後停止並保留變更。
+    std::env::set_var("CONVERTZZ_CONVERT_JOBS", "1");
+    let directory = temp_dir();
+    let first = directory.join("一.txt");
+    let second = directory.join("二.txt");
+    std::fs::write(&first, "里面开发").unwrap();
+    std::fs::write(&second, "软件测试").unwrap();
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            FilePlanRequest {
+                paths: vec![
+                    first.to_string_lossy().into_owned(),
+                    second.to_string_lossy().into_owned(),
+                ],
+                output_path: None,
+                output_directory: None,
+                mode: FileMode::Content,
+                recursive: false,
+                input_encoding: TextEncoding::Utf8,
+                output_encoding: TextEncoding::Utf8,
+                add_bom: false,
+                fix_charset_declaration: false,
+                fix_charset_extensions: None,
+                allowed_extensions: None,
+                preview_max_bytes: None,
+                conflict_policy: ConflictPolicy::Skip,
+                backup: Some(false),
+                conversion: conversion_s2t(),
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    let cancel_after_first = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let cancel_flag = Arc::clone(&cancel_after_first);
+    let progress: ProgressReporter = Arc::new(move |event| {
+        if event.message.starts_with("已寫入：") {
+            cancel_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+    });
+    let request_cancelled: CancelCheck = Arc::new({
+        let cancel_after_first = Arc::clone(&cancel_after_first);
+        move || cancel_after_first.load(std::sync::atomic::Ordering::SeqCst)
+    });
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            progress,
+            request_cancelled,
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.succeeded.len(), 1, "{result:?}");
+    assert!(result
+        .skipped
+        .iter()
+        .any(|path| path == &second.to_string_lossy().into_owned()));
+    assert_eq!(std::fs::read_to_string(&first).unwrap(), "裡面開發");
+    assert_eq!(std::fs::read_to_string(&second).unwrap(), "软件测试");
     let _ = std::fs::remove_dir_all(&directory);
 }
 
@@ -563,7 +727,13 @@ async fn two_phase_rename_swaps_names() {
         .await
         .unwrap();
     let applied = service
-        .apply(shared_conversion(), &result.plan_id, None, noop())
+        .apply(
+            shared_conversion(),
+            &result.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
         .await
         .unwrap();
     assert!(applied.failed.is_empty());
@@ -594,11 +764,17 @@ async fn stage_validation_failure_keeps_original() {
         .await
         .unwrap();
     let result = service
-        .apply(shared_conversion(), &plan.plan_id, None, noop())
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
         .await
         .unwrap();
     assert_eq!(result.failed.len(), 1);
-    assert_eq!(result.failed[0].path, "批次作業");
+    assert_eq!(result.failed[0].path, source.to_string_lossy().into_owned());
     assert_eq!(result.failed[0].message, "受控驗證失敗");
     assert_eq!(std::fs::read_to_string(&source).unwrap(), "來源內容");
     assert!(names(&directory)
@@ -650,10 +826,16 @@ async fn file_becoming_readonly_is_not_replaced() {
         .unwrap();
     std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o444)).unwrap();
     let result = service
-        .apply(shared_conversion(), &plan.plan_id, None, noop())
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
         .await
         .unwrap();
-    assert_eq!(result.failed[0].path, "批次作業");
+    assert_eq!(result.failed[0].path, source.to_string_lossy().into_owned());
     assert_eq!(result.failed[0].message, "來源檔案為唯讀，無法安全取代。");
     assert_eq!(std::fs::read_to_string(&source).unwrap(), "來源");
     assert_eq!(names(&directory), ["里面.txt"]);
@@ -692,7 +874,13 @@ async fn creates_file_bak_before_conversion() {
         .await
         .unwrap();
     let result = service
-        .apply(shared_conversion(), &plan.plan_id, None, noop())
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
         .await
         .unwrap();
     assert!(result.failed.is_empty());
@@ -738,7 +926,13 @@ async fn folder_selection_backs_up_whole_folder() {
         .await
         .unwrap();
     let result = service
-        .apply(shared_conversion(), &plan.plan_id, None, noop())
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
         .await
         .unwrap();
     assert!(result.failed.is_empty());
@@ -799,7 +993,13 @@ async fn backup_false_skips_bak() {
         .await
         .unwrap();
     service
-        .apply(shared_conversion(), &plan.plan_id, None, noop())
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
         .await
         .unwrap();
     assert_eq!(names(&directory), ["note.txt"]);
@@ -849,13 +1049,21 @@ async fn both_mode_converts_content_and_filename() {
                 plan_id: plan.plan_id.clone(),
                 source_path: source.to_string_lossy().into_owned(),
             },
+            noop(),
+            never_cancel(),
         )
         .await
         .unwrap();
     assert!(previewed.source_preview.contains("里面开发"));
     assert!(previewed.output_preview.contains("裡面開發"));
     let result = service
-        .apply(shared_conversion(), &plan.plan_id, None, noop())
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
         .await
         .unwrap();
     assert!(result.failed.is_empty(), "{result:?}");
@@ -903,13 +1111,21 @@ async fn cancel_rejects_content_plan_without_writing() {
                 plan_id: plan.plan_id.clone(),
                 source_path: source.to_string_lossy().into_owned(),
             },
+            noop(),
+            never_cancel(),
         )
         .await
         .unwrap();
     assert!(previewed.output_preview.contains("裡面開發"));
     assert_eq!(service.cancel(&plan.plan_id)["cancelled"], true);
     let error = service
-        .apply(shared_conversion(), &plan.plan_id, None, noop())
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
         .await
         .unwrap_err();
     assert_eq!(error.code, "PLAN_NOT_FOUND");
@@ -962,7 +1178,13 @@ async fn readonly_directory_keeps_original() {
         .unwrap();
     std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o555)).unwrap();
     let result = service
-        .apply(shared_conversion(), &plan.plan_id, None, noop())
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
         .await
         .unwrap();
     std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -1023,6 +1245,8 @@ async fn content_plan_lists_without_converting() {
                 plan_id: plan.plan_id.clone(),
                 source_path: first.to_string_lossy().into_owned(),
             },
+            noop(),
+            never_cancel(),
         )
         .await
         .unwrap();
@@ -1069,6 +1293,8 @@ async fn preview_rejects_path_outside_plan() {
                 plan_id: plan.plan_id,
                 source_path: directory.join("missing.txt").to_string_lossy().into_owned(),
             },
+            noop(),
+            never_cancel(),
         )
         .await
         .unwrap_err();
@@ -1115,6 +1341,7 @@ async fn apply_only_writes_selected_files() {
             &plan.plan_id,
             Some(selected.as_slice()),
             noop(),
+            never_cancel(),
         )
         .await
         .unwrap();

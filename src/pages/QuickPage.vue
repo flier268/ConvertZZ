@@ -4,7 +4,9 @@ import { ElMessage } from "element-plus";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import type { Direction, EngineKind, ZhConvertOptions } from "@shared/contracts";
 import { convertText } from "../lib/actions";
+import { core, isCancellationError } from "../lib/coreClient";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
+import { formatProgressLabel, progressPercentage, type ProgressSnapshot } from "../lib/progressEta";
 import SideBySideDiffView from "../components/SideBySideDiffView.vue";
 
 defineOptions({ name: "QuickPage" });
@@ -18,6 +20,9 @@ const busy = ref(false);
 const duration = ref<number>();
 const promptAfterConversion = ref(true);
 const zhconvert = ref<ZhConvertOptions>();
+const progress = ref<ProgressSnapshot>();
+const progressStartedAt = ref<number>();
+const activeRequestId = ref<string>();
 
 loadSettings().then((settings) => {
   engine.value = settings.engine;
@@ -29,6 +34,8 @@ loadSettings().then((settings) => {
 
 async function convert() {
   busy.value = true;
+  progress.value = undefined;
+  progressStartedAt.value = Date.now();
   try {
     const settings = await loadSettings();
     zhconvert.value = zhConvertOptions(settings, direction.value);
@@ -39,15 +46,37 @@ async function convert() {
       vocabularyCorrection.value,
       zhconvert.value,
       settings.dictionaryPath,
+      {
+        onProgress: (value) => {
+          progress.value = value;
+        },
+        onRequestId: (id) => {
+          activeRequestId.value = id;
+        },
+      },
     );
     output.value = result.text;
     duration.value = result.durationMs;
     if (promptAfterConversion.value) ElMessage.success(`轉換完成。耗時 ${result.durationMs} ms。`);
     if (result.warnings.length) ElMessage.warning(result.warnings[0]);
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : String(error));
+    if (isCancellationError(error)) ElMessage.info("已取消轉換。");
+    else ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     busy.value = false;
+    activeRequestId.value = undefined;
+    progress.value = undefined;
+    progressStartedAt.value = undefined;
+  }
+}
+
+async function cancelConvert() {
+  const requestId = activeRequestId.value;
+  if (!requestId) return;
+  try {
+    await core.cancel(requestId);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -88,8 +117,17 @@ async function copy() {
           <el-option label="ZhConvert API" value="zhconvert" />
         </el-select>
         <el-checkbox v-model="vocabularyCorrection">詞彙修正</el-checkbox>
-        <el-button type="primary" :loading="busy" @click="convert">開始轉換</el-button>
+        <el-button type="primary" :loading="busy" :disabled="busy" @click="convert"
+          >開始轉換</el-button
+        >
+        <el-button v-if="busy" @click="cancelConvert">停止轉換</el-button>
       </div>
+      <el-progress
+        v-if="busy && progress"
+        class="quick-progress"
+        :percentage="progressPercentage(progress)"
+        :format="() => formatProgressLabel(progress, progressStartedAt)"
+      />
     </el-card>
     <el-card shadow="never">
       <template #header
@@ -111,3 +149,9 @@ async function copy() {
     </el-card>
   </section>
 </template>
+
+<style scoped>
+.quick-progress {
+  margin-top: 12px;
+}
+</style>

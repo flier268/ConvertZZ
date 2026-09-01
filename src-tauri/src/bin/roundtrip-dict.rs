@@ -272,8 +272,8 @@ roundtrip-dict — 以套件分詞／簡轉繁做回環，產出 ConvertZZ 額�
   143  Unix SIGTERM
 
 輸出（ConvertZZ 額外修正，不寫入套件字典；不要 cp -r 整個目錄到 extra-correction）：
-  zht.corpus.synonym.txt   分詞後同義詞（正字,錯字）
-  zht.corpus.dict.txt      額外分詞表
+  zht.corpus.synonym.txt   同義詞（正字,錯字|詞性）
+  zht.corpus.dict.txt      額外分詞表（詞|詞性|權值，含簡繁詞形）
   pairs.tsv                對應次數與例句
   report.json              統計
   checkpoint.json / state/ 檔級復原（勿套用）

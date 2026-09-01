@@ -221,6 +221,7 @@ pub fn run_roundtrip(
         let mut file_skipped = 0u64;
         let mut file_mismatched = 0u64;
         eprintln!("讀取 {}", file.display());
+        let mut last_progress = Instant::now();
         let mut iterator = read_text_lines(file)?;
         let mut exhausted = false;
         loop {
@@ -260,7 +261,10 @@ pub fn run_roundtrip(
                 if let Some(left) = remaining.as_mut() {
                     *left = left.saturating_sub(outcome.lines_read);
                 }
-                if file_lines % PROGRESS_EVERY < outcome.lines_read.max(1) {
+                if file_lines == outcome.lines_read
+                    || file_lines % PROGRESS_EVERY < outcome.lines_read.max(1)
+                    || last_progress.elapsed().as_secs() >= 2
+                {
                     let elapsed = started.elapsed().as_secs_f64().max(0.001);
                     eprintln!(
                         "已處理 {} 行，回環差異 {}，候選 {}，{:.0} 行/s，{:.1}s",
@@ -270,6 +274,7 @@ pub fn run_roundtrip(
                         (checkpoint.lines_read + file_lines) as f64 / elapsed,
                         elapsed
                     );
+                    last_progress = Instant::now();
                 }
             }
 
@@ -510,7 +515,7 @@ fn finish_run(
 }
 
 fn write_outputs(
-    _service: &ConversionService,
+    service: &ConversionService,
     config: &RoundtripRunConfig,
     checkpoint: &Checkpoint,
     skip_variants: &HashSet<String>,
@@ -540,7 +545,9 @@ fn write_outputs(
         files: checkpoint.completed_files.clone(),
         top_pairs: stats.top_pairs.clone(),
     };
-    write_derived_outputs(&config.output, &entries, &stats, &report)?;
+    write_derived_outputs(&config.output, &entries, &stats, &report, &|word| {
+        service.word_pos(word)
+    })?;
     eprintln!(
         "已寫入產出：{} 行，保留 {} 個正字（{} 個異體）",
         checkpoint.lines_read,

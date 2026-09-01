@@ -105,7 +105,10 @@ async fn core_request(
             }),
         );
     });
-    match core::dispatch(Arc::clone(&state), &operation, payload, progress).await {
+    state.begin_request(&id);
+    let result = core::dispatch(Arc::clone(&state), &operation, payload, progress, &id).await;
+    state.finish_request(&id);
+    match result {
         Ok(result) => Ok(result),
         Err(error) => {
             append_log(&app, "core", &error.message);

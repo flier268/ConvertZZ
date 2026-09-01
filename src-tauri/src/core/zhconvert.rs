@@ -1,5 +1,7 @@
 use super::error::CoreError;
-use super::types::{Direction, ZhConvertModules, ZhConvertOptions};
+use super::types::{
+    CancelCheck, Direction, ProgressEvent, ProgressReporter, ZhConvertModules, ZhConvertOptions,
+};
 use serde_json::Value;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -74,8 +76,23 @@ impl ZhConvertClient {
         direction: Direction,
         options: Option<&ZhConvertOptions>,
     ) -> Result<String, CoreError> {
+        self.convert_with_progress(text, direction, options, None, None)
+            .await
+    }
+
+    pub async fn convert_with_progress(
+        &self,
+        text: &str,
+        direction: Direction,
+        options: Option<&ZhConvertOptions>,
+        progress: Option<ProgressReporter>,
+        is_cancelled: Option<CancelCheck>,
+    ) -> Result<String, CoreError> {
         if direction == Direction::None || text.is_empty() {
             return Ok(text.to_string());
+        }
+        if is_cancelled.as_ref().is_some_and(|check| check()) {
+            return Err(CoreError::new("CONVERT_CANCELLED", "轉換已由使用者取消。"));
         }
         let options = options.cloned().unwrap_or_default();
         let info = self.service_info(false).await?;
@@ -85,9 +102,22 @@ impl ZhConvertClient {
             .unwrap_or(50_000)
             .saturating_sub(2048)
             .max(1024) as usize;
+        let total = text.chars().count().max(1) as u64;
+        let mut done = 0u64;
         let mut converted = String::new();
         for chunk in split_utf8(text, maximum) {
+            if is_cancelled.as_ref().is_some_and(|check| check()) {
+                return Err(CoreError::new("CONVERT_CANCELLED", "轉換已由使用者取消。"));
+            }
             converted.push_str(&self.convert_chunk(&chunk, direction, &options).await?);
+            done += chunk.chars().count() as u64;
+            if let Some(progress) = &progress {
+                progress(ProgressEvent {
+                    current: done.min(total),
+                    total,
+                    message: format!("正在呼叫 ZhConvert… {}/{total}", done.min(total)),
+                });
+            }
         }
         Ok(converted)
     }

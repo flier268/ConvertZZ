@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 pub type ProgressReporter = Arc<dyn Fn(ProgressEvent) + Send + Sync>;
+pub type CancelCheck = Arc<dyn Fn() -> bool + Send + Sync>;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

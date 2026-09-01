@@ -11,6 +11,10 @@ fn noop() -> ProgressReporter {
     Arc::new(|_| {})
 }
 
+fn never_cancel() -> super::super::types::CancelCheck {
+    Arc::new(|| false)
+}
+
 fn temp_dir() -> PathBuf {
     let path = std::env::temp_dir().join(format!("convertzz-audio-{}", Uuid::new_v4()));
     std::fs::create_dir_all(&path).unwrap();
@@ -246,7 +250,10 @@ async fn writes_file_bak_before_apply() {
         .plan(shared_conversion(), request, noop())
         .await
         .unwrap();
-    let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
     assert!(result.failed.is_empty());
     assert_eq!(
         std::fs::read(format!("{}.bak", path.display())).unwrap(),
@@ -288,7 +295,10 @@ async fn folder_backup_copies_entire_directory() {
         .plan(shared_conversion(), request, noop())
         .await
         .unwrap();
-    let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
     assert!(result.failed.is_empty());
     assert_eq!(
         std::fs::read(PathBuf::from(format!("{}.bak", folder.display())).join("a.mp3")).unwrap(),
@@ -425,7 +435,10 @@ async fn only_checked_files_are_written() {
             .selected,
         false
     );
-    let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
     assert_eq!(result.succeeded, [selected.to_string_lossy().into_owned()]);
     assert_eq!(std::fs::read(&skipped).unwrap(), skipped_before);
     let _ = std::fs::remove_dir_all(&directory);
@@ -460,7 +473,10 @@ async fn applies_id3v1_and_id3v2_directions_separately() {
             .and_then(|field| field.converted_values.clone()),
         Some(vec!["里面".into()])
     );
-    let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
     assert!(result.failed.is_empty());
     let verified = service
         .scan(
@@ -514,7 +530,10 @@ async fn disabled_id3_container_is_not_converted() {
             .selected,
         false
     );
-    service.apply(&plan.plan_id, noop()).await.unwrap();
+    service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
     let verified = service
         .scan(
             shared_conversion(),
@@ -640,7 +659,10 @@ async fn writes_requested_id3v2_version_and_encoding() {
             .plan(shared_conversion(), request, noop())
             .await
             .unwrap();
-        let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+        let result = service
+            .apply(&plan.plan_id, noop(), never_cancel())
+            .await
+            .unwrap();
         assert!(result.failed.is_empty(), "{result:?}");
         let written = std::fs::read(&path).unwrap();
         assert_eq!(id3v2_header_version(&written), Some(version));
@@ -779,7 +801,10 @@ async fn converts_ape_ogg_oga_and_opus_without_touching_unselected_fields() {
             .plan(shared_conversion(), request, noop())
             .await
             .unwrap();
-        let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+        let result = service
+            .apply(&plan.plan_id, noop(), never_cancel())
+            .await
+            .unwrap();
         assert!(result.failed.is_empty(), "{result:?}");
         let after = read_tagged(&path).unwrap();
         assert_eq!(
@@ -876,7 +901,10 @@ async fn converts_multivalue_fields_value_by_value() {
         planned_artist.converted_values.as_deref(),
         Some(&["頭髮".to_string(), "皇后".to_string()][..])
     );
-    let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
     assert!(result.failed.is_empty(), "{result:?}");
 
     let after = read_tagged(&path).unwrap();
@@ -1038,7 +1066,10 @@ async fn keeps_unknown_text_binary_frames_and_cover_bytes() {
         .plan(shared_conversion(), request, noop())
         .await
         .unwrap();
-    let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
     assert!(result.failed.is_empty(), "{result:?}");
     let after = id3::Tag::read_from_path(&path).unwrap();
     assert_eq!(after.title().as_deref(), Some("裡面"));
@@ -1124,7 +1155,10 @@ async fn keeps_unlisted_ogg_fields_unchanged() {
         .plan(shared_conversion(), request, noop())
         .await
         .unwrap();
-    let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
     assert!(result.failed.is_empty(), "{result:?}");
     let after = read_tagged(&path).unwrap();
     assert_eq!(
@@ -1158,7 +1192,10 @@ async fn cancel_rejects_old_audio_plan() {
         .await
         .unwrap();
     assert_eq!(service.cancel(&plan.plan_id)["cancelled"], true);
-    let error = service.apply(&plan.plan_id, noop()).await.unwrap_err();
+    let error = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap_err();
     assert_eq!(error.code, "PLAN_NOT_FOUND");
     assert_eq!(std::fs::read(&path).unwrap(), before);
     let _ = std::fs::remove_dir_all(&directory);
@@ -1212,7 +1249,10 @@ async fn write_failure_keeps_original_audio() {
         .await
         .unwrap();
     std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o555)).unwrap();
-    let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
     assert_eq!(result.failed.len(), 1);
     assert!(result.succeeded.is_empty());
     std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -1240,7 +1280,10 @@ async fn bak_conflict_skip_keeps_existing_backup() {
         .plan(shared_conversion(), request, noop())
         .await
         .unwrap();
-    let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
     assert!(result.failed.is_empty(), "{result:?}");
     assert_eq!(std::fs::read(&bak).unwrap(), b"old-backup");
     let verified = service
@@ -1284,7 +1327,10 @@ async fn bak_conflict_overwrite_replaces_existing_backup() {
         .plan(shared_conversion(), request, noop())
         .await
         .unwrap();
-    let result = service.apply(&plan.plan_id, noop()).await.unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
     assert!(result.failed.is_empty(), "{result:?}");
     assert_eq!(std::fs::read(&bak).unwrap(), before);
     let _ = std::fs::remove_dir_all(&directory);

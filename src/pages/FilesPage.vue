@@ -11,12 +11,13 @@ import type {
   FilePlanRequest,
   TextEncoding,
 } from "@shared/contracts";
-import { core } from "../lib/coreClient";
+import { core, isCancellationError } from "../lib/coreClient";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { cliInvocation } from "../lib/cli";
 import { ensureSupportedFilesFilter } from "../lib/fileFilters";
 import { fileConversionDefaults } from "../lib/settingsApply";
 import { buildFileDiffSections, type DiffSection } from "../lib/fileDiff";
+import { formatProgressLabel, progressPercentage, type ProgressSnapshot } from "../lib/progressEta";
 import SideBySideDiffView from "../components/SideBySideDiffView.vue";
 
 defineOptions({ name: "FilesPage" });
@@ -45,7 +46,9 @@ const fileFilters = ref(
 );
 const previewMaxBytes = ref(6 * 1024);
 const fixCharsetExtensions = ref<string[]>([]);
-const progress = ref<{ current: number; total: number; message: string }>();
+const progress = ref<ProgressSnapshot>();
+const progressStartedAt = ref<number>();
+const activeRequestId = ref<string>();
 const listPaneSize = ref<string | number>("55%");
 const previewPaneSize = ref<string | number>("45%");
 const columnWidths = reactive<Record<string, number>>({
@@ -360,20 +363,39 @@ async function loadItemPreview(item: FilePlanItem | undefined) {
     { label: "輸出", value: item.outputPath },
   ];
   previewSections.value = buildFileDiffSections(item).filter((section) => section.title === "檔名");
+  progress.value = undefined;
+  progressStartedAt.value = Date.now();
   try {
-    const previewed = await core.request<FilePlanItem>("files.preview", {
-      planId: plan.value.planId,
-      sourcePath: item.sourcePath,
-    });
+    const previewed = await core.request<FilePlanItem>(
+      "files.preview",
+      {
+        planId: plan.value.planId,
+        sourcePath: item.sourcePath,
+      },
+      {
+        onProgress: (value) => {
+          progress.value = value;
+        },
+        onRequestId: (id) => {
+          activeRequestId.value = id;
+        },
+      },
+    );
     if (requestId !== previewRequestId.value || !plan.value) return;
     const index = plan.value.items.findIndex((entry) => entry.sourcePath === item.sourcePath);
     if (index >= 0) plan.value.items[index] = { ...plan.value.items[index], ...previewed };
     updatePreviewPanel(plan.value.items[index] ?? previewed);
   } catch (error) {
     if (requestId !== previewRequestId.value) return;
-    ElMessage.error(error instanceof Error ? error.message : String(error));
+    if (isCancellationError(error)) ElMessage.info("已取消預覽。");
+    else ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
-    if (requestId === previewRequestId.value) previewBusy.value = false;
+    if (requestId === previewRequestId.value) {
+      previewBusy.value = false;
+      activeRequestId.value = undefined;
+      progress.value = undefined;
+      progressStartedAt.value = undefined;
+    }
   }
 }
 
@@ -381,6 +403,7 @@ async function createPlan() {
   if (!paths.value.length) return ElMessage.warning("請先選取檔案或資料夾。");
   busy.value = true;
   progress.value = undefined;
+  progressStartedAt.value = Date.now();
   clearPreviewState();
   try {
     const settings = await loadSettings();
@@ -416,9 +439,13 @@ async function createPlan() {
           dictionaryPath: settings.dictionaryPath,
         },
       } satisfies FilePlanRequest,
-      300_000,
-      (value) => {
-        progress.value = value;
+      {
+        onProgress: (value) => {
+          progress.value = value;
+        },
+        onRequestId: (id) => {
+          activeRequestId.value = id;
+        },
       },
     );
     // 大型清單先讓虛擬表格掛上，再載入第一筆預覽，避免主執行緒連續長任務。
@@ -426,9 +453,13 @@ async function createPlan() {
     const first = plan.value.items.find((item) => item.status === "ready") ?? plan.value.items[0];
     await loadItemPreview(first);
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : String(error));
+    if (isCancellationError(error)) ElMessage.info("已取消建立預覽。");
+    else ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     busy.value = false;
+    activeRequestId.value = undefined;
+    progress.value = undefined;
+    progressStartedAt.value = undefined;
   }
 }
 
@@ -449,18 +480,37 @@ async function applyPlan() {
     return;
   busy.value = true;
   progress.value = undefined;
+  progressStartedAt.value = Date.now();
   try {
     const selectedPaths = plan.value.items
       .filter((item) => item.selected)
       .map((item) => item.sourcePath);
     const result = await core.request<{
       succeeded: string[];
+      skipped?: string[];
       failed: Array<{ path: string; message: string }>;
-    }>("files.apply", { planId: plan.value.planId, selectedPaths }, 600_000, (value) => {
-      progress.value = value;
-    });
-    if (promptAfterConversion.value)
-      ElMessage.success(`已完成 ${result.succeeded.length} 個檔案。`);
+    }>(
+      "files.apply",
+      { planId: plan.value.planId, selectedPaths },
+      {
+        onProgress: (value) => {
+          progress.value = value;
+        },
+        onRequestId: (id) => {
+          activeRequestId.value = id;
+        },
+      },
+    );
+    const skippedCount = result.skipped?.length ?? 0;
+    if (promptAfterConversion.value) {
+      if (result.succeeded.length && skippedCount)
+        ElMessage.success(
+          `已完成 ${result.succeeded.length} 個檔案，另有 ${skippedCount} 個未處理（已停止或略過）。`,
+        );
+      else if (result.succeeded.length)
+        ElMessage.success(`已完成 ${result.succeeded.length} 個檔案。`);
+      else if (skippedCount) ElMessage.info("已停止檔案轉換；沒有寫入任何檔案。");
+    }
     if (result.failed.length)
       ElMessage.error(
         result.failed
@@ -472,17 +522,33 @@ async function applyPlan() {
     plan.value = undefined;
     clearPreviewState();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : String(error));
+    if (isCancellationError(error)) ElMessage.info("已取消檔案轉換。");
+    else ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     busy.value = false;
+    activeRequestId.value = undefined;
+    progress.value = undefined;
+    progressStartedAt.value = undefined;
   }
 }
 
 async function cancelPlan() {
-  if (!plan.value) return;
-  await core.request("files.cancel", { planId: plan.value.planId });
-  plan.value = undefined;
-  clearPreviewState();
+  const requestId = activeRequestId.value;
+  const planId = plan.value?.planId;
+  if (requestId) {
+    try {
+      await core.cancel(requestId);
+    } catch {
+      // 進行中的作業仍可能被 files.cancel 停住。
+    }
+  }
+  if (planId) {
+    await core.request("files.cancel", { planId });
+  }
+  if (!busy.value && !previewBusy.value) {
+    plan.value = undefined;
+    clearPreviewState();
+  }
 }
 
 onBeforeUnmount(() => {
@@ -576,17 +642,18 @@ watch(
         ><el-checkbox v-model="backup">轉換前備份（.bak）</el-checkbox>
       </div>
       <div class="path-summary">
-        <span>{{ pathSummary }}</span
-        ><el-button :loading="busy" @click="createPlan">建立預覽</el-button>
+        <span>{{ pathSummary }}</span>
+        <el-button :loading="busy" :disabled="busy" @click="createPlan">建立預覽</el-button>
+        <el-button v-if="busy || previewBusy" @click="cancelPlan">停止作業</el-button>
       </div>
       <div v-if="outputDirectory" class="path-summary">
         <span>輸出目錄：{{ outputDirectory }}</span
         ><el-button @click="outputDirectory = undefined">使用原目錄</el-button>
       </div>
       <el-progress
-        v-if="busy && progress"
-        :percentage="Math.round((progress.current / Math.max(1, progress.total)) * 100)"
-        :format="() => progress?.message ?? ''"
+        v-if="(busy || previewBusy) && progress"
+        :percentage="progressPercentage(progress)"
+        :format="() => formatProgressLabel(progress, progressStartedAt)"
       />
     </el-card>
     <section v-if="plan" class="file-plan-panel">

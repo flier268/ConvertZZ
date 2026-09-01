@@ -559,14 +559,15 @@ pub fn write_derived_outputs(
     entries: &[CorrectionEntry],
     stats: &FinishStats,
     report: &super::RoundtripReport,
+    pos_of: &dyn Fn(&str) -> u32,
 ) -> Result<(), String> {
     super::checkpoint::atomic_write(
         &output.join("zht.corpus.synonym.txt"),
-        format_synonym_file(entries).as_bytes(),
+        format_synonym_file(entries, pos_of).as_bytes(),
     )?;
     super::checkpoint::atomic_write(
         &output.join("zht.corpus.dict.txt"),
-        format_segment_dict(entries).as_bytes(),
+        format_segment_dict(entries, pos_of).as_bytes(),
     )?;
     super::checkpoint::atomic_write(
         &output.join("pairs.tsv"),

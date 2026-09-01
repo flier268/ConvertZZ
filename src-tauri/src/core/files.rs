@@ -4,16 +4,19 @@ use super::backup::{
 use super::conversion::{base_convert, ConversionService};
 use super::encoding::{can_roundtrip, decode_text, encode_text};
 use super::error::CoreError;
+use super::parallelism::default_convert_jobs;
 use super::types::{
-    ApplyFailure, ApplyResult, ConflictPolicy, ConversionOptions, Direction, FileConversionPlan,
-    FileItemKind, FileMode, FilePlanItem, FilePlanRequest, FilePreviewRequest, PlanStatus,
-    ProgressReporter, TextEncoding,
+    ApplyFailure, ApplyResult, CancelCheck, ConflictPolicy, ConversionOptions, Direction,
+    FileConversionPlan, FileItemKind, FileMode, FilePlanItem, FilePlanRequest, FilePreviewRequest,
+    PlanStatus, ProgressEvent, ProgressReporter, TextEncoding,
 };
 use chrono::Utc;
+use futures::stream::{self, StreamExt};
 use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
@@ -52,7 +55,7 @@ struct DirectoryTransactionEntry {
 
 pub struct FileService {
     plans: Mutex<std::collections::HashMap<String, StoredPlan>>,
-    cancelled: Mutex<HashSet<String>>,
+    cancelled: Arc<Mutex<HashSet<String>>>,
     convert_hook: Option<ConvertHook>,
     stage_validator: Option<StageValidator>,
 }
@@ -61,7 +64,7 @@ impl FileService {
     pub fn new() -> Self {
         Self {
             plans: Mutex::new(std::collections::HashMap::new()),
-            cancelled: Mutex::new(HashSet::new()),
+            cancelled: Arc::new(Mutex::new(HashSet::new())),
             convert_hook: None,
             stage_validator: None,
         }
@@ -90,6 +93,8 @@ impl FileService {
         conversion: &ConversionService,
         options: &ConversionOptions,
         text: impl Into<String>,
+        progress: Option<ProgressReporter>,
+        is_cancelled: Option<CancelCheck>,
     ) -> Result<super::types::ConversionResult, CoreError> {
         let text = text.into();
         if let Some(hook) = &self.convert_hook {
@@ -101,21 +106,37 @@ impl FileService {
                 duration_ms: 0.0,
             });
         }
-        conversion.convert(options.with_text(text)).await
+        conversion
+            .convert_with_progress(options.with_text(text), progress, is_cancelled)
+            .await
     }
 
     pub fn cancel(&self, plan_id: &str) -> serde_json::Value {
-        let cancelled = self
+        let removed = self
             .plans
             .lock()
             .ok()
             .is_some_and(|mut plans| plans.remove(plan_id).is_some());
-        if cancelled {
-            if let Ok(mut set) = self.cancelled.lock() {
-                set.insert(plan_id.to_string());
+        let marked = self
+            .cancelled
+            .lock()
+            .map(|mut set| set.insert(plan_id.to_string()))
+            .unwrap_or(false);
+        serde_json::json!({ "cancelled": removed || marked })
+    }
+
+    fn combined_cancel_check(&self, plan_id: &str, request_cancelled: CancelCheck) -> CancelCheck {
+        let cancelled = Arc::clone(&self.cancelled);
+        let plan_id = plan_id.to_string();
+        Arc::new(move || {
+            if request_cancelled() {
+                return true;
             }
-        }
-        serde_json::json!({ "cancelled": cancelled })
+            cancelled
+                .lock()
+                .ok()
+                .is_some_and(|set| set.contains(&plan_id))
+        })
     }
 
     pub async fn plan(
@@ -176,7 +197,13 @@ impl FileService {
             directories.sort_by_key(|path| std::cmp::Reverse(path_depth(path)));
             for source_path in directories {
                 let converted_name = self
-                    .convert_text(conversion, &request.conversion, file_name(&source_path))
+                    .convert_text(
+                        conversion,
+                        &request.conversion,
+                        file_name(&source_path),
+                        None,
+                        None,
+                    )
                     .await?
                     .text;
                 let output_path = source_path
@@ -232,6 +259,8 @@ impl FileService {
         &self,
         conversion: &ConversionService,
         request: FilePreviewRequest,
+        progress: ProgressReporter,
+        request_cancelled: CancelCheck,
     ) -> Result<FilePlanItem, CoreError> {
         let (plan_request, source_path, existing) = {
             let plans = self
@@ -259,6 +288,11 @@ impl FileService {
             return Ok(existing);
         }
 
+        let is_cancelled = self.combined_cancel_check(&request.plan_id, request_cancelled);
+        if is_cancelled() {
+            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+        }
+
         let preview_max_bytes = plan_request
             .preview_max_bytes
             .unwrap_or(6 * 1024)
@@ -266,8 +300,18 @@ impl FileService {
         let buffer = fs::read(&source_path)?;
         let (text, encoding) = decode_text(&buffer, plan_request.input_encoding)?;
         let source_preview = truncate(&text, preview_max_bytes);
+        let file_label = file_name(&source_path);
+        let convert_progress = map_progress(progress, 0, 1, move |current, total, _message| {
+            format!("正在預覽：{file_label}（{current}/{total}）")
+        });
         let converted = self
-            .convert_text(conversion, &plan_request.conversion, source_preview.clone())
+            .convert_text(
+                conversion,
+                &plan_request.conversion,
+                source_preview.clone(),
+                Some(convert_progress),
+                Some(is_cancelled),
+            )
             .await?;
         let output_encoding = resolve_output_encoding(plan_request.output_encoding, Some(encoding));
         let mut output_text = converted.text;
@@ -318,9 +362,15 @@ impl FileService {
         let converted_name = if request.mode == FileMode::Content {
             file_name(source_path)
         } else {
-            self.convert_text(conversion, &request.conversion, file_name(source_path))
-                .await?
-                .text
+            self.convert_text(
+                conversion,
+                &request.conversion,
+                file_name(source_path),
+                None,
+                None,
+            )
+            .await?
+            .text
         };
         let output_path = self
             .resolve_item_output_path(conversion, request, source_path, &converted_name)
@@ -364,8 +414,13 @@ impl FileService {
         source_path: &Path,
         selected: bool,
         existing_item: Option<&FilePlanItem>,
+        progress: Option<ProgressReporter>,
+        is_cancelled: Option<CancelCheck>,
     ) -> Result<(PreparedFile, Vec<String>), CoreError> {
         assert_source_writable(source_path)?;
+        if is_cancelled.as_ref().is_some_and(|check| check()) {
+            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+        }
         let source_buffer = if request.mode == FileMode::Filename {
             None
         } else {
@@ -377,8 +432,14 @@ impl FileService {
             .transpose()?;
         let converted_content = if let Some((text, _)) = &decoded {
             Some(
-                self.convert_text(conversion, &request.conversion, text)
-                    .await?,
+                self.convert_text(
+                    conversion,
+                    &request.conversion,
+                    text.clone(),
+                    progress.clone(),
+                    is_cancelled.clone(),
+                )
+                .await?,
             )
         } else {
             None
@@ -386,9 +447,15 @@ impl FileService {
         let converted_name = if request.mode == FileMode::Content {
             file_name(source_path)
         } else {
-            self.convert_text(conversion, &request.conversion, file_name(source_path))
-                .await?
-                .text
+            self.convert_text(
+                conversion,
+                &request.conversion,
+                file_name(source_path),
+                None,
+                is_cancelled.clone(),
+            )
+            .await?
+            .text
         };
         let output_path = self
             .resolve_item_output_path(conversion, request, source_path, &converted_name)
@@ -531,13 +598,18 @@ impl FileService {
         plan_id: &str,
         selected_paths: Option<&[String]>,
         progress: ProgressReporter,
+        request_cancelled: CancelCheck,
     ) -> Result<ApplyResult, CoreError> {
-        let mut plan = self
+        let plan = self
             .plans
             .lock()
             .ok()
             .and_then(|mut plans| plans.remove(plan_id))
             .ok_or_else(|| CoreError::new("PLAN_NOT_FOUND", "檔案轉換計畫已失效。請重新預覽。"))?;
+        let is_cancelled = self.combined_cancel_check(plan_id, request_cancelled);
+        if is_cancelled() {
+            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+        }
         let mut result = ApplyResult {
             succeeded: Vec::new(),
             skipped: Vec::new(),
@@ -549,106 +621,412 @@ impl FileService {
                 .map(|path| resolve_path(path))
                 .collect::<HashSet<_>>()
         });
-        let request = plan.request.clone();
-        let materialize_targets = plan
-            .files
-            .iter()
-            .enumerate()
-            .filter(|(_, file)| {
-                file.item.kind == FileItemKind::File
-                    && file.item.status == PlanStatus::Ready
-                    && request.mode != FileMode::Filename
-                    && file.content.is_none()
-                    && selection
-                        .as_ref()
-                        .is_none_or(|set| set.contains(&resolve_path(&file.item.source_path)))
-            })
-            .map(|(index, file)| (index, file.item.clone()))
-            .collect::<Vec<_>>();
-        let materialize_total = materialize_targets.len().max(1) as u64;
-        for (offset, (index, item)) in materialize_targets.into_iter().enumerate() {
-            self.throw_if_cancelled(plan_id)?;
-            progress(super::types::ProgressEvent {
-                current: (offset + 1) as u64,
-                total: materialize_total,
-                message: format!("正在轉換：{}", file_name(Path::new(&item.source_path))),
-            });
-            match self
-                .prepare_file(
-                    conversion,
-                    &request,
-                    Path::new(&item.source_path),
-                    item.selected,
-                    Some(&item),
-                )
-                .await
-            {
-                Ok((prepared, _)) => {
-                    plan.files[index] = prepared;
+        let request = Arc::new(plan.request.clone());
+        let mut pending_files = Vec::new();
+        let mut pending_directories = Vec::new();
+        for file in plan.files {
+            let selected = selection
+                .as_ref()
+                .is_none_or(|set| set.contains(&resolve_path(&file.item.source_path)));
+            if file.item.kind == FileItemKind::Directory {
+                if file.item.status == PlanStatus::Error {
+                    continue;
                 }
-                Err(error) => {
-                    plan.files[index].item.status = PlanStatus::Error;
-                    plan.files[index].item.selected = false;
-                    plan.files[index].item.warning = Some(error.message.clone());
-                    plan.files[index].content = None;
+                if file.item.status != PlanStatus::Ready || !selected {
+                    result.skipped.push(file.item.source_path);
+                    continue;
+                }
+                pending_directories.push(file);
+                continue;
+            }
+            if file.item.status == PlanStatus::Error {
+                continue;
+            }
+            if file.item.status != PlanStatus::Ready || !selected {
+                result.skipped.push(file.item.source_path);
+                continue;
+            }
+            pending_files.push(file);
+        }
+
+        if plan.backup && (!pending_files.is_empty() || !pending_directories.is_empty()) {
+            progress(ProgressEvent {
+                current: 0,
+                total: (pending_files.len() + pending_directories.len()).max(1) as u64,
+                message: "正在建立備份…".into(),
+            });
+            if let Err(error) = create_user_backups(
+                &plan.backup_roots,
+                &pending_files
+                    .iter()
+                    .chain(pending_directories.iter())
+                    .map(|file| PathBuf::from(&file.item.source_path))
+                    .collect::<Vec<_>>(),
+                ConflictPolicy::Overwrite,
+            ) {
+                result.failed.push(ApplyFailure {
+                    path: "備份".into(),
+                    message: error.message,
+                });
+                self.clear_cancelled(plan_id);
+                return Ok(result);
+            }
+        }
+
+        let file_total = pending_files.len();
+        let total = (file_total + pending_directories.len()).max(1) as u64;
+        let mut committed_outputs = Vec::new();
+        let mut stopped = false;
+
+        if !pending_files.is_empty() {
+            // 輸出路徑落在其他來源上（例如兩檔交換檔名）必須兩階段整批提交，
+            // 否則單檔寫入會破壞尚未處理的來源。其餘情況逐檔轉換並立即寫入。
+            if outputs_overlap_sources(&pending_files) {
+                match self
+                    .materialize_and_commit_overlapping_files(
+                        conversion,
+                        request.as_ref(),
+                        pending_files,
+                        Arc::clone(&progress),
+                        Arc::clone(&is_cancelled),
+                        total,
+                    )
+                    .await
+                {
+                    Ok(batch) => {
+                        committed_outputs.extend(batch.committed_outputs);
+                        result.skipped.extend(batch.skipped);
+                        result.failed.extend(batch.failed);
+                        stopped = batch.stopped;
+                    }
+                    Err(error)
+                        if error.code == "PLAN_CANCELLED" || error.code == "CONVERT_CANCELLED" =>
+                    {
+                        self.clear_cancelled(plan_id);
+                        return Err(error);
+                    }
+                    Err(error) => {
+                        result.failed.push(ApplyFailure {
+                            path: "重新命名".into(),
+                            message: error.message,
+                        });
+                    }
+                }
+            } else {
+                stopped = self
+                    .materialize_and_commit_files_incrementally(
+                        conversion,
+                        request.as_ref(),
+                        pending_files,
+                        Arc::clone(&progress),
+                        Arc::clone(&is_cancelled),
+                        total,
+                        &mut committed_outputs,
+                        &mut result,
+                    )
+                    .await;
+            }
+        }
+
+        if stopped {
+            for file in pending_directories {
+                result.skipped.push(file.item.source_path);
+            }
+            self.clear_cancelled(plan_id);
+            if committed_outputs.is_empty() && result.failed.is_empty() {
+                return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+            }
+            result.succeeded.extend(
+                committed_outputs
+                    .into_iter()
+                    .map(|path| path.to_string_lossy().into_owned()),
+            );
+            return Ok(result);
+        }
+
+        pending_directories
+            .sort_by_key(|item| std::cmp::Reverse(path_depth(Path::new(&item.item.source_path))));
+        let mut directory_transaction = Vec::new();
+        let mut pending_directories = pending_directories.into_iter().enumerate();
+        while let Some((offset, item)) = pending_directories.next() {
+            if is_cancelled() {
+                result.skipped.push(item.item.source_path);
+                for (_, remaining) in pending_directories {
+                    result.skipped.push(remaining.item.source_path);
+                }
+                stopped = true;
+                break;
+            }
+            if item.item.output_path == item.item.source_path {
+                result.skipped.push(item.item.source_path);
+                continue;
+            }
+            let source_path = item.item.source_path.clone();
+            match commit_directory(item) {
+                Ok(Some(entry)) => {
+                    progress(ProgressEvent {
+                        current: (file_total + offset + 1) as u64,
+                        total,
+                        message: format!(
+                            "正在重新命名資料夾：{}",
+                            file_name(Path::new(&entry.item.output_path))
+                        ),
+                    });
+                    directory_transaction.push(entry);
+                }
+                Ok(None) => result.skipped.push(source_path),
+                Err(error)
+                    if error.code == "PLAN_CANCELLED" || error.code == "CONVERT_CANCELLED" =>
+                {
+                    result.skipped.push(source_path);
+                    for (_, remaining) in pending_directories {
+                        result.skipped.push(remaining.item.source_path);
+                    }
+                    stopped = true;
+                    break;
+                }
+                Err(error) => result.failed.push(ApplyFailure {
+                    path: source_path,
+                    message: error.message,
+                }),
+            }
+        }
+
+        for output in committed_outputs {
+            result.succeeded.push(
+                resolve_committed_directory_path(&output, &directory_transaction)
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+        }
+        for entry in directory_transaction {
+            if entry.committed {
+                result.succeeded.push(entry.item.output_path);
+            }
+            if let Some(backup) = entry.conflict_backup {
+                if let Err(error) = fs::remove_dir_all(&backup) {
                     result.failed.push(ApplyFailure {
-                        path: item.source_path,
-                        message: error.message,
+                        path: backup.to_string_lossy().into_owned(),
+                        message: format!("已完成轉換，但無法清除復原暫存資料夾。{error}"),
                     });
                 }
             }
         }
 
-        let mut transaction = Vec::new();
-        let mut directory_transaction = Vec::new();
-        let apply_result = (|| -> Result<(), CoreError> {
-            let ready_files = plan
-                .files
-                .iter()
-                .filter(|file| {
-                    file.item.status == PlanStatus::Ready
-                        && selection
-                            .as_ref()
-                            .is_none_or(|set| set.contains(&resolve_path(&file.item.source_path)))
-                })
-                .collect::<Vec<_>>();
-            if plan.backup && !ready_files.is_empty() {
-                progress(super::types::ProgressEvent {
-                    current: 0,
-                    total: (ready_files.len() * 2 + 1).max(1) as u64,
-                    message: "正在建立備份…".into(),
-                });
-                create_user_backups(
-                    &plan.backup_roots,
-                    &ready_files
-                        .iter()
-                        .map(|file| PathBuf::from(&file.item.source_path))
-                        .collect::<Vec<_>>(),
-                    ConflictPolicy::Overwrite,
-                )?;
-            }
-            let total = (ready_files.len() * 2).max(1) as u64;
-            let mut current = 0_u64;
-            let mut remaining = Vec::new();
-            for file in std::mem::take(&mut plan.files) {
-                self.throw_if_cancelled(plan_id)?;
-                if file.item.kind == FileItemKind::Directory {
-                    remaining.push(file);
-                    continue;
-                }
-                if file.item.status == PlanStatus::Error {
-                    continue;
-                }
-                if file.item.status != PlanStatus::Ready
-                    || selection
-                        .as_ref()
-                        .is_some_and(|set| !set.contains(&resolve_path(&file.item.source_path)))
-                {
+        self.clear_cancelled(plan_id);
+        if stopped && result.succeeded.is_empty() && result.failed.is_empty() {
+            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+        }
+        Ok(result)
+    }
+
+    async fn materialize_and_commit_files_incrementally(
+        &self,
+        conversion: &ConversionService,
+        request: &FilePlanRequest,
+        pending_files: Vec<PreparedFile>,
+        progress: ProgressReporter,
+        is_cancelled: CancelCheck,
+        total: u64,
+        committed_outputs: &mut Vec<PathBuf>,
+        result: &mut ApplyResult,
+    ) -> bool {
+        let file_total = pending_files.len();
+        let jobs = default_convert_jobs().min(pending_files.len().max(1));
+        if jobs <= 1 || pending_files.len() <= 1 {
+            let mut pending_files = pending_files.into_iter().enumerate();
+            while let Some((offset, file)) = pending_files.next() {
+                if is_cancelled() {
                     result.skipped.push(file.item.source_path);
-                    continue;
+                    for (_, remaining) in pending_files {
+                        result.skipped.push(remaining.item.source_path);
+                    }
+                    return true;
+                }
+                let source_path = file.item.source_path.clone();
+                let file_label = file_name(Path::new(&source_path));
+                let progress_label = file_label.clone();
+                let file_progress = map_progress(
+                    Arc::clone(&progress),
+                    offset as u64,
+                    total,
+                    move |current, local_total, _message| {
+                        format!(
+                            "正在轉換並寫入：{progress_label}（檔案 {}/{total}，內容 {current}/{local_total}）",
+                            offset + 1
+                        )
+                    },
+                );
+                match self
+                    .materialize_and_commit_file(
+                        conversion,
+                        request,
+                        file,
+                        Some(file_progress),
+                        Arc::clone(&is_cancelled),
+                    )
+                    .await
+                {
+                    Ok(FileCommitOutcome::Succeeded { output_path }) => {
+                        committed_outputs.push(output_path);
+                        progress(ProgressEvent {
+                            current: (offset + 1) as u64,
+                            total,
+                            message: format!("已寫入：{file_label}"),
+                        });
+                    }
+                    Ok(FileCommitOutcome::Skipped(path)) => result.skipped.push(path),
+                    Err(error)
+                        if error.code == "PLAN_CANCELLED" || error.code == "CONVERT_CANCELLED" =>
+                    {
+                        result.skipped.push(source_path);
+                        for (_, remaining) in pending_files {
+                            result.skipped.push(remaining.item.source_path);
+                        }
+                        return true;
+                    }
+                    Err(error) => result.failed.push(ApplyFailure {
+                        path: source_path,
+                        message: error.message,
+                    }),
+                }
+            }
+            return false;
+        }
+
+        // 必須在 async 路徑上回報進度：rayon worker 上 emit 時前端常收不到更新。
+        progress(ProgressEvent {
+            current: 0,
+            total,
+            message: format!("正在以最多 {jobs} 個並行任務轉換並寫入 {file_total} 個檔案…"),
+        });
+        let completed = Arc::new(AtomicU64::new(0));
+        let outcomes = stream::iter(pending_files.into_iter())
+            .map(|file| {
+                let progress = Arc::clone(&progress);
+                let is_cancelled = Arc::clone(&is_cancelled);
+                let completed = Arc::clone(&completed);
+                async move {
+                    let source_path = file.item.source_path.clone();
+                    if is_cancelled() {
+                        return (
+                            source_path,
+                            Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。")),
+                        );
+                    }
+                    let file_label = file_name(Path::new(&source_path));
+                    let outcome = self
+                        .materialize_and_commit_file(
+                            conversion,
+                            request,
+                            file,
+                            None,
+                            Arc::clone(&is_cancelled),
+                        )
+                        .await;
+                    let current = completed.fetch_add(1, Ordering::Relaxed) + 1;
+                    progress(ProgressEvent {
+                        current: current.min(total),
+                        total,
+                        message: format!("正在轉換並寫入：{file_label}（{current}/{file_total}）"),
+                    });
+                    (source_path, outcome)
+                }
+            })
+            .buffer_unordered(jobs)
+            .collect::<Vec<_>>()
+            .await;
+        let mut stopped = false;
+        for (source_path, outcome) in outcomes {
+            match outcome {
+                Ok(FileCommitOutcome::Succeeded { output_path }) => {
+                    committed_outputs.push(output_path);
+                }
+                Ok(FileCommitOutcome::Skipped(path)) => result.skipped.push(path),
+                Err(error)
+                    if error.code == "PLAN_CANCELLED" || error.code == "CONVERT_CANCELLED" =>
+                {
+                    result.skipped.push(source_path);
+                    stopped = true;
+                }
+                Err(error) => result.failed.push(ApplyFailure {
+                    path: source_path,
+                    message: error.message,
+                }),
+            }
+        }
+        stopped
+    }
+
+    async fn materialize_and_commit_overlapping_files(
+        &self,
+        conversion: &ConversionService,
+        request: &FilePlanRequest,
+        pending_files: Vec<PreparedFile>,
+        progress: ProgressReporter,
+        is_cancelled: CancelCheck,
+        total: u64,
+    ) -> Result<OverlapBatchResult, CoreError> {
+        let mut batch = OverlapBatchResult::default();
+        let mut prepared_files = Vec::with_capacity(pending_files.len());
+        for (offset, file) in pending_files.into_iter().enumerate() {
+            if is_cancelled() {
+                batch.skipped.push(file.item.source_path);
+                batch.stopped = true;
+                break;
+            }
+            let source_path = file.item.source_path.clone();
+            let file_label = file_name(Path::new(&source_path));
+            let progress_label = file_label.clone();
+            let file_progress = map_progress(
+                Arc::clone(&progress),
+                offset as u64,
+                total,
+                move |current, local_total, _message| {
+                    format!(
+                        "正在轉換：{progress_label}（檔案 {}/{total}，內容 {current}/{local_total}）",
+                        offset + 1
+                    )
+                },
+            );
+            match self
+                .materialize_file(
+                    conversion,
+                    request,
+                    file,
+                    Some(file_progress),
+                    Arc::clone(&is_cancelled),
+                )
+                .await
+            {
+                Ok(Some(prepared)) => prepared_files.push(prepared),
+                Ok(None) => batch.skipped.push(source_path),
+                Err(error)
+                    if error.code == "PLAN_CANCELLED" || error.code == "CONVERT_CANCELLED" =>
+                {
+                    batch.skipped.push(source_path);
+                    batch.stopped = true;
+                    break;
+                }
+                Err(error) => batch.failed.push(ApplyFailure {
+                    path: source_path,
+                    message: error.message,
+                }),
+            }
+        }
+        if batch.stopped {
+            return Ok(batch);
+        }
+
+        let mut transaction = Vec::new();
+        let mut skipped_during_commit = Vec::new();
+        let stage_result = (|| -> Result<(), CoreError> {
+            for file in prepared_files {
+                if is_cancelled() {
+                    return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
                 }
                 if file.item.output_path == file.item.source_path && file.content.is_none() {
-                    result.skipped.push(file.item.source_path);
+                    skipped_during_commit.push(file.item.source_path);
                     continue;
                 }
                 let source = PathBuf::from(&file.item.source_path);
@@ -677,16 +1055,17 @@ impl FileService {
                     conflict_backup: None,
                     committed: false,
                 });
-                current += 1;
-                progress(super::types::ProgressEvent {
-                    current,
+                progress(ProgressEvent {
+                    current: transaction.len() as u64,
                     total,
                     message: format!("正在準備：{}", file_name(&source)),
                 });
             }
 
             for entry in &mut transaction {
-                self.throw_if_cancelled(plan_id)?;
+                if is_cancelled() {
+                    return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+                }
                 let original =
                     transaction_path(Path::new(&entry.file.item.source_path), "original");
                 fs::rename(&entry.file.item.source_path, &original)?;
@@ -694,7 +1073,9 @@ impl FileService {
             }
 
             for entry in &mut transaction {
-                self.throw_if_cancelled(plan_id)?;
+                if is_cancelled() {
+                    return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+                }
                 let output = PathBuf::from(&entry.file.item.output_path);
                 let source = PathBuf::from(&entry.file.item.source_path);
                 if output != source && output.exists() {
@@ -703,7 +1084,7 @@ impl FileService {
                         if let Some(backup) = entry.original_backup.take() {
                             let _ = fs::rename(backup, &source);
                         }
-                        result.skipped.push(entry.file.item.source_path.clone());
+                        skipped_during_commit.push(entry.file.item.source_path.clone());
                         continue;
                     }
                     let conflict = transaction_path(&output, "conflict");
@@ -712,142 +1093,277 @@ impl FileService {
                 }
                 fs::rename(&entry.stage_path, &output)?;
                 entry.committed = true;
-                current += 1;
-                progress(super::types::ProgressEvent {
-                    current,
+                progress(ProgressEvent {
+                    current: total,
                     total,
                     message: format!("正在寫入：{}", file_name(&output)),
                 });
             }
-
-            let mut directory_items = remaining
-                .into_iter()
-                .filter(|item| item.item.kind == FileItemKind::Directory)
-                .collect::<Vec<_>>();
-            directory_items.sort_by_key(|item| {
-                std::cmp::Reverse(path_depth(Path::new(&item.item.source_path)))
-            });
-            for item in directory_items {
-                self.throw_if_cancelled(plan_id)?;
-                if item.item.status != PlanStatus::Ready
-                    || selection
-                        .as_ref()
-                        .is_some_and(|set| !set.contains(&resolve_path(&item.item.source_path)))
-                    || item.item.output_path == item.item.source_path
-                {
-                    result.skipped.push(item.item.source_path);
-                    continue;
-                }
-                let mut entry = DirectoryTransactionEntry {
-                    temporary_path: transaction_path(
-                        Path::new(&item.item.source_path),
-                        "directory",
-                    ),
-                    item: item.item,
-                    conflict_backup: None,
-                    committed: false,
-                    conflict_policy: item.conflict_policy,
-                };
-                fs::rename(&entry.item.source_path, &entry.temporary_path)?;
-                if Path::new(&entry.item.output_path).exists() {
-                    if entry.conflict_policy == ConflictPolicy::Skip {
-                        let _ = fs::rename(&entry.temporary_path, &entry.item.source_path);
-                        result.skipped.push(entry.item.source_path.clone());
-                        continue;
-                    }
-                    let conflict = transaction_path(Path::new(&entry.item.output_path), "conflict");
-                    fs::rename(&entry.item.output_path, &conflict)?;
-                    entry.conflict_backup = Some(conflict);
-                }
-                fs::rename(&entry.temporary_path, &entry.item.output_path)?;
-                entry.committed = true;
-                current += 2;
-                progress(super::types::ProgressEvent {
-                    current,
-                    total,
-                    message: format!(
-                        "正在重新命名資料夾：{}",
-                        file_name(Path::new(&entry.item.output_path))
-                    ),
-                });
-                directory_transaction.push(entry);
-            }
             Ok(())
         })();
 
-        if let Err(error) = apply_result {
-            rollback_directories(&directory_transaction);
+        batch.skipped.extend(skipped_during_commit);
+
+        if let Err(error) = stage_result {
             rollback_transaction(&transaction);
-            if let Ok(mut cancelled) = self.cancelled.lock() {
-                cancelled.remove(plan_id);
-            }
-            if error.code == "PLAN_CANCELLED" {
+            if error.code == "PLAN_CANCELLED" || error.code == "CONVERT_CANCELLED" {
                 return Err(error);
             }
-            result.failed.push(ApplyFailure {
-                path: "批次作業".into(),
+            batch.failed.push(ApplyFailure {
+                path: "重新命名".into(),
                 message: error.message,
             });
-            return Ok(result);
+            return Ok(batch);
         }
 
         for entry in transaction {
             if !entry.committed {
                 continue;
             }
-            result.succeeded.push(
-                resolve_committed_directory_path(
-                    Path::new(&entry.file.item.output_path),
-                    &directory_transaction,
-                )
-                .to_string_lossy()
-                .into_owned(),
-            );
+            batch
+                .committed_outputs
+                .push(PathBuf::from(&entry.file.item.output_path));
             for backup in [entry.original_backup, entry.conflict_backup]
                 .into_iter()
                 .flatten()
             {
-                let effective = resolve_committed_directory_path(&backup, &directory_transaction);
                 if let Err(error) =
-                    fs::remove_file(&effective).or_else(|_| fs::remove_dir_all(&effective))
+                    fs::remove_file(&backup).or_else(|_| fs::remove_dir_all(&backup))
                 {
-                    result.failed.push(ApplyFailure {
-                        path: effective.to_string_lossy().into_owned(),
+                    batch.failed.push(ApplyFailure {
+                        path: backup.to_string_lossy().into_owned(),
                         message: format!("已完成轉換，但無法清除復原暫存檔。{error}"),
                     });
                 }
             }
         }
-        for entry in directory_transaction {
-            if entry.committed {
-                result.succeeded.push(entry.item.output_path);
-            }
-            if let Some(backup) = entry.conflict_backup {
-                if let Err(error) = fs::remove_dir_all(&backup) {
-                    result.failed.push(ApplyFailure {
-                        path: backup.to_string_lossy().into_owned(),
-                        message: format!("已完成轉換，但無法清除復原暫存資料夾。{error}"),
-                    });
-                }
-            }
+        Ok(batch)
+    }
+
+    async fn materialize_file(
+        &self,
+        conversion: &ConversionService,
+        request: &FilePlanRequest,
+        mut file: PreparedFile,
+        progress: Option<ProgressReporter>,
+        is_cancelled: CancelCheck,
+    ) -> Result<Option<PreparedFile>, CoreError> {
+        if is_cancelled() {
+            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
         }
+        if request.mode != FileMode::Filename && file.content.is_none() {
+            let item = file.item.clone();
+            let (prepared, _) = self
+                .prepare_file(
+                    conversion,
+                    request,
+                    Path::new(&item.source_path),
+                    item.selected,
+                    Some(&item),
+                    progress,
+                    Some(Arc::clone(&is_cancelled)),
+                )
+                .await?;
+            file = prepared;
+        }
+        if file.item.status != PlanStatus::Ready {
+            return Ok(None);
+        }
+        Ok(Some(file))
+    }
+
+    async fn materialize_and_commit_file(
+        &self,
+        conversion: &ConversionService,
+        request: &FilePlanRequest,
+        file: PreparedFile,
+        progress: Option<ProgressReporter>,
+        is_cancelled: CancelCheck,
+    ) -> Result<FileCommitOutcome, CoreError> {
+        let source_path = file.item.source_path.clone();
+        let Some(file) = self
+            .materialize_file(
+                conversion,
+                request,
+                file,
+                progress,
+                Arc::clone(&is_cancelled),
+            )
+            .await?
+        else {
+            return Ok(FileCommitOutcome::Skipped(source_path));
+        };
+        if is_cancelled() {
+            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+        }
+        commit_prepared_file(file, self.stage_validator.as_ref())
+    }
+
+    fn clear_cancelled(&self, plan_id: &str) {
         if let Ok(mut cancelled) = self.cancelled.lock() {
             cancelled.remove(plan_id);
         }
-        Ok(result)
+    }
+}
+
+#[derive(Default)]
+struct OverlapBatchResult {
+    committed_outputs: Vec<PathBuf>,
+    skipped: Vec<String>,
+    failed: Vec<ApplyFailure>,
+    stopped: bool,
+}
+
+fn outputs_overlap_sources(files: &[PreparedFile]) -> bool {
+    let sources = files
+        .iter()
+        .map(|file| resolve_path(&file.item.source_path))
+        .collect::<HashSet<_>>();
+    files.iter().any(|file| {
+        let source = resolve_path(&file.item.source_path);
+        let output = resolve_path(&file.item.output_path);
+        output != source && sources.contains(&output)
+    })
+}
+
+enum FileCommitOutcome {
+    Succeeded { output_path: PathBuf },
+    Skipped(String),
+}
+
+fn commit_prepared_file(
+    file: PreparedFile,
+    stage_validator: Option<&StageValidator>,
+) -> Result<FileCommitOutcome, CoreError> {
+    if file.item.output_path == file.item.source_path && file.content.is_none() {
+        return Ok(FileCommitOutcome::Skipped(file.item.source_path));
+    }
+    let source = PathBuf::from(&file.item.source_path);
+    assert_source_writable(&source)?;
+    let output = PathBuf::from(&file.item.output_path);
+    let stage_path = transaction_path(&output, "stage");
+    if let Some(parent) = stage_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    if let Some(content) = &file.content {
+        write_stage(&stage_path, content, &source)?;
+    } else {
+        fs::copy(&source, &stage_path)?;
+    }
+    verify_stage(&stage_path, file.content.as_deref(), &source)?;
+    if let Some(validator) = stage_validator {
+        if let Err(error) = validator(&stage_path, file.content.as_deref(), &source) {
+            let _ = fs::remove_file(&stage_path);
+            return Err(error);
+        }
     }
 
-    fn throw_if_cancelled(&self, plan_id: &str) -> Result<(), CoreError> {
-        if self
-            .cancelled
-            .lock()
-            .ok()
-            .is_some_and(|set| set.contains(plan_id))
-        {
-            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+    let mut entry = TransactionEntry {
+        file,
+        stage_path,
+        original_backup: None,
+        conflict_backup: None,
+        committed: false,
+    };
+    let commit_result = (|| -> Result<FileCommitOutcome, CoreError> {
+        let original = transaction_path(Path::new(&entry.file.item.source_path), "original");
+        fs::rename(&entry.file.item.source_path, &original)?;
+        entry.original_backup = Some(original);
+
+        let output = PathBuf::from(&entry.file.item.output_path);
+        let source = PathBuf::from(&entry.file.item.source_path);
+        if output != source && output.exists() {
+            if entry.file.conflict_policy == ConflictPolicy::Skip {
+                let _ = fs::remove_file(&entry.stage_path);
+                if let Some(backup) = entry.original_backup.take() {
+                    let _ = fs::rename(backup, &source);
+                }
+                return Ok(FileCommitOutcome::Skipped(
+                    entry.file.item.source_path.clone(),
+                ));
+            }
+            let conflict = transaction_path(&output, "conflict");
+            fs::rename(&output, &conflict)?;
+            entry.conflict_backup = Some(conflict);
         }
-        Ok(())
+        fs::rename(&entry.stage_path, &output)?;
+        entry.committed = true;
+        Ok(FileCommitOutcome::Succeeded {
+            output_path: output,
+        })
+    })();
+
+    match commit_result {
+        Ok(FileCommitOutcome::Succeeded { output_path }) => {
+            for backup in [entry.original_backup.take(), entry.conflict_backup.take()]
+                .into_iter()
+                .flatten()
+            {
+                let _ = fs::remove_file(&backup).or_else(|_| fs::remove_dir_all(&backup));
+            }
+            Ok(FileCommitOutcome::Succeeded { output_path })
+        }
+        Ok(skipped @ FileCommitOutcome::Skipped(_)) => Ok(skipped),
+        Err(error) => {
+            rollback_transaction(std::slice::from_ref(&entry));
+            Err(error)
+        }
     }
+}
+
+fn commit_directory(item: PreparedFile) -> Result<Option<DirectoryTransactionEntry>, CoreError> {
+    let mut entry = DirectoryTransactionEntry {
+        temporary_path: transaction_path(Path::new(&item.item.source_path), "directory"),
+        item: item.item,
+        conflict_backup: None,
+        committed: false,
+        conflict_policy: item.conflict_policy,
+    };
+    let commit_result = (|| -> Result<bool, CoreError> {
+        fs::rename(&entry.item.source_path, &entry.temporary_path)?;
+        if Path::new(&entry.item.output_path).exists() {
+            if entry.conflict_policy == ConflictPolicy::Skip {
+                let _ = fs::rename(&entry.temporary_path, &entry.item.source_path);
+                return Ok(false);
+            }
+            let conflict = transaction_path(Path::new(&entry.item.output_path), "conflict");
+            fs::rename(&entry.item.output_path, &conflict)?;
+            entry.conflict_backup = Some(conflict);
+        }
+        fs::rename(&entry.temporary_path, &entry.item.output_path)?;
+        entry.committed = true;
+        Ok(true)
+    })();
+
+    match commit_result {
+        Ok(true) => Ok(Some(entry)),
+        Ok(false) => Ok(None),
+        Err(error) => {
+            rollback_directories(std::slice::from_ref(&entry));
+            Err(error)
+        }
+    }
+}
+
+fn map_progress(
+    progress: ProgressReporter,
+    file_index: u64,
+    file_total: u64,
+    message: impl Fn(u64, u64, &str) -> String + Send + Sync + 'static,
+) -> ProgressReporter {
+    let file_total = file_total.max(1);
+    Arc::new(move |event: ProgressEvent| {
+        let local_total = event.total.max(1);
+        let overall_total = file_total.saturating_mul(local_total);
+        let overall_current = file_index
+            .saturating_mul(local_total)
+            .saturating_add(event.current.min(local_total));
+        progress(ProgressEvent {
+            current: overall_current.min(overall_total),
+            total: overall_total,
+            message: message(event.current, local_total, &event.message),
+        });
+    })
 }
 
 fn collect_files(
@@ -1087,7 +1603,7 @@ async fn resolve_output_directory_path(
         for part in relative_directory {
             parts.push(
                 files
-                    .convert_text(conversion, conversion_request, part)
+                    .convert_text(conversion, conversion_request, part, None, None)
                     .await?
                     .text,
             );

@@ -4,8 +4,8 @@ use super::encoding::{decode_text, encode_text};
 use super::error::CoreError;
 use super::types::{
     ApplyFailure, ApplyResult, AudioContainer, AudioFormat, AudioScanRequest, AudioTagField,
-    AudioTagFile, AudioTagPlan, AudioTagPlanRequest, ConflictPolicy, ConversionOptions,
-    ProgressReporter, TextEncoding,
+    AudioTagFile, AudioTagPlan, AudioTagPlanRequest, CancelCheck, ConflictPolicy,
+    ConversionOptions, ProgressReporter, TextEncoding,
 };
 use chrono::Utc;
 use lofty::config::WriteOptions;
@@ -17,7 +17,7 @@ use lofty::tag::{Accessor, ItemKey, ItemValue, Tag, TagItem};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 const STANDARD_FIELDS: &[&str] = &[
@@ -42,29 +42,29 @@ struct StoredAudioPlan {
 
 pub struct AudioService {
     plans: Mutex<HashMap<String, StoredAudioPlan>>,
-    cancelled: Mutex<HashSet<String>>,
+    cancelled: Arc<Mutex<HashSet<String>>>,
 }
 
 impl AudioService {
     pub fn new() -> Self {
         Self {
             plans: Mutex::new(HashMap::new()),
-            cancelled: Mutex::new(HashSet::new()),
+            cancelled: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
     pub fn cancel(&self, plan_id: &str) -> serde_json::Value {
-        let cancelled = self
+        let removed = self
             .plans
             .lock()
             .ok()
             .is_some_and(|mut plans| plans.remove(plan_id).is_some());
-        if cancelled {
-            if let Ok(mut set) = self.cancelled.lock() {
-                set.insert(plan_id.to_string());
-            }
-        }
-        serde_json::json!({ "cancelled": cancelled })
+        let marked = self
+            .cancelled
+            .lock()
+            .map(|mut set| set.insert(plan_id.to_string()))
+            .unwrap_or(false);
+        serde_json::json!({ "cancelled": removed || marked })
     }
 
     pub async fn scan(
@@ -205,6 +205,7 @@ impl AudioService {
         &self,
         plan_id: &str,
         progress: ProgressReporter,
+        request_cancelled: CancelCheck,
     ) -> Result<ApplyResult, CoreError> {
         let plan = self
             .plans
@@ -212,6 +213,18 @@ impl AudioService {
             .ok()
             .and_then(|mut plans| plans.remove(plan_id))
             .ok_or_else(|| CoreError::new("PLAN_NOT_FOUND", "音訊標籤計畫已失效。請重新預覽。"))?;
+        if request_cancelled()
+            || self
+                .cancelled
+                .lock()
+                .ok()
+                .is_some_and(|set| set.contains(plan_id))
+        {
+            return Err(CoreError::new(
+                "PLAN_CANCELLED",
+                "音訊標籤作業已由使用者取消。",
+            ));
+        }
         let mut result = ApplyResult {
             succeeded: Vec::new(),
             skipped: Vec::new(),
@@ -245,6 +258,12 @@ impl AudioService {
 
         for (index, file) in plan.files.into_iter().enumerate() {
             self.throw_if_cancelled(plan_id)?;
+            if request_cancelled() {
+                return Err(CoreError::new(
+                    "PLAN_CANCELLED",
+                    "音訊標籤作業已由使用者取消。",
+                ));
+            }
             if file.updates.is_empty() {
                 result
                     .skipped

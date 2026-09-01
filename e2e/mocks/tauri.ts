@@ -246,6 +246,9 @@ function mockCoreRequest(operation: string, rawPayload: unknown): unknown {
   if (operation === "files.cancel") {
     return { cancelled: true };
   }
+  if (operation === "core.cancel") {
+    return { cancelled: true };
+  }
   if (operation === "audio.scan") {
     return [
       {

@@ -266,6 +266,7 @@ export interface SettingsV2 {
 export type CoreOperation =
   | "health"
   | "convert.preview"
+  | "core.cancel"
   | "files.plan"
   | "files.preview"
   | "files.apply"

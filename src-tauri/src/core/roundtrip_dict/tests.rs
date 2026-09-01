@@ -96,12 +96,21 @@ fn finish_borrow_is_idempotent() {
 
 #[test]
 fn synonym_format_is_canonical_then_variants() {
-    let text = format_synonym_file(&[CorrectionEntry {
-        canonical: "裡面".into(),
-        variants: vec![("裏面".into(), 4), ("里边".into(), 2)],
-    }]);
-    assert!(text.contains("裡面,裏面,里边\n"));
-    assert!(text.contains("分詞"));
+    let text = format_synonym_file(
+        &[CorrectionEntry {
+            canonical: "裡面".into(),
+            variants: vec![("裏面".into(), 4), ("里边".into(), 2)],
+        }],
+        &|word| {
+            if word == "裡面" {
+                novel_segment::POSTAG::D_F
+            } else {
+                0
+            }
+        },
+    );
+    assert!(text.contains("裡面,裏面,里边|D_F\n"), "{text}");
+    assert!(text.contains("正字,錯字|詞性"));
 }
 
 #[test]
@@ -111,6 +120,14 @@ fn parse_synonym_line_skips_comments() {
         parse_synonym_line("裡面,裏面"),
         Some(("裡面".into(), vec!["裏面".into()]))
     );
+    let locative = super::parse_synonym_entry("裡面,里面,裏面|D_F+D_S").unwrap();
+    assert_eq!(locative.canonical, "裡面");
+    assert_eq!(
+        locative.pos,
+        novel_segment::POSTAG::D_F | novel_segment::POSTAG::D_S
+    );
+    let hex = super::parse_synonym_entry("公里,公裡|0x00100000").unwrap();
+    assert_eq!(hex.pos, novel_segment::POSTAG::D_N);
 }
 
 #[test]
@@ -127,18 +144,39 @@ fn process_line_pairs_are_segmented_words() {
 }
 
 #[test]
-fn split_process_units_breaks_on_punctuation_and_caps_length() {
+fn split_process_units_breaks_on_punctuation_not_length() {
     let units = split_process_units("甲乙。丙丁，戊己");
     assert_eq!(units, vec!["甲乙。", "丙丁，", "戊己"]);
-    let long: String = "裡".repeat(MAX_UNIT_CHARS + 5);
-    let units = split_process_units(&long);
-    assert!(units.len() >= 2);
-    assert!(units
-        .iter()
-        .all(|unit| unit.chars().count() <= MAX_UNIT_CHARS));
-    assert_eq!(
-        units.iter().map(|unit| unit.chars().count()).sum::<usize>(),
-        long.chars().count()
+    let long: String = "裡".repeat(45);
+    assert_eq!(split_process_units(&long), vec![long.as_str()]);
+}
+
+#[test]
+fn format_segment_dict_writes_pos_and_simplified_form() {
+    let text = format_segment_dict(
+        &[CorrectionEntry {
+            canonical: "裡面".into(),
+            variants: vec![("裏面".into(), 4)],
+        }],
+        &|word| {
+            if word == "裡面" {
+                novel_segment::POSTAG::D_F
+            } else {
+                0
+            }
+        },
+    );
+    assert!(text.contains("裡面|0x2000000|4\n"), "{text}");
+    assert!(text.contains("裏面|0x2000000|4\n"), "{text}");
+    assert!(text.contains("里面|0x2000000|4\n"), "{text}");
+}
+
+#[test]
+fn format_segment_dict_always_includes_wagyu() {
+    let text = format_segment_dict(&[], &|_| 0);
+    assert!(
+        text.contains("和牛|0x100000|1000\n"),
+        "pinned 和牛 missing: {text}"
     );
 }
 
@@ -594,27 +632,23 @@ fn fingerprint_rejects_changed_extra_correction() {
 #[test]
 fn extra_correction_skips_known_variants_in_output() {
     let (sources, output) = temp_pair("extra-skip");
-    write_corpus(
-        &sources,
-        "a.txt",
-        "這個制度已經實施三年了\n".repeat(3).as_str(),
-    );
+    write_corpus(&sources, "a.txt", "這道菜值得品嚐\n".repeat(3).as_str());
     let extra = sources.parent().unwrap().join("extra");
-    write_extra_correction(&extra, "制度,製度\n");
+    write_extra_correction(&extra, "品嚐,品嘗\n");
     let probe = sources.parent().unwrap().join("probe");
     let service = test_service();
     run_roundtrip(&service, base_config(sources.clone(), output.clone())).unwrap();
     let baseline = fs::read_to_string(output.join("zht.corpus.synonym.txt")).unwrap();
     assert!(
-        baseline.lines().any(|line| line.contains("製度")),
-        "baseline should keep 制度/製度, got {baseline}"
+        baseline.lines().any(|line| line.contains("品嘗")),
+        "baseline should keep 品嚐/品嘗, got {baseline}"
     );
     let mut config = base_config(sources.clone(), probe.clone());
     config.extra_correction = Some(extra);
     run_roundtrip(&service, config).unwrap();
     let synonym = fs::read_to_string(probe.join("zht.corpus.synonym.txt")).unwrap();
     assert!(
-        !synonym.lines().any(|line| line.contains("製度")),
+        !synonym.lines().any(|line| line.contains("品嘗")),
         "probe should skip extra-correction variants, got {synonym}"
     );
     let _ = fs::remove_dir_all(sources.parent().unwrap());
@@ -633,6 +667,21 @@ fn baseline_over_hard_fails() {
     config.memory.soft_bytes = Some(512);
     let err = run_roundtrip(&service, config).unwrap_err();
     assert!(err.contains("基線"));
+    let _ = fs::remove_dir_all(sources.parent().unwrap());
+}
+
+#[test]
+fn roundtrip_mixed_units_from_pool_does_not_deadlock() {
+    let (sources, output) = temp_pair("nested-pool");
+    let body = "這裡是里辦廣播？各位里民，關於本里申請的。\n".repeat(80);
+    write_corpus(&sources, "a.txt", &body);
+    let service = test_service();
+    let mut config = base_config(sources.clone(), output.clone());
+    config.jobs = 4;
+    config.batch_size = 64;
+    config.memory.lcs_inflight = Some(4);
+    let status = run_roundtrip(&service, config).unwrap();
+    assert_eq!(status.lines_read, 80);
     let _ = fs::remove_dir_all(sources.parent().unwrap());
 }
 

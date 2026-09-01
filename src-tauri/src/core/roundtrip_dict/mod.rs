@@ -15,6 +15,7 @@ pub use run::{run_roundtrip, RoundtripRunConfig, RoundtripRunStatus, RunStatus};
 
 use super::conversion::{base_convert, is_cjk_char, ConversionService};
 use super::types::Direction;
+use novel_segment::POSTAG;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::fs;
@@ -24,11 +25,10 @@ use std::path::{Path, PathBuf};
 pub(crate) const MIN_WORD_CHARS: usize = 2;
 pub(crate) const MAX_WORD_CHARS: usize = 8;
 pub(crate) const MAX_LINE_CHARS: usize = 20_000;
-/// DictTokenizer `get_chunks` 對長 CJK 句是指數展開；超過此字數會先切開再分詞。
-pub(crate) const MAX_UNIT_CHARS: usize = 40;
 pub(crate) const MAX_TOKEN_COUNT: usize = 800;
 pub(crate) const MAX_EXAMPLES: usize = 3;
-const DEFAULT_POS: &str = "0x100000";
+/// 固定寫入 extra 分詞表，避免「和牛只剩」被切成「牛只」再轉「牛隻」。
+pub(crate) const PINNED_DICT_WORDS: &[(&str, u32, u64)] = &[("和牛", POSTAG::D_N, 1000)];
 
 #[derive(Clone, Debug)]
 pub struct LineResult {
@@ -162,12 +162,14 @@ pub(crate) fn split_process_units(line: &str) -> Vec<&str> {
     for (idx, ch) in line.char_indices() {
         if is_unit_break(ch) {
             let end = idx + ch.len_utf8();
-            push_capped(&line[start..end], &mut pieces);
+            if start < end {
+                pieces.push(&line[start..end]);
+            }
             start = end;
         }
     }
     if start < line.len() {
-        push_capped(&line[start..], &mut pieces);
+        pieces.push(&line[start..]);
     }
     if pieces.is_empty() {
         vec![line]
@@ -194,26 +196,6 @@ fn is_unit_break(ch: char) -> bool {
             | '\n'
             | '…'
     )
-}
-
-fn push_capped<'a>(piece: &'a str, out: &mut Vec<&'a str>) {
-    if piece.is_empty() {
-        return;
-    }
-    let mut start = 0;
-    let mut count = 0;
-    for (i, ch) in piece.char_indices() {
-        count += 1;
-        if count == MAX_UNIT_CHARS {
-            let end = i + ch.len_utf8();
-            out.push(&piece[start..end]);
-            start = end;
-            count = 0;
-        }
-    }
-    if start < piece.len() {
-        out.push(&piece[start..]);
-    }
 }
 
 pub fn should_process(line: &str) -> bool {
@@ -542,11 +524,30 @@ fn extend_synonym_variants(variants: &mut HashSet<String>, text: &str) {
 }
 
 pub fn parse_synonym_line(line: &str) -> Option<(String, Vec<String>)> {
+    parse_synonym_entry(line).map(|entry| (entry.canonical, entry.variants))
+}
+
+/// Extra-correction synonym: `正字,錯字,...`（與套件相同）。舊檔可選 `|0xPOS` 或 `|D_F+D_S`。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SynonymEntry {
+    pub canonical: String,
+    pub variants: Vec<String>,
+    pub pos: u32,
+}
+
+pub fn parse_synonym_entry(line: &str) -> Option<SynonymEntry> {
     let line = line.trim();
     if line.is_empty() || line.starts_with("//") || line.starts_with('#') {
         return None;
     }
-    let mut parts: Vec<String> = line
+    let (body, pos) = match line.rsplit_once('|') {
+        Some((body, raw)) => match parse_pos_mask(raw.trim()) {
+            Some(mask) => (body.trim(), mask),
+            None => (line, 0),
+        },
+        None => (line, 0),
+    };
+    let mut parts: Vec<String> = body
         .split(',')
         .map(|part| part.trim().to_string())
         .filter(|part| !part.is_empty())
@@ -555,15 +556,73 @@ pub fn parse_synonym_line(line: &str) -> Option<(String, Vec<String>)> {
         return None;
     }
     let canonical = parts.remove(0);
-    Some((canonical, parts))
+    Some(SynonymEntry {
+        canonical,
+        variants: parts,
+        pos,
+    })
 }
 
-pub fn format_synonym_file(entries: &[CorrectionEntry]) -> String {
+fn parse_pos_mask(raw: &str) -> Option<u32> {
+    if raw.is_empty() {
+        return None;
+    }
+    if let Some(hex) = raw.strip_prefix("0x").or_else(|| raw.strip_prefix("0X")) {
+        return u32::from_str_radix(hex, 16).ok();
+    }
+    let mut mask = 0u32;
+    for part in raw.split('+') {
+        let name = part.trim();
+        if name.is_empty() {
+            return None;
+        }
+        mask |= pos_name_bit(name)?;
+    }
+    Some(mask)
+}
+
+fn pos_name_bit(name: &str) -> Option<u32> {
+    use novel_segment::POSTAG;
+    Some(match name {
+        "D_A" => POSTAG::D_A,
+        "D_B" => POSTAG::D_B,
+        "D_C" => POSTAG::D_C,
+        "D_D" => POSTAG::D_D,
+        "D_E" => POSTAG::D_E,
+        "D_F" => POSTAG::D_F,
+        "D_I" => POSTAG::D_I,
+        "D_L" => POSTAG::D_L,
+        "A_M" => POSTAG::A_M,
+        "D_MQ" => POSTAG::D_MQ,
+        "D_N" => POSTAG::D_N,
+        "D_O" => POSTAG::D_O,
+        "D_P" => POSTAG::D_P,
+        "A_Q" => POSTAG::A_Q,
+        "D_R" => POSTAG::D_R,
+        "D_S" => POSTAG::D_S,
+        "D_T" => POSTAG::D_T,
+        "D_U" => POSTAG::D_U,
+        "D_V" => POSTAG::D_V,
+        "D_W" => POSTAG::D_W,
+        "D_X" => POSTAG::D_X,
+        "D_Y" => POSTAG::D_Y,
+        "D_Z" => POSTAG::D_Z,
+        "A_NR" => POSTAG::A_NR,
+        "A_NS" => POSTAG::A_NS,
+        "A_NT" => POSTAG::A_NT,
+        "A_NX" => POSTAG::A_NX,
+        "A_NZ" => POSTAG::A_NZ,
+        "UNK" => POSTAG::UNK,
+        _ => return None,
+    })
+}
+
+pub fn format_synonym_file(entries: &[CorrectionEntry], pos_of: &dyn Fn(&str) -> u32) -> String {
     let mut output = String::from(
-        "// ConvertZZ 額外修正（新式分詞 convert_synonym 之後套用）\n\
+        "// ConvertZZ 額外修正（與套件同一趟分詞；同義詞格式：正字,錯字|詞性）\n\
          // 由繁體語料經套件引擎 T2S→S2T 後，以分詞對齊產生。\n\
          // 不得寫入 segment-dict 或 cjk-convert-rs 套件資料。\n\
-         // 格式：正字,錯字,...  套用時只取代分詞後的整詞，不做字串暴力取代。\n",
+         // 格式：正字,錯字,...|D_F 或 |0x02000000。詞性來自分詞器；套用時只改符合詞性的整詞。\n",
     );
     for entry in entries {
         output.push_str(&entry.canonical);
@@ -571,30 +630,103 @@ pub fn format_synonym_file(entries: &[CorrectionEntry]) -> String {
             output.push(',');
             output.push_str(variant);
         }
+        output.push_str(&format_pos_suffix(pos_of(&entry.canonical)));
         output.push('\n');
     }
     output
 }
 
-pub fn format_segment_dict(entries: &[CorrectionEntry]) -> String {
-    let mut output =
-        String::from("// ConvertZZ 額外分詞表，供整詞切出。不得併入 segment-dict 套件檔。\n");
-    let mut seen = HashSet::new();
-    for entry in entries {
-        let canonical_freq: u64 = entry.variants.iter().map(|item| item.1).sum();
-        if seen.insert(entry.canonical.clone()) {
-            output.push_str(&format!(
-                "{}|{DEFAULT_POS}|{canonical_freq}\n",
-                entry.canonical
-            ));
-        }
-        for (variant, count) in &entry.variants {
-            if seen.insert(variant.clone()) {
-                output.push_str(&format!("{variant}|{DEFAULT_POS}|{count}\n"));
-            }
+fn format_pos_suffix(pos: u32) -> String {
+    let pos = if pos == 0 { POSTAG::D_N } else { pos };
+    match format_pos_names(pos) {
+        Some(names) => format!("|{names}"),
+        None => format!("|{pos:#x}"),
+    }
+}
+
+fn format_pos_names(pos: u32) -> Option<String> {
+    const NAMED: &[(&str, u32)] = &[
+        ("D_A", POSTAG::D_A),
+        ("D_B", POSTAG::D_B),
+        ("D_C", POSTAG::D_C),
+        ("D_D", POSTAG::D_D),
+        ("D_E", POSTAG::D_E),
+        ("D_F", POSTAG::D_F),
+        ("D_I", POSTAG::D_I),
+        ("D_L", POSTAG::D_L),
+        ("A_M", POSTAG::A_M),
+        ("D_MQ", POSTAG::D_MQ),
+        ("D_N", POSTAG::D_N),
+        ("D_O", POSTAG::D_O),
+        ("D_P", POSTAG::D_P),
+        ("A_Q", POSTAG::A_Q),
+        ("D_R", POSTAG::D_R),
+        ("D_S", POSTAG::D_S),
+        ("D_T", POSTAG::D_T),
+        ("D_U", POSTAG::D_U),
+        ("D_V", POSTAG::D_V),
+        ("D_W", POSTAG::D_W),
+        ("D_X", POSTAG::D_X),
+        ("D_Y", POSTAG::D_Y),
+        ("D_Z", POSTAG::D_Z),
+        ("A_NR", POSTAG::A_NR),
+        ("A_NS", POSTAG::A_NS),
+        ("A_NT", POSTAG::A_NT),
+        ("A_NX", POSTAG::A_NX),
+        ("A_NZ", POSTAG::A_NZ),
+    ];
+    let mut rest = pos;
+    let mut names = Vec::new();
+    for (name, bit) in NAMED {
+        if rest & bit == *bit {
+            names.push(*name);
+            rest ^= bit;
         }
     }
+    if rest != 0 || names.is_empty() {
+        None
+    } else {
+        Some(names.join("+"))
+    }
+}
+
+pub fn format_segment_dict(entries: &[CorrectionEntry], pos_of: &dyn Fn(&str) -> u32) -> String {
+    let mut output = String::from(
+        "// ConvertZZ 額外分詞表（詞|詞性|權值）。正字、錯字與其簡體詞形都寫入。不得併入套件檔。\n",
+    );
+    let mut seen = HashSet::new();
+    for entry in entries {
+        let pos = match pos_of(&entry.canonical) {
+            0 => POSTAG::D_N,
+            value => value,
+        };
+        let canonical_freq: u64 = entry.variants.iter().map(|item| item.1).sum();
+        push_dict_row(
+            &mut output,
+            &mut seen,
+            &entry.canonical,
+            pos,
+            canonical_freq,
+        );
+        for (variant, count) in &entry.variants {
+            push_dict_row(&mut output, &mut seen, variant, pos, *count);
+        }
+    }
+    for (word, pos, freq) in PINNED_DICT_WORDS {
+        push_dict_row(&mut output, &mut seen, word, *pos, *freq);
+    }
     output
+}
+
+fn push_dict_row(output: &mut String, seen: &mut HashSet<String>, word: &str, pos: u32, freq: u64) {
+    if word.is_empty() || !seen.insert(word.to_string()) {
+        return;
+    }
+    output.push_str(&format!("{word}|{pos:#x}|{freq}\n"));
+    let simplified = base_convert(word, Direction::T2s);
+    if simplified != word && seen.insert(simplified.clone()) {
+        output.push_str(&format!("{simplified}|{pos:#x}|{freq}\n"));
+    }
 }
 
 pub fn format_pairs_tsv(pairs: &[ReportPair]) -> String {

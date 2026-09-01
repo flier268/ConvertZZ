@@ -25,10 +25,97 @@ async fn segmented_s2t_golden_cases() {
     let service = service();
     for (source, expected) in [
         ("里面", "裡面"),
+        ("個別選手表現觀察週報", "個別選手表現觀察週報"),
+        ("個別選手錶現觀察週報", "個別選手表現觀察週報"),
+        ("表現", "表現"),
+        ("表面", "表面"),
+        ("手表", "手錶"),
         ("皇后", "皇后"),
         ("头发", "頭髮"),
         ("开发", "開發"),
         ("面对表面", "面對表面"),
+        ("面包", "麵包"),
+        ("日志", "日誌"),
+        ("几率", "機率"),
+        ("餅干", "餅乾"),
+        ("秘密", "秘密"),
+        ("公里", "公里"),
+        ("台湾", "台灣"),
+        ("为了规避监督", "為了規避監督"),
+        ("為了規避監督", "為了規避監督"),
+        ("了解", "了解"),
+        ("瞭解", "了解"),
+        ("瞭望", "瞭望"),
+        ("尝试跟死忠的沟通", "嘗試跟死忠的溝通"),
+        ("嘗試跟死忠的溝通", "嘗試跟死忠的溝通"),
+        ("品尝", "品嚐"),
+        ("上台发言", "上台發言"),
+        ("平台", "平台"),
+        ("头发", "頭髮"),
+        ("頭髮", "頭髮"),
+        ("制药", "製藥"),
+        ("幹嗎", "幹嗎"),
+        ("重复", "重複"),
+        ("銷毀", "銷毀"),
+        ("策划", "策劃"),
+        ("淋漓尽致", "淋漓盡致"),
+        ("鉴于", "鑑於"),
+        ("身份证", "身分證"),
+        ("部分", "部分"),
+        ("注定", "注定"),
+        ("新台幣", "新台幣"),
+        ("电台", "電台"),
+        ("后台", "後台"),
+        ("混淆雙首長制", "混淆雙首長制"),
+        ("小吃店老闆娘", "小吃店老闆娘"),
+        ("雙四分之三", "雙四分之三"),
+        ("幹你娘", "幹你娘"),
+        ("轉換身份", "轉換身份"),
+        ("現制的監察權", "現制的監察權"),
+        ("譯者：曾依璇", "譯者：曾依璇"),
+        ("孫運璿", "孫運璿"),
+        ("製藥", "製藥"),
+        ("処理", "處理"),
+        ("説明書", "說明書"),
+        ("把錢要回", "把錢要回"),
+        ("水分子", "水分子"),
+        ("知識分子", "知識分子"),
+        ("不准進入", "不准進入"),
+        ("金馬影后", "金馬影后"),
+        ("編製預算", "編製預算"),
+        ("機製麵", "機製麵"),
+        ("本店專製", "本店專製"),
+        ("蘇製武器", "蘇製武器"),
+        ("律師公會", "律師公會"),
+        ("這麼好", "這麼好"),
+        ("那麼辦", "那麼辦"),
+        ("回復健康", "回復健康"),
+        ("這是他幹的", "這是他幹的"),
+        ("了若指掌", "了若指掌"),
+        ("症結", "症結"),
+        ("並行處理", "並行處理"),
+        ("三公里外", "三公里外"),
+        ("三公裡外", "三公里外"),
+        ("這裡是里辦廣播", "這裡是里辦廣播"),
+        ("各位里民", "各位里民"),
+        ("關於本里申請的", "關於本里申請的"),
+        ("這說明了環境教育", "這說明了環境教育"),
+        ("這說明瞭環境教育", "這說明了環境教育"),
+        ("簡單明瞭", "簡單明瞭"),
+        ("簡單明了", "簡單明瞭"),
+        ("明瞭", "明瞭"),
+        ("明了", "明了"),
+        ("彭傑燊", "彭傑燊"),
+        ("胜肽", "胜肽"),
+        ("勝肽", "胜肽"),
+        ("勝利", "勝利"),
+        ("巴西里碎屑", "巴西里碎屑"),
+        ("膿疱", "膿疱"),
+        ("膿皰", "膿疱"),
+        ("哪里", "哪裡"),
+        ("家裡", "家裡"),
+        ("家里", "家裡"),
+        ("裡面", "裡面"),
     ] {
         let result = service
             .convert(ConversionRequest {
@@ -41,8 +128,42 @@ async fn segmented_s2t_golden_cases() {
             })
             .await
             .unwrap();
-        assert_eq!(result.text, expected, "{source}");
+        assert_eq!(
+            result.text,
+            expected,
+            "{source} tokens={:?}",
+            service.debug_pos(source)
+        );
     }
+}
+
+#[tokio::test]
+async fn wagyu_stays_one_word_so_zhi_is_not_zhi_classifier() {
+    let service = service();
+    let source = "和牛只剩兩份";
+    let tokens = service.debug_pos(source);
+    assert!(
+        tokens.iter().any(|(word, _)| word == "和牛"),
+        "和牛 should be one token, got {tokens:?}"
+    );
+    assert!(
+        !tokens
+            .iter()
+            .any(|(word, _)| word == "牛只" || word == "牛隻"),
+        "must not split 和牛只剩 as 牛只, got {tokens:?}"
+    );
+    let result = service
+        .convert(ConversionRequest {
+            text: source.into(),
+            direction: Direction::S2t,
+            engine: EngineKind::Segmented,
+            dictionary_path: None,
+            zhconvert: None,
+            vocabulary_correction: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(result.text, source, "tokens={tokens:?}");
 }
 
 #[tokio::test]
@@ -70,6 +191,27 @@ async fn preserves_whitespace_and_punctuation() {
         convert("里面  😀\n《A》", Direction::S2t, EngineKind::Segmented).await,
         "裡面  😀\n《A》"
     );
+}
+
+#[test]
+fn convert_segmented_inside_rayon_pool_does_not_deadlock() {
+    let service = service();
+    let text = "這裡是里辦廣播？各位里民，關於本里申請的。";
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(4)
+        .build()
+        .expect("pool");
+    let results: Vec<String> = pool.install(|| {
+        use rayon::prelude::*;
+        (0..64)
+            .into_par_iter()
+            .map(|_| service.convert_segmented(text, Direction::S2t))
+            .collect()
+    });
+    assert_eq!(results.len(), 64);
+    assert!(results
+        .iter()
+        .all(|item| item.contains("這裡") && item.contains("里辦")));
 }
 
 #[test]
@@ -105,6 +247,67 @@ fn with_extra_correction_requires_synonym_file() {
     assert!(err.to_string().contains("zht.corpus.synonym.txt"));
     std::fs::write(root.join("zht.corpus.synonym.txt"), "制度,製度\n").unwrap();
     super::ConversionService::with_extra_correction(None, &root).expect("load extra");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[tokio::test]
+async fn extra_synonym_pos_is_consulted() {
+    let root = std::env::temp_dir().join(format!(
+        "convertzz-extra-pos-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(
+        root.join("zht.corpus.dict.txt"),
+        "錕鋙正|0x1000|20000\n錕鋙錯|0x100000|20000\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("zht.corpus.synonym.txt"), "錕鋙正,錕鋙錯|D_V\n").unwrap();
+    let noun_only = super::ConversionService::with_extra_correction(None, &root).unwrap();
+    let noun = noun_only
+        .convert(ConversionRequest {
+            text: "錕鋙錯".into(),
+            direction: Direction::S2t,
+            engine: EngineKind::Segmented,
+            dictionary_path: None,
+            zhconvert: None,
+            vocabulary_correction: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        noun.text,
+        "錕鋙錯",
+        "名詞不該套用動詞同義詞 tokens={:?}",
+        noun_only.debug_pos("錕鋙錯")
+    );
+
+    std::fs::write(
+        root.join("zht.corpus.dict.txt"),
+        "錕鋙正|0x1000|20000\n錕鋙錯|0x1000|20000\n",
+    )
+    .unwrap();
+    let verb = super::ConversionService::with_extra_correction(None, &root).unwrap();
+    let matched = verb
+        .convert(ConversionRequest {
+            text: "錕鋙錯".into(),
+            direction: Direction::S2t,
+            engine: EngineKind::Segmented,
+            dictionary_path: None,
+            zhconvert: None,
+            vocabulary_correction: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        matched.text,
+        "錕鋙正",
+        "tokens={:?}",
+        verb.debug_pos("錕鋙錯")
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -174,6 +377,28 @@ fn split_cjk_runs_keeps_markup_and_cjk_separate() {
             TextRun::Plain("<div>"),
             TextRun::Cjk("里面"),
             TextRun::Plain("</div>"),
+        ]
+    );
+}
+
+#[test]
+fn split_cjk_runs_breaks_on_newlines_and_punctuation() {
+    assert_eq!(
+        split_cjk_runs("里面\n开发。头发"),
+        vec![
+            TextRun::Cjk("里面"),
+            TextRun::Plain("\n"),
+            TextRun::Cjk("开发"),
+            TextRun::Plain("。"),
+            TextRun::Cjk("头发"),
+        ]
+    );
+    assert_eq!(
+        split_cjk_runs("里面\r\n开发"),
+        vec![
+            TextRun::Cjk("里面"),
+            TextRun::Plain("\r\n"),
+            TextRun::Cjk("开发"),
         ]
     );
 }
@@ -262,20 +487,27 @@ async fn vocabulary_off_uses_glyph_only() {
         })
         .await
         .unwrap();
-    // cn2tw_min → cjk2zht: 里→裡, 钟→鐘, 换→換; 面 stays 面 (not 麵).
-    assert_eq!(result.text, "裡面開發面對表面鐘表簡繁轉換");
+    // 詞彙關閉時只做 1-1 字形：里不改裡、面不改麵；钟仍是鐘。
+    assert_eq!(result.text, "里面開發面對表面鐘表簡繁轉換");
     assert!(result.warnings[0].contains("詞彙修正已停用"));
 }
 
 #[test]
-fn glyph_s2t_runs_min_before_zht() {
-    // Order matters for 钟: min→鐘, zht alone would yield 鍾.
+fn glyph_s2t_uses_cn2tw_min_only() {
+    // min：钟→鐘、体類一對一。不用 cjk2zht，所以 里／制／娘／璇／処 維持原字。
     assert_eq!(super::glyph_s2t("钟表"), "鐘表");
     assert_eq!(super::glyph_s2t("秒钟"), "秒鐘");
-    assert_eq!(super::glyph_s2t("里面"), "裡面");
+    assert_eq!(super::glyph_s2t("里面"), "里面");
     assert_eq!(super::glyph_s2t("面对表面"), "面對表面");
     assert_eq!(super::glyph_s2t("简繁转换"), "簡繁轉換");
-    assert_eq!(super::glyph_s2t("説明書"), "說明書");
+    assert_eq!(super::glyph_s2t("説明書"), "説明書");
+    assert_eq!(super::glyph_s2t("疱"), "疱");
+    assert_eq!(super::glyph_s2t("制"), "制");
+    assert_eq!(super::glyph_s2t("娘"), "娘");
+    assert_eq!(super::glyph_s2t("璇"), "璇");
+    assert_eq!(super::glyph_s2t("製"), "製");
+    assert_eq!(super::glyph_s2t("処理"), "処理");
+    assert_eq!(super::glyph_s2t("疱"), "疱");
 }
 
 #[tokio::test]
@@ -318,4 +550,130 @@ async fn mixed_html_like_content_stays_interactive() {
         elapsed.as_secs_f64() < 2.0,
         "mixed HTML conversion too slow: {elapsed:?}"
     );
+}
+
+#[tokio::test]
+async fn long_unpunctuated_cjk_does_not_explode() {
+    let clause = "里面开发头发软件皇后面对表面今天天气很好几率日志面包";
+    let text = clause.repeat(40);
+    let _ = convert("里面", Direction::S2t, EngineKind::Segmented).await;
+    let started = std::time::Instant::now();
+    let result = convert(&text, Direction::S2t, EngineKind::Segmented).await;
+    let elapsed = started.elapsed();
+    assert_eq!(result.chars().count(), text.chars().count());
+    assert!(
+        elapsed.as_secs_f64() < 2.0,
+        "unpunctuated CJK conversion too slow: {elapsed:?}"
+    );
+}
+
+#[tokio::test]
+async fn punctuated_chinese_does_not_explode() {
+    let clause = "里面开发头发软件，皇后面对表面。今天天氣很好。\n";
+    let text = clause.repeat(400);
+    let _ = convert("里面", Direction::S2t, EngineKind::Segmented).await;
+    let started = Instant::now();
+    let result = convert(&text, Direction::S2t, EngineKind::Segmented).await;
+    let elapsed = started.elapsed();
+    assert!(result.contains("裡面"));
+    assert!(result.contains("頭髮"));
+    assert!(
+        elapsed.as_secs_f64() < 2.0,
+        "punctuated Chinese conversion too slow: {elapsed:?}"
+    );
+}
+
+#[tokio::test]
+async fn convert_with_progress_can_be_cancelled() {
+    use super::super::types::{CancelCheck, ConversionRequest, EngineKind};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let service = shared_conversion();
+    let flag = std::sync::Arc::new(AtomicBool::new(true));
+    let flag2 = std::sync::Arc::clone(&flag);
+    let is_cancelled: CancelCheck = std::sync::Arc::new(move || flag2.load(Ordering::SeqCst));
+    let text = "里面".repeat(200);
+    let error = service
+        .convert_with_progress(
+            ConversionRequest {
+                text,
+                direction: Direction::S2t,
+                engine: EngineKind::Segmented,
+                dictionary_path: None,
+                zhconvert: None,
+                vocabulary_correction: Some(true),
+            },
+            None,
+            Some(is_cancelled),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, "CONVERT_CANCELLED");
+}
+
+#[tokio::test]
+async fn extra_correction_maps_fanwei_to_fanwei() {
+    // extra-correction：範圍,范圍。cn2tw_min 不把單字「范」改成「範」。
+    for source in ["范圍", "范围", "範圍"] {
+        assert_eq!(
+            convert(source, Direction::S2t, EngineKind::Segmented).await,
+            "範圍",
+            "{source}"
+        );
+    }
+    let simplified = convert("範圍", Direction::T2s, EngineKind::Segmented).await;
+    let roundtrip = convert(&simplified, Direction::S2t, EngineKind::Segmented).await;
+    assert_eq!(simplified, "范围", "T2S {simplified}");
+    assert_eq!(roundtrip, "範圍", "T2S→S2T {simplified} → {roundtrip}");
+    assert_eq!(service().segment_tokens("范圍"), vec!["范圍".to_string()]);
+    assert_eq!(service().segment_tokens("范围"), vec!["范围".to_string()]);
+    let glyph_only = service()
+        .convert(ConversionRequest {
+            text: "范围".into(),
+            direction: Direction::S2t,
+            engine: EngineKind::Segmented,
+            dictionary_path: None,
+            zhconvert: None,
+            vocabulary_correction: Some(false),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        glyph_only.text, "范圍",
+        "min 表不改單字范：{}",
+        glyph_only.text
+    );
+}
+
+#[test]
+fn glyph_s2t_min_leaves_fan_as_fan() {
+    use cjk_convert_rs::cn2tw_min;
+    assert_eq!(cn2tw_min("范围"), "范圍");
+    assert_eq!(super::glyph_s2t("范围"), "范圍");
+    assert_eq!(super::glyph_s2t("範圍"), "範圍");
+    assert_eq!(super::glyph_s2t("范圍"), "范圍");
+}
+
+#[tokio::test]
+async fn without_extra_correction_s2t_fanwei() {
+    let isolated = super::ConversionService::without_extra_correction(None).expect("service");
+    for source in ["范圍", "范围", "範圍"] {
+        let text = isolated
+            .convert(ConversionRequest {
+                text: source.into(),
+                direction: Direction::S2t,
+                engine: EngineKind::Segmented,
+                dictionary_path: None,
+                zhconvert: None,
+                vocabulary_correction: None,
+            })
+            .await
+            .unwrap()
+            .text;
+        assert_eq!(
+            text,
+            "範圍",
+            "{source} → {text} tokens={:?}",
+            isolated.segment_tokens(source)
+        );
+    }
 }

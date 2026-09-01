@@ -27,6 +27,7 @@ chrono = { version = "0.4.45", features = ["clock"] }
 cjk-convert-rs = "0.1.0"
 encoding_rs = "0.8.35"
 enigo = "0.6.1"
+futures = { version = "0.3", default-features = false, features = ["std"] }
 id3 = "1.17.1"
 keyring = "4.1.6"
 lofty = "0.25.1"

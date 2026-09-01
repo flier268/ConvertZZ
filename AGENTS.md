@@ -12,7 +12,7 @@ ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程
 | `src/pages/` | 快速轉換、檔案、剪貼簿、音訊、工具、字典、設定、關於 |
 | `src/lib/` | 前端動作、設定、核心客戶端、CLI、托盤與快捷鍵協調 |
 | `src-tauri/src/core/` | 文字、編碼、檔案、字典、音訊標籤與舊設定匯入 |
-| `src-tauri/src/bin/roundtrip-dict.rs` | 語料回環比較，產出套件外的額外分詞修正；來源語料只讀。預設不載 extra-correction；`--extra-correction DIR` 僅供探針。`Cargo.toml` 的 `default-run` 必須是 `convertzz`，否則 `tauri dev` 的 `cargo run` 會因兩個 binary 失敗 |
+| `src-tauri/roundtrip-dict/` | 語料回環比較獨立 crate，產出套件外的額外分詞修正；來源語料只讀。預設不載 extra-correction；`--extra-correction DIR` 僅供探針。建置：`cargo build --manifest-path src-tauri/Cargo.toml -p roundtrip-dict --release` |
 | `src-tauri/resources/extra-correction/` | ConvertZZ 額外修正層；與 `segment-dict` 分開。分詞表 `詞\|詞性\|權值`、同義詞 `正字,錯字\|詞性`，載入後同一趟分詞並依詞性套用；不寫入套件詞典、不做全文暴力取代 |
 | `data/roundtrip-correction/` | 回環工具產出（產生檔，不進 git、不進套件字典） |
 | `wiki/` | GitHub Wiki submodule（`ConvertZZ.wiki.git`）；教學與開發文件 |
@@ -46,7 +46,7 @@ pnpm run dev
 pnpm run check
 pnpm test
 pnpm fmt
-cargo test --manifest-path src-tauri/Cargo.toml
+cargo test --manifest-path src-tauri/Cargo.toml --workspace
 ```
 
 Wiki 在 `wiki/`。修改後先於 `wiki/` 內 commit 並 `git push origin master`，再於主倉庫更新 submodule 指標。說明見 [wiki/Wiki維護.md](wiki/Wiki維護.md)。`roundtrip-dict` 用法見 [wiki/語料回環修正詞典.md](wiki/語料回環修正詞典.md)。

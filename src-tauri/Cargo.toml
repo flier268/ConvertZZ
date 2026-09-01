@@ -9,13 +9,13 @@ edition = "2021"
 rust-version = "1.89"
 default-run = "convertzz"
 
+[workspace]
+members = ["roundtrip-dict"]
+resolver = "2"
+
 [lib]
 name = "convertzz_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
-
-[[bin]]
-name = "roundtrip-dict"
-path = "src/bin/roundtrip-dict.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -36,7 +36,6 @@ regex = "1.13.1"
 reqwest = { version = "0.13.4", default-features = false, features = ["form", "json", "rustls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-signal-hook = "0.4.4"
 tauri = { version = "2.11.5", features = ["tray-icon"] }
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2"

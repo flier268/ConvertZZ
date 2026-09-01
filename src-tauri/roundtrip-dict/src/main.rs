@@ -99,7 +99,8 @@ fn exit_code(status: &RunStatus, sigint: bool, sigterm: bool) -> i32 {
 
 fn parse_args() -> Result<Args, String> {
     let mut sources = None;
-    let mut output = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/roundtrip-correction");
+    let mut output =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/roundtrip-correction");
     let mut select = CorpusSelect::default();
     let mut min_count = 5u64;
     let mut min_dominance = 0.7f64;
@@ -241,7 +242,7 @@ roundtrip-dict — 以套件分詞／簡轉繁做回環，產出 ConvertZZ 額�
 用檔級檢查點與溢寫處理，不是改對齊演算法。
 
 用法：
-  cargo run --manifest-path src-tauri/Cargo.toml --bin roundtrip-dict -- --sources DIR [選項]
+  cargo run --manifest-path src-tauri/Cargo.toml -p roundtrip-dict -- --sources DIR [選項]
 
 選項：
   --sources DIR         語料根目錄（必填，只讀）

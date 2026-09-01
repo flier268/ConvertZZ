@@ -1,0 +1,13 @@
+[package]
+name = "roundtrip-dict"
+version = "2.0.0-beta6"
+description = "Corpus roundtrip extra-correction generator for ConvertZZ"
+authors = ["ConvertZZ contributors"]
+license = "GPL-3.0-only"
+edition = "2021"
+rust-version = "1.89"
+publish = false
+
+[dependencies]
+convertzz = { path = ".." }
+signal-hook = "0.4.4"

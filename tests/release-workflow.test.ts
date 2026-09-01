@@ -114,10 +114,11 @@ describe("發行工作流程契約", () => {
     );
   });
 
-  it("Cargo 有 roundtrip-dict 時仍指定 convertzz 為預設執行檔，讓 tauri dev 能 cargo run", () => {
+  it("roundtrip-dict 以獨立 crate 編譯", () => {
     const cargo = readProjectFile("src-tauri/Cargo.toml");
-    expect(cargo).toContain('default-run = "convertzz"');
-    expect(cargo).toContain('name = "roundtrip-dict"');
+    const tool = readProjectFile("src-tauri/roundtrip-dict/Cargo.toml");
+    expect(cargo).toContain('members = ["roundtrip-dict"]');
+    expect(tool).toContain('name = "roundtrip-dict"');
   });
 
   it("Windows 發行會跑 pnpm check，且倉庫強制 LF 以免 Prettier 因 CRLF 失敗", () => {

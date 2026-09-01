@@ -672,7 +672,6 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "signal-hook",
  "tauri",
  "tauri-build",
  "tauri-plugin-clipboard-manager",
@@ -3699,6 +3698,14 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "roundtrip-dict"
+version = "2.0.0-beta6"
+dependencies = [
+ "convertzz",
+ "signal-hook",
 ]
 
 [[package]]

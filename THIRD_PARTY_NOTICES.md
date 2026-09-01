@@ -21,7 +21,6 @@ ConvertZZ 2.0 包含第三方自由軟體。
 | enigo | 0.6.1 | MIT |
 | arboard | 3.6.1 | Apache-2.0 OR MIT |
 | keyring | 4 | Apache-2.0 OR MIT |
-| signal-hook | 0.4.4 | Apache-2.0 OR MIT |
 
 完整 JavaScript 相依版本記錄於 `pnpm-lock.yaml`。
 

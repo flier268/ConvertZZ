@@ -36,7 +36,7 @@ jobs:
       - name: 檢查前端
         run: pnpm run check
       - name: 執行 Rust 核心測試
-        run: cargo test --manifest-path src-tauri/Cargo.toml -- --test-threads=1
+        run: cargo test --manifest-path src-tauri/Cargo.toml --workspace -- --test-threads=1
 
   e2e:
     runs-on: ubuntu-22.04

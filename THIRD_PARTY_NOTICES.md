@@ -12,7 +12,7 @@ ConvertZZ 2.0 包含第三方自由軟體。
 | tauri-plugin-updater | 2.10.1 | Apache-2.0 OR MIT |
 | tauri-plugin-process | 2.3.1 | Apache-2.0 OR MIT |
 | cjk-convert-rs | 0.1.0 | ISC |
-| ws-segment-rs | 0.1.3 | MIT |
+| ws-segment-rs | 0.1.4 | MIT |
 | encoding_rs | 0.8.35 | Apache-2.0 OR MIT |
 | chardetng | 1.0.0 | Apache-2.0 OR MIT |
 | id3 | 1.17 | MPL-2.0 |

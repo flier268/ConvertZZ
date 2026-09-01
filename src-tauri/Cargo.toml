@@ -7,6 +7,7 @@ license = "GPL-3.0-only"
 repository = "https://github.com/flier268/ConvertZZ"
 edition = "2021"
 rust-version = "1.89"
+default-run = "convertzz"
 
 [lib]
 name = "convertzz_lib"

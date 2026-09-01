@@ -114,6 +114,12 @@ describe("發行工作流程契約", () => {
     );
   });
 
+  it("Cargo 有 roundtrip-dict 時仍指定 convertzz 為預設執行檔，讓 tauri dev 能 cargo run", () => {
+    const cargo = readProjectFile("src-tauri/Cargo.toml");
+    expect(cargo).toContain('default-run = "convertzz"');
+    expect(cargo).toContain('name = "roundtrip-dict"');
+  });
+
   it("Windows 發行會跑 pnpm check，且倉庫強制 LF 以免 Prettier 因 CRLF 失敗", () => {
     const gitattributes = readProjectFile(".gitattributes");
     const prettier = readProjectFile(".prettierrc.json");

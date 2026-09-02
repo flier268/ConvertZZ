@@ -41,6 +41,8 @@ pub struct LineResult {
     pub skipped: bool,
     pub mismatched: bool,
     pub pairs: Vec<(String, String)>,
+    /// 原文分詞（2–8 字 CJK）。用來判斷異體是否本身也是語料正詞。
+    pub originals: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -86,11 +88,7 @@ pub(crate) fn process_line_with_buf(
 ) -> LineResult {
     let line = line.trim();
     if !should_process(line) {
-        return LineResult {
-            skipped: true,
-            mismatched: false,
-            pairs: Vec::new(),
-        };
+        return skipped_line();
     }
     let units = split_process_units(line);
     if units.len() == 1 {
@@ -105,6 +103,7 @@ pub(crate) fn process_line_with_buf(
         }
     };
     let mut pairs = Vec::new();
+    let mut originals = Vec::new();
     let mut mismatched = false;
     let mut any = false;
     for unit in units {
@@ -113,23 +112,41 @@ pub(crate) fn process_line_with_buf(
         }
         any = true;
         let result = process_unit_with_buf(service, unit, Some(buf));
+        originals.extend(result.originals);
         if result.mismatched {
             mismatched = true;
             pairs.extend(result.pairs);
         }
     }
     if !any {
-        return LineResult {
-            skipped: true,
-            mismatched: false,
-            pairs: Vec::new(),
-        };
+        return skipped_line();
     }
     LineResult {
         skipped: false,
         mismatched,
         pairs,
+        originals,
     }
+}
+
+fn skipped_line() -> LineResult {
+    LineResult {
+        skipped: true,
+        mismatched: false,
+        pairs: Vec::new(),
+        originals: Vec::new(),
+    }
+}
+
+fn original_words(tokens: &[String]) -> Vec<String> {
+    tokens
+        .iter()
+        .filter(|token| {
+            let len = token.chars().count();
+            len >= MIN_WORD_CHARS && len <= MAX_WORD_CHARS && is_cjk_word(token)
+        })
+        .cloned()
+        .collect()
 }
 
 fn process_unit_with_buf(
@@ -137,6 +154,8 @@ fn process_unit_with_buf(
     unit: &str,
     lcs_buf: Option<&mut Vec<u32>>,
 ) -> LineResult {
+    let original_tokens = service.segment_tokens(unit);
+    let originals = original_words(&original_tokens);
     let simplified = service.convert_segmented(unit, Direction::T2s);
     let reconstructed = service.convert_segmented(&simplified, Direction::S2t);
     if reconstructed == unit {
@@ -144,21 +163,23 @@ fn process_unit_with_buf(
             skipped: false,
             mismatched: false,
             pairs: Vec::new(),
+            originals,
         };
     }
-    let original_tokens = service.segment_tokens(unit);
     let reconstructed_tokens = service.segment_tokens(&reconstructed);
     if original_tokens.len() > MAX_TOKEN_COUNT || reconstructed_tokens.len() > MAX_TOKEN_COUNT {
         return LineResult {
             skipped: false,
             mismatched: true,
             pairs: Vec::new(),
+            originals,
         };
     }
     LineResult {
         skipped: false,
         mismatched: true,
         pairs: extract_pairs_with_buf(&original_tokens, &reconstructed_tokens, lcs_buf),
+        originals,
     }
 }
 
@@ -242,11 +263,19 @@ fn pairs_from_hunk(original: &[String], reconstructed: &[String]) -> Vec<(String
     let mut pairs = Vec::new();
     if original_chars == reconstructed_chars {
         let reconstructed_chars: Vec<char> = reconstructed_joined.chars().collect();
+        // 只接受落在「重建側連續分詞」邊界上的字元切片，避免「四|隻有」對到「四只|有」
+        // 中間的「只有」這種跨詞假詞對。
+        let aligned_spans = consecutive_token_char_spans(reconstructed);
         let mut index = 0;
         for token in original {
             let len = token.chars().count();
-            let span: String = reconstructed_chars[index..index + len].iter().collect();
-            index += len;
+            let start = index;
+            let end = index + len;
+            index = end;
+            if !aligned_spans.contains(&(start, end)) {
+                continue;
+            }
+            let span: String = reconstructed_chars[start..end].iter().collect();
             if let Some(pair) = usable_pair(&span, token) {
                 pairs.push(pair);
             }
@@ -261,7 +290,25 @@ fn pairs_from_hunk(original: &[String], reconstructed: &[String]) -> Vec<(String
     pairs
 }
 
-fn usable_pair(variant: &str, canonical: &str) -> Option<(String, String)> {
+/// 重建側每個連續 token 子序列的字元區間 `[start, end)`。
+fn consecutive_token_char_spans(tokens: &[String]) -> HashSet<(usize, usize)> {
+    let mut offsets = Vec::with_capacity(tokens.len() + 1);
+    offsets.push(0usize);
+    let mut pos = 0usize;
+    for token in tokens {
+        pos += token.chars().count();
+        offsets.push(pos);
+    }
+    let mut spans = HashSet::new();
+    for left in 0..tokens.len() {
+        for right in (left + 1)..=tokens.len() {
+            spans.insert((offsets[left], offsets[right]));
+        }
+    }
+    spans
+}
+
+pub(crate) fn usable_pair(variant: &str, canonical: &str) -> Option<(String, String)> {
     if variant == canonical {
         return None;
     }
@@ -628,7 +675,7 @@ pub fn format_synonym_file(entries: &[CorrectionEntry], pos_of: &dyn Fn(&str) ->
         "// ConvertZZ 額外修正（與套件同一趟分詞；同義詞格式：正字,錯字|詞性）\n\
          // 由繁體語料經套件引擎 T2S→S2T 後，以分詞對齊產生。\n\
          // 不得寫入 segment-dict 或 cjk-convert-rs 套件資料。\n\
-         // 格式：正字,錯字,...|D_F 或 |0x02000000。詞性來自分詞器；套用時只改符合詞性的整詞。\n",
+         // 格式：正字,錯字,...|D_F 或 |0x02000000。詞性來自分詞器；套用時只改上下文詞性符合的整詞。\n",
     );
     for entry in entries {
         output.push_str(&entry.canonical);

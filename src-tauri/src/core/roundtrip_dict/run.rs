@@ -1,11 +1,11 @@
 use super::aggregator::{
-    compact_shards, finish_from_shards, merge_sorted_shard_files, next_shard_relative,
-    write_derived_outputs, PairAggregator,
+    finish_from_shards, merge_sorted_shard_files, write_derived_outputs, PairAggregator,
 };
 use super::checkpoint::{
-    build_fingerprint, fingerprint_mismatch_message, list_uncommitted_for, load_checkpoint,
-    reset_output, save_checkpoint, uncommitted_name, validate_completed_paths, wipe_uncommitted,
-    Checkpoint,
+    apply_corpus_incremental, build_fingerprint, engine_fingerprint_matches,
+    fingerprint_mismatch_message, list_uncommitted_for, load_checkpoint, reset_output,
+    save_checkpoint, uncommitted_name, upsert_file_shard, validate_completed_paths,
+    wipe_uncommitted, Checkpoint,
 };
 use super::memory::{
     aggregator_estimate, auto_lcs_inflight, inflight_estimate, resolve_thresholds, usage,
@@ -120,17 +120,25 @@ pub fn run_roundtrip(
     let existing = load_checkpoint(&config.output)?;
     let resumed = existing.is_some();
     let mut checkpoint = match existing {
-        Some(checkpoint) => {
-            if checkpoint.fingerprint != fingerprint {
+        Some(mut checkpoint) => {
+            if !engine_fingerprint_matches(&checkpoint.fingerprint, &fingerprint) {
                 return Err(fingerprint_mismatch_message().into());
             }
             validate_completed_paths(&config.sources, &checkpoint.completed_files)?;
+            let plan = apply_corpus_incremental(&mut checkpoint, &fingerprint, &config.output)?;
+            if plan.rerun > 0 || plan.dropped > 0 {
+                eprintln!(
+                    "語料變更：沿用 {} 個檔，重跑 {} 個檔",
+                    plan.reuse, plan.rerun
+                );
+            }
             checkpoint
         }
         None => Checkpoint::new(fingerprint),
     };
 
     if checkpoint.status == "complete" {
+        save_checkpoint(&config.output, &mut checkpoint)?;
         eprintln!("已完成，略過");
         return Ok(status_from_checkpoint(
             &checkpoint,
@@ -615,38 +623,29 @@ fn durable_commit(
         drop(file_acc);
         pieces.push(ram_path);
     }
-    let shard_rel = next_shard_relative(&checkpoint.shards);
+    let shard_rel = super::checkpoint::file_shard_relative(relative);
     let shard_path = config.output.join(&shard_rel);
     if pieces.is_empty() {
         PairAggregator::default().write_shard_path(&shard_path)?;
     } else {
         merge_sorted_shard_files(&pieces, &shard_path)?;
     }
-    checkpoint.completed_files.push(relative.to_string());
-    checkpoint.lines_read += file_lines;
-    checkpoint.lines_skipped += file_skipped;
-    checkpoint.lines_mismatched += file_mismatched;
-    checkpoint.shards.push(shard_rel);
-    if checkpoint.shards.len() >= 8 {
-        if let Ok(compacted) = compact_shards(&config.output, &checkpoint.shards) {
-            if compacted.len() == 1 && compacted != checkpoint.shards {
-                let old = checkpoint.shards.clone();
-                checkpoint.shards = compacted;
-                save_checkpoint(&config.output, checkpoint)?;
-                for item in old {
-                    if !checkpoint.shards.contains(&item) {
-                        let _ = std::fs::remove_file(config.output.join(item));
-                    }
-                }
-            } else {
-                save_checkpoint(&config.output, checkpoint)?;
-            }
-        } else {
-            save_checkpoint(&config.output, checkpoint)?;
-        }
-    } else {
-        save_checkpoint(&config.output, checkpoint)?;
-    }
+    let print = checkpoint
+        .fingerprint
+        .files
+        .iter()
+        .find(|item| item.path == relative)
+        .cloned();
+    upsert_file_shard(
+        checkpoint,
+        relative,
+        shard_rel,
+        print.as_ref(),
+        file_lines,
+        file_skipped,
+        file_mismatched,
+    );
+    save_checkpoint(&config.output, checkpoint)?;
     for piece in pieces {
         let _ = std::fs::remove_file(piece);
     }
@@ -732,11 +731,16 @@ fn process_batch(
                 acc.lines_read += 1;
                 if result.skipped {
                     acc.lines_skipped += 1;
-                } else if result.mismatched {
-                    acc.lines_mismatched += 1;
-                    let example = line.trim();
-                    for (variant, canonical) in result.pairs {
-                        acc.aggregator.add(variant, canonical, example);
+                } else {
+                    for word in result.originals {
+                        acc.aggregator.note_original(word);
+                    }
+                    if result.mismatched {
+                        acc.lines_mismatched += 1;
+                        let example = line.trim();
+                        for (variant, canonical) in result.pairs {
+                            acc.aggregator.add(variant, canonical, example);
+                        }
                     }
                 }
                 acc

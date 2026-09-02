@@ -27,6 +27,8 @@ pub struct PairStat {
 #[derive(Clone, Debug, Default)]
 pub struct PairAggregator {
     stats: HashMap<(String, String), PairStat>,
+    /// 原文詞頻。引擎產出的異體若本身也是語料正詞，不可互代。
+    originals: HashMap<String, u64>,
 }
 
 impl PairAggregator {
@@ -36,6 +38,10 @@ impl PairAggregator {
         if stat.examples.len() < MAX_EXAMPLES && !stat.examples.iter().any(|item| item == example) {
             stat.examples.push(super::truncate_example(example));
         }
+    }
+
+    pub fn note_original(&mut self, word: impl Into<String>) {
+        *self.originals.entry(word.into()).or_insert(0) += 1;
     }
 
     pub fn merge(&mut self, other: Self) {
@@ -51,10 +57,13 @@ impl PairAggregator {
                 }
             }
         }
+        for (word, count) in other.originals {
+            *self.originals.entry(word).or_insert(0) += count;
+        }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.stats.is_empty()
+        self.stats.is_empty() && self.originals.is_empty()
     }
 
     pub fn raw_occurrences(&self) -> u64 {
@@ -66,7 +75,7 @@ impl PairAggregator {
     }
 
     pub fn estimated_bytes(&self) -> u64 {
-        self.stats.len() as u64 * EST_BYTES_PER_PAIR
+        (self.stats.len() as u64 + self.originals.len() as u64) * EST_BYTES_PER_PAIR
     }
 
     pub fn finish(
@@ -77,6 +86,9 @@ impl PairAggregator {
     ) -> (Vec<CorrectionEntry>, FinishStats) {
         let mut by_variant: HashMap<String, Vec<(String, PairStat)>> = HashMap::new();
         for ((variant, canonical), stat) in &self.stats {
+            if variant == canonical {
+                continue;
+            }
             by_variant
                 .entry(variant.clone())
                 .or_default()
@@ -84,8 +96,13 @@ impl PairAggregator {
         }
         let unique = self.stats.len();
         let occurrences = self.raw_occurrences();
-        let (entries, mut stats) =
-            finish_grouped(by_variant, min_count, min_dominance, skip_variants);
+        let (entries, mut stats) = finish_grouped(
+            by_variant,
+            min_count,
+            min_dominance,
+            skip_variants,
+            &self.originals,
+        );
         stats.raw_pair_occurrences = occurrences;
         stats.unique_raw_pairs = unique;
         (entries, stats)
@@ -95,7 +112,21 @@ impl PairAggregator {
         writer
             .write_all(SHARD_MAGIC)
             .map_err(|error| format!("寫入 shard 失敗：{error}"))?;
-        let mut records: Vec<_> = self.stats.iter().collect();
+        let identity_stats: HashMap<(String, String), PairStat> = self
+            .originals
+            .iter()
+            .map(|(word, count)| {
+                (
+                    (word.clone(), word.clone()),
+                    PairStat {
+                        count: *count,
+                        examples: Vec::new(),
+                    },
+                )
+            })
+            .collect();
+        let mut records: Vec<(&(String, String), &PairStat)> = self.stats.iter().collect();
+        records.extend(identity_stats.iter().map(|(k, v)| (k, v)));
         records.sort_by(|left, right| {
             left.0
                  .0
@@ -132,13 +163,17 @@ impl PairAggregator {
             };
             ensure_increasing(&previous, &record.variant, &record.canonical)?;
             previous = Some((record.variant.clone(), record.canonical.clone()));
-            aggregator.stats.insert(
-                (record.variant, record.canonical),
-                PairStat {
-                    count: record.count,
-                    examples: record.examples,
-                },
-            );
+            if record.variant == record.canonical {
+                *aggregator.originals.entry(record.variant).or_insert(0) += record.count;
+            } else {
+                aggregator.stats.insert(
+                    (record.variant, record.canonical),
+                    PairStat {
+                        count: record.count,
+                        examples: record.examples,
+                    },
+                );
+            }
         }
         Ok(aggregator)
     }
@@ -177,6 +212,7 @@ fn finish_grouped(
     min_count: u64,
     min_dominance: f64,
     skip_variants: &HashSet<String>,
+    originals: &HashMap<String, u64>,
 ) -> (Vec<CorrectionEntry>, FinishStats) {
     let mut skipped_existing = 0;
     let mut skipped_low_count = 0;
@@ -187,6 +223,10 @@ fn finish_grouped(
     for (variant, mut candidates) in by_variant {
         if skip_variants.contains(&variant) {
             skipped_existing += 1;
+            continue;
+        }
+        if originals.get(&variant).copied().unwrap_or(0) >= min_count {
+            skipped_ambiguous += 1;
             continue;
         }
         candidates.sort_by(|left, right| {
@@ -460,6 +500,7 @@ pub fn finish_from_shards(
             min_count,
             min_dominance,
             skip_variants,
+            &HashMap::new(),
         ));
     }
     let mut readers = Vec::new();
@@ -478,6 +519,7 @@ pub fn finish_from_shards(
         }
     }
     let mut by_variant: HashMap<String, Vec<(String, PairStat)>> = HashMap::new();
+    let mut originals: HashMap<String, u64> = HashMap::new();
     let mut unique = 0usize;
     let mut occurrences = 0u64;
     let mut current_variant: Option<String> = None;
@@ -523,19 +565,23 @@ pub fn finish_from_shards(
             merged.count = merged.count.saturating_add(count);
             merge_examples(&mut merged.examples, examples);
         }
-        unique += 1;
-        occurrences = occurrences.saturating_add(merged.count);
-        if current_variant.as_deref() != Some(merged.variant.as_str()) {
-            flush(current_variant.take(), &mut candidates, &mut by_variant);
-            current_variant = Some(merged.variant.clone());
+        if merged.variant == merged.canonical {
+            *originals.entry(merged.variant).or_insert(0) += merged.count;
+        } else {
+            unique += 1;
+            occurrences = occurrences.saturating_add(merged.count);
+            if current_variant.as_deref() != Some(merged.variant.as_str()) {
+                flush(current_variant.take(), &mut candidates, &mut by_variant);
+                current_variant = Some(merged.variant.clone());
+            }
+            candidates.push((
+                merged.canonical,
+                PairStat {
+                    count: merged.count,
+                    examples: merged.examples,
+                },
+            ));
         }
-        candidates.push((
-            merged.canonical,
-            PairStat {
-                count: merged.count,
-                examples: merged.examples,
-            },
-        ));
         for other in refill {
             if readers[other].peek()?.is_some() {
                 let rec = readers[other].current().expect("peeked");
@@ -548,7 +594,13 @@ pub fn finish_from_shards(
         }
     }
     flush(current_variant, &mut candidates, &mut by_variant);
-    let (entries, mut stats) = finish_grouped(by_variant, min_count, min_dominance, skip_variants);
+    let (entries, mut stats) = finish_grouped(
+        by_variant,
+        min_count,
+        min_dominance,
+        skip_variants,
+        &originals,
+    );
     stats.raw_pair_occurrences = occurrences;
     stats.unique_raw_pairs = unique;
     Ok((entries, stats))
@@ -690,32 +742,4 @@ fn read_str_with_len(reader: &mut impl Read, len: u32) -> Result<String, String>
         .read_exact(&mut buf)
         .map_err(|_| "shard 截斷（欄位）。".to_string())?;
     String::from_utf8(buf).map_err(|_| "shard 欄位不是 UTF-8。".to_string())
-}
-
-pub fn next_shard_relative(existing: &[String]) -> String {
-    let mut max = 0u32;
-    for item in existing {
-        if let Some(name) = Path::new(item).file_stem().and_then(|name| name.to_str()) {
-            if let Some(digits) = name.strip_prefix("shard-") {
-                if let Ok(value) = digits.parse::<u32>() {
-                    max = max.max(value);
-                }
-            }
-        }
-    }
-    format!("state/shards/shard-{:06}.pairs", max + 1)
-}
-
-pub fn compact_shards(output: &Path, shards: &[String]) -> Result<Vec<String>, String> {
-    if shards.len() < 8 {
-        return Ok(shards.to_vec());
-    }
-    let inputs: Vec<PathBuf> = shards.iter().map(|item| output.join(item)).collect();
-    let dest_rel = "state/committed.pairs";
-    let dest = output.join(dest_rel);
-    if let Err(error) = merge_sorted_shard_files(&inputs, &dest) {
-        eprintln!("壓實失敗，保留舊 shard：{error}");
-        return Ok(shards.to_vec());
-    }
-    Ok(vec![dest_rel.to_string()])
 }

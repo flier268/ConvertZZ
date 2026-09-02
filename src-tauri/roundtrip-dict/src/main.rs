@@ -363,6 +363,10 @@ roundtrip-dict — 以套件分詞／簡轉繁做回環，產出 ConvertZZ 額�
   --memory-hard-mb N    硬水位 MiB；0=關；省略=auto
   --lcs-inflight N      同時 LCS 數；省略=auto
   --reset               刪除檢查點、state/ 與衍生四檔後從頭跑
+                        完整跑完後若只改少數語料檔，不必 --reset：會沿用未變更檔
+                        的 shard，只重算變更檔並重寫衍生檔。套件詞典、
+                        extra-correction、--include／--exclude 變更仍需 --reset。
+                        已壓實成單一 committed.pairs 的舊檢查點無法增量，請 --reset 一次。
   --rebuild-outputs     只從已提交 shard 重寫衍生檔
   --extra-correction DIR
                         探針：聚合時略過該目錄 zht.corpus.synonym.txt 的錯詞。

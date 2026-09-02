@@ -57,6 +57,61 @@ fn extract_pairs_does_not_emit_character_replace_across_word_boundary() {
 }
 
 #[test]
+fn extract_pairs_requires_reconstructed_token_boundaries() {
+    // 「四|隻有」對「四只|有」若只按原詞字數切片，會假造「只有↔隻有」。
+    let pairs = extract_pairs(&tokens(&["四", "隻有"]), &tokens(&["四只", "有"]));
+    assert!(
+        !pairs
+            .iter()
+            .any(|(variant, canonical)| variant == "只有" || canonical == "隻有"),
+        "cross-token phantom pair: {pairs:?}"
+    );
+}
+
+#[test]
+fn extract_pairs_keeps_joined_reconstructed_tokens() {
+    // 原詞「裡面」對重建「裏|面」仍應合併成「裏面」。
+    let pairs = extract_pairs(&tokens(&["裡面"]), &tokens(&["裏", "面"]));
+    assert_eq!(pairs, vec![("裏面".into(), "裡面".into())]);
+}
+
+#[test]
+fn process_line_does_not_learn_zhiyou_from_measure_boundary() {
+    let service = test_service();
+    let misseg = process_line(&service, "對面五隻裡面四隻有CC");
+    assert!(
+        !misseg.pairs.iter().any(|(variant, canonical)| {
+            (variant == "只有" && canonical == "隻有") || (variant == "隻有" && canonical == "只有")
+        }),
+        "unexpected 只有/隻有 pair: {:?}",
+        misseg.pairs
+    );
+
+    let measure = process_line(&service, "七隻小狗");
+    assert!(
+        measure
+            .pairs
+            .iter()
+            .any(|(variant, canonical)| variant == "七只" && canonical == "七隻"),
+        "measure-word 七隻 should still be protected: {:?}",
+        measure.pairs
+    );
+
+    let clean = process_line(&service, "我只有一本書");
+    assert!(
+        clean.pairs.is_empty(),
+        "identity roundtrip should not emit pairs: {:?}",
+        clean.pairs
+    );
+    let both = process_line(&service, "觸發機制");
+    assert!(
+        both.originals.iter().any(|word| word == "機制"),
+        "identity 機制 must be attested as original: {:?}",
+        both.originals
+    );
+}
+
+#[test]
 fn aggregator_keeps_dominant_canonical() {
     let mut aggregator = PairAggregator::default();
     for _ in 0..10 {
@@ -69,6 +124,35 @@ fn aggregator_keeps_dominant_canonical() {
     assert_eq!(entries[0].canonical, "裡面");
     assert_eq!(entries[0].variants, vec![("裏面".into(), 10)]);
     assert_eq!(stats.skipped_ambiguous, 0);
+}
+
+#[test]
+fn aggregator_drops_variant_that_is_also_an_original_word() {
+    let mut aggregator = PairAggregator::default();
+    aggregator.add("機制".into(), "機製".into(), "觸發機製");
+    for _ in 0..3 {
+        aggregator.note_original("機制");
+        aggregator.note_original("機製");
+    }
+    let skip = HashSet::new();
+    let (entries, stats) = aggregator.finish(1, 0.7, &skip);
+    assert!(
+        entries.is_empty(),
+        "機制 and 機製 are both corpus words: {entries:?}"
+    );
+    assert_eq!(stats.skipped_ambiguous, 1);
+}
+
+#[test]
+fn aggregator_keeps_engine_only_variant() {
+    let mut aggregator = PairAggregator::default();
+    aggregator.add("裏面".into(), "裡面".into(), "冰箱裡面");
+    aggregator.note_original("裡面");
+    let skip = HashSet::new();
+    let (entries, _) = aggregator.finish(1, 0.7, &skip);
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].canonical, "裡面");
+    assert_eq!(entries[0].variants, vec![("裏面".into(), 1)]);
 }
 
 #[test]
@@ -471,6 +555,30 @@ fn run_roundtrip_commits_files_and_resumes() {
 }
 
 #[test]
+fn reruns_only_changed_corpus_file() {
+    let (sources, output) = temp_pair("incr");
+    write_corpus(&sources, "keep.txt", &LINE.repeat(3));
+    write_corpus(&sources, "touch.txt", &LINE.repeat(3));
+    let service = test_service();
+    let opened = Arc::new(AtomicU64::new(0));
+    let mut config = base_config(sources.clone(), output.clone());
+    config.files_opened = Some(Arc::clone(&opened));
+    run_roundtrip(&service, config).unwrap();
+    assert_eq!(opened.load(Ordering::SeqCst), 2);
+
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    write_corpus(&sources, "touch.txt", &LINE.repeat(4));
+    opened.store(0, Ordering::SeqCst);
+    let mut config = base_config(sources.clone(), output.clone());
+    config.files_opened = Some(Arc::clone(&opened));
+    let second = run_roundtrip(&service, config).unwrap();
+    assert_eq!(second.status, RunStatus::Complete);
+    assert_eq!(opened.load(Ordering::SeqCst), 1);
+    assert_eq!(second.files_committed.len(), 2);
+    let _ = fs::remove_dir_all(sources.parent().unwrap());
+}
+
+#[test]
 fn limit_does_not_commit_half_file() {
     let (sources, output) = temp_pair("limit");
     write_corpus(&sources, "one.txt", &LINE.repeat(20));
@@ -568,6 +676,23 @@ fn fingerprint_rejects_changed_include() {
     config.select.include = vec!["other".into()];
     let err = run_roundtrip(&service, config).unwrap_err();
     assert!(err.contains("--reset"));
+    let _ = fs::remove_dir_all(sources.parent().unwrap());
+}
+
+#[test]
+fn roundtrip_does_not_collapse_two_attested_words() {
+    let (sources, output) = temp_pair("jizhi-both");
+    write_corpus(&sources, "a.txt", "觸發機制\n觸發機製\n觸發機制\n");
+    let service = test_service();
+    let config = base_config(sources.clone(), output.clone());
+    run_roundtrip(&service, config).unwrap();
+    let synonym = fs::read_to_string(output.join("zht.corpus.synonym.txt")).unwrap();
+    assert!(
+        !synonym
+            .lines()
+            .any(|line| line.starts_with("機製,機制") || line.starts_with("機制,機製")),
+        "both 機制 and 機製 occur as originals, should not be synonyms:\n{synonym}"
+    );
     let _ = fs::remove_dir_all(sources.parent().unwrap());
 }
 

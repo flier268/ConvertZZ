@@ -10,6 +10,8 @@ use std::time::SystemTime;
 pub struct FileFingerprint {
     pub path: String,
     pub len: u64,
+    #[serde(default)]
+    pub mtime: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -55,6 +57,24 @@ pub struct Checkpoint {
     pub last_hard_file: Option<String>,
     #[serde(rename = "updatedAt")]
     pub updated_at: String,
+    /// 單檔 shard 與行數，供語料微改時只重跑變更檔。舊檢查點可缺。
+    #[serde(default, rename = "fileShards")]
+    pub file_shards: Vec<FileShard>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FileShard {
+    pub path: String,
+    pub shard: String,
+    pub len: u64,
+    #[serde(default)]
+    pub mtime: Option<u64>,
+    #[serde(rename = "linesRead")]
+    pub lines_read: u64,
+    #[serde(rename = "linesSkipped")]
+    pub lines_skipped: u64,
+    #[serde(rename = "linesMismatched")]
+    pub lines_mismatched: u64,
 }
 
 impl Checkpoint {
@@ -70,6 +90,7 @@ impl Checkpoint {
             shards: Vec::new(),
             last_hard_file: None,
             updated_at: now_rfc3339(),
+            file_shards: Vec::new(),
         }
     }
 }
@@ -116,12 +137,17 @@ pub fn build_fingerprint(
         if relative.contains("..") || Path::new(&relative).is_absolute() {
             return Err(format!("拒絕不安全的語料相對路徑：{relative}"));
         }
-        let len = fs::metadata(path)
-            .map_err(|error| format!("無法讀取 {}：{error}", path.display()))?
-            .len();
+        let meta =
+            fs::metadata(path).map_err(|error| format!("無法讀取 {}：{error}", path.display()))?;
+        let mtime = meta
+            .modified()
+            .ok()
+            .and_then(|time| time.duration_since(SystemTime::UNIX_EPOCH).ok())
+            .map(|duration| duration.as_secs());
         file_prints.push(FileFingerprint {
             path: relative,
-            len,
+            len: meta.len(),
+            mtime,
         });
     }
     let mut include = select.include.clone();
@@ -142,7 +168,224 @@ pub fn build_fingerprint(
 }
 
 pub fn fingerprint_mismatch_message() -> &'static str {
-    "檢查點與目前來源、套件詞典或 extra-correction 不符，請使用 --reset。"
+    "檢查點與目前套件詞典、extra-correction 或語料選取不符，請使用 --reset。"
+}
+
+pub fn compacted_checkpoint_message() -> &'static str {
+    "舊檢查點已把多檔 shard 壓實，無法只重跑變更檔。請使用 --reset。"
+}
+
+pub fn missing_file_stats_message() -> &'static str {
+    "舊檢查點沒有單檔行數，無法扣掉變更檔。請使用 --reset。"
+}
+
+pub fn engine_fingerprint_matches(old: &Fingerprint, new: &Fingerprint) -> bool {
+    old.sources == new.sources
+        && old.include == new.include
+        && old.exclude == new.exclude
+        && old.format == new.format
+        && old.synonym == new.synonym
+        && old.extra_correction == new.extra_correction
+}
+
+pub fn file_print_unchanged(old: &FileFingerprint, new: &FileFingerprint) -> bool {
+    old.path == new.path
+        && old.len == new.len
+        && (old.mtime.is_none() || new.mtime.is_none() || old.mtime == new.mtime)
+}
+
+pub fn file_shard_relative(relative: &str) -> String {
+    format!("state/shards/{}.pairs", percent_encode_path(relative))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IncrementalPlan {
+    pub reuse: usize,
+    pub rerun: usize,
+    pub dropped: usize,
+}
+
+pub fn corpus_prints_equivalent(old: &[FileFingerprint], new: &[FileFingerprint]) -> bool {
+    if old.len() != new.len() {
+        return false;
+    }
+    let new_by_path: std::collections::HashMap<&str, &FileFingerprint> =
+        new.iter().map(|item| (item.path.as_str(), item)).collect();
+    old.iter().all(|item| {
+        new_by_path
+            .get(item.path.as_str())
+            .is_some_and(|fresh| file_print_unchanged(item, fresh))
+    })
+}
+
+pub fn apply_corpus_incremental(
+    checkpoint: &mut Checkpoint,
+    new_fp: &Fingerprint,
+    output: &Path,
+) -> Result<IncrementalPlan, String> {
+    if corpus_prints_equivalent(&checkpoint.fingerprint.files, &new_fp.files) {
+        checkpoint.fingerprint = new_fp.clone();
+        let reuse = checkpoint.completed_files.len();
+        let completed: std::collections::HashSet<&str> = checkpoint
+            .completed_files
+            .iter()
+            .map(String::as_str)
+            .collect();
+        let rerun = new_fp
+            .files
+            .iter()
+            .filter(|item| !completed.contains(item.path.as_str()))
+            .count();
+        return Ok(IncrementalPlan {
+            reuse,
+            rerun,
+            dropped: 0,
+        });
+    }
+    hydrate_file_shards(checkpoint)?;
+    let new_by_path: std::collections::HashMap<&str, &FileFingerprint> = new_fp
+        .files
+        .iter()
+        .map(|item| (item.path.as_str(), item))
+        .collect();
+    let had_zero_lines = checkpoint
+        .file_shards
+        .iter()
+        .any(|item| item.lines_read == 0 && !item.path.is_empty());
+    let mut keep = Vec::new();
+    let mut dropped = 0usize;
+    for entry in std::mem::take(&mut checkpoint.file_shards) {
+        match new_by_path.get(entry.path.as_str()) {
+            Some(fresh)
+                if file_print_unchanged(
+                    &FileFingerprint {
+                        path: entry.path.clone(),
+                        len: entry.len,
+                        mtime: entry.mtime,
+                    },
+                    fresh,
+                ) =>
+            {
+                keep.push(entry);
+            }
+            _ => {
+                let _ = fs::remove_file(output.join(&entry.shard));
+                dropped += 1;
+            }
+        }
+    }
+    if dropped > 0 && had_zero_lines {
+        return Err(missing_file_stats_message().into());
+    }
+    let reuse = keep.len();
+    let rerun = new_fp.files.len().saturating_sub(reuse);
+    checkpoint.file_shards = keep;
+    sync_checkpoint_from_file_shards(checkpoint, true);
+    checkpoint.fingerprint = new_fp.clone();
+    if rerun > 0 {
+        checkpoint.status = "running".into();
+    }
+    Ok(IncrementalPlan {
+        reuse,
+        rerun,
+        dropped,
+    })
+}
+
+fn hydrate_file_shards(checkpoint: &mut Checkpoint) -> Result<(), String> {
+    if !checkpoint.file_shards.is_empty() {
+        return Ok(());
+    }
+    if checkpoint.completed_files.is_empty() {
+        return Ok(());
+    }
+    if checkpoint.shards.len() != checkpoint.completed_files.len() {
+        return Err(compacted_checkpoint_message().into());
+    }
+    let prints: std::collections::HashMap<&str, &FileFingerprint> = checkpoint
+        .fingerprint
+        .files
+        .iter()
+        .map(|item| (item.path.as_str(), item))
+        .collect();
+    checkpoint.file_shards = checkpoint
+        .completed_files
+        .iter()
+        .zip(checkpoint.shards.iter())
+        .map(|(path, shard)| {
+            let print = prints.get(path.as_str());
+            FileShard {
+                path: path.clone(),
+                shard: shard.clone(),
+                len: print.map(|item| item.len).unwrap_or(0),
+                mtime: print.and_then(|item| item.mtime),
+                lines_read: 0,
+                lines_skipped: 0,
+                lines_mismatched: 0,
+            }
+        })
+        .collect();
+    Ok(())
+}
+
+fn sync_checkpoint_from_file_shards(checkpoint: &mut Checkpoint, recompute_lines: bool) {
+    checkpoint.completed_files = checkpoint
+        .file_shards
+        .iter()
+        .map(|item| item.path.clone())
+        .collect();
+    checkpoint.shards = checkpoint
+        .file_shards
+        .iter()
+        .map(|item| item.shard.clone())
+        .collect();
+    if recompute_lines {
+        checkpoint.lines_read = checkpoint
+            .file_shards
+            .iter()
+            .map(|item| item.lines_read)
+            .sum();
+        checkpoint.lines_skipped = checkpoint
+            .file_shards
+            .iter()
+            .map(|item| item.lines_skipped)
+            .sum();
+        checkpoint.lines_mismatched = checkpoint
+            .file_shards
+            .iter()
+            .map(|item| item.lines_mismatched)
+            .sum();
+    }
+}
+
+pub fn upsert_file_shard(
+    checkpoint: &mut Checkpoint,
+    relative: &str,
+    shard: String,
+    print: Option<&FileFingerprint>,
+    lines_read: u64,
+    lines_skipped: u64,
+    lines_mismatched: u64,
+) {
+    let entry = FileShard {
+        path: relative.to_string(),
+        shard,
+        len: print.map(|item| item.len).unwrap_or(0),
+        mtime: print.and_then(|item| item.mtime),
+        lines_read,
+        lines_skipped,
+        lines_mismatched,
+    };
+    if let Some(existing) = checkpoint
+        .file_shards
+        .iter_mut()
+        .find(|item| item.path == relative)
+    {
+        *existing = entry;
+    } else {
+        checkpoint.file_shards.push(entry);
+    }
+    sync_checkpoint_from_file_shards(checkpoint, true);
 }
 
 fn synonym_fingerprints() -> Vec<SynonymFingerprint> {

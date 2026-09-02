@@ -453,56 +453,61 @@ function fieldEnabled(
       </div>
       <el-progress
         v-if="busy && progress"
+        class="job-progress"
         :percentage="progressPercentage(progress)"
         :format="() => formatProgressLabel(progress, progressStartedAt)"
       />
     </el-card>
-    <el-empty v-if="!files.length" description="請選取 MP3、APE、OGG 或 Opus 檔案" />
-    <el-card v-for="file in files" :key="file.path" shadow="never" class="audio-file-card">
-      <template #header>
-        <div class="card-title">
-          <el-checkbox v-model="file.selected" :disabled="Boolean(file.warning) || Boolean(plan)">
-            <div>
-              <strong>{{ file.path.split(/[\\/]/).at(-1) }}</strong
-              ><small
-                >{{ file.format.toUpperCase() }} ·
-                {{ file.hasCoverArt ? "含封面" : "無封面" }}</small
-              >
-            </div>
-          </el-checkbox>
-          <el-tag v-if="file.warning" type="danger">{{ file.warning }}</el-tag>
-        </div>
-      </template>
-      <el-table :data="file.fields" max-height="300">
-        <el-table-column label="轉換" width="70"
-          ><template #default="scope"
-            ><el-checkbox
-              v-model="scope.row.selected"
-              :disabled="Boolean(plan) || !fieldEnabled(file, scope.row.container)" /></template
-        ></el-table-column>
-        <el-table-column prop="container" label="標籤" width="150" />
-        <el-table-column prop="label" label="欄位" width="160" />
-        <el-table-column label="目前內容" min-width="200"
-          ><template #default="scope">{{ scope.row.values.join(" / ") }}</template></el-table-column
-        >
-        <el-table-column v-if="plan" label="轉換預覽" min-width="200"
-          ><template #default="scope">{{
-            scope.row.convertedValues?.join(" / ")
-          }}</template></el-table-column
-        >
-        <el-table-column v-if="plan" label="差異" width="90" fixed="right"
-          ><template #default="scope"
-            ><el-button
-              link
-              type="primary"
-              :disabled="!scope.row.convertedValues?.length"
-              @click="openFieldDiff(file, scope.row)"
-              >檢視</el-button
-            ></template
-          ></el-table-column
-        >
-      </el-table>
-    </el-card>
+    <div class="page-fill-main audio-file-list">
+      <el-empty v-if="!files.length" description="請選取 MP3、APE、OGG 或 Opus 檔案" />
+      <el-card v-for="file in files" :key="file.path" shadow="never" class="audio-file-card">
+        <template #header>
+          <div class="card-title">
+            <el-checkbox v-model="file.selected" :disabled="Boolean(file.warning) || Boolean(plan)">
+              <div>
+                <strong>{{ file.path.split(/[\\/]/).at(-1) }}</strong
+                ><small
+                  >{{ file.format.toUpperCase() }} ·
+                  {{ file.hasCoverArt ? "含封面" : "無封面" }}</small
+                >
+              </div>
+            </el-checkbox>
+            <el-tag v-if="file.warning" type="danger">{{ file.warning }}</el-tag>
+          </div>
+        </template>
+        <el-table :data="file.fields" max-height="300">
+          <el-table-column label="轉換" width="70"
+            ><template #default="scope"
+              ><el-checkbox
+                v-model="scope.row.selected"
+                :disabled="Boolean(plan) || !fieldEnabled(file, scope.row.container)" /></template
+          ></el-table-column>
+          <el-table-column prop="container" label="標籤" width="150" />
+          <el-table-column prop="label" label="欄位" width="160" />
+          <el-table-column label="目前內容" min-width="200"
+            ><template #default="scope">{{
+              scope.row.values.join(" / ")
+            }}</template></el-table-column
+          >
+          <el-table-column v-if="plan" label="轉換預覽" min-width="200"
+            ><template #default="scope">{{
+              scope.row.convertedValues?.join(" / ")
+            }}</template></el-table-column
+          >
+          <el-table-column v-if="plan" label="差異" width="90" fixed="right"
+            ><template #default="scope"
+              ><el-button
+                link
+                type="primary"
+                :disabled="!scope.row.convertedValues?.length"
+                @click="openFieldDiff(file, scope.row)"
+                >檢視</el-button
+              ></template
+            ></el-table-column
+          >
+        </el-table>
+      </el-card>
+    </div>
     <PreviewDiffDialog
       v-model="diffVisible"
       :title="diffTitle"

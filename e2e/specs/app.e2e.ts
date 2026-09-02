@@ -127,6 +127,117 @@ test.describe("ConvertZZ 前端", () => {
     ).toBeVisible();
   });
 
+  test("檔案頁窄視窗不橫向溢出，清單會填滿剩餘高度", async ({ page }) => {
+    await openApp(page);
+    await openPage(page, "#nav-files", "檔案與檔名");
+    await page.getByRole("button", { name: "選取檔案" }).click();
+    await page.getByRole("button", { name: "建立預覽" }).click();
+    await expect(page.getByText("變更預覽")).toBeVisible();
+    await expect(page.getByRole("button", { name: "建立預覽" })).toBeVisible();
+    await expect(page.locator(".el-form-item", { hasText: "作業" })).toBeVisible();
+
+    const layoutMetrics = async () =>
+      page.evaluate(() => {
+        const content = document.querySelector(".content");
+        const card = document.querySelector(".el-card");
+        const grid = document.querySelector(".option-grid");
+        const layout = document.querySelector(".file-plan-layout");
+        if (!content || !card || !grid || !layout) return null;
+        const contentRect = content.getBoundingClientRect();
+        const layoutRect = layout.getBoundingClientRect();
+        return {
+          contentOverflowX: content.scrollWidth - content.clientWidth,
+          cardOverflowX: card.scrollWidth - card.clientWidth,
+          gridOverflowX: grid.scrollWidth - grid.clientWidth,
+          layoutHeight: layoutRect.height,
+          gapBelowLayout: contentRect.bottom - layoutRect.bottom,
+          overflowY: content.scrollHeight - content.clientHeight,
+        };
+      });
+
+    const wide = await layoutMetrics();
+    expect(wide).toBeTruthy();
+    expect(wide!.contentOverflowX).toBeLessThanOrEqual(2);
+    expect(wide!.overflowY).toBeLessThanOrEqual(2);
+    expect(wide!.layoutHeight).toBeGreaterThan(300);
+    expect(wide!.gapBelowLayout).toBeLessThan(40);
+
+    await page.setViewportSize({ width: 960, height: 640 });
+    const narrow = await layoutMetrics();
+    expect(narrow).toBeTruthy();
+    expect(narrow!.contentOverflowX).toBeLessThanOrEqual(2);
+    expect(narrow!.cardOverflowX).toBeLessThanOrEqual(2);
+    expect(narrow!.gridOverflowX).toBeLessThanOrEqual(2);
+    expect(narrow!.overflowY).toBeLessThanOrEqual(2);
+    expect(narrow!.layoutHeight).toBeGreaterThanOrEqual(160);
+    expect(narrow!.gapBelowLayout).toBeLessThan(40);
+  });
+
+  test("各工作頁不讓整窗內容過長", async ({ page }) => {
+    await openApp(page);
+    const pages = [
+      { nav: "#nav-quick", heading: "快速轉換" },
+      { nav: "#nav-clipboard", heading: "剪貼簿" },
+      { nav: "#nav-tools", heading: "文字工具" },
+      { nav: "#nav-dictionary", heading: "舊版字典" },
+      { nav: "#nav-settings", heading: "設定" },
+      { nav: "#nav-about", heading: "ConvertZZ 2.0" },
+      { nav: "#nav-audio", heading: "音訊標籤" },
+    ] as const;
+    for (const item of pages) {
+      await openPage(page, item.nav, item.heading);
+      const metrics = await page.evaluate(() => {
+        const content = document.querySelector(".content");
+        const fill = document.querySelector(".page-fill-main");
+        if (!content || !fill) return null;
+        const contentRect = content.getBoundingClientRect();
+        const fillRect = fill.getBoundingClientRect();
+        return {
+          overflowY: content.scrollHeight - content.clientHeight,
+          overflowX: content.scrollWidth - content.clientWidth,
+          gap: contentRect.bottom - fillRect.bottom,
+          fillHeight: fillRect.height,
+        };
+      });
+      expect(metrics, item.heading).toBeTruthy();
+      expect(metrics!.overflowY, item.heading).toBeLessThanOrEqual(2);
+      expect(metrics!.overflowX, item.heading).toBeLessThanOrEqual(2);
+      expect(metrics!.gap, item.heading).toBeLessThan(48);
+      expect(metrics!.fillHeight, item.heading).toBeGreaterThan(160);
+    }
+  });
+
+  test("檔案轉換進度文字在進度條下方且停止按鈕與建立預覽並排", async ({ page }) => {
+    await openApp(page, { holdFileApply: true });
+    await openPage(page, "#nav-files", "檔案與檔名");
+    await page.getByRole("button", { name: "選取檔案" }).click();
+    await page.getByRole("button", { name: "建立預覽" }).click();
+    await page.getByRole("button", { name: "確認執行" }).click();
+    const progress = page.locator(".job-progress");
+    await expect(progress).toBeVisible();
+    await expect(progress.locator(".el-progress__text")).toContainText("正在轉換並寫入");
+    try {
+      const bar = await progress.locator(".el-progress-bar").boundingBox();
+      const text = await progress.locator(".el-progress__text").boundingBox();
+      expect(bar).toBeTruthy();
+      expect(text).toBeTruthy();
+      expect(text!.y).toBeGreaterThan(bar!.y + bar!.height - 1);
+      expect(text!.x).toBeLessThan(bar!.x + 24);
+
+      const actions = page.locator(".path-summary-actions");
+      const createBtn = actions.getByRole("button", { name: "建立預覽" });
+      const stopBtn = actions.getByRole("button", { name: "停止作業" });
+      const createBox = await createBtn.boundingBox();
+      const stopBox = await stopBtn.boundingBox();
+      expect(createBox).toBeTruthy();
+      expect(stopBox).toBeTruthy();
+      expect(Math.abs(createBox!.y - stopBox!.y)).toBeLessThan(8);
+      expect(stopBox!.x).toBeGreaterThan(createBox!.x);
+    } finally {
+      await page.evaluate(() => window.__convertzzE2e?.releaseFileApply?.());
+    }
+  });
+
   test("拖入檔案後可改選音訊標籤", async ({ page }) => {
     await openApp(page);
     await emitAppEvent(page, "app://file-drop", { paths: ["/tmp/song.mp3"] });

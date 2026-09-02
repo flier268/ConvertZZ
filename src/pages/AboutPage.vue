@@ -73,37 +73,39 @@ const differences = [
         >
       </div>
     </header>
-    <el-card shadow="never" class="about-hero"
-      ><div class="about-mark"><BrandMark /></div>
-      <div>
-        <h2>新的核心。</h2>
-        <p>Vue 與 Element Plus 提供介面。</p>
-        <p>Rust 轉換核心在同程序提供相同的 Windows 與 Linux 結果。</p>
-      </div></el-card
-    >
-    <el-card shadow="never"
-      ><template #header><div class="section-title">平台差異</div></template
-      ><el-table :data="differences"
-        ><el-table-column prop="feature" label="功能" min-width="240" /><el-table-column
-          prop="windows"
-          label="Windows" /><el-table-column prop="x11" label="Linux X11" /><el-table-column
-          prop="wayland"
-          label="Linux Wayland" /></el-table
-      ><el-alert
-        v-if="capabilities?.limitations.length"
-        class="capability-alert"
-        :title="`目前環境：${capabilities.platform} / ${capabilities.displayServer}`"
-        :description="capabilities.limitations.join(' ')"
-        type="warning"
-        :closable="false"
-    /></el-card>
-    <el-card shadow="never"
-      ><template #header><div class="section-title">轉換差異</div></template>
-      <p>舊版字典的優先權、長詞與保護詞規則保持不變。</p>
-      <p>未命中字元改由 cjk-convert-rs 處理。</p>
-      <p>少數字形可能與 Windows LCMapStringEx 不同。</p>
-      <p>舊版 Encoding.Default 會依 Windows 系統碼頁改變。新版編碼工具改用明確指定的編碼。</p>
-      <p>ZhConvert 是選用的網路服務。</p></el-card
-    >
+    <div class="page-fill-main about-stack">
+      <el-card shadow="never" class="about-hero"
+        ><div class="about-mark"><BrandMark /></div>
+        <div>
+          <h2>新的核心。</h2>
+          <p>Vue 與 Element Plus 提供介面。</p>
+          <p>Rust 轉換核心在同程序提供相同的 Windows 與 Linux 結果。</p>
+        </div></el-card
+      >
+      <el-card shadow="never"
+        ><template #header><div class="section-title">平台差異</div></template
+        ><el-table :data="differences"
+          ><el-table-column prop="feature" label="功能" min-width="240" /><el-table-column
+            prop="windows"
+            label="Windows" /><el-table-column prop="x11" label="Linux X11" /><el-table-column
+            prop="wayland"
+            label="Linux Wayland" /></el-table
+        ><el-alert
+          v-if="capabilities?.limitations.length"
+          class="capability-alert"
+          :title="`目前環境：${capabilities.platform} / ${capabilities.displayServer}`"
+          :description="capabilities.limitations.join(' ')"
+          type="warning"
+          :closable="false"
+      /></el-card>
+      <el-card shadow="never"
+        ><template #header><div class="section-title">轉換差異</div></template>
+        <p>舊版字典的優先權、長詞與保護詞規則保持不變。</p>
+        <p>未命中字元改由 cjk-convert-rs 處理。</p>
+        <p>少數字形可能與 Windows LCMapStringEx 不同。</p>
+        <p>舊版 Encoding.Default 會依 Windows 系統碼頁改變。新版編碼工具改用明確指定的編碼。</p>
+        <p>ZhConvert 是選用的網路服務。</p></el-card
+      >
+    </div>
   </section>
 </template>

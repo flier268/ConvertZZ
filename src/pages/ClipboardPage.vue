@@ -167,7 +167,7 @@ onBeforeUnmount(() => {
         ><el-button type="primary" :disabled="!output" @click="copy">寫回剪貼簿</el-button>
       </div></el-card
     >
-    <el-card shadow="never">
+    <el-card shadow="never" class="page-fill-main">
       <template #header
         ><div class="card-title">
           <span>轉換差異</span>
@@ -177,6 +177,7 @@ onBeforeUnmount(() => {
         v-model:source="source"
         :output="output"
         editable
+        fill-height
         source-label="剪貼簿文字"
         output-label="轉換預覽"
         source-placeholder="剪貼簿文字會顯示於此"

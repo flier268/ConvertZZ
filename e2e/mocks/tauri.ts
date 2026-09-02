@@ -79,6 +79,8 @@ export interface ConvertzzE2eConfig {
   update?: "none" | "install";
   confirms?: string[];
   lastOpenedUrl?: string;
+  holdFileApply?: boolean;
+  releaseFileApply?: () => void;
 }
 
 declare global {
@@ -112,6 +114,7 @@ const store = new Map<string, unknown>([
 const listeners = new Map<string, Set<(event: { payload: unknown }) => void>>();
 let clipboard = "";
 let lastFilePlanItem: Record<string, unknown> | undefined;
+let lastCoreRequestId = "";
 
 export function isTauri(): boolean {
   return true;
@@ -139,7 +142,8 @@ if (typeof window !== "undefined") {
 export async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
   switch (command) {
     case "core_request":
-      return mockCoreRequest(String(args.operation ?? ""), args.payload) as T;
+      lastCoreRequestId = String(args.id ?? "");
+      return (await mockCoreRequest(String(args.operation ?? ""), args.payload)) as T;
     case "app_log":
       return undefined as T;
     case "app_log_path":
@@ -194,7 +198,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
   }
 }
 
-function mockCoreRequest(operation: string, rawPayload: unknown): unknown {
+async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<unknown> {
   const payload = (rawPayload ?? {}) as Record<string, unknown>;
   if (operation === "health") return { engine: "rust", version: "2.0.0-beta6" };
   if (operation === "settings.migrate") {
@@ -243,6 +247,17 @@ function mockCoreRequest(operation: string, rawPayload: unknown): unknown {
     return lastFilePlanItem;
   }
   if (operation === "files.apply") {
+    if (e2e().holdFileApply) {
+      await emit("core://progress", {
+        id: lastCoreRequestId,
+        current: 658,
+        total: 947,
+        message: "正在轉換並寫入：shard-000219.txt (658/947)",
+      });
+      await new Promise<void>((resolve) => {
+        e2e().releaseFileApply = resolve;
+      });
+    }
     return { succeeded: ["/tmp/里面.txt"], skipped: [], failed: [] };
   }
   if (operation === "files.cancel") {

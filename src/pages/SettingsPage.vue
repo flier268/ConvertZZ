@@ -168,7 +168,7 @@ async function saveApiKey() {
         <el-button :loading="importing" @click="importLegacyJson">匯入 ConvertZZ.json</el-button>
       </div>
     </header>
-    <el-card shadow="never">
+    <el-card shadow="never" class="page-fill-main settings-main-card">
       <el-tabs v-model="activeTab" class="settings-tabs">
         <el-tab-pane label="一般" name="general" lazy>
           <el-form label-position="top" class="option-grid"

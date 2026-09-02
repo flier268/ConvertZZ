@@ -124,12 +124,12 @@ async function copy() {
       </div>
       <el-progress
         v-if="busy && progress"
-        class="quick-progress"
+        class="job-progress"
         :percentage="progressPercentage(progress)"
         :format="() => formatProgressLabel(progress, progressStartedAt)"
       />
     </el-card>
-    <el-card shadow="never">
+    <el-card shadow="never" class="page-fill-main">
       <template #header
         ><div class="card-title">
           <span>轉換差異</span>
@@ -143,15 +143,10 @@ async function copy() {
         v-model:source="source"
         :output="output"
         editable
+        fill-height
         source-label="原始文字"
         output-label="轉換結果"
       />
     </el-card>
   </section>
 </template>
-
-<style scoped>
-.quick-progress {
-  margin-top: 12px;
-}
-</style>

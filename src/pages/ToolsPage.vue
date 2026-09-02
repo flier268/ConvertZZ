@@ -82,13 +82,13 @@ async function run() {
         ><el-button type="primary" @click="run">執行</el-button>
       </div></el-card
     >
-    <div class="editor-grid">
+    <div class="editor-grid page-fill-main">
       <el-card shadow="never" class="editor-card"
         ><template #header>輸入</template
-        ><el-input v-model="source" type="textarea" :rows="20" resize="none" /></el-card
+        ><el-input v-model="source" type="textarea" :rows="8" resize="none" /></el-card
       ><el-card shadow="never" class="editor-card result-card"
         ><template #header>輸出</template
-        ><el-input v-model="output" type="textarea" :rows="20" resize="none"
+        ><el-input v-model="output" type="textarea" :rows="8" resize="none"
       /></el-card>
     </div>
   </section>

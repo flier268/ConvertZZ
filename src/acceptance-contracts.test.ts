@@ -76,6 +76,8 @@ describe("驗收項目的自動化契約", () => {
     expect(page).toContain("buildFileDiffSections");
     expect(page).toContain("setAllSelected");
     expect(page).toContain("scheduleItemPreview");
+    expect(page).toContain("path-summary-actions");
+    expect(page).toContain('class="job-progress"');
     expect(contracts).toContain('"files.preview"');
     expect(contracts).toContain("FilePreviewRequest");
     expect(diffView).toContain("syncScroll");
@@ -89,6 +91,39 @@ describe("驗收項目的自動化契約", () => {
     expect(diffView).toContain("goToChange");
     expect(fileDiff).toContain('title: "檔名"');
     expect(fileDiff).toContain('title: "內容"');
+  });
+
+  it("檔案頁與長作業進度會隨視窗寬度換行且不蓋住進度條", () => {
+    const styles = readProjectFile("src/styles.css");
+    const files = readProjectFile("src/pages/FilesPage.vue");
+    const quick = readProjectFile("src/pages/QuickPage.vue");
+    const audio = readProjectFile("src/pages/AudioPage.vue");
+    expect(styles).toContain("repeat(auto-fit, minmax(120px, 1fr))");
+    expect(styles).toMatch(/\.job-progress\s*\{[^}]*flex-direction:\s*column/s);
+    expect(styles).toContain(".page-stack:has(.file-plan-panel)");
+    expect(styles).toContain("max-height: 100%");
+    expect(styles).toContain(".page-fill-main");
+    expect(styles).toContain("min-height: min-content");
+    expect(files).toContain("path-summary-actions");
+    expect(files).toContain('class="job-progress"');
+    expect(quick).toContain('class="job-progress"');
+    expect(audio).toContain('class="job-progress"');
+  });
+
+  it("各工作頁主內容會填滿剩餘視窗高度", () => {
+    const styles = readProjectFile("src/styles.css");
+    expect(styles).toContain(".page-fill-main");
+    expect(readProjectFile("src/pages/QuickPage.vue")).toContain('class="page-fill-main"');
+    expect(readProjectFile("src/pages/QuickPage.vue")).toContain("fill-height");
+    expect(readProjectFile("src/pages/ClipboardPage.vue")).toContain('class="page-fill-main"');
+    expect(readProjectFile("src/pages/ClipboardPage.vue")).toContain("fill-height");
+    expect(readProjectFile("src/pages/ToolsPage.vue")).toContain("page-fill-main");
+    expect(readProjectFile("src/pages/DictionaryPage.vue")).toContain("page-fill-main");
+    expect(readProjectFile("src/pages/AudioPage.vue")).toContain("page-fill-main audio-file-list");
+    expect(readProjectFile("src/pages/SettingsPage.vue")).toContain(
+      'class="page-fill-main settings-main-card"',
+    );
+    expect(readProjectFile("src/pages/AboutPage.vue")).toContain("page-fill-main about-stack");
   });
 
   it("快速轉換固定並排差異檢視且來源可編輯", () => {

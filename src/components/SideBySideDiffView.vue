@@ -501,6 +501,7 @@ watch(pageCount, (count) => {
   font-size: 13px;
 }
 .preview-diff-root.fill-height .preview-diff-body {
+  flex: 1 1 auto;
   height: auto;
   max-height: none;
   min-height: 0;

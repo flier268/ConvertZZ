@@ -225,48 +225,51 @@ loadSettings().then((settings) => {
           placeholder="預覽結果"
         /></div
     ></el-card>
-    <el-card shadow="never"
-      ><el-table v-loading="busy" :data="entries" height="460"
-        ><el-table-column label="啟用" width="68"
-          ><template #default="scope"
-            ><el-checkbox
-              v-model="scope.row.enabled"
-              @change="mark(scope.row)" /></template></el-table-column
-        ><el-table-column label="分類" width="120"
-          ><template #default="scope"
-            ><el-input
-              v-model="scope.row.type"
-              @input="mark(scope.row)" /></template></el-table-column
-        ><el-table-column label="簡體" min-width="180"
-          ><template #default="scope"
-            ><el-input
-              v-model="scope.row.simplified"
-              @input="mark(scope.row)" /></template></el-table-column
-        ><el-table-column label="優先" width="100"
-          ><template #default="scope"
-            ><el-input-number
-              v-model="scope.row.simplifiedPriority"
-              :controls="false"
-              @change="mark(scope.row)" /></template></el-table-column
-        ><el-table-column label="繁體" min-width="180"
-          ><template #default="scope"
-            ><el-input
-              v-model="scope.row.traditional"
-              @input="mark(scope.row)" /></template></el-table-column
-        ><el-table-column label="優先" width="100"
-          ><template #default="scope"
-            ><el-input-number
-              v-model="scope.row.traditionalPriority"
-              :controls="false"
-              @change="mark(scope.row)" /></template></el-table-column
-        ><el-table-column label="操作" width="72"
-          ><template #default="scope"
-            ><el-button link type="danger" @click="removeEntry(scope.row)"
-              >刪除</el-button
-            ></template
-          ></el-table-column
-        ></el-table
-      ><el-pagination
+    <el-card shadow="never" class="page-fill-main dictionary-table-card"
+      ><div class="dictionary-table-host">
+        <el-table v-loading="busy" :data="entries" height="100%"
+          ><el-table-column label="啟用" width="68"
+            ><template #default="scope"
+              ><el-checkbox
+                v-model="scope.row.enabled"
+                @change="mark(scope.row)" /></template></el-table-column
+          ><el-table-column label="分類" width="120"
+            ><template #default="scope"
+              ><el-input
+                v-model="scope.row.type"
+                @input="mark(scope.row)" /></template></el-table-column
+          ><el-table-column label="簡體" min-width="180"
+            ><template #default="scope"
+              ><el-input
+                v-model="scope.row.simplified"
+                @input="mark(scope.row)" /></template></el-table-column
+          ><el-table-column label="優先" width="100"
+            ><template #default="scope"
+              ><el-input-number
+                v-model="scope.row.simplifiedPriority"
+                :controls="false"
+                @change="mark(scope.row)" /></template></el-table-column
+          ><el-table-column label="繁體" min-width="180"
+            ><template #default="scope"
+              ><el-input
+                v-model="scope.row.traditional"
+                @input="mark(scope.row)" /></template></el-table-column
+          ><el-table-column label="優先" width="100"
+            ><template #default="scope"
+              ><el-input-number
+                v-model="scope.row.traditionalPriority"
+                :controls="false"
+                @change="mark(scope.row)" /></template></el-table-column
+          ><el-table-column label="操作" width="72"
+            ><template #default="scope"
+              ><el-button link type="danger" @click="removeEntry(scope.row)"
+                >刪除</el-button
+              ></template
+            ></el-table-column
+          ></el-table
+        >
+      </div>
+      <el-pagination
         v-model:current-page="page"
         :page-size="pageSize"
         :total="total"

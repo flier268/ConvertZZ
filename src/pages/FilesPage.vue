@@ -659,15 +659,20 @@ watch(
       </div>
       <div class="path-summary">
         <span>{{ pathSummary }}</span>
-        <el-button :loading="busy" :disabled="busy" @click="createPlan">建立預覽</el-button>
-        <el-button v-if="busy || previewBusy" @click="cancelPlan">停止作業</el-button>
+        <div class="path-summary-actions">
+          <el-button :loading="busy" :disabled="busy" @click="createPlan">建立預覽</el-button>
+          <el-button v-if="busy || previewBusy" @click="cancelPlan">停止作業</el-button>
+        </div>
       </div>
       <div v-if="outputDirectory" class="path-summary">
-        <span>輸出目錄：{{ outputDirectory }}</span
-        ><el-button @click="outputDirectory = undefined">使用原目錄</el-button>
+        <span>輸出目錄：{{ outputDirectory }}</span>
+        <div class="path-summary-actions">
+          <el-button @click="outputDirectory = undefined">使用原目錄</el-button>
+        </div>
       </div>
       <el-progress
         v-if="(busy || previewBusy) && progress"
+        class="job-progress"
         :percentage="progressPercentage(progress)"
         :format="() => formatProgressLabel(progress, progressStartedAt)"
       />
@@ -790,8 +795,12 @@ watch(
 
 <style scoped>
 .file-plan-panel {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
 }
 .file-plan-panel-header {
   display: flex;
@@ -807,10 +816,16 @@ watch(
   gap: 8px;
 }
 .file-plan-layout {
-  min-height: 420px;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
 }
 .file-plan-splitter {
-  height: 420px;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 .file-plan-splitter :deep(.el-splitter-bar) {
   width: 10px;

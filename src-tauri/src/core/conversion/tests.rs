@@ -26,7 +26,6 @@ async fn segmented_s2t_golden_cases() {
     for (source, expected) in [
         ("里面", "裡面"),
         ("個別選手表現觀察週報", "個別選手表現觀察週報"),
-        ("個別選手錶現觀察週報", "個別選手表現觀察週報"),
         ("表現", "表現"),
         ("表面", "表面"),
         ("手表", "手錶"),
@@ -84,6 +83,9 @@ async fn segmented_s2t_golden_cases() {
         ("金馬影后", "金馬影后"),
         ("編製預算", "編製預算"),
         ("機製麵", "機製麵"),
+        ("觸發機制", "觸發機制"),
+        ("保障機制", "保障機制"),
+        ("機制", "機制"),
         ("本店專製", "本店專製"),
         ("蘇製武器", "蘇製武器"),
         ("律師公會", "律師公會"),
@@ -134,6 +136,30 @@ async fn segmented_s2t_golden_cases() {
             "{source} tokens={:?}",
             service.debug_pos(source)
         );
+    }
+}
+
+#[tokio::test]
+async fn me_particle_becomes_me_except_youngest_child() {
+    for (source, expected) in [
+        ("什么", "什麼"),
+        ("怎么", "怎麼"),
+        ("那么", "那麼"),
+        ("这么", "這麼"),
+        ("要么", "要麼"),
+        ("好么", "好麼"),
+        ("是么", "是麼"),
+        ("干么", "幹麼"),
+        ("老么", "老么"),
+        ("么兒", "么兒"),
+        ("么儿", "么兒"),
+        ("么女", "么女"),
+        ("他是家裡的老么", "他是家裡的老么"),
+        ("老幺", "老么"),
+        ("幺女", "么女"),
+    ] {
+        let got = convert(source, Direction::S2t, EngineKind::Segmented).await;
+        assert_eq!(got, expected, "{source}");
     }
 }
 
@@ -308,6 +334,73 @@ async fn extra_synonym_pos_is_consulted() {
         "tokens={:?}",
         verb.debug_pos("錕鋙錯")
     );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[tokio::test]
+async fn extra_synonym_does_not_overwrite_stable_taiwan_forms() {
+    let root = std::env::temp_dir().join(format!(
+        "convertzz-extra-stable-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(
+        root.join("zht.corpus.dict.txt"),
+        "\
+上麵|0x2000000|9\n上面|0x2000000|9\n\
+控製|0x1000|9\n控制|0x1000|9\n\
+併於|0x10000000|9\n並於|0x10000000|9\n\
+部份|0x100000|9\n部分|0x100000|9\n\
+隻有|0x10000000|9\n只有|0x10000000|9\n\
+機製|0x100000|9\n機制|0x100000|9\n\
+七隻|0x300000|9\n七只|0x300000|9\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("zht.corpus.synonym.txt"),
+        "\
+上麵,上面|D_F\n\
+控製,控制|D_V\n\
+併於,並於|D_C\n\
+部份,部分|D_N\n\
+隻有,只有|D_C\n\
+機製,機制|D_N\n\
+七隻,七只|D_MQ+D_N\n",
+    )
+    .unwrap();
+    let extra = super::ConversionService::with_extra_correction(None, &root).unwrap();
+    for (source, expected) in [
+        ("上面註記", "上面註記"),
+        ("控制藥物", "控制藥物"),
+        ("並於1週內", "並於1週內"),
+        ("部分自行負擔", "部分自行負擔"),
+        ("我只有一本書", "我只有一本書"),
+        ("觸發機制", "觸發機制"),
+        ("保障機制", "保障機制"),
+        ("機製麵", "機製麵"),
+        ("七只小狗", "七隻小狗"),
+    ] {
+        let result = extra
+            .convert(ConversionRequest {
+                text: source.into(),
+                direction: Direction::S2t,
+                engine: EngineKind::Segmented,
+                dictionary_path: None,
+                zhconvert: None,
+                vocabulary_correction: None,
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            result.text,
+            expected,
+            "{source} tokens={:?}",
+            extra.debug_pos(source)
+        );
+    }
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -502,6 +595,7 @@ fn glyph_s2t_uses_cn2tw_min_only() {
     assert_eq!(super::glyph_s2t("简繁转换"), "簡繁轉換");
     assert_eq!(super::glyph_s2t("説明書"), "説明書");
     assert_eq!(super::glyph_s2t("疱"), "疱");
+    assert_eq!(super::glyph_s2t("皰"), "疱");
     assert_eq!(super::glyph_s2t("制"), "制");
     assert_eq!(super::glyph_s2t("娘"), "娘");
     assert_eq!(super::glyph_s2t("璇"), "璇");

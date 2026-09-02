@@ -1,0 +1,19 @@
+# ConvertZZ 字形特例。欄位以 Tab 分隔：kind  from  to  dir  when
+# 協議見同目錄 README.md。不要把這些字硬刻進 conversion.rs。
+#
+# kind: skip | s2t | t2s | variant | s2t-multi | t2s-multi
+# from 可用 | 列多個來源。when 省略＝一律；例外規則寫在預設前面。
+
+# 璇：min 表會改成璿。人名用字不同，只跳過、不把璿改回璇。
+skip	璇		s2t
+
+# 疱：台灣醫學常用疱（膿疱／疱疹），跳過 min 的疱→皰。
+skip	疱		s2t
+# 異體：皰正規成疱。
+variant	皰	疱	s2t
+
+# 一簡多繁：么。排行保留么；其餘語氣／疑問用麼。
+s2t-multi	么|幺	么	s2t	word^=老么|老幺
+s2t-multi	么|幺	么	s2t	word=么|幺;next^=兒|儿|女|弟|妹|叔|伯|姐|兄
+s2t-multi	么|幺	么	s2t	ch0=么|幺;ch1=兒|儿|女|弟|妹|叔|伯|姐|兄
+s2t-multi	么	麼	s2t

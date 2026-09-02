@@ -6,7 +6,7 @@ use super::types::{
     CancelCheck, ConversionRequest, ConversionResult, Direction, ProgressEvent, ProgressReporter,
 };
 use super::zhconvert::ZhConvertClient;
-use cjk_convert_rs::{cn2tw_min_with, tw2cn, ConvertOptions};
+use cjk_convert_rs::{cn2tw_min_with, tw2cn_with};
 use novel_segment::{DoSegmentOptions, Segment, SegmentOptions, POSTAG};
 use rayon::prelude::*;
 use std::collections::HashMap;
@@ -15,6 +15,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime};
+
+mod specials;
 
 const MAX_CHUNK_CHARACTERS: usize = 8_192;
 
@@ -66,12 +68,77 @@ struct ExtraSynonymHit {
 
 type ExtraSynonymMap = HashMap<String, Vec<ExtraSynonymHit>>;
 
-fn lookup_extra_synonym<'a>(map: &'a ExtraSynonymMap, word: &str, pos: u32) -> Option<&'a str> {
+fn lookup_extra_synonym<'a>(
+    map: &'a ExtraSynonymMap,
+    word: &str,
+    pos: u32,
+    prev_pos: u32,
+) -> Option<&'a str> {
     let hits = map.get(word)?;
     hits.iter()
         .rev()
-        .find(|hit| hit.pos == 0 || (pos != 0 && pos & hit.pos != 0))
+        .find(|hit| extra_should_apply(word, pos, prev_pos, hit))
         .map(|hit| hit.canonical.as_str())
+}
+
+fn extra_should_apply(token: &str, token_pos: u32, prev_pos: u32, hit: &ExtraSynonymHit) -> bool {
+    if !extra_pos_allows(token_pos, prev_pos, hit.pos) {
+        return false;
+    }
+    if token == hit.canonical {
+        return false;
+    }
+    if base_convert(token, Direction::T2s) != base_convert(&hit.canonical, Direction::T2s) {
+        return true;
+    }
+    let engine = base_convert(&base_convert(token, Direction::T2s), Direction::S2t);
+    let Some(token_dist) = glyph_distance(token, &engine) else {
+        return true;
+    };
+    let Some(canonical_dist) = glyph_distance(&hit.canonical, &engine) else {
+        return true;
+    };
+    const MEASURE: u32 = POSTAG::D_MQ | POSTAG::A_Q;
+    if token_dist < canonical_dist {
+        // 目前詞已較接近引擎（機制／控制／只有）。量詞「七只→七隻」除外。
+        return hit.pos & MEASURE != 0 && extra_pos_allows(token_pos, prev_pos, MEASURE);
+    }
+    true
+}
+
+fn glyph_distance(left: &str, right: &str) -> Option<usize> {
+    let left_chars: Vec<char> = left.chars().collect();
+    let right_chars: Vec<char> = right.chars().collect();
+    if left_chars.len() != right_chars.len() {
+        return None;
+    }
+    Some(
+        left_chars
+            .iter()
+            .zip(&right_chars)
+            .filter(|(a, b)| a != b)
+            .count(),
+    )
+}
+
+/// 無詞性＝與套件相同、不限詞性。有詞性時必須看分詞器依前後文標的詞性：
+/// 本詞詞性要與條目有交集，未知詞性不轉；條目含量詞時，本詞或前詞也必須是量詞／數詞。
+fn extra_pos_allows(token_pos: u32, prev_pos: u32, allowed: u32) -> bool {
+    if allowed == 0 {
+        return true;
+    }
+    if token_pos == 0 {
+        return false;
+    }
+    if token_pos & allowed == 0 {
+        return false;
+    }
+    const MEASURE: u32 = POSTAG::D_MQ | POSTAG::A_Q;
+    const NUMERAL: u32 = POSTAG::A_M | MEASURE;
+    if allowed & MEASURE != 0 && token_pos & MEASURE == 0 && prev_pos & NUMERAL == 0 {
+        return false;
+    }
+    true
 }
 
 pub struct ConversionService {
@@ -222,10 +289,8 @@ fn apply_extra_correction(
             if refs.is_empty() {
                 continue;
             }
-            // |詞性 只改符合該詞性的整詞；無詞性則與套件相同，不分詞性。
-            if entry.pos == 0 {
-                segmenter.add_synonym(&entry.canonical, &refs);
-            }
+            // extra 不走套件 convert_synonym（那個只看字形、不看前後詞性）。
+            // |詞性 只改上下文詞性符合的整詞；無詞性則不限詞性。
             for variant in refs {
                 extra_synonym
                     .entry(variant.to_string())
@@ -260,6 +325,7 @@ impl ConversionService {
 
     fn build(default_dictionary: Option<PathBuf>, extra: ExtraLoad) -> Result<Self, CoreError> {
         configure_segment_dict_root();
+        specials::init()?;
         let mut segmenter = Segment::new(SegmentOptions {
             auto_cjk: true,
             all_mod: true,
@@ -447,20 +513,27 @@ impl ConversionService {
             .segmenter
             .do_segment(chunk, segment_plain_options(direction == Direction::S2t));
         words
-            .into_iter()
-            .map(|word| {
+            .iter()
+            .enumerate()
+            .map(|(index, word)| {
                 let pos = word.pos();
-                let from_extra = lookup_extra_synonym(&self.extra_synonym, &word.w, pos)
+                let prev_pos = index
+                    .checked_sub(1)
+                    .map(|prev| words[prev].pos())
+                    .unwrap_or(0);
+                let from_extra = lookup_extra_synonym(&self.extra_synonym, &word.w, pos, prev_pos)
                     .unwrap_or(&word.w)
                     .to_string();
                 let glyph = base_convert(&from_extra, direction);
-                if direction == Direction::S2t {
-                    lookup_extra_synonym(&self.extra_synonym, &glyph, pos)
+                let pulled = if direction == Direction::S2t {
+                    lookup_extra_synonym(&self.extra_synonym, &glyph, pos, prev_pos)
                         .map(str::to_string)
                         .unwrap_or(glyph)
                 } else {
                     glyph
-                }
+                };
+                let next = words.get(index + 1).map(|item| item.w.as_str());
+                specials::current().apply_token(&pulled, next, direction, pos, prev_pos)
             })
             .collect()
     }
@@ -482,16 +555,6 @@ impl ConversionService {
     }
 }
 
-/// S2T glyphs: only `cn2tw_min` (safe: false). No `cjk2zht`——那張 JP／簡體表會把
-/// 台灣也在用的「制／娘／里」整字改掉，分詞也擋不住。一簡多繁與日文整詞交給
-/// `ZhtSynonymOptimizer`／extra-correction。min 的 璇→璿 同樣跳過。
-const GLYPH_S2T_OPTS: ConvertOptions<'static> = ConvertOptions {
-    safe: false,
-    // 疱：台灣醫學常用疱（膿疱／疱疹），不改成皰。胜肽靠 extra-correction 整詞，不 skip 胜（勝利仍要轉）。
-    skip: "璇疱",
-    ..ConvertOptions::DEFAULT
-};
-
 fn segment_plain_options(convert_synonym: bool) -> DoSegmentOptions {
     DoSegmentOptions {
         simple: Some(true),
@@ -503,14 +566,18 @@ fn segment_plain_options(convert_synonym: bool) -> DoSegmentOptions {
     }
 }
 
+/// S2T glyphs: only `cn2tw_min` (safe: false). No `cjk2zht`——那張 JP／簡體表會把
+/// 台灣也在用的「制／娘／里」整字改掉，分詞也擋不住。一簡多繁與日文整詞交給
+/// `ZhtSynonymOptimizer`／extra-correction。璇／疱／么 等字形特例見
+/// `resources/conversion-specials/rules.txt`。
 fn glyph_s2t(text: &str) -> String {
-    cn2tw_min_with(text, &GLYPH_S2T_OPTS)
+    cn2tw_min_with(text, &specials::current().s2t_options())
 }
 
 pub fn base_convert(text: &str, direction: Direction) -> String {
     match direction {
         Direction::S2t => glyph_s2t(text),
-        Direction::T2s => tw2cn(text),
+        Direction::T2s => tw2cn_with(text, &specials::current().t2s_options()),
         Direction::None => text.to_string(),
     }
 }

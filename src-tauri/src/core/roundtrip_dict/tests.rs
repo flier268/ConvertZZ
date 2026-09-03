@@ -358,7 +358,7 @@ fn format_segment_dict_writes_pos_and_simplified_form() {
 fn format_segment_dict_always_includes_wagyu() {
     let text = format_segment_dict(&[], &|_| 0);
     assert!(
-        text.contains("和牛|0x100000|1000\n"),
+        text.contains("和牛|0x100000|50000\n"),
         "pinned 和牛 missing: {text}"
     );
     for word in [
@@ -374,6 +374,10 @@ fn format_segment_dict_always_includes_wagyu() {
         "裡名",
         "胜肽",
         "勝肽",
+        "選手",
+        "选手",
+        "表現",
+        "表现",
         "三星鄉",
         "三星乡",
         "莊敬里",
@@ -388,10 +392,10 @@ fn format_segment_dict_always_includes_wagyu() {
         "羅東鎮",
         "羅東镇",
     ] {
-        let row = format!("{word}|0x100000|1000\n");
+        let row = format!("{word}|0x100000|50000\n");
         assert!(text.contains(&row), "pinned {word} missing");
     }
-    assert!(!text.contains("板橋區|0x100000|1000\n"), "must not pin 區");
+    assert!(!text.contains("板橋區|0x100000|50000\n"), "must not pin 區");
 }
 
 #[test]

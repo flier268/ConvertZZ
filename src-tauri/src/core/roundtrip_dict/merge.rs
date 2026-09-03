@@ -320,7 +320,7 @@ mod tests {
         assert!(synonym.contains("拮据,拮據|D_A\n"), "{synonym}");
         let dict = fs::read_to_string(into.join("zht.corpus.dict.txt")).unwrap();
         assert!(dict.contains("本里|0x100000|8\n"), "{dict}");
-        assert!(dict.contains("和牛|0x100000|1000\n"), "{dict}");
+        assert!(dict.contains("和牛|0x100000|50000\n"), "{dict}");
         let _ = fs::remove_dir_all(from.parent().unwrap());
     }
 

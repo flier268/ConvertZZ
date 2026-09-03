@@ -149,7 +149,8 @@ pub(crate) struct Specials {
 }
 
 pub(crate) const PIN_POS: u32 = POSTAG::D_N;
-pub(crate) const PIN_FREQ: u64 = 1000;
+/// 必須高過套件詞典重疊詞（如「手表」9151），否則「選手表現」會輸給「選|手表|現」。
+pub(crate) const PIN_FREQ: u64 = 50_000;
 
 impl Specials {
     pub(crate) fn s2t_options(&self) -> ConvertOptions<'_> {
@@ -730,8 +731,8 @@ mod tests {
             "好麼"
         );
         for word in [
-            "和牛", "胜肽", "勝肽", "本里", "本裡", "里辦", "裡辦", "里民", "裡民", "里長", "裡長",
-            "里名", "裡名", "老么", "老幺",
+            "和牛", "選手", "选手", "表現", "表现", "胜肽", "勝肽", "本里", "本裡", "里辦", "裡辦",
+            "里民", "裡民", "里長", "裡長", "里名", "裡名", "老么", "老幺",
         ] {
             assert!(
                 specials.pinned_words().iter().any(|item| item == word),

@@ -26,6 +26,8 @@ async fn segmented_s2t_golden_cases() {
     for (source, expected) in [
         ("里面", "裡面"),
         ("個別選手表現觀察週報", "個別選手表現觀察週報"),
+        ("選手表現", "選手表現"),
+        ("选手表现", "選手表現"),
         ("表現", "表現"),
         ("表面", "表面"),
         ("手表", "手錶"),
@@ -197,6 +199,37 @@ async fn wagyu_stays_one_word_so_zhi_is_not_zhi_classifier() {
         .await
         .unwrap();
     assert_eq!(result.text, source, "tokens={tokens:?}");
+}
+
+#[tokio::test]
+async fn athlete_performance_stays_two_words_so_watch_is_not_watch() {
+    let service = service();
+    for source in [
+        "個別選手表現觀察週報",
+        "个别选手表现观察周报",
+        "選手表現",
+        "选手表现",
+    ] {
+        let tokens = service.debug_pos(source);
+        assert!(
+            tokens
+                .iter()
+                .any(|(word, _)| word == "選手" || word == "选手"),
+            "選手 should be one token, got {tokens:?}"
+        );
+        assert!(
+            tokens
+                .iter()
+                .any(|(word, _)| word == "表現" || word == "表现"),
+            "表現 should be one token, got {tokens:?}"
+        );
+        assert!(
+            !tokens
+                .iter()
+                .any(|(word, _)| word == "手表" || word == "手錶"),
+            "must not split 選手表現 as 手表, got {tokens:?}"
+        );
+    }
 }
 
 #[tokio::test]

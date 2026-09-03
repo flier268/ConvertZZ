@@ -175,6 +175,25 @@ fn process_line_learns_split_neighborhood_li_and_jieju() {
         "specials pin 里辦 as one token: {:?}",
         neighborhood.originals
     );
+    let places = process_line(&service, "宜蘭縣三星鄉公所通知莊敬里里民");
+    assert!(
+        places.originals.iter().any(|word| word == "三星鄉"),
+        "place-names pin 三星鄉 as one token: {:?}",
+        places.originals
+    );
+    assert!(
+        places.originals.iter().any(|word| word == "莊敬里"),
+        "place-names pin 莊敬里 as one token: {:?}",
+        places.originals
+    );
+    assert!(
+        !places
+            .originals
+            .iter()
+            .any(|word| word == "鄉" || word == "里"),
+        "must not split xx鄉／xx里: {:?}",
+        places.originals
+    );
     let jieju = process_line(&service, "讓玩家在後期感到拮据");
     assert!(
         jieju
@@ -338,12 +357,30 @@ fn format_segment_dict_always_includes_wagyu() {
         "pinned 和牛 missing: {text}"
     );
     for word in [
-        "本里", "本裡", "里辦", "裡辦", "里民", "裡民", "里長", "裡長", "里名", "裡名", "胜肽",
+        "本里",
+        "本裡",
+        "里辦",
+        "裡辦",
+        "里民",
+        "裡民",
+        "里長",
+        "裡長",
+        "里名",
+        "裡名",
+        "胜肽",
         "勝肽",
+        "三星鄉",
+        "三星乡",
+        "莊敬里",
+        "莊敬裡",
+        "水里鄉",
+        "南庄鄉",
+        "南莊鄉",
     ] {
         let row = format!("{word}|0x100000|1000\n");
-        assert!(text.contains(&row), "pinned {word} missing: {text}");
+        assert!(text.contains(&row), "pinned {word} missing");
     }
+    assert!(!text.contains("羅東鎮|0x100000|1000\n"), "must not pin 鎮");
 }
 
 #[test]

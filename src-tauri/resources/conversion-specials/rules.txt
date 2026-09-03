@@ -4,6 +4,7 @@
 # kind: skip | s2t | t2s | variant | s2t-multi | t2s-multi | pin
 # from 可用 | 列多個來源。when 省略＝一律；例外規則寫在預設前面。
 # pin 與 word=／word^= 的整詞會在分詞時釘入（固定 extra），轉換時仍走 skip／s2t-multi。
+# 台灣完整「xx鄉／xx里」見 place-names.txt（fetch-place-names.py）；分詞、轉換、roundtrip-dict 都會讀。
 
 # 璇：min 表會改成璿。人名用字不同，只跳過、不把璿改回璇。
 skip	璇		s2t

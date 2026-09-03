@@ -2,8 +2,8 @@
 name: conversion-specials
 description: >
   只在使用者要新增或修改 ConvertZZ 字形特例時使用：改
-  conversion-specials/rules.txt、加入 skip／variant／s2t-multi／t2s-multi／pin
-  規則。觸發：加入特例、修改特例、改 rules.txt、/conversion-specials。
+  conversion-specials/rules.txt 或 place-names.txt、加入 skip／variant／s2t-multi／t2s-multi／pin
+  規則。觸發：加入特例、修改特例、改 rules.txt、台灣鄉里名稱、/conversion-specials。
   不要在一般轉換、extra-correction、roundtrip、除錯既有行為時套用。
 ---
 
@@ -11,7 +11,7 @@ description: >
 
 只在本次任務要**新增或修改**字形特例時跟這份 skill。討論轉換結果、修 extra-correction、跑 roundtrip、或只讀現有規則，不要套用。
 
-字形特例只改 `src-tauri/resources/conversion-specials/rules.txt`。欄位、`when` 語法與現況案例以同目錄 [README.md](../../../src-tauri/resources/conversion-specials/README.md) 為準；改規則前先讀完。不要把字寫進 `conversion.rs`，也不要寫進 `segment-dict`。
+字形特例只改 `src-tauri/resources/conversion-specials/rules.txt`。台灣完整「xx鄉／xx里」放 `place-names.txt`（用 `fetch-place-names.py` 更新），不要把幾千個地名寫進 `rules.txt`。欄位、`when` 語法與現況案例以同目錄 [README.md](../../../src-tauri/resources/conversion-specials/README.md) 為準；改規則前先讀完。不要把字寫進 `conversion.rs`，也不要寫進 `segment-dict`。
 
 ## 放哪一層
 
@@ -19,6 +19,7 @@ description: >
 | --- | --- |
 | 單字、有上下文的一簡多繁／一繁多簡、異體、引擎錯映射 | `rules.txt` |
 | 固定整詞保護（和牛、胜肽、里長） | `rules.txt` 的 `pin` 或 `word=`／`word^=`（分詞釘入、轉換再套用） |
+| 台灣完整鄉／里名（xx鄉、xx里） | `place-names.txt`（分詞釘入、簡轉繁拉回、roundtrip-dict 寫回 extra） |
 | 語料產生的整詞同義（手錶、範圍、機制）＋詞性 | `extra-correction` 同義詞／分詞表 |
 | 語意取代清單或 `skip: "…"` 字串 | 不准；改 `rules.txt` |
 

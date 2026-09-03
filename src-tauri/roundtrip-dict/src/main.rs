@@ -490,7 +490,7 @@ fn print_merge_extra_help() {
 roundtrip-dict merge-extra — 把回環產出合併進 extra-correction
 
 不整包覆蓋。既有正字優先（不會把 機制,機製 翻成 機製,機制）。
-新的 2 字詞對（本里,本裡）與分詞列才追加。固定保護詞來自 conversion-specials（`pin`／`word=`：和牛、本里、里辦、里民、里長、里名、胜肽），會寫回分詞表。
+新的 2 字詞對（本里,本裡）與分詞列才追加。固定保護詞來自 conversion-specials（`pin`／`word=`／`place-names.txt`：和牛、本里、里辦、里民、里長、里名、胜肽、三星鄉、莊敬里），會寫回分詞表。
 
 用法：
   cargo run --manifest-path src-tauri/Cargo.toml -p roundtrip-dict -- \\

@@ -200,6 +200,37 @@ async fn wagyu_stays_one_word_so_zhi_is_not_zhi_classifier() {
 }
 
 #[tokio::test]
+async fn taiwan_xiang_li_place_names_stay() {
+    let service = service();
+    for (source, expected) in [
+        ("三星鄉", "三星鄉"),
+        ("三星乡", "三星鄉"),
+        ("莊敬里", "莊敬里"),
+        ("莊敬裡", "莊敬里"),
+        ("水里鄉", "水里鄉"),
+        ("水裡鄉", "水里鄉"),
+        ("南庄鄉", "南庄鄉"),
+        ("太麻里鄉", "太麻里鄉"),
+        ("這裡", "這裡"),
+        ("公里", "公里"),
+        ("家裡", "家裡"),
+    ] {
+        let result = service
+            .convert(ConversionRequest {
+                text: source.into(),
+                direction: Direction::S2t,
+                engine: EngineKind::Segmented,
+                dictionary_path: None,
+                zhconvert: None,
+                vocabulary_correction: None,
+            })
+            .await
+            .unwrap();
+        assert_eq!(result.text, expected, "{source}");
+    }
+}
+
+#[tokio::test]
 async fn peptide_and_li_titles_stay_one_word() {
     let service = service();
     for (source, word) in [
@@ -207,6 +238,10 @@ async fn peptide_and_li_titles_stay_one_word() {
         ("勝肽合成", "勝肽"),
         ("各位里長好", "里長"),
         ("請填里名", "里名"),
+        ("宜蘭縣三星鄉公所", "三星鄉"),
+        ("通知莊敬里里民", "莊敬里"),
+        ("南庄里", "南庄里"),
+        ("苗栗縣南庄鄉南庄里", "南庄里"),
     ] {
         let tokens = service.debug_pos(source);
         assert!(
@@ -220,7 +255,9 @@ async fn peptide_and_li_titles_stay_one_word() {
                 || item == "里"
                 || item == "裡"
                 || item == "長"
-                || item == "名"),
+                || item == "名"
+                || item == "鄉"
+                || item == "乡"),
             "{source}: must not split {word}, got {tokens:?}"
         );
     }

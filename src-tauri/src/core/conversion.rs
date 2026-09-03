@@ -607,7 +607,7 @@ fn segment_align_options() -> DoSegmentOptions {
 /// S2T glyphs: only `cn2tw_min` (safe: false). No `cjk2zht`——那張 JP／簡體表會把
 /// 台灣也在用的「制／娘／里」整字改掉，分詞也擋不住。一簡多繁與日文整詞交給
 /// `ZhtSynonymOptimizer`／extra-correction。璇／疱／么／胜肽／里長 等見
-/// `resources/conversion-specials/rules.txt`（分詞時釘整詞，轉換時再套用）。
+/// `resources/conversion-specials/rules.txt` 與 `place-names.txt`（分詞時釘整詞，轉換時再套用）。
 fn glyph_s2t(text: &str) -> String {
     cn2tw_min_with(text, &specials::current().s2t_options())
 }

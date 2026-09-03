@@ -2,9 +2,9 @@
 
 ConvertZZ 額外修正層。在 `ws-segment-rs`／`cjk-convert-rs` 套件字典載入之後套用。
 
-字形特例與固定整詞（璇／疱／么、和牛、胜肽、里長、一簡多繁、異體 skip）在 `../conversion-specials/`，不在本目錄。
+字形特例與固定整詞（璇／疱／么、和牛、胜肽、里長、台灣 xx鄉／xx里、一簡多繁、異體 skip）在 `../conversion-specials/`，不在本目錄。
 
-與套件字典同一趟分詞：`zht.corpus.dict.txt` 是分詞表（`詞|詞性|權值`，含簡繁詞形），`zht.corpus.synonym.txt` 是同義詞（`正字,錯字,...`，與套件 `synonym.txt` 相同）。不寫入套件詞典檔，也不在同義詞列上加 `|POS`。字形後只對已分出的整詞查 extra 同義詞，不再分第二次。`roundtrip-dict` 產出分詞表時會寫入分詞器詞性與簡體詞形，並把 conversion-specials 的 `pin`／`word=` 整詞寫回分詞表（和牛、胜肽、里長等）。
+與套件字典同一趟分詞：`zht.corpus.dict.txt` 是分詞表（`詞|詞性|權值`，含簡繁詞形），`zht.corpus.synonym.txt` 是同義詞（`正字,錯字,...`，與套件 `synonym.txt` 相同）。不寫入套件詞典檔，也不在同義詞列上加 `|POS`。字形後只對已分出的整詞查 extra 同義詞，不再分第二次。`roundtrip-dict` 產出分詞表時會寫入分詞器詞性與簡體詞形，並把 conversion-specials 的 `pin`／`word=`／`place-names.txt` 整詞寫回分詞表（和牛、胜肽、里長、三星鄉、莊敬里等）。
 
 `roundtrip-dict` 預設寫到倉庫根目錄的 `data/roundtrip-correction/`，**不會**自動放到這裡。檢視 `pairs.tsv` 後用 `merge-extra` 合併核准列，**不要整包覆蓋**。
 

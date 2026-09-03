@@ -1,7 +1,7 @@
 //! 把 roundtrip 產出合併進 extra-correction，不整包覆蓋。
 //!
 //! extra 既有正字優先（不把 `機制,機製` 翻成 `機製,機制`）。
-//! 新正詞與新錯詞才追加。分詞表聯集後再寫入 PINNED。
+//! 新正詞與新錯詞才追加。分詞表聯集後再寫入 conversion-specials 保護詞（含 xx鄉／xx里）。
 
 use super::{
     atomic_write, format_synonym_file, is_extra_correction_path, is_package_data_path,

@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 const BUNDLED_RULES: &str = include_str!("../../../resources/conversion-specials/rules.txt");
+const BUNDLED_PLACE_NAMES: &str =
+    include_str!("../../../resources/conversion-specials/place-names.txt");
 
 static SPECIALS: OnceLock<Specials> = OnceLock::new();
 
@@ -142,6 +144,8 @@ pub(crate) struct Specials {
     t2s_table: HashMap<char, char>,
     rewrites: Vec<Rewrite>,
     pinned: Vec<String>,
+    /// 完整「xx鄉／xx里」及其簡體、裡、台 詞形 → 正名。
+    place_canonical: HashMap<String, String>,
 }
 
 pub(crate) const PIN_POS: u32 = POSTAG::D_N;
@@ -174,6 +178,11 @@ impl Specials {
         pos: u32,
         prev_pos: u32,
     ) -> String {
+        if direction == Direction::S2t {
+            if let Some(canonical) = self.place_canonical.get(word) {
+                return canonical.clone();
+            }
+        }
         for rule in &self.rewrites {
             if !rule.dir.matches(direction) {
                 continue;
@@ -210,8 +219,8 @@ fn nonempty_table(table: &HashMap<char, char>) -> Option<&HashMap<char, char>> {
 
 pub(crate) fn current() -> &'static Specials {
     SPECIALS.get_or_init(|| {
-        parse(&load_text()).unwrap_or_else(|error| {
-            panic!("無法載入 conversion-specials/rules.txt：{error}");
+        load_specials().unwrap_or_else(|error| {
+            panic!("無法載入 conversion-specials：{error}");
         })
     })
 }
@@ -220,21 +229,29 @@ pub(crate) fn init() -> Result<(), CoreError> {
     if SPECIALS.get().is_some() {
         return Ok(());
     }
-    let parsed =
-        parse(&load_text()).map_err(|error| CoreError::new("CONVERSION_SPECIALS", error))?;
+    let parsed = load_specials().map_err(|error| CoreError::new("CONVERSION_SPECIALS", error))?;
     let _ = SPECIALS.set(parsed);
     Ok(())
 }
 
-fn load_text() -> String {
-    for path in file_candidates() {
+fn load_specials() -> Result<Specials, String> {
+    let mut specials = parse(&load_first(&file_candidates(), BUNDLED_RULES))?;
+    absorb_place_names(
+        &mut specials,
+        &load_first(&place_name_candidates(), BUNDLED_PLACE_NAMES),
+    )?;
+    Ok(specials)
+}
+
+fn load_first(candidates: &[PathBuf], bundled: &str) -> String {
+    for path in candidates {
         if path.is_file() {
-            if let Ok(text) = std::fs::read_to_string(&path) {
+            if let Ok(text) = std::fs::read_to_string(path) {
                 return text;
             }
         }
     }
-    BUNDLED_RULES.to_string()
+    bundled.to_string()
 }
 
 fn file_candidates() -> Vec<PathBuf> {
@@ -265,6 +282,13 @@ fn file_candidates() -> Vec<PathBuf> {
         candidates.push(appdir.join("conversion-specials/rules.txt"));
     }
     candidates
+}
+
+fn place_name_candidates() -> Vec<PathBuf> {
+    file_candidates()
+        .into_iter()
+        .map(|path| path.with_file_name("place-names.txt"))
+        .collect()
 }
 
 pub(crate) fn parse(text: &str) -> Result<Specials, String> {
@@ -350,7 +374,68 @@ pub(crate) fn parse(text: &str) -> Result<Specials, String> {
         t2s_table,
         rewrites,
         pinned,
+        place_canonical: HashMap::new(),
     })
+}
+
+fn absorb_place_names(specials: &mut Specials, text: &str) -> Result<(), String> {
+    let mut pinned_seen: HashSet<String> = specials.pinned.iter().cloned().collect();
+    let mut seen_canonical = HashSet::new();
+    for (index, line) in text.lines().enumerate() {
+        let line_no = index + 1;
+        let name = line.trim();
+        if name.is_empty() || name.starts_with('#') || name.starts_with("//") {
+            continue;
+        }
+        if name.contains('\t') || name.contains(' ') {
+            return Err(format!(
+                "place-names 第 {line_no} 行：地名必須是單一完整名稱"
+            ));
+        }
+        if name.chars().count() < 2 || !(name.ends_with('鄉') || name.ends_with('里')) {
+            return Err(format!(
+                "place-names 第 {line_no} 行：只收完整 xx鄉／xx里，收到「{name}」"
+            ));
+        }
+        if !seen_canonical.insert(name.to_string()) {
+            continue;
+        }
+        for form in place_name_forms(name) {
+            specials
+                .place_canonical
+                .entry(form.clone())
+                .or_insert_with(|| name.to_string());
+            if form.chars().count() >= 2 && pinned_seen.insert(form.clone()) {
+                specials.pinned.push(form);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn place_name_forms(canonical: &str) -> Vec<String> {
+    let mut forms = HashSet::new();
+    let mut bases = vec![canonical.to_string()];
+    for (from, to) in [("臺", "台"), ("台", "臺"), ("庄", "莊"), ("莊", "庄")] {
+        if canonical.contains(from) {
+            bases.push(canonical.replace(from, to));
+        }
+    }
+    for base in bases {
+        forms.insert(base.clone());
+        if let Some(stem) = base.strip_suffix('鄉') {
+            forms.insert(format!("{stem}乡"));
+            if stem.contains('里') {
+                let stem_li = stem.replace('里', "裡");
+                forms.insert(format!("{stem_li}鄉"));
+                forms.insert(format!("{stem_li}乡"));
+            }
+        } else if let Some(stem) = base.strip_suffix('里') {
+            forms.insert(format!("{stem}裡"));
+            forms.insert(format!("{stem}裏"));
+        }
+    }
+    forms.into_iter().collect()
 }
 
 struct ParsedRule {
@@ -655,6 +740,69 @@ mod tests {
             specials.apply_token("本裡", None, Direction::S2t, 0, 0),
             "本里"
         );
+    }
+
+    fn bundled_with_places() -> Specials {
+        let mut specials = parse(BUNDLED_RULES).expect("rules");
+        absorb_place_names(&mut specials, BUNDLED_PLACE_NAMES).expect("places");
+        specials
+    }
+
+    #[test]
+    fn bundled_place_names_pin_complete_xiang_li_only() {
+        let specials = bundled_with_places();
+        for word in [
+            "三星鄉",
+            "三星乡",
+            "莊敬里",
+            "莊敬裡",
+            "水里鄉",
+            "水裡鄉",
+            "南庄鄉",
+            "南莊鄉",
+            "臺西鄉",
+            "台西鄉",
+            "太麻里鄉",
+            "里港鄉",
+            "夢裡里",
+        ] {
+            assert!(
+                specials.pinned_words().iter().any(|item| item == word),
+                "pinned missing {word}"
+            );
+        }
+        for word in ["羅東鎮", "竹北市", "板橋區", "鄉", "里", "這裡", "公里"] {
+            assert!(
+                !specials.pinned_words().iter().any(|item| item == word),
+                "must not pin incomplete or non-鄉里 name {word}"
+            );
+        }
+        assert_eq!(
+            specials.apply_token("莊敬裡", None, Direction::S2t, 0, 0),
+            "莊敬里"
+        );
+        assert_eq!(
+            specials.apply_token("三星乡", None, Direction::S2t, 0, 0),
+            "三星鄉"
+        );
+        assert_eq!(
+            specials.apply_token("水裡鄉", None, Direction::S2t, 0, 0),
+            "水里鄉"
+        );
+        assert_eq!(
+            specials.apply_token("南莊鄉", None, Direction::S2t, 0, 0),
+            "南庄鄉"
+        );
+        assert_eq!(
+            specials.apply_token("夢裡里", None, Direction::S2t, 0, 0),
+            "夢裡里"
+        );
+        assert_eq!(
+            specials.apply_token("這裡", None, Direction::S2t, 0, 0),
+            "這裡"
+        );
+        let err = absorb_place_names(&mut parse("").expect("empty"), "羅東鎮\n").unwrap_err();
+        assert!(err.contains("xx鄉"), "{err}");
     }
 
     #[test]

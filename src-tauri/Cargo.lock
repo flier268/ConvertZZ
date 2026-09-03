@@ -655,7 +655,7 @@ dependencies = [
 
 [[package]]
 name = "convertzz"
-version = "2.0.0-beta6"
+version = "2.0.0-beta7"
 dependencies = [
  "arboard",
  "chardetng",
@@ -3702,7 +3702,7 @@ dependencies = [
 
 [[package]]
 name = "roundtrip-dict"
-version = "2.0.0-beta6"
+version = "2.0.0-beta7"
 dependencies = [
  "convertzz",
  "signal-hook",

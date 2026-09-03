@@ -114,7 +114,7 @@ cat ~/.tauri/convertzz.key
 
 `/releases/latest` **只看已發佈、且不是預發佈的最新 Release**。
 
-程式預設只檢查正式版。設定中的「檢查開發／預發佈版本」開啟後，會另外讀取 GitHub 上的 `alpha`、`beta`、`rc` 通道標籤（附註訊息為實際版本，例如 `v2.0.0-beta1`），再與正式版比較，取 SemVer 較新者。排序為 `2.0.0 > 2.0.0-rc.1 > 2.0.0-beta6 > 2.0.0-beta5 > 2.0.0-alpha9`。因此若正式版已經比目前的開發版新，仍會提示下載正式版。
+程式預設只檢查正式版。設定中的「檢查開發／預發佈版本」開啟後，會另外讀取 GitHub 上的 `alpha`、`beta`、`rc` 通道標籤（附註訊息為實際版本，例如 `v2.0.0-beta1`），再與正式版比較，取 SemVer 較新者。排序為 `2.0.0 > 2.0.0-rc.1 > 2.0.0-beta7 > 2.0.0-beta6 > 2.0.0-alpha9`。因此若正式版已經比目前的開發版新，仍會提示下載正式版。
 
 含 `-` 的發行標籤（如 `v2.0.0-beta1`）會在 GitHub Release 標成 Pre-release，因此不會成為 `/releases/latest`。發佈這類 Release 後，工作流程會把 `alpha`、`beta` 或 `rc` 標籤強制移到該 commit；標籤已存在時會覆蓋。
 

@@ -194,6 +194,11 @@ fn process_line_learns_split_neighborhood_li_and_jieju() {
         "must not split xx鄉／xx里: {:?}",
         places.originals
     );
+    assert!(
+        places.originals.iter().any(|word| word == "宜蘭縣"),
+        "place-names pin 宜蘭縣 as one token: {:?}",
+        places.originals
+    );
     let jieju = process_line(&service, "讓玩家在後期感到拮据");
     assert!(
         jieju
@@ -376,11 +381,17 @@ fn format_segment_dict_always_includes_wagyu() {
         "水里鄉",
         "南庄鄉",
         "南莊鄉",
+        "臺北市",
+        "台北市",
+        "宜蘭縣",
+        "竹北市",
+        "羅東鎮",
+        "羅東镇",
     ] {
         let row = format!("{word}|0x100000|1000\n");
         assert!(text.contains(&row), "pinned {word} missing");
     }
-    assert!(!text.contains("羅東鎮|0x100000|1000\n"), "must not pin 鎮");
+    assert!(!text.contains("板橋區|0x100000|1000\n"), "must not pin 區");
 }
 
 #[test]

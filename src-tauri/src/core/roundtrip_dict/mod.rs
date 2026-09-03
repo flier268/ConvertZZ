@@ -35,7 +35,7 @@ pub(crate) const MAX_WORD_CHARS: usize = 8;
 pub(crate) const MAX_LINE_CHARS: usize = 20_000;
 pub(crate) const MAX_TOKEN_COUNT: usize = 800;
 pub(crate) const MAX_EXAMPLES: usize = 3;
-/// 固定寫入 extra 分詞表。來源是 conversion-specials：`pin`、`word=`／`word^=`，以及 `place-names.txt` 的完整 xx鄉／xx里。
+/// 固定寫入 extra 分詞表。來源是 conversion-specials：`pin`、`word=`／`word^=`，以及 `place-names.txt` 的完整 xx縣／xx市／xx鄉／xx鎮／xx里。
 pub(crate) fn pinned_dict_words() -> Vec<(String, u32, u64)> {
     super::conversion::specials::current()
         .pinned_words()

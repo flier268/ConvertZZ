@@ -30,7 +30,7 @@ ConvertZZ 2.0 包含第三方自由軟體。
 
 `ws-segment-rs` 分詞字典來自 `segment-dict`，發行包會附帶 `src-tauri/resources/segment-dict`。
 
-`src-tauri/resources/conversion-specials/place-names.txt` 的鄉／里名稱來自內政部國土測繪中心代碼服務（政府資料開放授權條款第1版）。
+`src-tauri/resources/conversion-specials/place-names.txt` 的縣／市／鄉／鎮／里名稱來自內政部國土測繪中心代碼服務（政府資料開放授權條款第1版）。
 
 測試樣本 `tests/fixtures/mac-399.ape` 與 `tests/fixtures/test.ogg` 來自 TagLib 測試資料。
 

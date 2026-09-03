@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""從內政部國土測繪中心代碼服務下載台灣鄉／里完整名稱，寫入 place-names.txt。
+"""從內政部國土測繪中心代碼服務下載台灣縣／市／鄉／鎮／里完整名稱，寫入 place-names.txt。
 
-只收「xx鄉」「xx里」，不收鎮／市／區／村或單字。授權：政府資料開放授權條款第1版。
+只收完整「xx縣」「xx市」「xx鄉」「xx鎮」「xx里」，不收區／村或單字。
+授權：政府資料開放授權條款第1版。
 """
 
 from __future__ import annotations
@@ -19,10 +20,10 @@ API_VILLAGE = "https://api.nlsc.gov.tw/other/ListVillage/{county}/{town}"
 USER_AGENT = "ConvertZZ-place-names/1.0"
 CJK = re.compile(r"^[\u4e00-\u9fff]+$")
 HERE = Path(__file__).resolve().parent
-HEADER = """# 台灣鄉／里完整名稱（固定整詞保護）。
-# 來源：內政部國土測繪中心代碼服務 ListTown／ListVillage（政府資料開放授權條款第1版）。
+HEADER = """# 台灣縣／市／鄉／鎮／里完整名稱（固定整詞保護）。
+# 來源：內政部國土測繪中心代碼服務 ListCounty／ListTown／ListVillage（政府資料開放授權條款第1版）。
 # 更新：python3 src-tauri/resources/conversion-specials/fetch-place-names.py
-# 只收完整「xx鄉」「xx里」，不收鎮／市／區／村、單字或不完全名稱。
+# 只收完整「xx縣」「xx市」「xx鄉」「xx鎮」「xx里」，不收區／村、單字或不完全名稱。
 # 分詞時釘入；轉換與 roundtrip-dict 都讀這份名單。
 """
 
@@ -49,12 +50,20 @@ def normalize(raw: str) -> str:
     return raw.replace("[", "").replace("]", "").strip()
 
 
-def keep(name: str, suffix: str) -> bool:
-    return bool(name) and name.endswith(suffix) and len(name) >= 2 and CJK.fullmatch(name)
+def keep(name: str, *suffixes: str) -> bool:
+    return bool(name) and name.endswith(suffixes) and len(name) >= 2 and CJK.fullmatch(name)
 
 
-def collect() -> tuple[list[str], list[str]]:
-    counties = parse_items(fetch(API_COUNTY), "countyItem", ["countycode"])
+def collect() -> tuple[list[str], list[str], list[str], list[str], list[str]]:
+    counties = parse_items(fetch(API_COUNTY), "countyItem", ["countycode", "countyname"])
+    county_names: list[str] = []
+    seen_county = set()
+    for county in counties:
+        name = normalize(county["countyname"])
+        if keep(name, "縣", "市") and name not in seen_county:
+            seen_county.add(name)
+            county_names.append(name)
+
     towns: list[dict[str, str]] = []
     for county in counties:
         code = county["countycode"]
@@ -62,11 +71,17 @@ def collect() -> tuple[list[str], list[str]]:
             town["countycode"] = code
             towns.append(town)
 
+    town_shi: set[str] = set()
+    zhen: set[str] = set()
     xiang: set[str] = set()
     li: set[str] = set()
     for town in towns:
         name = normalize(town["townname"])
-        if keep(name, "鄉"):
+        if keep(name, "市") and name not in seen_county:
+            town_shi.add(name)
+        elif keep(name, "鎮"):
+            zhen.add(name)
+        elif keep(name, "鄉"):
             xiang.add(name)
 
     total = len(towns)
@@ -81,13 +96,16 @@ def collect() -> tuple[list[str], list[str]]:
             if keep(name, "里"):
                 li.add(name)
         if index % 80 == 0 or index == total:
-            print(f"村里 {index}/{total}，鄉 {len(xiang)}，里 {len(li)}", file=sys.stderr)
+            print(
+                f"村里 {index}/{total}，縣市 {len(county_names)}，縣轄市 {len(town_shi)}，鎮 {len(zhen)}，鄉 {len(xiang)}，里 {len(li)}",
+                file=sys.stderr,
+            )
 
-    return sorted(xiang), sorted(li)
+    return county_names, sorted(town_shi), sorted(zhen), sorted(xiang), sorted(li)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="下載台灣 xx鄉／xx里 完整名稱")
+    parser = argparse.ArgumentParser(description="下載台灣 xx縣／xx市／xx鄉／xx鎮／xx里 完整名稱")
     parser.add_argument(
         "-o",
         "--output",
@@ -96,12 +114,15 @@ def main() -> int:
         help="輸出路徑（預設：同目錄 place-names.txt）",
     )
     args = parser.parse_args()
-    xiang, li = collect()
-    if not xiang or not li:
-        print("沒有收到鄉或里名稱。", file=sys.stderr)
+    counties, town_shi, zhen, xiang, li = collect()
+    if not counties or not xiang or not li:
+        print("沒有收到縣市、鄉或里名稱。", file=sys.stderr)
         return 1
-    args.output.write_text(HEADER + "\n".join(xiang + li) + "\n", encoding="utf-8")
-    print(f"寫入 {args.output}：鄉 {len(xiang)}，里 {len(li)}")
+    names = counties + town_shi + zhen + xiang + li
+    args.output.write_text(HEADER + "\n".join(names) + "\n", encoding="utf-8")
+    print(
+        f"寫入 {args.output}：縣市 {len(counties)}，縣轄市 {len(town_shi)}，鎮 {len(zhen)}，鄉 {len(xiang)}，里 {len(li)}"
+    )
     return 0
 
 

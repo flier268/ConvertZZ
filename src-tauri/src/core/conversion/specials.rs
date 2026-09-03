@@ -144,7 +144,7 @@ pub(crate) struct Specials {
     t2s_table: HashMap<char, char>,
     rewrites: Vec<Rewrite>,
     pinned: Vec<String>,
-    /// 完整「xx鄉／xx里」及其簡體、裡、台 詞形 → 正名。
+    /// 完整「xx縣／xx市／xx鄉／xx鎮／xx里」及其簡體、裡、台 詞形 → 正名。
     place_canonical: HashMap<String, String>,
 }
 
@@ -392,9 +392,9 @@ fn absorb_place_names(specials: &mut Specials, text: &str) -> Result<(), String>
                 "place-names 第 {line_no} 行：地名必須是單一完整名稱"
             ));
         }
-        if name.chars().count() < 2 || !(name.ends_with('鄉') || name.ends_with('里')) {
+        if !is_complete_place_name(name) {
             return Err(format!(
-                "place-names 第 {line_no} 行：只收完整 xx鄉／xx里，收到「{name}」"
+                "place-names 第 {line_no} 行：只收完整 xx縣／xx市／xx鄉／xx鎮／xx里，收到「{name}」"
             ));
         }
         if !seen_canonical.insert(name.to_string()) {
@@ -413,26 +413,45 @@ fn absorb_place_names(specials: &mut Specials, text: &str) -> Result<(), String>
     Ok(())
 }
 
+fn is_complete_place_name(name: &str) -> bool {
+    name.chars().count() >= 2
+        && name
+            .chars()
+            .last()
+            .is_some_and(|ch| matches!(ch, '縣' | '市' | '鄉' | '鎮' | '里'))
+}
+
 fn place_name_forms(canonical: &str) -> Vec<String> {
     let mut forms = HashSet::new();
-    let mut bases = vec![canonical.to_string()];
-    for (from, to) in [("臺", "台"), ("台", "臺"), ("庄", "莊"), ("莊", "庄")] {
-        if canonical.contains(from) {
-            bases.push(canonical.replace(from, to));
-        }
-    }
-    for base in bases {
-        forms.insert(base.clone());
-        if let Some(stem) = base.strip_suffix('鄉') {
-            forms.insert(format!("{stem}乡"));
-            if stem.contains('里') {
-                let stem_li = stem.replace('里', "裡");
-                forms.insert(format!("{stem_li}鄉"));
-                forms.insert(format!("{stem_li}乡"));
+    forms.insert(canonical.to_string());
+    let mut stack = vec![canonical.to_string()];
+    let pairs = [
+        ("臺", "台"),
+        ("台", "臺"),
+        ("庄", "莊"),
+        ("莊", "庄"),
+        ("蘭", "兰"),
+        ("園", "园"),
+        ("義", "义"),
+        ("雲", "云"),
+        ("門", "门"),
+        ("連", "连"),
+        ("羅", "罗"),
+        ("東", "东"),
+        ("鄉", "乡"),
+        ("縣", "县"),
+        ("鎮", "镇"),
+        ("里", "裡"),
+        ("里", "裏"),
+    ];
+    while let Some(current) = stack.pop() {
+        for (from, to) in pairs {
+            if current.contains(from) {
+                let next = current.replace(from, to);
+                if forms.insert(next.clone()) {
+                    stack.push(next);
+                }
             }
-        } else if let Some(stem) = base.strip_suffix('里') {
-            forms.insert(format!("{stem}裡"));
-            forms.insert(format!("{stem}裏"));
         }
     }
     forms.into_iter().collect()
@@ -752,6 +771,15 @@ mod tests {
     fn bundled_place_names_pin_complete_xiang_li_only() {
         let specials = bundled_with_places();
         for word in [
+            "臺北市",
+            "台北市",
+            "宜蘭縣",
+            "宜蘭县",
+            "宜兰县",
+            "竹北市",
+            "羅東鎮",
+            "羅東镇",
+            "罗东镇",
             "三星鄉",
             "三星乡",
             "莊敬里",
@@ -771,10 +799,20 @@ mod tests {
                 "pinned missing {word}"
             );
         }
-        for word in ["羅東鎮", "竹北市", "板橋區", "鄉", "里", "這裡", "公里"] {
+        for word in [
+            "板橋區",
+            "鄉",
+            "里",
+            "縣",
+            "市",
+            "鎮",
+            "這裡",
+            "公里",
+            "台北",
+        ] {
             assert!(
                 !specials.pinned_words().iter().any(|item| item == word),
-                "must not pin incomplete or non-鄉里 name {word}"
+                "must not pin incomplete or non-縣市鄉鎮里 name {word}"
             );
         }
         assert_eq!(
@@ -801,8 +839,20 @@ mod tests {
             specials.apply_token("這裡", None, Direction::S2t, 0, 0),
             "這裡"
         );
-        let err = absorb_place_names(&mut parse("").expect("empty"), "羅東鎮\n").unwrap_err();
-        assert!(err.contains("xx鄉"), "{err}");
+        assert_eq!(
+            specials.apply_token("台北市", None, Direction::S2t, 0, 0),
+            "臺北市"
+        );
+        assert_eq!(
+            specials.apply_token("宜兰县", None, Direction::S2t, 0, 0),
+            "宜蘭縣"
+        );
+        assert_eq!(
+            specials.apply_token("羅東镇", None, Direction::S2t, 0, 0),
+            "羅東鎮"
+        );
+        let err = absorb_place_names(&mut parse("").expect("empty"), "板橋區\n").unwrap_err();
+        assert!(err.contains("xx縣"), "{err}");
     }
 
     #[test]

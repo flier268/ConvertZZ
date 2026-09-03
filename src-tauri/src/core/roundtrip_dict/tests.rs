@@ -50,6 +50,56 @@ fn extract_pairs_ignores_single_character_and_non_cjk() {
 }
 
 #[test]
+fn extract_pairs_glues_single_char_neighbor_into_compound() {
+    let pairs = extract_pairs(
+        &tokens(&["本", "里", "垃圾車"]),
+        &tokens(&["本", "裡", "垃圾車"]),
+    );
+    assert!(
+        pairs.contains(&("本裡".into(), "本里".into())),
+        "本+里 should become 本里/本裡, got {pairs:?}"
+    );
+    assert!(
+        !pairs
+            .iter()
+            .any(|(variant, canonical)| variant.chars().count() == 1
+                || canonical.chars().count() == 1),
+        "must not keep 里/裡 as a 1-char pair: {pairs:?}"
+    );
+    assert!(
+        !pairs
+            .iter()
+            .any(|(variant, _)| variant.contains("垃圾車") || variant.contains("垃圾")),
+        "must not glue 里+垃圾車: {pairs:?}"
+    );
+}
+
+#[test]
+fn extract_pairs_glues_following_single_char_neighbor() {
+    let pairs = extract_pairs(
+        &tokens(&["聯繫", "里", "辦"]),
+        &tokens(&["聯繫", "裡", "辦"]),
+    );
+    assert!(
+        pairs.contains(&("裡辦".into(), "里辦".into())),
+        "里+辦 should become 里辦/裡辦, got {pairs:?}"
+    );
+    assert!(
+        !pairs.iter().any(|(variant, _)| variant.contains("聯繫")),
+        "must not glue 2-char 聯繫+里: {pairs:?}"
+    );
+}
+
+#[test]
+fn extract_pairs_does_not_glue_multichar_locative_neighbor() {
+    let pairs = extract_pairs(&tokens(&["房子", "里"]), &tokens(&["房子", "裡"]));
+    assert!(
+        pairs.is_empty(),
+        "房子+里 is locative 2+1, must not learn 房子里: {pairs:?}"
+    );
+}
+
+#[test]
 fn extract_pairs_does_not_emit_character_replace_across_word_boundary() {
     let pairs = extract_pairs(&tokens(&["皇后", "裡面"]), &tokens(&["皇后", "裏面"]));
     assert_eq!(pairs, vec![("裏面".into(), "裡面".into())]);
@@ -108,6 +158,31 @@ fn process_line_does_not_learn_zhiyou_from_measure_boundary() {
         both.originals.iter().any(|word| word == "機制"),
         "identity 機制 must be attested as original: {:?}",
         both.originals
+    );
+}
+
+#[test]
+fn process_line_learns_split_neighborhood_li_and_jieju() {
+    let service = test_service();
+    let neighborhood = process_line(&service, "關於本里垃圾車時間，請聯繫里辦協助。");
+    assert!(
+        neighborhood.originals.iter().any(|word| word == "本里"),
+        "specials pin 本里 as one token: {:?}",
+        neighborhood.originals
+    );
+    assert!(
+        neighborhood.originals.iter().any(|word| word == "里辦"),
+        "specials pin 里辦 as one token: {:?}",
+        neighborhood.originals
+    );
+    let jieju = process_line(&service, "讓玩家在後期感到拮据");
+    assert!(
+        jieju
+            .pairs
+            .iter()
+            .any(|(variant, canonical)| variant == "拮據" && canonical == "拮据"),
+        "拮据 is already one token and must be learned: {:?}",
+        jieju.pairs
     );
 }
 
@@ -262,6 +337,13 @@ fn format_segment_dict_always_includes_wagyu() {
         text.contains("和牛|0x100000|1000\n"),
         "pinned 和牛 missing: {text}"
     );
+    for word in [
+        "本里", "本裡", "里辦", "裡辦", "里民", "裡民", "里長", "裡長", "里名", "裡名", "胜肽",
+        "勝肽",
+    ] {
+        let row = format!("{word}|0x100000|1000\n");
+        assert!(text.contains(&row), "pinned {word} missing: {text}");
+    }
 }
 
 #[test]

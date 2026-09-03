@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime};
 
-mod specials;
+pub(crate) mod specials;
 
 const MAX_CHUNK_CHARACTERS: usize = 8_192;
 
@@ -101,6 +101,10 @@ fn extra_should_apply(token: &str, token_pos: u32, prev_pos: u32, hit: &ExtraSyn
     const MEASURE: u32 = POSTAG::D_MQ | POSTAG::A_Q;
     if token_dist < canonical_dist {
         // 目前詞已較接近引擎（機制／控制／只有）。量詞「七只→七隻」除外。
+        // extra 正字經字形引擎會變成目前詞時（拮据→拮據），這層要覆寫引擎。
+        if base_convert(&hit.canonical, Direction::S2t) == token {
+            return true;
+        }
         return hit.pos & MEASURE != 0 && extra_pos_allows(token_pos, prev_pos, MEASURE);
     }
     true
@@ -305,6 +309,19 @@ fn apply_extra_correction(
     Ok(())
 }
 
+fn apply_specials_pins(segmenter: &mut Segment) -> Result<(), CoreError> {
+    for word in specials::current().pinned_words() {
+        let spec = format!("{word}|{:#x}|{}", specials::PIN_POS, specials::PIN_FREQ);
+        segmenter.add_word(&spec, None, None).map_err(|error| {
+            CoreError::new(
+                "CONVERSION_SPECIALS",
+                format!("無法釘入分詞詞「{word}」：{error}"),
+            )
+        })?;
+    }
+    Ok(())
+}
+
 impl ConversionService {
     pub fn new(default_dictionary: Option<PathBuf>) -> Result<Self, CoreError> {
         Self::build(default_dictionary, ExtraLoad::Discover)
@@ -342,6 +359,7 @@ impl ConversionService {
                 apply_extra_correction(&mut segmenter, &mut extra_synonym, &root, true)?
             }
         }
+        apply_specials_pins(&mut segmenter)?;
         Ok(Self {
             segmenter,
             extra_synonym,
@@ -374,6 +392,15 @@ impl ConversionService {
         }
         self.segmenter
             .do_segment_simple(text, segment_plain_options(false))
+    }
+
+    /// 回環對齊用：關閉同義詞與 ZhtSynonymOptimizer，保留原文「里／据」不被改寫。
+    pub fn segment_tokens_align(&self, text: &str) -> Vec<String> {
+        if text.is_empty() {
+            return Vec::new();
+        }
+        self.segmenter
+            .do_segment_simple(text, segment_align_options())
     }
 
     /// Isolated-word POS for extra-correction dict rows. Unknown or split words use `D_N`.
@@ -566,10 +593,21 @@ fn segment_plain_options(convert_synonym: bool) -> DoSegmentOptions {
     }
 }
 
+fn segment_align_options() -> DoSegmentOptions {
+    DoSegmentOptions {
+        simple: Some(true),
+        strip_punctuation: Some(false),
+        strip_stopword: Some(false),
+        strip_space: Some(false),
+        convert_synonym: Some(false),
+        disable_modules: vec!["ZhtSynonymOptimizer".into()],
+    }
+}
+
 /// S2T glyphs: only `cn2tw_min` (safe: false). No `cjk2zht`——那張 JP／簡體表會把
 /// 台灣也在用的「制／娘／里」整字改掉，分詞也擋不住。一簡多繁與日文整詞交給
-/// `ZhtSynonymOptimizer`／extra-correction。璇／疱／么 等字形特例見
-/// `resources/conversion-specials/rules.txt`。
+/// `ZhtSynonymOptimizer`／extra-correction。璇／疱／么／胜肽／里長 等見
+/// `resources/conversion-specials/rules.txt`（分詞時釘整詞，轉換時再套用）。
 fn glyph_s2t(text: &str) -> String {
     cn2tw_min_with(text, &specials::current().s2t_options())
 }

@@ -1,6 +1,7 @@
 mod aggregator;
 mod checkpoint;
 mod memory;
+mod merge;
 mod run;
 mod synonym_audit;
 
@@ -12,6 +13,7 @@ pub use checkpoint::{atomic_write, build_fingerprint, Checkpoint, Fingerprint};
 pub use memory::{
     default_sampler, FakeSampler, MemoryPolicy, MemorySample, MemorySampler, ResolvedMemory,
 };
+pub use merge::{merge_extra_correction, MergeStats};
 pub use run::{run_roundtrip, RoundtripRunConfig, RoundtripRunStatus, RunStatus};
 pub use synonym_audit::{
     audit_synonym_orientation, format_orientation_report, is_left_simplified_right_traditional,
@@ -33,8 +35,20 @@ pub(crate) const MAX_WORD_CHARS: usize = 8;
 pub(crate) const MAX_LINE_CHARS: usize = 20_000;
 pub(crate) const MAX_TOKEN_COUNT: usize = 800;
 pub(crate) const MAX_EXAMPLES: usize = 3;
-/// 固定寫入 extra 分詞表，避免「和牛只剩」被切成「牛只」再轉「牛隻」。
-pub(crate) const PINNED_DICT_WORDS: &[(&str, u32, u64)] = &[("和牛", POSTAG::D_N, 1000)];
+/// 固定寫入 extra 分詞表。來源是 conversion-specials：`pin` 與 `word=`／`word^=` 的整詞。
+pub(crate) fn pinned_dict_words() -> Vec<(String, u32, u64)> {
+    super::conversion::specials::current()
+        .pinned_words()
+        .iter()
+        .map(|word| {
+            (
+                word.clone(),
+                super::conversion::specials::PIN_POS,
+                super::conversion::specials::PIN_FREQ,
+            )
+        })
+        .collect()
+}
 
 #[derive(Clone, Debug)]
 pub struct LineResult {
@@ -154,7 +168,7 @@ fn process_unit_with_buf(
     unit: &str,
     lcs_buf: Option<&mut Vec<u32>>,
 ) -> LineResult {
-    let original_tokens = service.segment_tokens(unit);
+    let original_tokens = service.segment_tokens_align(unit);
     let originals = original_words(&original_tokens);
     let simplified = service.convert_segmented(unit, Direction::T2s);
     let reconstructed = service.convert_segmented(&simplified, Direction::S2t);
@@ -166,7 +180,7 @@ fn process_unit_with_buf(
             originals,
         };
     }
-    let reconstructed_tokens = service.segment_tokens(&reconstructed);
+    let reconstructed_tokens = service.segment_tokens_align(&reconstructed);
     if original_tokens.len() > MAX_TOKEN_COUNT || reconstructed_tokens.len() > MAX_TOKEN_COUNT {
         return LineResult {
             skipped: false,
@@ -245,9 +259,17 @@ fn extract_pairs_with_buf(
         return Vec::new();
     }
     let mut pairs = Vec::new();
-    for (original_hunk, reconstructed_hunk) in token_replace_hunks(original, reconstructed, lcs_buf)
-    {
-        pairs.extend(pairs_from_hunk(&original_hunk, &reconstructed_hunk));
+    let ops = alignment_ops(original, reconstructed, lcs_buf);
+    for (index, op) in ops.iter().enumerate() {
+        let AlignOp::Replace {
+            original: original_hunk,
+            reconstructed: reconstructed_hunk,
+        } = op
+        else {
+            continue;
+        };
+        pairs.extend(pairs_from_hunk(original_hunk, reconstructed_hunk));
+        pairs.extend(pairs_from_glued_single_char_neighbors(&ops, index));
     }
     pairs
 }
@@ -350,11 +372,19 @@ fn same_conversion_family(left: &str, right: &str) -> bool {
     equal * 2 >= left_chars.len()
 }
 
-fn token_replace_hunks(
+enum AlignOp {
+    Equal(String),
+    Replace {
+        original: Vec<String>,
+        reconstructed: Vec<String>,
+    },
+}
+
+fn alignment_ops(
     original: &[String],
     reconstructed: &[String],
     lcs_buf: Option<&mut Vec<u32>>,
-) -> Vec<(Vec<String>, Vec<String>)> {
+) -> Vec<AlignOp> {
     let n = original.len();
     let m = reconstructed.len();
     let cols = m + 1;
@@ -380,7 +410,7 @@ fn token_replace_hunks(
     }
 
     enum Op {
-        Equal,
+        Equal(String),
         Delete(String),
         Insert(String),
     }
@@ -389,7 +419,7 @@ fn token_replace_hunks(
     let mut j = m;
     while i > 0 || j > 0 {
         if i > 0 && j > 0 && original[i - 1] == reconstructed[j - 1] {
-            ops.push(Op::Equal);
+            ops.push(Op::Equal(original[i - 1].clone()));
             i -= 1;
             j -= 1;
         } else if j > 0 && (i == 0 || buf[i * cols + (j - 1)] >= buf[(i - 1) * cols + j]) {
@@ -402,28 +432,92 @@ fn token_replace_hunks(
     }
     ops.reverse();
 
-    let mut hunks = Vec::new();
+    let mut aligned = Vec::new();
     let mut deleted = Vec::new();
     let mut inserted = Vec::new();
-    let flush = |deleted: &mut Vec<String>,
-                 inserted: &mut Vec<String>,
-                 hunks: &mut Vec<(Vec<String>, Vec<String>)>| {
-        if !deleted.is_empty() && !inserted.is_empty() {
-            hunks.push((std::mem::take(deleted), std::mem::take(inserted)));
-        } else {
-            deleted.clear();
-            inserted.clear();
-        }
-    };
+    let flush =
+        |deleted: &mut Vec<String>, inserted: &mut Vec<String>, aligned: &mut Vec<AlignOp>| {
+            if !deleted.is_empty() && !inserted.is_empty() {
+                aligned.push(AlignOp::Replace {
+                    original: std::mem::take(deleted),
+                    reconstructed: std::mem::take(inserted),
+                });
+            } else {
+                deleted.clear();
+                inserted.clear();
+            }
+        };
     for op in ops {
         match op {
-            Op::Equal => flush(&mut deleted, &mut inserted, &mut hunks),
+            Op::Equal(token) => {
+                flush(&mut deleted, &mut inserted, &mut aligned);
+                aligned.push(AlignOp::Equal(token));
+            }
             Op::Delete(token) => deleted.push(token),
             Op::Insert(token) => inserted.push(token),
         }
     }
-    flush(&mut deleted, &mut inserted, &mut hunks);
-    hunks
+    flush(&mut deleted, &mut inserted, &mut aligned);
+    aligned
+}
+
+fn single_cjk_char(token: &str) -> Option<&str> {
+    let mut chars = token.chars();
+    let first = chars.next()?;
+    if chars.next().is_some() || !is_cjk_char(first) {
+        return None;
+    }
+    Some(token)
+}
+
+fn replace_single_cjk_char(tokens: &[String]) -> Option<&str> {
+    if tokens.len() != 1 {
+        return None;
+    }
+    single_cjk_char(&tokens[0])
+}
+
+/// 單字差異（里→裡）本身不收；若前後剛好也是單字漢字，粘成 2 字詞（本里、里辦）。
+/// 不跟 2 字以上鄰居粘，避免「房子里」「里垃圾車」。
+fn pairs_from_glued_single_char_neighbors(
+    ops: &[AlignOp],
+    replace_index: usize,
+) -> Vec<(String, String)> {
+    let AlignOp::Replace {
+        original,
+        reconstructed,
+    } = &ops[replace_index]
+    else {
+        return Vec::new();
+    };
+    let Some(orig_ch) = replace_single_cjk_char(original) else {
+        return Vec::new();
+    };
+    let Some(recon_ch) = replace_single_cjk_char(reconstructed) else {
+        return Vec::new();
+    };
+    let mut pairs = Vec::new();
+    if let Some(left) = replace_index
+        .checked_sub(1)
+        .and_then(|index| match &ops[index] {
+            AlignOp::Equal(token) => single_cjk_char(token),
+            AlignOp::Replace { .. } => None,
+        })
+    {
+        if let Some(pair) = usable_pair(&format!("{left}{recon_ch}"), &format!("{left}{orig_ch}")) {
+            pairs.push(pair);
+        }
+    }
+    if let Some(right) = ops.get(replace_index + 1).and_then(|op| match op {
+        AlignOp::Equal(token) => single_cjk_char(token),
+        AlignOp::Replace { .. } => None,
+    }) {
+        if let Some(pair) = usable_pair(&format!("{recon_ch}{right}"), &format!("{orig_ch}{right}"))
+        {
+            pairs.push(pair);
+        }
+    }
+    pairs
 }
 
 pub fn is_cjk_word(text: &str) -> bool {
@@ -616,7 +710,7 @@ pub fn parse_synonym_entry(line: &str) -> Option<SynonymEntry> {
     })
 }
 
-fn parse_pos_mask(raw: &str) -> Option<u32> {
+pub(crate) fn parse_pos_mask(raw: &str) -> Option<u32> {
     if raw.is_empty() {
         return None;
     }
@@ -765,8 +859,8 @@ pub fn format_segment_dict(entries: &[CorrectionEntry], pos_of: &dyn Fn(&str) ->
             push_dict_row(&mut output, &mut seen, variant, pos, *count);
         }
     }
-    for (word, pos, freq) in PINNED_DICT_WORDS {
-        push_dict_row(&mut output, &mut seen, word, *pos, *freq);
+    for (word, pos, freq) in pinned_dict_words() {
+        push_dict_row(&mut output, &mut seen, &word, pos, freq);
     }
     output
 }

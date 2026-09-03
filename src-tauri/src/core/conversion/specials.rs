@@ -37,6 +37,7 @@ enum Kind {
     Variant,
     S2tMulti,
     T2sMulti,
+    Pin,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -140,7 +141,11 @@ pub(crate) struct Specials {
     s2t_table: HashMap<char, char>,
     t2s_table: HashMap<char, char>,
     rewrites: Vec<Rewrite>,
+    pinned: Vec<String>,
 }
+
+pub(crate) const PIN_POS: u32 = POSTAG::D_N;
+pub(crate) const PIN_FREQ: u64 = 1000;
 
 impl Specials {
     pub(crate) fn s2t_options(&self) -> ConvertOptions<'_> {
@@ -188,6 +193,10 @@ impl Specials {
             return output;
         }
         word.to_string()
+    }
+
+    pub(crate) fn pinned_words(&self) -> &[String] {
+        &self.pinned
     }
 }
 
@@ -283,9 +292,25 @@ pub(crate) fn parse(text: &str) -> Result<Specials, String> {
     let mut s2t_table = HashMap::new();
     let mut t2s_table = HashMap::new();
     let mut rewrites = Vec::new();
+    let mut pinned = Vec::new();
+    let mut pinned_seen = HashSet::new();
+    let mut push_pin = |word: &str, pinned: &mut Vec<String>| {
+        if word.chars().count() < 2 || !pinned_seen.insert(word.to_string()) {
+            return;
+        }
+        pinned.push(word.to_string());
+    };
 
     for (line_no, rule) in raw {
+        for word in rule.when.word_eq.iter().chain(rule.when.word_prefix.iter()) {
+            push_pin(word, &mut pinned);
+        }
         match rule.kind {
+            Kind::Pin => {
+                for word in &rule.from {
+                    push_pin(word, &mut pinned);
+                }
+            }
             Kind::Skip => {
                 let chars: String = rule.from.iter().flat_map(|item| item.chars()).collect();
                 push_skip(rule.dir, &chars, &mut skip_s2t, &mut skip_t2s);
@@ -324,6 +349,7 @@ pub(crate) fn parse(text: &str) -> Result<Specials, String> {
         s2t_table,
         t2s_table,
         rewrites,
+        pinned,
     })
 }
 
@@ -343,7 +369,7 @@ fn parse_rule(line: &str) -> Result<ParsedRule, String> {
     }
     let kind = parse_kind(fields[0]).ok_or_else(|| {
         format!(
-            "未知 kind「{}」。可用 skip / s2t / t2s / variant / s2t-multi / t2s-multi。",
+            "未知 kind「{}」。可用 skip / s2t / t2s / variant / s2t-multi / t2s-multi / pin。",
             fields[0]
         )
     })?;
@@ -378,6 +404,7 @@ fn parse_kind(value: &str) -> Option<Kind> {
         "variant" => Kind::Variant,
         "s2t-multi" => Kind::S2tMulti,
         "t2s-multi" => Kind::T2sMulti,
+        "pin" => Kind::Pin,
         _ => return None,
     })
 }
@@ -390,12 +417,13 @@ fn kind_name(kind: Kind) -> &'static str {
         Kind::Variant => "variant",
         Kind::S2tMulti => "s2t-multi",
         Kind::T2sMulti => "t2s-multi",
+        Kind::Pin => "pin",
     }
 }
 
 fn default_dir(kind: Kind) -> Dir {
     match kind {
-        Kind::Skip | Kind::S2t | Kind::Variant | Kind::S2tMulti => Dir::S2t,
+        Kind::Skip | Kind::S2t | Kind::Variant | Kind::S2tMulti | Kind::Pin => Dir::S2t,
         Kind::T2s | Kind::T2sMulti => Dir::T2s,
     }
 }
@@ -597,6 +625,36 @@ mod tests {
             specials.apply_token("好么", None, Direction::S2t, 0, 0),
             "好麼"
         );
+        for word in [
+            "和牛", "胜肽", "勝肽", "本里", "本裡", "里辦", "裡辦", "里民", "裡民", "里長", "裡長",
+            "里名", "裡名", "老么", "老幺",
+        ] {
+            assert!(
+                specials.pinned_words().iter().any(|item| item == word),
+                "pinned missing {word}: {:?}",
+                specials.pinned_words()
+            );
+        }
+        assert_eq!(
+            specials.apply_token("勝肽", None, Direction::S2t, 0, 0),
+            "胜肽"
+        );
+        assert_eq!(
+            specials.apply_token("胜肽", None, Direction::S2t, 0, 0),
+            "胜肽"
+        );
+        assert_eq!(
+            specials.apply_token("勝利", None, Direction::S2t, 0, 0),
+            "勝利"
+        );
+        assert_eq!(
+            specials.apply_token("裡長", None, Direction::S2t, 0, 0),
+            "里長"
+        );
+        assert_eq!(
+            specials.apply_token("本裡", None, Direction::S2t, 0, 0),
+            "本里"
+        );
     }
 
     #[test]
@@ -611,6 +669,7 @@ t2s-multi\t乾\t乾\tt2s\tword^=乾隆|乾坤
 t2s-multi\t乾\t干\tt2s
 s2t-multi\t只\t隻\ts2t\tpos=D_MQ+A_Q
 s2t-multi\t只\t只\ts2t
+pin\t和牛\t\ts2t
 ",
         )
         .expect("parse");
@@ -634,6 +693,9 @@ s2t-multi\t只\t只\ts2t
             specials.apply_token("只", None, Direction::S2t, POSTAG::D_D, 0),
             "只"
         );
+        assert!(specials.pinned_words().iter().any(|item| item == "和牛"));
+        assert!(specials.pinned_words().iter().any(|item| item == "乾隆"));
+        assert!(specials.pinned_words().iter().any(|item| item == "乾坤"));
     }
 
     #[test]

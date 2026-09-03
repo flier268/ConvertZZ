@@ -111,6 +111,13 @@ async fn segmented_s2t_golden_cases() {
         ("胜肽", "胜肽"),
         ("勝肽", "胜肽"),
         ("勝利", "勝利"),
+        ("里長", "里長"),
+        ("裡長", "里長"),
+        ("里长", "里長"),
+        ("里名", "里名"),
+        ("裡名", "里名"),
+        ("各位里長好", "各位里長好"),
+        ("請填里名", "請填里名"),
         ("巴西里碎屑", "巴西里碎屑"),
         ("膿疱", "膿疱"),
         ("膿皰", "膿疱"),
@@ -190,6 +197,33 @@ async fn wagyu_stays_one_word_so_zhi_is_not_zhi_classifier() {
         .await
         .unwrap();
     assert_eq!(result.text, source, "tokens={tokens:?}");
+}
+
+#[tokio::test]
+async fn peptide_and_li_titles_stay_one_word() {
+    let service = service();
+    for (source, word) in [
+        ("胜肽合成", "胜肽"),
+        ("勝肽合成", "勝肽"),
+        ("各位里長好", "里長"),
+        ("請填里名", "里名"),
+    ] {
+        let tokens = service.debug_pos(source);
+        assert!(
+            tokens.iter().any(|(item, _)| item == word),
+            "{source}: {word} should be one token, got {tokens:?}"
+        );
+        assert!(
+            !tokens.iter().any(|(item, _)| item == "胜"
+                || item == "勝"
+                || item == "肽"
+                || item == "里"
+                || item == "裡"
+                || item == "長"
+                || item == "名"),
+            "{source}: must not split {word}, got {tokens:?}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -274,6 +308,51 @@ fn with_extra_correction_requires_synonym_file() {
     std::fs::write(root.join("zht.corpus.synonym.txt"), "制度,製度\n").unwrap();
     super::ConversionService::with_extra_correction(None, &root).expect("load extra");
     let _ = std::fs::remove_dir_all(&root);
+}
+
+#[tokio::test]
+async fn neighborhood_li_and_jieju_keep_taiwan_forms() {
+    let service = service();
+    for (source, expected) in [
+        (
+            "各位鄰居好，提醒大家關於本里垃圾車時間的異動。",
+            "各位鄰居好，提醒大家關於本里垃圾車時間的異動。",
+        ),
+        (
+            "請立刻往高處移動或聯繫里辦協助。",
+            "請立刻往高處移動或聯繫里辦協助。",
+        ),
+        ("關於本里垃圾車時間", "關於本里垃圾車時間"),
+        ("聯繫里辦協助", "聯繫里辦協助"),
+        ("這裡是里辦廣播", "這裡是里辦廣播"),
+        ("各位里民", "各位里民"),
+        ("各位里長", "各位里長"),
+        ("請填里名", "請填里名"),
+        ("感到拮据", "感到拮据"),
+        ("感到拮據", "感到拮据"),
+        (
+            "这款游戏的经济设计确实比较倾向于让玩家在后期感到拮据",
+            "這款遊戲的經濟設計確實比較傾向於讓玩家在後期感到拮据",
+        ),
+    ] {
+        let result = service
+            .convert(ConversionRequest {
+                text: source.into(),
+                direction: Direction::S2t,
+                engine: EngineKind::Segmented,
+                dictionary_path: None,
+                zhconvert: None,
+                vocabulary_correction: None,
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            result.text,
+            expected,
+            "{source} tokens={:?}",
+            service.debug_pos(source)
+        );
+    }
 }
 
 #[tokio::test]

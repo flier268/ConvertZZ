@@ -14,7 +14,7 @@ ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程
 | `src-tauri/src/core/` | 文字、編碼、檔案、字典、音訊標籤與舊設定匯入 |
 | `src-tauri/roundtrip-dict/` | 語料回環比較獨立 crate，產出套件外的額外分詞修正；來源語料只讀。預設不載 extra-correction；`--extra-correction DIR` 僅供探針。建置：`cargo build --manifest-path src-tauri/Cargo.toml -p roundtrip-dict --release` |
 | `src-tauri/resources/extra-correction/` | ConvertZZ 額外修正層；與 `segment-dict` 分開。分詞表 `詞\|詞性\|權值`、同義詞 `正字,錯字\|詞性`，載入後同一趟分詞並依詞性套用；不寫入套件詞典、不做全文暴力取代 |
-| `src-tauri/resources/conversion-specials/` | 字形特例協議（`rules.txt`）：簡轉繁、一簡多繁、一繁多簡、繁轉簡、異體、skip。取代 conversion.rs 硬編碼；不寫入套件詞典 |
+| `src-tauri/resources/conversion-specials/` | 字形特例與固定整詞（`rules.txt`）：簡轉繁、一簡多繁、一繁多簡、繁轉簡、異體、skip、pin。`pin`／`word=` 在分詞時釘入、轉換時再套用；不寫入套件詞典 |
 | `data/roundtrip-correction/` | 回環工具產出（產生檔，不進 git、不進套件字典） |
 | `wiki/` | GitHub Wiki submodule（`ConvertZZ.wiki.git`）；教學與開發文件 |
 | `src-tauri/` | 視窗、托盤、快捷鍵、憑證庫、轉換核心與平台能力 |
@@ -33,7 +33,7 @@ ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程
 - Vue 只負責呈現、預覽、確認與呼叫型別化操作。
 - 變更通訊協定時，先改 `shared/contracts.ts`，再同步 `src-tauri/src/core` dispatch 與前端客戶端。
 - 前端不得取得任意 Shell。檔案路徑只可來自選擇器或已驗證的工作項目。
-- 新式引擎只使用 `ws-segment-rs` 的分詞與 `ZhtSynonymOptimizer`，字形只交給 `cjk-convert-rs`。不要新增硬編碼語意取代清單。璇／疱／么與一簡多繁等字形特例只寫 `resources/conversion-specials/rules.txt`。
+- 新式引擎只使用 `ws-segment-rs` 的分詞與 `ZhtSynonymOptimizer`，字形只交給 `cjk-convert-rs`。不要新增硬編碼語意取代清單。璇／疱／么、胜肽／里長與一簡多繁等字形特例與固定整詞只寫 `resources/conversion-specials/rules.txt`（分詞釘詞、轉換套用）。
 - 分詞與簡轉繁套件字典維持 `resources/segment-dict`（來自套件）。語料回環修正是 ConvertZZ 額外層，只放 `extra-correction` 或 `data/roundtrip-correction`，不得寫入、覆寫或併入套件詞典。
 
 ## 建置與檢查

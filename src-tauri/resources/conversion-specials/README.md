@@ -10,8 +10,9 @@ ConvertZZ 字形特例。取代 `conversion.rs` 裡的硬編碼（璇／疱／�
 | `t2s-multi` | 一繁多簡（依上下文選簡體） |
 | `variant` | 異體正規化（例如台灣醫學用疱，不用皰） |
 | `skip` | 字形引擎（`cn2tw_min`／`tw2cn`）不要改這個字 |
+| `pin` | 固定整詞：分詞時釘入，避免被切開（和牛）。`to` 可留空 |
 
-這層與套件 `segment-dict`、語料回環 `extra-correction` 分開。整詞同義詞仍放 extra-correction；這裡只放單字／有上下文的字形特例。不要把規則寫進 `conversion.rs`。
+這層與套件 `segment-dict`、語料回環 `extra-correction` 分開。語料產生的整詞同義詞仍放 extra-correction。`pin` 與 `word=`／`word^=` 列出的 2 字以上詞會在分詞時釘入（固定 extra），轉換繁體時仍走 skip／s2t-multi。不要把規則寫進 `conversion.rs`。
 
 ## 檔案
 
@@ -50,6 +51,9 @@ kind<TAB>from<TAB>to<TAB>dir<TAB>when
 - **璇**：`cn2tw_min` 會改成璿；人名曾依璇與孫運璿是不同字，只 `skip`，不互改。
 - **疱**：台灣醫學常用疱，`skip` 避免改成皰；異體皰正規成疱。
 - **么**：語氣／疑問用麼；老么、么兒、么女等排行保留么（幺在這些詞正規成么）。
+- **和牛**：`pin`，避免「和牛只剩」切成「牛只」。
+- **胜肽**：`word=胜肽|勝肽`，分詞釘整詞，轉換維持胜（不要勝肽）。
+- **里長／里名／本里／里辦／里民**：`word=` 釘整詞，村里用「里」不改「裡」。
 
 一簡多繁如「只／隻」「制／製」若已有 extra-correction 整詞＋詞性，不要在這裡再做無條件單字取代。需要時用 `s2t-multi`＋`pos=`。
 

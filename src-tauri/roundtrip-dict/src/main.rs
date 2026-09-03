@@ -1,6 +1,7 @@
 use convertzz_lib::roundtrip_dict::{
-    audit_synonym_orientation, default_sampler, format_orientation_report, resolve_synonym_path,
-    run_roundtrip, CorpusSelect, MemoryPolicy, RoundtripRunConfig, RunStatus,
+    audit_synonym_orientation, default_extra_correction_root, default_sampler,
+    format_orientation_report, merge_extra_correction, resolve_synonym_path, run_roundtrip,
+    CorpusSelect, MemoryPolicy, RoundtripRunConfig, RunStatus,
 };
 use convertzz_lib::ConversionService;
 use std::path::PathBuf;
@@ -10,6 +11,7 @@ use std::sync::Arc;
 enum Command {
     Roundtrip(RoundtripArgs),
     CheckOrientation(OrientationArgs),
+    MergeExtra(MergeExtraArgs),
 }
 
 struct RoundtripArgs {
@@ -33,6 +35,11 @@ struct OrientationArgs {
     full: bool,
 }
 
+struct MergeExtraArgs {
+    from: PathBuf,
+    into: PathBuf,
+}
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("{error}");
@@ -44,6 +51,7 @@ fn run() -> Result<(), String> {
     match parse_args()? {
         Command::Roundtrip(args) => run_roundtrip_command(args),
         Command::CheckOrientation(args) => run_orientation_command(args),
+        Command::MergeExtra(args) => run_merge_extra_command(args),
     }
 }
 
@@ -133,6 +141,20 @@ fn run_orientation_command(args: OrientationArgs) -> Result<(), String> {
     }
 }
 
+fn run_merge_extra_command(args: MergeExtraArgs) -> Result<(), String> {
+    let stats = merge_extra_correction(&args.from, &args.into)?;
+    eprintln!(
+        "已合併進 {}。同義詞保留 {}、新增 {} 筆（+{} 個錯詞）；分詞表保留 {}、新增 {} 列。",
+        args.into.display(),
+        stats.synonym_entries_kept,
+        stats.synonym_entries_added,
+        stats.synonym_variants_added,
+        stats.dict_rows_kept,
+        stats.dict_rows_added
+    );
+    Ok(())
+}
+
 fn exit_code(status: &RunStatus, sigint: bool, sigterm: bool) -> i32 {
     match status {
         RunStatus::Complete | RunStatus::Limit => 0,
@@ -161,6 +183,10 @@ fn parse_args() -> Result<Command, String> {
         Some("check-synonym-orientation") => {
             argv.next();
             Ok(Command::CheckOrientation(parse_orientation_args(&mut argv)?))
+        }
+        Some("merge-extra") => {
+            argv.next();
+            Ok(Command::MergeExtra(parse_merge_extra_args(&mut argv)?))
         }
         _ => Ok(Command::Roundtrip(parse_roundtrip_args(&mut argv)?)),
     }
@@ -195,6 +221,31 @@ fn parse_orientation_args(
         output,
         full,
     })
+}
+
+fn parse_merge_extra_args(
+    args: &mut impl Iterator<Item = String>,
+) -> Result<MergeExtraArgs, String> {
+    let mut from =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/roundtrip-correction");
+    let mut into = default_extra_correction_root();
+    let mut args = args.peekable();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "-h" | "--help" => {
+                print_merge_extra_help();
+                std::process::exit(0);
+            }
+            "--from" => from = required_path(&mut args, "--from")?,
+            "--into" => into = required_path(&mut args, "--into")?,
+            other => {
+                return Err(format!(
+                    "未知參數：{other}\n使用 merge-extra --help 查看用法。"
+                ))
+            }
+        }
+    }
+    Ok(MergeExtraArgs { from, into })
 }
 
 fn parse_roundtrip_args(args: &mut impl Iterator<Item = String>) -> Result<RoundtripArgs, String> {
@@ -343,10 +394,13 @@ roundtrip-dict — 以套件分詞／簡轉繁做回環，產出 ConvertZZ 額�
 用法：
   cargo run --manifest-path src-tauri/Cargo.toml -p roundtrip-dict -- --sources DIR [選項]
   cargo run --manifest-path src-tauri/Cargo.toml -p roundtrip-dict -- check-synonym-orientation [選項]
+  cargo run --manifest-path src-tauri/Cargo.toml -p roundtrip-dict -- merge-extra [選項]
 
 子命令：
   check-synonym-orientation
                         找出同義詞檔疑似「左邊簡體、右邊繁體」的條目
+                        （詳見該子命令 --help）
+  merge-extra           把產出的 zht.corpus.* 合併進 extra-correction，不整包覆蓋
                         （詳見該子命令 --help）
 
 選項：
@@ -395,7 +449,7 @@ roundtrip-dict — 以套件分詞／簡轉繁做回環，產出 ConvertZZ 額�
 寫入產出後會自動跑導向檢查；回環成功時即使有可疑條目仍 exit 0。
 要單獨重跑檢查或讓可疑變成非零退出，用子命令 check-synonym-orientation。
 
-套用時只複製兩個 zht.corpus.* 到 extra-correction。"
+套用請用 merge-extra 合併兩個 zht.corpus.*，不要 cp 整包覆蓋 extra-correction。"
     );
 }
 
@@ -427,5 +481,27 @@ roundtrip-dict check-synonym-orientation — 找出疑似左簡右繁的同義�
   2    有可疑條目
 
 報告欄位：line confidence reason canonical variant suggested_flip raw"
+    );
+}
+
+fn print_merge_extra_help() {
+    println!(
+        "\
+roundtrip-dict merge-extra — 把回環產出合併進 extra-correction
+
+不整包覆蓋。既有正字優先（不會把 機制,機製 翻成 機製,機制）。
+新的 2 字詞對（本里,本裡）與分詞列才追加。固定保護詞來自 conversion-specials（`pin`／`word=`：和牛、本里、里辦、里民、里長、里名、胜肽），會寫回分詞表。
+
+用法：
+  cargo run --manifest-path src-tauri/Cargo.toml -p roundtrip-dict -- \\
+    merge-extra [--from DIR] [--into DIR]
+
+選項：
+  --from DIR   roundtrip 產出目錄（預設：data/roundtrip-correction）
+  --into DIR   extra-correction 目錄（預設：src-tauri/resources/extra-correction）
+  -h, --help   顯示說明
+
+來源必須含 zht.corpus.synonym.txt 與 zht.corpus.dict.txt。
+不要把 --from 指到 extra-correction，也不要把 --into 指到套件字典。"
     );
 }

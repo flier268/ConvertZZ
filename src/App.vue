@@ -26,7 +26,7 @@ import BrandMark from "./BrandMark.vue";
 import DropActionDialog from "./components/DropActionDialog.vue";
 import { isOnboardingComplete, loadSettings, patchSavedSettings } from "./lib/settings";
 import { core } from "./lib/coreClient";
-import { setCliInvocation } from "./lib/cli";
+import { applyParsedCliNavigation, setCliInvocation } from "./lib/cli";
 import type { ParsedCli } from "@shared/contracts";
 import {
   buildDropCliInvocation,
@@ -88,6 +88,19 @@ function onTourStarted(): void {
   void invoke("show_main_window");
 }
 
+async function applyIncomingCli(parsed: ParsedCli): Promise<void> {
+  const navigation = await applyParsedCliNavigation(parsed, (page) => {
+    active.value = page;
+  });
+  if (navigation.parseError) {
+    await showAppToast(navigation.parseError);
+    return;
+  }
+  if (navigation.filenamePreviewQueued) {
+    await showAppToast("已同時建立檔名轉換預覽，可至「檔案與檔名」查看。");
+  }
+}
+
 provide("replayOnboarding", () => tour.value?.replay());
 
 onMounted(async () => {
@@ -129,9 +142,7 @@ onMounted(async () => {
         args,
         defaultEngine: settings.engine,
       });
-      setCliInvocation(parsed);
-      if (parsed.mode === "audio") active.value = "audio";
-      else if (parsed.mode === "file") active.value = "files";
+      await applyIncomingCli(parsed);
     }
     step = "listen:navigate";
     unlisten.push(
@@ -157,9 +168,7 @@ onMounted(async () => {
           args: payload.slice(1),
           defaultEngine: currentSettings.engine,
         });
-        setCliInvocation(parsed);
-        active.value =
-          parsed.mode === "audio" ? "audio" : parsed.mode === "file" ? "files" : "quick";
+        await applyIncomingCli(parsed);
       }),
     );
     step = "listen:file-drop";

@@ -344,6 +344,31 @@ describe("驗收項目的自動化契約", () => {
     expect(page).toContain("await createPlan()");
   });
 
+  it("無頭 CLI 全程不開 GUI，並以 2.0 --flag 為主、舊 /x: 相容", () => {
+    const cli = readProjectFile("src-tauri/src/core/cli.rs");
+    const headless = readProjectFile("src-tauri/src/core/headless.rs");
+    const rust = readProjectFile("src-tauri/src/lib.rs");
+    const contracts = readProjectFile("shared/contracts.ts");
+    expect(cli).toContain('"--headless"');
+    expect(cli).toContain('"--output" | "-o"');
+    expect(cli).toContain('"--yes" | "-y"');
+    expect(cli).toContain('"--direction"');
+    expect(cli).toContain('"--filename"');
+    expect(cli).toContain("filename_flag && (file_flag || audio_flag)");
+    expect(cli).toContain("!file_flag && !audio_flag");
+    expect(cli).toContain('"/o:utf8"');
+    expect(readProjectFile("src/lib/cli.ts")).toContain("applyParsedCliNavigation");
+    expect(readProjectFile("src/App.vue")).toContain("applyParsedCliNavigation");
+    expect(cli).toContain("output_encoding_explicit");
+    expect(headless).toContain("CliMode::Audio");
+    expect(headless).toContain("是否寫入");
+    expect(rust.indexOf("args_request_headless")).toBeLessThan(
+      rust.indexOf("tauri_plugin_single_instance"),
+    );
+    expect(contracts).toContain("confirmWrite?");
+    expect(contracts).toContain("headless?");
+  });
+
   it("懸浮球拖入檔案會詢問動作後再開啟預覽流程", () => {
     const floating = readProjectFile("src/FloatingBall.vue");
     const app = readProjectFile("src/App.vue");

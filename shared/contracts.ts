@@ -182,6 +182,28 @@ export interface ParsedCli {
   vocabularyCorrection: "settings" | "enabled" | "disabled";
   /** 轉換前備份；預設 true。`/b:f` 可關閉。 */
   backup: boolean;
+  /** 無頭 CLI：全程不開 GUI。 */
+  headless?: boolean;
+  /** 寫入確認：`/y`／`--yes`。 */
+  confirmWrite?: boolean;
+  /** 是否明確指定 `/o:*`。 */
+  outputEncodingExplicit?: boolean;
+  /** 是否明確指定 `--input`／`/i:*`。 */
+  inputEncodingExplicit?: boolean;
+  /** 是否明確指定 `/f:*`／`--direction`。 */
+  directionExplicit?: boolean;
+  /** 是否明確指定 `--engine`／`/e:*`。 */
+  engineExplicit?: boolean;
+  /** 是否明確指定 `--vocabulary`／`/d:*`。 */
+  vocabularyExplicit?: boolean;
+  /** 是否明確指定 `--backup`／`--no-backup`／`/b:*`。 */
+  backupExplicit?: boolean;
+  /** 無頭時載入本機全域／可攜設定（`--globalconfig`）。 */
+  useGlobalConfig?: boolean;
+  /** 無頭時載入指定設定檔（`--config <路徑>`）。 */
+  configPath?: string;
+  /** 已知旗標但值無效時的解析錯誤。 */
+  parseErrors?: string[];
 }
 
 export interface ShortcutSetting {

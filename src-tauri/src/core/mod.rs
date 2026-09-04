@@ -7,12 +7,15 @@ mod dictionary_service;
 mod encoding;
 mod error;
 mod files;
+pub mod headless;
 mod parallelism;
 pub mod roundtrip_dict;
 mod settings;
 mod types;
 mod utility;
 mod zhconvert;
+
+pub use cli::{args_request_headless, args_request_help, print_cli_help};
 
 pub use conversion::ConversionService;
 pub use error::CoreError;
@@ -225,7 +228,7 @@ pub async fn dispatch(
                 .get("defaultEngine")
                 .and_then(Value::as_str)
                 .and_then(|value| serde_json::from_value(Value::String(value.to_string())).ok());
-            to_value(cli::parse_legacy_cli(&args, default_engine))
+            to_value(cli::parse_cli(&args, default_engine))
         }
         other => Err(CoreError::new(
             "UNKNOWN_OPERATION",
@@ -260,7 +263,6 @@ fn selected_paths(payload: &Value) -> Option<Vec<String>> {
         })
 }
 
-#[allow(dead_code)]
 pub fn zhconvert_client(state: &CoreState) -> &ZhConvertClient {
     &state.conversion.zhconvert
 }

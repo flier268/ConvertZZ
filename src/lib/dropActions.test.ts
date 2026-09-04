@@ -44,6 +44,16 @@ describe("dropActions", () => {
       operation: "filename",
       vocabularyCorrection: "settings",
       backup: false,
+      headless: false,
+      confirmWrite: false,
+      outputEncodingExplicit: false,
+      inputEncodingExplicit: false,
+      directionExplicit: true,
+      engineExplicit: false,
+      vocabularyExplicit: false,
+      backupExplicit: false,
+      useGlobalConfig: false,
+      parseErrors: [],
     });
   });
 

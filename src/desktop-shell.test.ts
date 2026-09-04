@@ -168,6 +168,37 @@ describe("Tauri desktop shell", () => {
     expect(main).toContain('windows_subsystem = "windows"');
   });
 
+  it("early-exits headless CLI before single-instance and GUI setup", () => {
+    const rust = readProjectFile("src-tauri/src/lib.rs");
+    const headless = readProjectFile("src-tauri/src/core/headless.rs");
+    const cli = readProjectFile("src-tauri/src/core/cli.rs");
+    const cargo = readProjectFile("src-tauri/Cargo.toml");
+
+    expect(rust.indexOf("args_request_headless")).toBeLessThan(
+      rust.indexOf("tauri_plugin_single_instance"),
+    );
+    expect(rust).toContain("core::headless::run");
+    expect(rust).toContain("ensure_headless_console");
+    expect(rust).toContain("AttachConsole");
+    expect(rust).toContain("GetStdHandle");
+    expect(rust).toContain("GetFileType");
+    expect(rust).toContain("SetStdHandle");
+    expect(rust).toContain("CONOUT$");
+    expect(cargo).toContain("Win32_System_Console");
+    expect(cargo).toContain("Win32_Storage_FileSystem");
+    expect(cli).toContain('"--headless"');
+    expect(cli).toContain('"--output" | "-o"');
+    expect(cli).toContain('"--yes" | "-y"');
+    expect(cli).toContain('"--globalconfig"');
+    expect(cli).toContain('"--config"');
+    expect(cli).toContain('"/o:utf8"'); // 舊語法相容
+    expect(rust).toContain("args_request_help");
+    expect(headless).toContain("confirm_write");
+    expect(headless).toContain("load_cli_settings");
+    expect(headless).toContain("files.plan");
+    expect(headless).toContain("audio.plan");
+  });
+
   it("positions the floating ball before showing it", () => {
     const app = readProjectFile("src/App.vue");
     const ball = readProjectFile("src/FloatingBall.vue");

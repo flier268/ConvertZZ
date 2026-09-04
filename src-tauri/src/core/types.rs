@@ -376,6 +376,39 @@ pub struct ParsedCli {
     pub operation: FileMode,
     pub vocabulary_correction: VocabularyCorrection,
     pub backup: bool,
+    /// 無頭 CLI：全程不開 GUI。`/headless`／`--headless`，或經典 `/o:*`＋路徑且未指定 `/file`／`/audio`。
+    #[serde(default)]
+    pub headless: bool,
+    /// 寫入確認：`/y`／`--yes`。無頭非 TTY 時必須為 true。
+    #[serde(default)]
+    pub confirm_write: bool,
+    /// 是否明確指定 `/o:*`（經典無頭觸發條件之一）。
+    #[serde(default)]
+    pub output_encoding_explicit: bool,
+    /// 是否明確指定 `--input`／`/i:*`。
+    #[serde(default)]
+    pub input_encoding_explicit: bool,
+    /// 是否明確指定 `/f:*`／`--direction`。
+    #[serde(default)]
+    pub direction_explicit: bool,
+    /// 是否明確指定 `--engine`／`/e:*`。
+    #[serde(default)]
+    pub engine_explicit: bool,
+    /// 是否明確指定 `--vocabulary`／`/d:*`。
+    #[serde(default)]
+    pub vocabulary_explicit: bool,
+    /// 是否明確指定 `--backup`／`--no-backup`／`/b:*`。
+    #[serde(default)]
+    pub backup_explicit: bool,
+    /// 無頭時載入本機全域／可攜設定（`--globalconfig`）。不可與 `config_path` 併用。
+    #[serde(default)]
+    pub use_global_config: bool,
+    /// 無頭時載入指定設定檔（`--config <路徑>`）。不可與 `use_global_config` 併用。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_path: Option<String>,
+    /// 已知旗標但值無效時的解析錯誤（無頭會失敗；GUI 可忽略）。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parse_errors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

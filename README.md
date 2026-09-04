@@ -239,43 +239,48 @@ AppImage 會封裝建置時收集到的對應執行函式庫。
 
 舊版 `Dictionary.csv` 會依 UTF-8 BOM 六欄格式讀取。
 
-`/file` 會開啟檔案預覽。
+### 2.0 命令列（建議）
 
-`/audio` 會開啟音訊標籤預覽。
+```bash
+ConvertZZ --help
+ConvertZZ --file book.txt                          # GUI 預覽
+ConvertZZ --audio song.mp3                         # GUI 預覽
+ConvertZZ --headless --file --direction s2t -y a.txt
+ConvertZZ --output utf8 --direction s2t -y "books/*.txt" "out/*.txt"
+ConvertZZ --headless --audio --direction s2t -y song.mp3
+ConvertZZ --headless --file --globalconfig -y a.txt
+ConvertZZ --headless --file --config ./my-settings.json -y a.txt
+```
 
-`/e:l` 代表舊版字典引擎。
+| 選項 | 說明 |
+| --- | --- |
+| `--file` | 檔案／檔名模式（GUI 預覽；搭配 `--headless` 則為 CLI） |
+| `--audio` | 音訊標籤模式 |
+| `--headless` | 無頭 CLI（不開視窗） |
+| `--yes`／`-y` | 確認寫入（無頭非 TTY 必填） |
+| `--input`／`-i` | 來源編碼：`utf8`、`utf16le`、`utf16be`、`gbk`、`big5`… |
+| `--output`／`-o` | 輸出編碼（明確指定且未用 `--file`／`--audio` 時會進無頭；可與純 `--filename` 併用） |
+| `--output-path` | 輸出路徑（亦可為第二個位置參數） |
+| `--direction` | `s2t`／`t2s`／`none`（無頭且未載入設定時必填） |
+| `--engine` | `segmented`／`legacy`／`zhconvert`（無頭預設 `segmented`） |
+| `--vocabulary` | `on`／`off`／`settings`（無頭未載入設定時 `settings` 無效，預設 `on`） |
+| `--globalconfig` | 無頭時載入本機全域／可攜設定 |
+| `--config` | 無頭時載入指定設定檔（不可與 `--globalconfig` 併用） |
+| `--filename` | 只轉檔名；與 `--file`／`--audio` 併用＝內容或標籤＋檔名 |
+| `--operation` | `content`／`filename`／`both`（進階） |
+| `--backup`／`--no-backup` | 轉換前 `.bak` 備份（預設開啟） |
 
-`/e:f` 代表 ZhConvert 引擎。
+無頭預設**不讀設定**，必要參數（至少 `--direction`）須由命令列提供；需要沿用 GUI 設定時加上 `--globalconfig` 或 `--config`。無頭行程在 GUI／single-instance 之前結束，因此不論主程式視窗是否已開啟，行為都相同。
 
-`/e:n` 代表新式分詞引擎。
+未指定 `--file`／`--audio` 時，第二個位置參數仍為輸出路徑；輸入／輸出路徑支援 `*` 萬用字元。
 
-`/f:t` 代表簡轉繁。
+GUI 命令列（`--file`、`--audio`、或僅路徑且無 `--output`）仍會先顯示預覽再寫入。無頭模式在 CLI 顯示計劃，並要求 `-y` 或互動確認（是／否）後才寫入。`--audio --filename` 會先寫標籤再改檔名，只確認一次。
 
-`/f:s` 代表繁轉簡。
+檔案、檔名與音訊標籤寫入前預設會建立 `.bak` 備份；選取資料夾時備份整份資料夾為 `資料夾.bak`。可在設定中關閉「轉換前自動備份」，或於命令列使用 `--no-backup`。
 
-`/f:d` 代表不轉換字形。
+### 舊版參數相容
 
-`/d:t` 代表啟用詞彙修正。
-
-`/d:f` 代表停用詞彙修正。
-
-`/d:s` 代表沿用設定。
-
-`/b:t` 代表轉換前建立 `.bak` 備份（預設）。
-
-`/b:f` 代表不建立備份。
-
-`/i:*` 與 `/o:*` 會設定來源與輸出編碼。
-
-未指定 `/file` 時，第二個檔案參數會沿用舊版的輸出路徑語意。
-
-輸入檔名與輸出檔名支援舊版的 `*` 萬用字元對應。
-
-命令列檔案仍會先顯示預覽。
-
-這項行為符合 2.0 版的寫入安全規則。
-
-檔案、檔名與音訊標籤寫入前預設會建立 `.bak` 備份；選取資料夾時備份整份資料夾為 `資料夾.bak`。可在設定中關閉「轉換前自動備份」，或於命令列使用 `/b:f`。
+`/file`、`/audio`、`/o:utf8`、`/f:t`、`/d:t`、`/e:n`、`/b:f`、`/y` 等舊語法仍可解析，僅供相容，**不再擴充或作為文件範例**。新腳本請改用上表的 `--` 選項。
 
 ## 開發與建置環境
 

@@ -49,6 +49,16 @@ export function buildDropCliInvocation(
     operation: choice.operation,
     vocabularyCorrection: "settings",
     backup: settings.autoBackupBeforeConversion,
+    headless: false,
+    confirmWrite: false,
+    outputEncodingExplicit: false,
+    inputEncodingExplicit: false,
+    directionExplicit: true,
+    engineExplicit: false,
+    vocabularyExplicit: false,
+    backupExplicit: false,
+    useGlobalConfig: false,
+    parseErrors: [],
   };
 }
 

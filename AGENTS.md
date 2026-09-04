@@ -110,7 +110,7 @@ Vitest 涵蓋 `src/**/*.test.ts` 與 `tests/**/*.test.ts`。轉換核心單元�
 - 舊版 `ConvertZZ.json` 只讀取，結果另存為 2.0 設定，不得修改來源。`Dictionary.csv` 必須先詢問，再建立不覆蓋的時間戳備份。備份失敗時不得寫入或覆寫。
 - `Dictionary.csv` 維持 UTF-8 BOM 六欄格式；倉庫來源為 `resources/Dictionary.csv`。
 - 舊 WPF 原始碼已於 K-07 移除；可自 git 標籤 `legacy-wpf-final` 回復 `ConvertZZ/`。
-- 命令列保持舊參數語意，但檔案作業仍要先預覽。不要恢復無確認寫入。
+- 命令列以 2.0 `--flag` 為準（如 `--output`、`--direction`、`--headless`、`--yes`）；舊版 `/o:utf8`、`/f:t` 等仍可解析但不做後續擴充。檔案作業須先預覽（GUI）或 CLI 計劃摘要後確認。無頭模式（`--headless`，或明確 `--output`／`-o` 且未指定 `--file`／`--audio`）全程不開 GUI，寫入需 `--yes`／`-y` 或 TTY 確認（是／否）；`--audio --filename` 先寫標籤再改名、只確認一次。不要恢復無確認寫入。無頭預設不讀設定，須由命令列提供必要參數（至少 `--direction`）；`--globalconfig` 載入本機全域／可攜設定，`--config <路徑>` 載入指定設定檔（二者不可併用）。無頭在 `tauri::Builder`／single-instance 之前 early-exit，行為不依賴 GUI 是否已開啟。
 - 自動更新只簽署 Windows 安裝程式與 Linux AppImage。公鑰放在 `tauri.conf.json`，私鑰只存在 GitHub Secrets `TAURI_SIGNING_PRIVATE_KEY`。
 - 授權維持 GPL-3.0-only。第三方授權聲明必須同步更新。
 

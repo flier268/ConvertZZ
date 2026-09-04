@@ -636,8 +636,81 @@ async fn check_signed_update(
     }))
 }
 
+#[cfg(windows)]
+fn ensure_headless_console() {
+    use std::fs::OpenOptions;
+    use std::os::windows::io::IntoRawHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::Storage::FileSystem::{
+        GetFileType, FILE_TYPE_CHAR, FILE_TYPE_DISK, FILE_TYPE_PIPE,
+    };
+    use windows::Win32::System::Console::{
+        AllocConsole, AttachConsole, GetStdHandle, SetStdHandle, ATTACH_PARENT_PROCESS,
+        STD_ERROR_HANDLE, STD_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+    };
+
+    // windows subsystem 啟動時 stdio 常為無效；先掛上 console。
+    // 僅在把手無效時才綁 CON*，保留已重新導向到檔案／pipe 的把手。
+    unsafe {
+        if AttachConsole(ATTACH_PARENT_PROCESS).is_err() {
+            let _ = AllocConsole();
+        }
+    }
+
+    let handle_usable = |which: STD_HANDLE| -> bool {
+        unsafe {
+            let Ok(handle) = GetStdHandle(which) else {
+                return false;
+            };
+            if handle.is_invalid() {
+                return false;
+            }
+            matches!(
+                GetFileType(handle),
+                FILE_TYPE_DISK | FILE_TYPE_PIPE | FILE_TYPE_CHAR
+            )
+        }
+    };
+
+    let bind = |path: &str, read: bool, write: bool, which: STD_HANDLE| {
+        if handle_usable(which) {
+            return;
+        }
+        let mut options = OpenOptions::new();
+        if read {
+            options.read(true);
+        }
+        if write {
+            options.write(true);
+        }
+        if let Ok(file) = options.open(path) {
+            let handle = HANDLE(file.into_raw_handle());
+            unsafe {
+                let _ = SetStdHandle(which, handle);
+            }
+        }
+    };
+    bind("CONIN$", true, false, STD_INPUT_HANDLE);
+    bind("CONOUT$", false, true, STD_OUTPUT_HANDLE);
+    bind("CONOUT$", false, true, STD_ERROR_HANDLE);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let cli_args: Vec<String> = std::env::args().skip(1).collect();
+    if core::args_request_help(&cli_args) {
+        #[cfg(windows)]
+        ensure_headless_console();
+        core::print_cli_help();
+        std::process::exit(0);
+    }
+    if core::args_request_headless(&cli_args) {
+        #[cfg(windows)]
+        ensure_headless_console();
+        let code = core::headless::run(&cli_args, discover_dictionary(None));
+        std::process::exit(code);
+    }
+
     tauri::Builder::default()
         .manage(Arc::new(
             CoreState::new(discover_dictionary(None)).expect("無法初始化轉換核心"),

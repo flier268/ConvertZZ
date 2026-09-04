@@ -6,6 +6,22 @@ function readProjectFile(path: string): string {
   return readFileSync(fileURLToPath(new URL(`../${path}`, import.meta.url)), "utf8");
 }
 
+describe("CI 工作流程契約", () => {
+  const ci = readProjectFile(".github/workflows/ci.yml");
+
+  it("避免同一次推送重複跑 CI：master push + PR，且略過 tags", () => {
+    expect(ci).toMatch(/^\s+branches:\s*$/m);
+    expect(ci).toContain("- master");
+    expect(ci).toContain("pull_request:");
+    expect(ci).not.toMatch(/^on:\s*\n\s+push:\s*\n\s+pull_request:/m);
+    expect(ci).toContain("concurrency:");
+    expect(ci).toContain("cancel-in-progress: true");
+    expect(ci).toContain(
+      "group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}",
+    );
+  });
+});
+
 describe("發行工作流程契約", () => {
   const workflow = readProjectFile(".github/workflows/release.yml");
   const tauri = readProjectFile("src-tauri/tauri.conf.json");
@@ -129,5 +145,11 @@ describe("發行工作流程契約", () => {
     expect(workflow).toContain("os: windows-latest");
     expect(gitattributes).toMatch(/^\*\s+text=auto\s+eol=lf\s*$/m);
     expect(prettier).toContain('"endOfLine": "lf"');
+  });
+
+  it("Release 同一標籤重推會取消進行中的舊執行", () => {
+    expect(workflow).toContain("concurrency:");
+    expect(workflow).toContain("group: ${{ github.workflow }}-${{ github.ref }}");
+    expect(workflow).toContain("cancel-in-progress: true");
   });
 });

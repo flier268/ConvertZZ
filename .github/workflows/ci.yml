@@ -2,10 +2,18 @@ name: CI
 
 on:
   push:
+    # 只在預設分支跑 push CI；功能分支改由 pull_request 觸發，避免同一次推送跑兩份。
+    # 不監聽 tags，以免推 v* 標籤時與 Release 重複（Release 已跑 pnpm check）。
+    branches:
+      - master
   pull_request:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:

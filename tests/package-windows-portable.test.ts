@@ -52,10 +52,10 @@ describe("Windows 免安裝 zip 打包", () => {
     try {
       const result = packageWindowsPortable({
         releaseDir,
-        version: "v2.0.0-beta7",
+        version: "v2.0.0-beta8",
         outDir,
       });
-      expect(result.zipName).toBe("ConvertZZ_2.0.0-beta7_x64-portable.zip");
+      expect(result.zipName).toBe("ConvertZZ_2.0.0-beta8_x64-portable.zip");
       expect(result.zipPath).toBe(join(outDir, result.zipName));
 
       const bytes = readFileSync(result.zipPath);

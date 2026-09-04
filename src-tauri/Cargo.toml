@@ -1,6 +1,6 @@
 [package]
 name = "convertzz"
-version = "2.0.0-beta7"
+version = "2.0.0-beta8"
 description = "Cross-platform Chinese text conversion desktop application"
 authors = ["ConvertZZ contributors"]
 license = "GPL-3.0-only"

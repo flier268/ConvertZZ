@@ -1,6 +1,6 @@
 [package]
 name = "roundtrip-dict"
-version = "2.0.0-beta7"
+version = "2.0.0-beta8"
 description = "Corpus roundtrip extra-correction generator for ConvertZZ"
 authors = ["ConvertZZ contributors"]
 license = "GPL-3.0-only"

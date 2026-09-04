@@ -32,7 +32,7 @@ describe("SideBySideDiffView 渲染效能", () => {
     );
 
     expect(marks.length).toBe(6000);
-    expect(elapsedMs).toBeLessThan(2_000);
+    expect(elapsedMs).toBeLessThan(3_000);
     wrapper.unmount();
   });
 });

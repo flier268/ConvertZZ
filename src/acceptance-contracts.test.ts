@@ -355,13 +355,15 @@ describe("驗收項目的自動化契約", () => {
     expect(cli).toContain('"--direction"');
     expect(cli).toContain('"--filename"');
     expect(cli).toContain("filename_flag && (file_flag || audio_flag)");
-    expect(cli).toContain("!file_flag && !audio_flag");
+    expect(cli.replace(/\s+/g, " ")).toContain("!file_flag && !audio_flag");
     expect(cli).toContain('"/o:utf8"');
     expect(readProjectFile("src/lib/cli.ts")).toContain("applyParsedCliNavigation");
     expect(readProjectFile("src/App.vue")).toContain("applyParsedCliNavigation");
     expect(cli).toContain("output_encoding_explicit");
     expect(headless).toContain("CliMode::Audio");
-    expect(headless).toContain("是否寫入");
+    expect(headless).toContain("將寫入");
+    expect(headless).toContain("是否繼續？");
+    expect(headless).toContain("確認寫入");
     expect(rust.indexOf("args_request_headless")).toBeLessThan(
       rust.indexOf("tauri_plugin_single_instance"),
     );

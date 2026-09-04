@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: 安裝相依套件
+        run: pnpm install --frozen-lockfile
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: ci
+          save-if: ${{ github.event_name != 'pull_request' }}
+      - name: 安裝 Linux 建置套件
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ffmpeg libayatana-appindicator3-dev libdbus-1-dev \
+            librsvg2-dev libwebkit2gtk-4.1-dev pkg-config
+      - name: 檢查前端
+        run: pnpm run check
+      - name: 執行 Rust 核心測試
+        run: cargo test --manifest-path src-tauri/Cargo.toml --workspace -- --test-threads=1
+
+  e2e:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: 安裝相依套件
+        run: pnpm install --frozen-lockfile
+      - name: 安裝 Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: 執行前端 e2e
+        run: pnpm run test:e2e
+
+  rust-format:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: 檢查 Rust 格式
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check

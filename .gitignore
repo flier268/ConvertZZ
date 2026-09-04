@@ -259,3 +259,22 @@ paket-files/
 # Python Tools for Visual Studio (PTVS)
 __pycache__/
 *.pyc
+node_modules/
+dist/
+coverage/
+src-tauri/target/
+src-tauri/gen/
+src-tauri/icons/android/
+src-tauri/icons/ios/
+src-tauri/icons/*.icns
+src-tauri/icons/[0-9]*x*.png
+src-tauri/icons/Square*Logo.png
+src-tauri/icons/StoreLogo.png
+.vite/
+tests/.cache/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+*.log
+data/roundtrip-correction/

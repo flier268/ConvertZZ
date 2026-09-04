@@ -1,0 +1,101 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ConvertZZ",
+  "version": "2.0.0-beta8",
+  "identifier": "dev.flier268.convertzz",
+  "build": {
+    "beforeDevCommand": "pnpm run dev:web",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost blob: data:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost https://api.zhconvert.org https://api.github.com"
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "ConvertZZ 2.0",
+        "width": 1180,
+        "height": 760,
+        "minWidth": 960,
+        "minHeight": 640,
+        "center": true,
+        "focus": false,
+        "visible": false,
+        "create": false
+      },
+      {
+        "label": "floating",
+        "url": "index.html?window=floating",
+        "title": "ConvertZZ",
+        "width": 72,
+        "height": 72,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "backgroundColor": [0, 0, 0, 0],
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "focus": false,
+        "visible": false,
+        "create": false
+      },
+      {
+        "label": "toast",
+        "url": "index.html?window=toast",
+        "title": "ConvertZZ",
+        "width": 280,
+        "height": 140,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "focus": false,
+        "visible": false,
+        "create": false
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "appimage", "deb", "rpm"],
+    "resources": {
+      "../resources/Dictionary.csv": "Dictionary.csv",
+      "resources/segment-dict": "segment-dict",
+      "resources/extra-correction": "extra-correction",
+      "resources/conversion-specials": "conversion-specials",
+      "../THIRD_PARTY_NOTICES.md": "licenses/THIRD_PARTY_NOTICES.md"
+    },
+    "icon": ["icons/icon.png", "icons/icon.ico"],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      },
+      "wix": {
+        "language": {
+          "zh-TW": {
+            "localePath": "./windows/wix/zh-TW.wxl"
+          }
+        }
+      }
+    },
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgwNzdCNjhFNDQ5QkY3RTgKUldUbzk1dEVqclozZ0NZOXM4SCt3MGN3TFg1dnRKRWd2N2IrRWNaTlAwRG16YUlXSUxjcTNWZkYK",
+      "endpoints": [
+        "https://github.com/flier268/ConvertZZ/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

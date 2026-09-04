@@ -1,0 +1,68 @@
+[package]
+name = "convertzz"
+version = "2.0.0-beta8"
+description = "Cross-platform Chinese text conversion desktop application"
+authors = ["ConvertZZ contributors"]
+license = "GPL-3.0-only"
+repository = "https://github.com/flier268/ConvertZZ"
+edition = "2021"
+rust-version = "1.89"
+default-run = "convertzz"
+
+[workspace]
+members = ["roundtrip-dict"]
+resolver = "2"
+
+[lib]
+name = "convertzz_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+arboard = "3.6.1"
+chardetng = "1.0.0"
+chrono = { version = "0.4.45", features = ["clock"] }
+cjk-convert-rs = "0.1.0"
+encoding_rs = "0.8.35"
+enigo = "0.6.1"
+futures = { version = "0.3", default-features = false, features = ["std"] }
+id3 = "1.17.1"
+keyring = "4.1.6"
+lofty = "0.25.1"
+rayon = "1.12.0"
+regex = "1.13.1"
+reqwest = { version = "0.13.4", default-features = false, features = ["form", "json", "rustls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2.11.5", features = ["tray-icon"] }
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-process = "2.3.1"
+tauri-plugin-single-instance = "2"
+tauri-plugin-store = "2"
+tauri-plugin-updater = "2.10.1"
+thiserror = "2.0.20"
+tokio = { version = "1.53.1", features = ["rt-multi-thread"] }
+url = "2.5.8"
+uuid = { version = "1", features = ["v4"] }
+ws-segment-rs = "0.1.4"
+
+[target."cfg(windows)".dependencies]
+windows = { version = "0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+    "Win32_System_DataExchange",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = "0.14.0"
+
+[dev-dependencies]
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }

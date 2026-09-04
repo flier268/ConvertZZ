@@ -33,19 +33,41 @@ const busy = ref(false);
 const importing = ref(false);
 const savedSnapshot = ref("");
 const activeTab = ref("general");
-const quickActionRows: Array<{ label: string; key: keyof QuickActionSettings }> = [
-  { label: "左鍵 + Ctrl", key: "leftClickCtrl" },
-  { label: "左鍵 + Alt", key: "leftClickAlt" },
-  { label: "左鍵 + Shift", key: "leftClickShift" },
-  { label: "右鍵 + Ctrl", key: "rightClickCtrl" },
-  { label: "右鍵 + Alt", key: "rightClickAlt" },
-  { label: "右鍵 + Shift", key: "rightClickShift" },
-  { label: "左鍵拖入 + Ctrl", key: "leftDropCtrl" },
-  { label: "左鍵拖入 + Alt", key: "leftDropAlt" },
-  { label: "左鍵拖入 + Shift", key: "leftDropShift" },
-  { label: "右鍵拖入 + Ctrl", key: "rightDropCtrl" },
-  { label: "右鍵拖入 + Alt", key: "rightDropAlt" },
-  { label: "右鍵拖入 + Shift", key: "rightDropShift" },
+const gestureModifiers = ["Ctrl", "Alt", "Shift"] as const;
+type GestureModifier = (typeof gestureModifiers)[number];
+const gestureGroups: Array<{
+  title: string;
+  hint: string;
+  rows: Array<{ label: string; keys: Record<GestureModifier, keyof QuickActionSettings> }>;
+}> = [
+  {
+    title: "點擊",
+    hint: "按住修飾鍵後點擊浮動球。",
+    rows: [
+      {
+        label: "左鍵",
+        keys: { Ctrl: "leftClickCtrl", Alt: "leftClickAlt", Shift: "leftClickShift" },
+      },
+      {
+        label: "右鍵",
+        keys: { Ctrl: "rightClickCtrl", Alt: "rightClickAlt", Shift: "rightClickShift" },
+      },
+    ],
+  },
+  {
+    title: "拖入檔案",
+    hint: "按住修飾鍵後把檔案拖到浮動球。",
+    rows: [
+      {
+        label: "左鍵",
+        keys: { Ctrl: "leftDropCtrl", Alt: "leftDropAlt", Shift: "leftDropShift" },
+      },
+      {
+        label: "右鍵",
+        keys: { Ctrl: "rightDropCtrl", Alt: "rightDropAlt", Shift: "rightDropShift" },
+      },
+    ],
+  },
 ];
 
 function quickActionValue(key: keyof QuickActionSettings): string {
@@ -193,30 +215,38 @@ async function saveApiKey() {
               </div></el-form-item
             ></el-form
           >
-          <div class="switch-row">
-            <el-checkbox v-model="settings.vocabularyCorrection">詞彙修正</el-checkbox
-            ><el-checkbox v-model="settings.recognizeEncoding">自動辨識編碼</el-checkbox
-            ><el-tooltip
-              content="檔案、檔名與音訊標籤寫入前會建立 .bak。選取資料夾時備份整份資料夾，不會對其中每個檔案分別加後綴。命令列可用 /b:f 關閉。"
-              placement="top"
-              :show-after="300"
-            >
-              <el-checkbox v-model="settings.autoBackupBeforeConversion"
-                >轉換前自動備份</el-checkbox
+          <div class="settings-section">
+            <div class="section-title">轉換</div>
+            <div class="settings-toggle-grid">
+              <el-checkbox v-model="settings.vocabularyCorrection">詞彙修正</el-checkbox>
+              <el-checkbox v-model="settings.recognizeEncoding">自動辨識編碼</el-checkbox>
+              <el-tooltip
+                content="檔案、檔名與音訊標籤寫入前會建立 .bak。選取資料夾時備份整份資料夾，不會對其中每個檔案分別加後綴。命令列可用 /b:f 關閉。"
+                placement="top"
+                :show-after="300"
               >
-            </el-tooltip>
-            <el-checkbox v-model="settings.promptAfterConversion">完成後提示</el-checkbox
-            ><el-checkbox v-model="settings.showMainWindowOnStart">啟動時顯示主視窗</el-checkbox
-            ><el-checkbox v-model="settings.checkVersionOnStart">啟動時檢查更新</el-checkbox>
-            <el-tooltip
-              content="正式版預設只提示正式版。目前執行的不是正式版時，會預設一併檢查開發／預發佈通道。開啟後會檢查 alpha、beta、rc 通道並可自動更新；若正式版較新則下載正式版。"
-              placement="top"
-              :show-after="300"
-            >
-              <el-checkbox v-model="settings.checkPreReleaseUpdates"
-                >檢查開發／預發佈版本</el-checkbox
+                <el-checkbox v-model="settings.autoBackupBeforeConversion"
+                  >轉換前自動備份</el-checkbox
+                >
+              </el-tooltip>
+              <el-checkbox v-model="settings.promptAfterConversion">完成後提示</el-checkbox>
+            </div>
+          </div>
+          <div class="settings-section">
+            <div class="section-title">啟動與更新</div>
+            <div class="settings-toggle-grid">
+              <el-checkbox v-model="settings.showMainWindowOnStart">啟動時顯示主視窗</el-checkbox>
+              <el-checkbox v-model="settings.checkVersionOnStart">啟動時檢查更新</el-checkbox>
+              <el-tooltip
+                content="正式版預設只提示正式版。目前執行的不是正式版時，會預設一併檢查開發／預發佈通道。開啟後會檢查 alpha、beta、rc 通道並可自動更新；若正式版較新則下載正式版。"
+                placement="top"
+                :show-after="300"
               >
-            </el-tooltip>
+                <el-checkbox v-model="settings.checkPreReleaseUpdates"
+                  >檢查開發／預發佈版本</el-checkbox
+                >
+              </el-tooltip>
+            </div>
           </div>
           <p v-if="settings.skippedUpdateVersion" class="settings-note">
             已略過 {{ settings.skippedUpdateVersion }}，啟動時不會再詢問此版本。
@@ -286,7 +316,7 @@ async function saveApiKey() {
                 ><el-checkbox v-model="scope.row.enabled" /></template></el-table-column
             ><el-table-column label="動作" min-width="220"
               ><template #default="scope"
-                ><el-select v-model="scope.row.action"
+                ><el-select v-model="scope.row.action" filterable
                   ><el-option
                     v-for="action in LEGACY_ACTIONS"
                     :key="action.value"
@@ -303,21 +333,62 @@ async function saveApiKey() {
           <p class="muted">點選快捷鍵欄位後按下組合鍵，錄製後會自動啟用。Backspace 可清除。</p>
         </el-tab-pane>
         <el-tab-pane label="浮動球" name="floating" lazy>
-          <div class="switch-row">
-            <el-checkbox v-model="settings.floatingBall.enabled">顯示浮動球</el-checkbox>
+          <label class="floating-enable">
+            <el-switch v-model="settings.floatingBall.enabled" />
+            <span>
+              <span class="section-title">顯示浮動球</span>
+              <p class="muted">
+                桌面上的捷徑球。按住 Ctrl、Alt 或 Shift
+                後點擊，或把檔案拖進去。關閉後手勢設定仍會保留。
+              </p>
+            </span>
+          </label>
+          <el-alert
+            v-if="capabilities && !capabilities.floatingAlwaysOnTop"
+            title="浮動球置頂能力取決於合成器。"
+            type="info"
+            :closable="false"
+            show-icon
+            class="floating-limitation"
+          />
+          <div class="gesture-groups">
+            <section v-for="group in gestureGroups" :key="group.title" class="gesture-group">
+              <div class="gesture-group-header">
+                <div class="section-title">{{ group.title }}</div>
+                <p class="muted">{{ group.hint }}</p>
+              </div>
+              <table class="gesture-matrix">
+                <thead>
+                  <tr>
+                    <th scope="col">按鈕</th>
+                    <th v-for="modifier in gestureModifiers" :key="modifier" scope="col">
+                      {{ modifier }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in group.rows" :key="row.label">
+                    <th scope="row">{{ row.label }}</th>
+                    <td v-for="modifier in gestureModifiers" :key="modifier">
+                      <el-select
+                        filterable
+                        :model-value="quickActionValue(row.keys[modifier])"
+                        :aria-label="`${group.title} ${row.label} ${modifier}`"
+                        @update:model-value="setQuickActionValue(row.keys[modifier], $event)"
+                      >
+                        <el-option
+                          v-for="action in LEGACY_ACTIONS"
+                          :key="action.value"
+                          :label="action.label"
+                          :value="action.value"
+                        />
+                      </el-select>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
           </div>
-          <el-table :data="quickActionRows" max-height="360"
-            ><el-table-column prop="label" label="手勢" width="170" /><el-table-column label="動作"
-              ><template #default="scope"
-                ><el-select
-                  :model-value="quickActionValue(scope.row.key)"
-                  @update:model-value="setQuickActionValue(scope.row.key, $event)"
-                  ><el-option
-                    v-for="action in LEGACY_ACTIONS"
-                    :key="action.value"
-                    :label="action.label"
-                    :value="action.value" /></el-select></template></el-table-column
-          ></el-table>
         </el-tab-pane>
         <el-tab-pane label="ZhConvert" name="zhconvert" lazy>
           <p class="muted">本程式使用繁化姬 API。金鑰不會寫入 settings-v2.json。</p>

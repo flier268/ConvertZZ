@@ -155,6 +155,9 @@ describe("設定分頁", () => {
     await wrapper.get('[id^="tab-floating"]').trigger("click");
     await flushPromises();
     expect(wrapper.text()).toContain("顯示浮動球");
+    expect(wrapper.text()).toContain("點擊");
+    expect(wrapper.text()).toContain("拖入檔案");
+    expect(wrapper.find('[aria-label="點擊 左鍵 Ctrl"]').exists()).toBe(true);
 
     await wrapper.get('[id^="tab-zhconvert"]').trigger("click");
     await flushPromises();
@@ -203,6 +206,9 @@ describe("設定分頁", () => {
     await wrapper.get('[id^="tab-hotkeys"]').trigger("click");
     await flushPromises();
     expect(wrapper.text()).toContain("目前顯示伺服器無法保證全域快捷鍵。");
+    await wrapper.get('[id^="tab-floating"]').trigger("click");
+    await flushPromises();
+    expect(wrapper.text()).toContain("浮動球置頂能力取決於合成器。");
     wrapper.unmount();
   });
 

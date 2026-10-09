@@ -1374,20 +1374,44 @@ fn assert_skip(bytes: &[u8], encoding: TextEncoding, expected: super::ContentSki
 #[test]
 fn binary_detection_rejects_nul_magic_and_replacement_chars() {
     assert_skip(b"abc\0def", TextEncoding::Utf8, super::ContentSkip::Binary);
-    assert_skip(b"ID3abc", TextEncoding::Auto, super::ContentSkip::Binary);
     assert_skip(
-        b"\xFF\xFB\x90\x64AAAA",
+        b"ID3\x03\x00\x00\x00\x00\x00\x00rest",
+        TextEncoding::Auto,
+        super::ContentSkip::Binary,
+    );
+    // MPEG1 Layer III、128 kbps、44100 Hz、無 padding，幀長 417。短於一幀不算音訊。
+    assert!(!super::has_binary_magic(b"\xFF\xFB\x90\x64AAAA"));
+    let mut frame = vec![0xFF, 0xFB, 0x90, 0x64];
+    frame.resize(417, 0);
+    assert_eq!(super::mpeg_frame_length(&frame), Some(417));
+    assert_skip(&frame, TextEncoding::Utf8, super::ContentSkip::Binary);
+    assert_skip(
+        &std::fs::read(audio_fixture("测试音乐b.mp3")).unwrap(),
         TextEncoding::Utf8,
         super::ContentSkip::Binary,
     );
     assert_skip(
-        b"fLaC\x01\x02\x03\x04",
+        b"fLaC\x00\x00\x00\x22",
         TextEncoding::Utf8,
         super::ContentSkip::Binary,
     );
-    assert_skip(b"OggSabcd", TextEncoding::Utf8, super::ContentSkip::Binary);
     assert_skip(
-        b"RIFFWAVEWAVE",
+        b"OggS\x00\x02\x00\x00",
+        TextEncoding::Utf8,
+        super::ContentSkip::Binary,
+    );
+    assert_skip(
+        b"RIFF\x24\x00\x00\x00WAVE",
+        TextEncoding::Utf8,
+        super::ContentSkip::Binary,
+    );
+    assert_skip(
+        b"RIFF\x24\x00\x00\x00AVI ",
+        TextEncoding::Utf8,
+        super::ContentSkip::Binary,
+    );
+    assert_skip(
+        b"RIFF\x24\x00\x00\x00WEBP",
         TextEncoding::Utf8,
         super::ContentSkip::Binary,
     );
@@ -1411,17 +1435,37 @@ fn binary_detection_rejects_nul_magic_and_replacement_chars() {
         TextEncoding::Utf8,
         super::ContentSkip::Binary,
     );
-    let mut m4a = b"    ".to_vec();
+    let mut m4a = vec![0x00, 0x00, 0x00, 0x14];
     m4a.extend_from_slice(b"ftypM4A ");
+    m4a.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(m4a.len(), 20);
     assert_skip(&m4a, TextEncoding::Utf8, super::ContentSkip::Binary);
-
-    let replacements = "\u{FFFD}".repeat(8);
     assert_skip(
-        replacements.as_bytes(),
+        b"MThd\x00\x00\x00\x06",
         TextEncoding::Utf8,
         super::ContentSkip::Binary,
     );
+    assert_skip(
+        b"caff\x00\x01",
+        TextEncoding::Utf8,
+        super::ContentSkip::Binary,
+    );
+    let ape = std::fs::read(audio_fixture("mac-399.ape")).unwrap();
+    assert!(ape.starts_with(b"MAC "));
+    assert_skip(&ape, TextEncoding::Utf8, super::ContentSkip::Binary);
+
+    let replacements = "\u{FFFD}".repeat(8);
+    assert_text(replacements.as_bytes(), TextEncoding::Utf8);
     assert!(super::replacement_ratio_too_high(&replacements));
+    let mut utf16_replacements = vec![0xFF, 0xFE];
+    for _ in 0..8 {
+        utf16_replacements.extend(0xFFFDu16.to_le_bytes());
+    }
+    assert_skip(
+        &utf16_replacements,
+        TextEncoding::Utf16le,
+        super::ContentSkip::Binary,
+    );
     let rare = format!("{}{}", "測試".repeat(80), "\u{FFFD}");
     assert!(!super::replacement_ratio_too_high(&rare));
     assert_text(rare.as_bytes(), TextEncoding::Utf8);
@@ -1456,6 +1500,36 @@ fn binary_detection_keeps_plain_text() {
     assert!(utf16.contains(&0));
     assert_text(&utf16, TextEncoding::Auto);
     assert_text(&utf16, TextEncoding::Utf16le);
+
+    assert_text("caffeine 软件".as_bytes(), TextEncoding::Auto);
+    assert_text("MAC 地址列表".as_bytes(), TextEncoding::Auto);
+    assert_text(
+        "RIFF 是一種容器格式，不是 WAVE 音訊。".as_bytes(),
+        TextEncoding::Auto,
+    );
+    assert_text(
+        "ID3 標籤只是這份說明的開頭。".as_bytes(),
+        TextEncoding::Auto,
+    );
+    assert_text(
+        "%PDF 不是檔頭，後面沒有版本號。".as_bytes(),
+        TextEncoding::Auto,
+    );
+    assert_text(b"    ftypM4A text", TextEncoding::Utf8);
+    assert!(!super::has_binary_magic(b"MThd notes"));
+    assert!(!super::has_binary_magic(b"caffeine"));
+    assert!(!super::has_binary_magic(b"wvpktext!!"));
+    assert!(!super::has_binary_magic(b"FLV\x01"));
+    assert!(!super::has_binary_magic(b"\x30\x26\xB2\x75"));
+
+    let mut yen = Vec::new();
+    for unit in "￥這是一份純文字，不是音訊檔。軟體測試裡面開發。".encode_utf16()
+    {
+        yen.extend(unit.to_be_bytes());
+    }
+    assert!(yen.starts_with(&[0xFF, 0xE5]), "{:02x?}", &yen[..2]);
+    assert!(!super::has_binary_magic(&yen));
+    assert_text(&yen, TextEncoding::Utf16be);
 }
 
 #[test]
@@ -1619,5 +1693,141 @@ async fn decode_errors_are_not_written_back() {
     );
     assert_eq!(std::fs::read(&source).unwrap(), original);
     assert!(result.succeeded.is_empty());
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn utf16_odd_length_and_lone_surrogate_are_not_written_back() {
+    let directory = temp_dir();
+    for (name, mut original) in [
+        ("odd.txt", utf16le_with_bom("里面")),
+        ("surrogate.txt", utf16le_with_bom("里面")),
+    ] {
+        if name.starts_with("odd") {
+            original.push(0x42);
+        } else {
+            original.extend_from_slice(&0xD800u16.to_le_bytes());
+        }
+        let source = directory.join(name);
+        std::fs::write(&source, &original).unwrap();
+        let (result, previewed) = preview_and_apply(&source, FileMode::Content).await;
+        let warning = previewed.warning.as_deref().unwrap_or("");
+        assert!(warning.contains("解碼時發生錯誤"), "{name}: {warning}");
+        assert_eq!(std::fs::read(&source).unwrap(), original, "{name}");
+        assert!(result.succeeded.is_empty(), "{name}: {result:?}");
+        assert!(result.failed.is_empty(), "{name}: {result:?}");
+    }
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+fn utf16le_with_bom(text: &str) -> Vec<u8> {
+    let mut bytes = vec![0xFF, 0xFE];
+    for unit in text.encode_utf16() {
+        bytes.extend(unit.to_le_bytes());
+    }
+    bytes
+}
+
+#[tokio::test]
+async fn overlapping_rename_keeps_binary_bytes() {
+    let directory = temp_dir();
+    let first = directory.join("甲.mp3");
+    let second = directory.join("乙.mp3");
+    let first_bytes = std::fs::read(audio_fixture("测试音乐.mp3")).unwrap();
+    let second_bytes = std::fs::read(audio_fixture("测试音乐b.mp3")).unwrap();
+    std::fs::write(&first, &first_bytes).unwrap();
+    std::fs::write(&second, &second_bytes).unwrap();
+    let service = FileService::new().with_convert_hook(|text| match text {
+        "甲.mp3" => "乙.mp3".into(),
+        "乙.mp3" => "甲.mp3".into(),
+        other => other.into(),
+    });
+    let mut request = binary_file_request(&directory, FileMode::Both);
+    request.conflict_policy = ConflictPolicy::Overwrite;
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert_eq!(std::fs::read(&first).unwrap(), second_bytes);
+    assert_eq!(std::fs::read(&second).unwrap(), first_bytes);
+    assert!(result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("已略過內容轉換")));
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn binary_output_directory_and_backup_keep_bytes() {
+    let directory = temp_dir();
+    let output_directory = directory.join("out");
+    let source = directory.join("测试音乐.mp3");
+    let original = std::fs::read(audio_fixture("测试音乐b.mp3")).unwrap();
+    std::fs::write(&source, &original).unwrap();
+    let backup_path = PathBuf::from(format!("{}.bak", source.display()));
+
+    let mut content_request = binary_file_request(&source, FileMode::Content);
+    content_request.output_directory = Some(output_directory.to_string_lossy().into_owned());
+    content_request.backup = Some(true);
+    let service = FileService::new();
+    let content_plan = service
+        .plan(shared_conversion(), content_request, noop())
+        .await
+        .unwrap();
+    let content_result = service
+        .apply(
+            shared_conversion(),
+            &content_plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(content_result.failed.is_empty(), "{content_result:?}");
+    assert!(content_result.succeeded.is_empty(), "{content_result:?}");
+    assert_eq!(std::fs::read(&source).unwrap(), original);
+    assert_eq!(std::fs::read(&backup_path).unwrap(), original);
+    assert!(!output_directory.join("测试音乐.mp3").exists());
+    std::fs::remove_file(&backup_path).unwrap();
+
+    let mut both_request = binary_file_request(&source, FileMode::Both);
+    both_request.output_directory = Some(output_directory.to_string_lossy().into_owned());
+    both_request.backup = Some(true);
+    let both_plan = service
+        .plan(shared_conversion(), both_request, noop())
+        .await
+        .unwrap();
+    let renamed = output_directory.join("測試音樂.mp3");
+    assert_eq!(both_plan.items[0].output_path, renamed.to_string_lossy());
+    let both_result = service
+        .apply(
+            shared_conversion(),
+            &both_plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(both_result.failed.is_empty(), "{both_result:?}");
+    assert_eq!(std::fs::read(&renamed).unwrap(), original);
+    assert!(!source.exists());
+    assert_eq!(std::fs::read(&backup_path).unwrap(), original);
+    assert!(both_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("已略過內容轉換")));
     let _ = std::fs::remove_dir_all(&directory);
 }

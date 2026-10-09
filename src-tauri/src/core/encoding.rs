@@ -27,10 +27,11 @@ pub fn detect_encoding(buffer: &[u8]) -> TextEncoding {
         .unwrap_or(TextEncoding::Utf8)
 }
 
+#[derive(Debug)]
 pub struct DecodedText {
     pub text: String,
     pub encoding: TextEncoding,
-    /// `encoding_rs` 回報無法對應的位元組。UTF-16 路徑不經 `encoding_rs`，此旗標為 false。
+    /// 解碼器無法對應的位元組，或 UTF-16 的奇數長度與落單 surrogate。
     pub had_errors: bool,
 }
 
@@ -61,10 +62,19 @@ pub fn decode_text_detailed(
         });
     }
     if encoding == TextEncoding::Utf16le || encoding == TextEncoding::Utf16be {
+        let codec = if encoding == TextEncoding::Utf16le {
+            UTF_16LE
+        } else {
+            UTF_16BE
+        };
+        // BOM 已先去掉。`decode` 會再嗅探 BOM 並可能換端序，所以用 without_bom_handling。
+        let (text, decode_errors) = codec.decode_without_bom_handling(without_bom);
+        // 奇數長度會丟掉最後一個位元組。encoding_rs 會標成錯誤；這裡仍明確算錯，避免靜默寫回。
+        let had_errors = decode_errors || without_bom.len() % 2 == 1;
         return Ok(DecodedText {
-            text: decode_utf16(without_bom, encoding == TextEncoding::Utf16le),
+            text: text.into_owned(),
             encoding,
-            had_errors: false,
+            had_errors,
         });
     }
     let Some(codec) = encoding_codec(encoding) else {
@@ -149,20 +159,6 @@ fn encode_utf16(text: &str, little_endian: bool) -> Vec<u8> {
         output.extend_from_slice(&bytes);
     }
     output
-}
-
-fn decode_utf16(buffer: &[u8], little_endian: bool) -> String {
-    let units = buffer
-        .chunks_exact(2)
-        .map(|chunk| {
-            if little_endian {
-                u16::from_le_bytes([chunk[0], chunk[1]])
-            } else {
-                u16::from_be_bytes([chunk[0], chunk[1]])
-            }
-        })
-        .collect::<Vec<_>>();
-    String::from_utf16_lossy(&units)
 }
 
 fn encoding_codec(encoding: TextEncoding) -> Option<&'static Encoding> {

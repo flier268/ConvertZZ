@@ -7,6 +7,10 @@ const DEFAULT_TYPE_FILTER: &str = "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*
 /// 2.0 早期預設。載入時改為 `DEFAULT_TYPE_FILTER`，避免檔案轉換對話框再帶入音訊。
 const LEGACY_TYPE_FILTER_WITH_AUDIO: &str = "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音訊文件|*.mp3;*.ape;*.ogg;*.oga;*.opus>";
 
+/// C# `ConvertZZ/Settings.cs` 的 `FileConvert` 預設（`origin/master` 第 141 行，commit `00c2e902`）。
+/// 群組名是「音頻」，而且只列 `*.mp3`，與 2.0 的「音訊」字串不同。
+const CSHARP_TYPE_FILTER_WITH_AUDIO: &str = "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音頻文件|*.mp3>";
+
 pub fn migrate_from_path(path: &str) -> Result<Value, CoreError> {
     let raw = std::fs::read_to_string(path)?
         .trim_start_matches('\u{feff}')
@@ -238,13 +242,39 @@ fn normalize_type_filter(value: &str, fallback: &str) -> String {
     normalize_saved_type_filter(value)
 }
 
-/// 自訂篩選保留；只有與早期內建音訊預設完全相同時才改掉。空白字串不在這裡補預設。
+/// 自訂篩選保留。已知的舊內建預設，或拿掉音訊／音頻群組後與新預設相同，才改掉。
+/// 空白字串不在這裡補預設。
 fn normalize_saved_type_filter(value: &str) -> String {
-    if value == LEGACY_TYPE_FILTER_WITH_AUDIO {
+    if is_legacy_builtin_type_filter(value) {
         DEFAULT_TYPE_FILTER.to_string()
     } else {
         value.to_string()
     }
+}
+
+fn is_legacy_builtin_type_filter(value: &str) -> bool {
+    value == LEGACY_TYPE_FILTER_WITH_AUDIO
+        || value == CSHARP_TYPE_FILTER_WITH_AUDIO
+        || without_audio_groups(value) == DEFAULT_TYPE_FILTER
+}
+
+/// 去掉名稱含「音訊」或「音頻」的 `<名稱|樣式>` 群組，其餘照原順序用 `/` 接回。
+fn without_audio_groups(value: &str) -> String {
+    let mut groups = Vec::new();
+    let mut rest = value;
+    while let Some(start) = rest.find('<') {
+        let Some(relative_end) = rest[start..].find('>') else {
+            break;
+        };
+        let end = start + relative_end;
+        let group = &rest[start..=end];
+        let name = group[1..].split('|').next().unwrap_or("");
+        if !name.contains("音訊") && !name.contains("音頻") {
+            groups.push(group);
+        }
+        rest = &rest[end + 1..];
+    }
+    groups.join("/")
 }
 
 fn merge_object(defaults: Option<&Value>, value: &Value) -> Value {

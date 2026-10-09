@@ -1948,7 +1948,7 @@ fn resolve_committed_directory_path(
 
 const BINARY_CONTENT_WARNING: &str = "此檔案為二進位內容，已略過內容轉換。";
 const DECODE_ERROR_WARNING: &str = "解碼時發生錯誤，已略過內容轉換。";
-/// 少於這個數量的 U+FFFD 不視為二進位，避免正常文字裡的個別替換字元被擋下。
+/// 少於這個數量的 U+FFFD 不視為二進位。只用於 UTF-16；其他編碼看 `had_errors`。
 const REPLACEMENT_MIN_COUNT: usize = 4;
 /// 替換字元佔解碼後字元數的比例達到此值，且數量達下限，才視為二進位。
 const REPLACEMENT_RATIO: f64 = 0.02;
@@ -2025,7 +2025,12 @@ fn inspect_file_bytes(buffer: &[u8], requested: TextEncoding) -> Result<Inspecte
     if decoded.had_errors {
         return Ok(InspectedBytes::Skip(ContentSkip::DecodeError));
     }
-    if replacement_ratio_too_high(&decoded.text) {
+    // encoding_rs 路徑靠 had_errors。比例只留給 UTF-16，避免合法 UTF-8 裡的「�」被當成二進位。
+    if matches!(
+        decoded.encoding,
+        TextEncoding::Utf16le | TextEncoding::Utf16be
+    ) && replacement_ratio_too_high(&decoded.text)
+    {
         return Ok(InspectedBytes::Skip(ContentSkip::Binary));
     }
     Ok(InspectedBytes::Text {
@@ -2049,11 +2054,11 @@ fn replacement_ratio_too_high(text: &str) -> bool {
 }
 
 fn has_binary_magic(buffer: &[u8]) -> bool {
-    buffer.starts_with(b"ID3")
-        || buffer.starts_with(b"fLaC")
-        || buffer.starts_with(b"OggS")
-        || buffer.starts_with(b"RIFF")
-        || buffer.starts_with(b"%PDF")
+    has_id3v2(buffer)
+        || has_flac(buffer)
+        || has_ogg(buffer)
+        || has_riff_media(buffer)
+        || buffer.starts_with(b"%PDF-")
         || buffer.starts_with(b"PK\x03\x04")
         || buffer.starts_with(b"PK\x05\x06")
         || buffer.starts_with(b"PK\x07\x08")
@@ -2064,37 +2069,208 @@ fn has_binary_magic(buffer: &[u8]) -> bool {
         || buffer.starts_with(b"\x7FELF")
         || buffer.starts_with(b"Rar!\x1A\x07")
         || buffer.starts_with(b"7z\xBC\xAF\x27\x1C")
-        || buffer.starts_with(b"\x1F\x8B")
-        || buffer.starts_with(b"BZh")
+        || has_gzip(buffer)
+        || has_bzip2(buffer)
         || buffer.starts_with(b"\xFD7zXZ\x00")
-        || buffer.starts_with(b"MAC ")
-        || buffer.starts_with(b"APETAGEX")
-        || buffer.starts_with(b"caff")
-        || buffer.starts_with(b"MThd")
-        || buffer.starts_with(b"wvpk")
-        || buffer.starts_with(b"\x30\x26\xB2\x75")
-        || buffer.starts_with(b"FLV\x01")
+        || has_ape(buffer)
+        || has_ape_tag(buffer)
+        || has_caf(buffer)
+        || has_midi(buffer)
+        || has_wavpack(buffer)
+        || has_asf(buffer)
+        || has_flv(buffer)
         || is_mpeg_audio_sync(buffer)
         || is_iso_bmff(buffer)
         || is_aiff(buffer)
         || is_pe_executable(buffer)
 }
 
+fn has_id3v2(buffer: &[u8]) -> bool {
+    if buffer.len() < 10 || &buffer[..3] != b"ID3" {
+        return false;
+    }
+    let version = buffer[3];
+    if !(2..=4).contains(&version) {
+        return false;
+    }
+    let flags = buffer[5];
+    let flags_ok = match version {
+        2 => flags & 0x3F == 0,
+        3 => flags & 0x1F == 0,
+        _ => flags & 0x0F == 0,
+    };
+    flags_ok && buffer[6..10].iter().all(|byte| *byte < 0x80)
+}
+
+fn has_flac(buffer: &[u8]) -> bool {
+    buffer.len() >= 8
+        && buffer.starts_with(b"fLaC")
+        && buffer[4] & 0x7F == 0
+        && u32::from_be_bytes([0, buffer[5], buffer[6], buffer[7]]) == 34
+}
+
+fn has_ogg(buffer: &[u8]) -> bool {
+    buffer.len() >= 5 && buffer.starts_with(b"OggS") && buffer[4] == 0
+}
+
+fn has_riff_media(buffer: &[u8]) -> bool {
+    buffer.len() >= 12
+        && buffer.starts_with(b"RIFF")
+        && matches!(&buffer[8..12], b"WAVE" | b"AVI " | b"WEBP")
+}
+
+fn has_gzip(buffer: &[u8]) -> bool {
+    buffer.len() >= 3 && buffer.starts_with(b"\x1F\x8B") && buffer[2] == 8
+}
+
+fn has_bzip2(buffer: &[u8]) -> bool {
+    buffer.len() >= 4 && buffer.starts_with(b"BZh") && (b'1'..=b'9').contains(&buffer[3])
+}
+
+fn has_ape(buffer: &[u8]) -> bool {
+    if buffer.len() < 6 || !buffer.starts_with(b"MAC ") {
+        return false;
+    }
+    let version = u16::from_le_bytes([buffer[4], buffer[5]]);
+    (3800..=3990).contains(&version)
+}
+
+fn has_ape_tag(buffer: &[u8]) -> bool {
+    if buffer.len() < 12 || !buffer.starts_with(b"APETAGEX") {
+        return false;
+    }
+    let version = u32::from_le_bytes([buffer[8], buffer[9], buffer[10], buffer[11]]);
+    version == 1000 || version == 2000
+}
+
+fn has_caf(buffer: &[u8]) -> bool {
+    buffer.len() >= 6 && buffer.starts_with(b"caff") && buffer[4..6] == [0x00, 0x01]
+}
+
+fn has_midi(buffer: &[u8]) -> bool {
+    buffer.len() >= 8 && buffer.starts_with(b"MThd") && buffer[4..8] == [0x00, 0x00, 0x00, 0x06]
+}
+
+fn has_wavpack(buffer: &[u8]) -> bool {
+    if buffer.len() < 10 || !buffer.starts_with(b"wvpk") {
+        return false;
+    }
+    let version = u16::from_le_bytes([buffer[8], buffer[9]]);
+    (0x402..=0x410).contains(&version)
+}
+
+fn has_asf(buffer: &[u8]) -> bool {
+    const HEADER: [u8; 16] = [
+        0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11, 0xA6, 0xD9, 0x00, 0xAA, 0x00, 0x62, 0xCE,
+        0x6C,
+    ];
+    buffer.len() >= HEADER.len() && buffer[..HEADER.len()] == HEADER
+}
+
+fn has_flv(buffer: &[u8]) -> bool {
+    buffer.len() >= 9
+        && buffer.starts_with(b"FLV\x01")
+        && buffer[4] & 0xFA == 0
+        && buffer[5..9] == [0x00, 0x00, 0x00, 0x09]
+}
+
 fn is_mpeg_audio_sync(buffer: &[u8]) -> bool {
-    // UTF-16LE BOM 是 FF FE，第二個位元組落在 E0–FF，不能當成 MPEG 幀同步。
-    if buffer.len() < 2 || buffer.starts_with(&[0xFF, 0xFE]) {
+    // UTF-16LE BOM 是 FF FE。第二個位元組落在 E0–FF，不能當成檔案開頭的 MPEG 幀同步。
+    if buffer.starts_with(&[0xFF, 0xFE]) {
         return false;
     }
-    if buffer[0] != 0xFF || buffer[1] & 0xE0 != 0xE0 {
+    // 比一幀還短的緩衝區不是完整音訊幀。無 BOM 的 UTF-16BE「￥」(FF E5) 因此不會被當成 MP3。
+    // 檔案剛好裝下一幀，或尾端不足 4 byte 再構成下一幀頭時，接受單幀。
+    let Some(frame_len) = mpeg_frame_length(buffer) else {
+        return false;
+    };
+    if buffer.len() < frame_len {
         return false;
     }
-    let version = (buffer[1] >> 3) & 0b11;
-    let layer = (buffer[1] >> 1) & 0b11;
-    version != 0b01 && layer != 0b00
+    if buffer.len() < frame_len + 4 {
+        return true;
+    }
+    mpeg_frame_length(&buffer[frame_len..]).is_some()
+}
+
+fn mpeg_frame_length(buffer: &[u8]) -> Option<usize> {
+    if buffer.len() < 4 || buffer[0] != 0xFF || buffer[1] & 0xE0 != 0xE0 {
+        return None;
+    }
+    let version_id = (buffer[1] >> 3) & 0b11;
+    let layer_id = (buffer[1] >> 1) & 0b11;
+    if version_id == 0b01 || layer_id == 0b00 {
+        return None;
+    }
+    let bitrate_index = (buffer[2] >> 4) & 0x0F;
+    let sample_index = (buffer[2] >> 2) & 0b11;
+    // 1111 是非法位元率。0000 是 free，沒有固定幀長，無法核對下一幀。
+    if bitrate_index == 0x00 || bitrate_index == 0x0F || sample_index == 0b11 {
+        return None;
+    }
+    let bitrate_kbps = mpeg_bitrate_kbps(version_id, layer_id, bitrate_index)?;
+    let sample_rate = mpeg_sample_rate(version_id, sample_index)?;
+    let padding = ((buffer[2] >> 1) & 1) as usize;
+    let bitrate = bitrate_kbps as usize * 1000;
+    let sample_rate = sample_rate as usize;
+    let length = if layer_id == 0b11 {
+        (12 * bitrate / sample_rate + padding) * 4
+    } else if layer_id == 0b01 && version_id != 0b11 {
+        72 * bitrate / sample_rate + padding
+    } else {
+        144 * bitrate / sample_rate + padding
+    };
+    (length >= 4).then_some(length)
+}
+
+fn mpeg_bitrate_kbps(version_id: u8, layer_id: u8, index: u8) -> Option<u32> {
+    const MPEG1_LAYER1: [u32; 14] = [
+        32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448,
+    ];
+    const MPEG1_LAYER2: [u32; 14] = [
+        32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384,
+    ];
+    const MPEG1_LAYER3: [u32; 14] = [
+        32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320,
+    ];
+    const MPEG2_LAYER1: [u32; 14] = [
+        32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256,
+    ];
+    const MPEG2_LAYER23: [u32; 14] = [8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
+    let table: &[u32] = match (version_id == 0b11, layer_id) {
+        (true, 0b11) => &MPEG1_LAYER1,
+        (true, 0b10) => &MPEG1_LAYER2,
+        (true, 0b01) => &MPEG1_LAYER3,
+        (false, 0b11) => &MPEG2_LAYER1,
+        (false, 0b10) | (false, 0b01) => &MPEG2_LAYER23,
+        _ => return None,
+    };
+    table.get(usize::from(index.checked_sub(1)?)).copied()
+}
+
+fn mpeg_sample_rate(version_id: u8, index: u8) -> Option<u32> {
+    let table: &[u32] = match version_id {
+        0b11 => &[44100, 48000, 32000],
+        0b10 => &[22050, 24000, 16000],
+        0b00 => &[11025, 12000, 8000],
+        _ => return None,
+    };
+    table.get(usize::from(index)).copied()
 }
 
 fn is_iso_bmff(buffer: &[u8]) -> bool {
-    buffer.len() >= 12 && &buffer[4..8] == b"ftyp"
+    if buffer.len() < 12 || &buffer[4..8] != b"ftyp" {
+        return false;
+    }
+    let size = u32::from_be_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]);
+    let len = u32::try_from(buffer.len()).unwrap_or(u32::MAX);
+    // 0 與 1 是延伸到檔尾／64-bit 大小，不是一般 ftyp。大小至少要蓋過 brand。
+    if !(12..=len).contains(&size) {
+        return false;
+    }
+    buffer[8..12]
+        .iter()
+        .all(|byte| (0x20..=0x7E).contains(byte))
 }
 
 fn is_aiff(buffer: &[u8]) -> bool {

@@ -2,7 +2,7 @@ import type { EngineKind, SettingsV2 } from "@shared/contracts";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { version as appVersion } from "../../package.json";
-import { DEFAULT_FILE_TYPE_FILTER, LEGACY_FILE_TYPE_FILTER_WITH_AUDIO } from "./fileFilters";
+import { DEFAULT_FILE_TYPE_FILTER, isLegacyBuiltinFileTypeFilter } from "./fileFilters";
 import { isPreReleaseVersion } from "./update";
 
 type LegacySettings = Record<string, unknown>;
@@ -198,12 +198,12 @@ export function migrateSettings(input: unknown, currentVersion = appVersion): Se
 }
 
 function normalizeSavedTypeFilter(value: string | undefined, fallback: string): string {
-  if (value == null || value === LEGACY_FILE_TYPE_FILTER_WITH_AUDIO) return fallback;
+  if (value == null || isLegacyBuiltinFileTypeFilter(value)) return fallback;
   return value;
 }
 
 function normalizeTypeFilter(value: string, fallback: string): string {
-  if (!value || value === LEGACY_FILE_TYPE_FILTER_WITH_AUDIO) return fallback;
+  if (!value || isLegacyBuiltinFileTypeFilter(value)) return fallback;
   return value;
 }
 

@@ -241,3 +241,35 @@ fn legacy_audio_type_filter_is_replaced_by_text_default() {
         "<日誌|*.log>"
     );
 }
+
+#[test]
+fn csharp_default_type_filter_is_replaced_by_text_default() {
+    // origin/master ConvertZZ/Settings.cs:141，commit 00c2e902。群組名是「音頻」。
+    let csharp = "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音頻文件|*.mp3>";
+    assert_eq!(super::CSHARP_TYPE_FILTER_WITH_AUDIO, csharp);
+    let expected = default_settings()["files"]["typeFilter"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(!expected.contains("mp3"));
+    assert_eq!(
+        migrate(json!({ "version": 2, "files": { "typeFilter": csharp } }))["files"]["typeFilter"],
+        expected
+    );
+    assert_eq!(
+        migrate(json!({ "FileConvert": { "TypeFilter": csharp } }))["files"]["typeFilter"],
+        expected
+    );
+    let audio_in_the_middle = "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<音訊文件|*.wav>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>";
+    assert_eq!(
+        migrate(json!({ "version": 2, "files": { "typeFilter": audio_in_the_middle } }))["files"]
+            ["typeFilter"],
+        expected
+    );
+    let custom_with_audio = "<日誌|*.log>/<音頻文件|*.mp3>";
+    assert_eq!(
+        migrate(json!({ "version": 2, "files": { "typeFilter": custom_with_audio } }))["files"]
+            ["typeFilter"],
+        custom_with_audio
+    );
+}

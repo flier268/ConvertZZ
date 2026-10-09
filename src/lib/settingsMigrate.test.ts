@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { LEGACY_FILE_TYPE_FILTER_WITH_AUDIO } from "./fileFilters";
+import {
+  CSHARP_FILE_TYPE_FILTER_WITH_AUDIO,
+  DEFAULT_FILE_TYPE_FILTER,
+  LEGACY_FILE_TYPE_FILTER_WITH_AUDIO,
+} from "./fileFilters";
 import { defaultCheckPreReleaseUpdates, defaultSettings, migrateSettings } from "./settingsMigrate";
 
 describe("開發／預發佈更新預設", () => {
@@ -51,5 +55,30 @@ describe("開發／預發佈更新預設", () => {
     expect(
       migrateSettings({ version: 2, files: { typeFilter: "" } }, "2.0.0").files.typeFilter,
     ).toBe("");
+  });
+
+  it("C# 預設音頻篩選會改成不含音訊的預設，自訂音頻群組保留", () => {
+    const csharp =
+      "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音頻文件|*.mp3>";
+    expect(CSHARP_FILE_TYPE_FILTER_WITH_AUDIO).toBe(csharp);
+    const defaults = defaultSettings("2.0.0");
+    expect(
+      migrateSettings({ version: 2, files: { typeFilter: csharp } }, "2.0.0").files.typeFilter,
+    ).toBe(defaults.files.typeFilter);
+    expect(migrateSettings({ FileConvert: { TypeFilter: csharp } }, "2.0.0").files.typeFilter).toBe(
+      defaults.files.typeFilter,
+    );
+    const audioInTheMiddle = `${DEFAULT_FILE_TYPE_FILTER.split("/").join("/<音訊文件|*.wav>/")}`;
+    expect(audioInTheMiddle).toContain("音訊文件");
+    expect(
+      migrateSettings({ version: 2, files: { typeFilter: audioInTheMiddle } }, "2.0.0").files
+        .typeFilter,
+    ).toBe(defaults.files.typeFilter);
+    expect(
+      migrateSettings(
+        { version: 2, files: { typeFilter: "<日誌|*.log>/<音頻文件|*.mp3>" } },
+        "2.0.0",
+      ).files.typeFilter,
+    ).toBe("<日誌|*.log>/<音頻文件|*.mp3>");
   });
 });

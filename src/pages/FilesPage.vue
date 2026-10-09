@@ -15,6 +15,7 @@ import type {
 import { core, isCancellationError } from "../lib/coreClient";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { cliInvocation } from "../lib/cli";
+import { summarizeFileApplyWarnings } from "../lib/fileApplyMessages";
 import { ensureSupportedFilesFilter } from "../lib/fileFilters";
 import { fileConversionDefaults } from "../lib/settingsApply";
 import { buildFileDiffSections, type DiffSection } from "../lib/fileDiff";
@@ -516,7 +517,7 @@ async function applyPlan() {
     );
     const skippedCount = result.skipped.length;
     const warnings = result.warnings ?? [];
-    for (const warning of warnings) ElMessage.warning(warning);
+    for (const warning of summarizeFileApplyWarnings(warnings)) ElMessage.warning(warning);
     if (promptAfterConversion.value) {
       if (result.succeeded.length && skippedCount)
         ElMessage.success(

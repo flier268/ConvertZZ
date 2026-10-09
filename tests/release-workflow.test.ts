@@ -9,10 +9,15 @@ function readProjectFile(path: string): string {
 describe("CI 工作流程契約", () => {
   const ci = readProjectFile(".github/workflows/ci.yml");
 
-  it("避免同一次推送重複跑 CI：只有 master push + PR，且略過 tags", () => {
+  it("避免同一次推送重複跑 CI：任何分支 push 都跑、同 repo 的 PR 略過、不監聽 tags", () => {
     expect(ci).toMatch(/^\s+branches:\s*$/m);
-    expect(ci).toContain("- master");
-    expect(ci).not.toContain("- migrate-to-nodejs");
+    expect(ci).toContain('- "**"');
+    expect(ci).not.toMatch(/^\s+tags:/m);
+    const sameRepoGuard =
+      "if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository";
+    for (const job of ["test", "e2e", "rust-format"]) {
+      expect(ci).toMatch(new RegExp(`^  ${job}:\\n    ${escapeRegExp(sameRepoGuard)}$`, "m"));
+    }
     expect(ci).toContain("pull_request:");
     expect(ci).not.toMatch(/^on:\s*\n\s+push:\s*\n\s+pull_request:/m);
     expect(ci).toContain("concurrency:");
@@ -165,3 +170,7 @@ describe("發行工作流程契約", () => {
     expect(workflow).toContain("cancel-in-progress: true");
   });
 });
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

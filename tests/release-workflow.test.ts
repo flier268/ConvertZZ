@@ -9,9 +9,10 @@ function readProjectFile(path: string): string {
 describe("CI 工作流程契約", () => {
   const ci = readProjectFile(".github/workflows/ci.yml");
 
-  it("避免同一次推送重複跑 CI：master push + PR，且略過 tags", () => {
+  it("避免同一次推送重複跑 CI：master／migrate-to-nodejs push + PR，且略過 tags", () => {
     expect(ci).toMatch(/^\s+branches:\s*$/m);
     expect(ci).toContain("- master");
+    expect(ci).toContain("- migrate-to-nodejs");
     expect(ci).toContain("pull_request:");
     expect(ci).not.toMatch(/^on:\s*\n\s+push:\s*\n\s+pull_request:/m);
     expect(ci).toContain("concurrency:");
@@ -26,6 +27,15 @@ describe("發行工作流程契約", () => {
   const workflow = readProjectFile(".github/workflows/release.yml");
   const tauri = readProjectFile("src-tauri/tauri.conf.json");
   const updater = readProjectFile("src-tauri/tauri.updater.conf.json");
+
+  it("Linux job 在打包前跑 Rust 核心測試（含 ffmpeg）", () => {
+    const rustTest = workflow.indexOf(
+      "cargo test --manifest-path src-tauri/Cargo.toml --workspace",
+    );
+    expect(rustTest).toBeGreaterThan(0);
+    expect(rustTest).toBeLessThan(workflow.indexOf("name: 建立安裝包"));
+    expect(workflow).toMatch(/build-essential ffmpeg /u);
+  });
 
   it("J-04 Windows matrix 產出 NSIS（預發行版略過 MSI）", () => {
     expect(workflow).toContain("os: windows-latest");
@@ -147,9 +157,11 @@ describe("發行工作流程契約", () => {
     expect(prettier).toContain('"endOfLine": "lf"');
   });
 
-  it("Release 同一標籤重推會取消進行中的舊執行", () => {
+  it("Release 同一標籤重推會取消進行中的舊執行（依標籤分組）", () => {
     expect(workflow).toContain("concurrency:");
-    expect(workflow).toContain("group: ${{ github.workflow }}-${{ github.ref }}");
+    expect(workflow).toContain(
+      "group: ${{ github.workflow }}-${{ inputs.tag || github.ref_name }}",
+    );
     expect(workflow).toContain("cancel-in-progress: true");
   });
 });

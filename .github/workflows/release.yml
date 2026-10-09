@@ -14,7 +14,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # 依標籤分組：手動觸發時 github.ref 是分支，同一分支先後發兩個標籤不應互相取消。
+  group: ${{ github.workflow }}-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: true
 
 env:
@@ -53,7 +54,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential file libayatana-appindicator3-dev libdbus-1-dev \
+            build-essential ffmpeg file libayatana-appindicator3-dev libdbus-1-dev \
             librsvg2-dev libwebkit2gtk-4.1-dev patchelf pkg-config rpm
       - name: 確認更新私鑰
         shell: bash
@@ -68,6 +69,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: 執行測試
         run: pnpm run check
+      - name: 執行 Rust 核心測試
+        if: runner.os == 'Linux'
+        run: cargo test --manifest-path src-tauri/Cargo.toml --workspace -- --test-threads=1
       - name: 建立安裝包
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

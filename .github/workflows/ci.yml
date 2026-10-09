@@ -2,10 +2,12 @@ name: CI
 
 on:
   push:
-    # 只在預設分支跑 push CI；功能分支改由 pull_request 觸發，避免同一次推送跑兩份。
-    # 不監聽 tags，以免推 v* 標籤時與 Release 重複（Release 已跑 pnpm check）。
+    # 預設分支與 2.0 發行分支（beta 標籤從 migrate-to-nodejs 打）跑 push CI；
+    # 其他功能分支改由 pull_request 觸發，避免同一次推送跑兩份。
+    # 不監聽 tags，以免推 v* 標籤時與 Release 重複（Release 已跑 pnpm check 與 cargo test）。
     branches:
       - master
+      - migrate-to-nodejs
   pull_request:
 
 permissions:

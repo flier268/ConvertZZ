@@ -186,6 +186,11 @@ pub struct FilePlanRequest {
     pub conflict_policy: ConflictPolicy,
     #[serde(default)]
     pub backup: Option<bool>,
+    /// 直接指定版本控制資料夾（`.git`、`.svn`、`.hg`、`.bzr`）或其中的路徑時是否照樣處理。
+    /// 預設 `false`：這些輸入會被略過並列在 `FileConversionPlan::ignored_inputs`。
+    /// GUI 經使用者確認、或無頭加上 `--include-ignored` 時才設為 `true`。
+    #[serde(default)]
+    pub include_ignored: bool,
     pub conversion: ConversionOptions,
 }
 
@@ -245,6 +250,9 @@ pub struct FileConversionPlan {
     pub created_at: String,
     pub items: Vec<FilePlanItem>,
     pub warnings: Vec<String>,
+    /// 因位於版本控制資料夾而略過的直接輸入（`include_ignored` 為 `false` 時）。
+    #[serde(default)]
+    pub ignored_inputs: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -407,6 +415,10 @@ pub struct ParsedCli {
     /// 無頭時載入本機全域／可攜設定（`--globalconfig`）。不可與 `config_path` 併用。
     #[serde(default)]
     pub use_global_config: bool,
+    /// `--include-ignored`：直接指定的版本控制資料夾（`.git` 等）或其中的路徑也照樣處理。
+    /// 未指定時無頭模式略過這些輸入並印出警告。
+    #[serde(default)]
+    pub include_ignored: bool,
     /// 無頭時載入指定設定檔（`--config <路徑>`）。不可與 `use_global_config` 併用。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config_path: Option<String>,

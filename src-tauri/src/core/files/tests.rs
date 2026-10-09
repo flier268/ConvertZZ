@@ -52,6 +52,7 @@ fn filename_request(path: &Path, policy: ConflictPolicy) -> FilePlanRequest {
         preview_max_bytes: None,
         conflict_policy: policy,
         backup: Some(false),
+        include_ignored: false,
         conversion: conversion_s2t(),
     }
 }
@@ -91,6 +92,7 @@ async fn preview_limit_and_unicode_bom() {
                 preview_max_bytes: Some(1024),
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
+                include_ignored: false,
                 conversion: conversion_s2t(),
             },
             noop(),
@@ -165,6 +167,7 @@ async fn preview_then_safe_write_and_fix_charset() {
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
+                include_ignored: false,
                 conversion: conversion_s2t(),
             },
             noop(),
@@ -290,6 +293,7 @@ async fn request_cancel_stops_apply_before_write() {
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
+                include_ignored: false,
                 conversion: conversion_s2t(),
             },
             noop(),
@@ -382,6 +386,7 @@ async fn expands_wildcards_and_output_pattern() {
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
+                include_ignored: false,
                 conversion: conversion_s2t(),
             },
             noop(),
@@ -433,6 +438,7 @@ async fn rejects_mismatched_wildcard_counts() {
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
+                include_ignored: false,
                 conversion: conversion_s2t(),
             },
             noop(),
@@ -525,6 +531,7 @@ async fn directory_input_respects_extension_filter() {
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
+                include_ignored: false,
                 conversion: ConversionOptions {
                     direction: Direction::None,
                     engine: EngineKind::Segmented,
@@ -620,6 +627,7 @@ async fn later_file_failure_keeps_earlier_writes() {
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
+                include_ignored: false,
                 conversion: conversion_s2t(),
             },
             noop(),
@@ -675,6 +683,7 @@ async fn cancel_after_first_file_keeps_written_changes() {
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
+                include_ignored: false,
                 conversion: conversion_s2t(),
             },
             noop(),
@@ -761,12 +770,11 @@ async fn stage_validation_failure_keeps_original() {
     std::fs::write(&source, "來源內容").unwrap();
     let service = FileService::new()
         .with_stage_validator(|_, _, _| Err(CoreError::new("FILE_VERIFY", "受控驗證失敗")));
+    // 純改名不經暫存檔（同一磁碟區直接 rename）；用 both 模式走寫入暫存檔的路徑。
+    let mut request = filename_request(&source, ConflictPolicy::Overwrite);
+    request.mode = FileMode::Both;
     let plan = service
-        .plan(
-            shared_conversion(),
-            filename_request(&source, ConflictPolicy::Overwrite),
-            noop(),
-        )
+        .plan(shared_conversion(), request, noop())
         .await
         .unwrap();
     let result = service
@@ -873,6 +881,7 @@ async fn creates_file_bak_before_conversion() {
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(true),
+                include_ignored: false,
                 conversion: conversion_s2t(),
             },
             noop(),
@@ -925,6 +934,7 @@ async fn folder_selection_backs_up_whole_folder() {
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(true),
+                include_ignored: false,
                 conversion: conversion_s2t(),
             },
             noop(),
@@ -992,6 +1002,7 @@ async fn backup_false_skips_bak() {
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
+                include_ignored: false,
                 conversion: conversion_s2t(),
             },
             noop(),
@@ -1036,6 +1047,7 @@ async fn both_mode_converts_content_and_filename() {
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
+                include_ignored: false,
                 conversion: conversion_s2t(),
             },
             noop(),
@@ -1104,6 +1116,7 @@ async fn cancel_rejects_content_plan_without_writing() {
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
+                include_ignored: false,
                 conversion: conversion_s2t(),
             },
             noop(),
@@ -1232,6 +1245,7 @@ async fn content_plan_lists_without_converting() {
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
+                include_ignored: false,
                 conversion: conversion_s2t(),
             },
             noop(),
@@ -1286,6 +1300,7 @@ async fn preview_rejects_path_outside_plan() {
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
+                include_ignored: false,
                 conversion: conversion_s2t(),
             },
             noop(),
@@ -1334,6 +1349,7 @@ async fn apply_only_writes_selected_files() {
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
+                include_ignored: false,
                 conversion: conversion_s2t(),
             },
             noop(),
@@ -1568,6 +1584,7 @@ fn binary_file_request(path: &Path, mode: FileMode) -> FilePlanRequest {
         preview_max_bytes: Some(4096),
         conflict_policy: ConflictPolicy::Skip,
         backup: Some(false),
+        include_ignored: false,
         conversion: ConversionOptions {
             vocabulary_correction: Some(false),
             ..conversion_s2t()
@@ -1937,6 +1954,7 @@ fn directory_scan_request(
         preview_max_bytes: Some(4096),
         conflict_policy: ConflictPolicy::Skip,
         backup: Some(false),
+        include_ignored: false,
         conversion: conversion_s2t(),
     }
 }
@@ -2140,5 +2158,310 @@ async fn empty_extension_list_collects_no_files() {
         .await
         .unwrap();
     assert_eq!(sorted_file_names(&picked), ["custom.mytxt"]);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn empty_extension_list_collects_nothing_and_does_not_rename_subfolders() {
+    let directory = temp_dir();
+    let nested = directory.join("简体资料夹");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(nested.join("软件.txt"), "软件").unwrap();
+    for mode in [FileMode::Filename, FileMode::Both] {
+        let service = FileService::new();
+        let plan = service
+            .plan(
+                shared_conversion(),
+                directory_scan_request(&directory, mode, Some(Vec::new())),
+                noop(),
+            )
+            .await
+            .unwrap();
+        assert!(plan.items.is_empty(), "{mode:?}：{:?}", plan.items);
+        assert!(
+            plan.warnings
+                .iter()
+                .any(|warning| warning.contains("沒有符合副檔名篩選器的檔案")),
+            "{:?}",
+            plan.warnings
+        );
+        let result = service
+            .apply(
+                shared_conversion(),
+                &plan.plan_id,
+                None,
+                noop(),
+                never_cancel(),
+            )
+            .await
+            .unwrap();
+        assert!(result.succeeded.is_empty());
+        assert!(nested.exists(), "子資料夾不應被改名");
+    }
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn folder_scan_with_matches_has_no_empty_folder_warning() {
+    let directory = temp_dir();
+    std::fs::write(directory.join("软件.txt"), "软件").unwrap();
+    let plan = FileService::new()
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Content, Some(vec![".txt".into()])),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(plan.items.len(), 1);
+    assert!(plan.warnings.is_empty(), "{:?}", plan.warnings);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn recursive_scan_skips_version_control_and_hidden_directories() {
+    let directory = temp_dir();
+    for hidden in [".git", ".svn", ".hg", ".bzr", ".cache"] {
+        let path = directory.join(hidden).join("简体");
+        std::fs::create_dir_all(&path).unwrap();
+        std::fs::write(path.join("软件.txt"), "软件").unwrap();
+        std::fs::write(directory.join(hidden).join("COMMIT_EDITMSG"), "修正软件").unwrap();
+    }
+    std::fs::write(directory.join("软件.txt"), "软件").unwrap();
+    let plan = FileService::new()
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Both, None),
+            noop(),
+        )
+        .await
+        .unwrap();
+    let sources = plan
+        .items
+        .iter()
+        .map(|item| item.source_path.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(sources.len(), 1, "{sources:?}");
+    assert!(sources[0].ends_with("软件.txt"));
+    assert!(plan.ignored_inputs.is_empty());
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn directly_selected_git_folder_needs_include_ignored() {
+    let directory = temp_dir();
+    let git = directory.join(".git");
+    std::fs::create_dir_all(&git).unwrap();
+    std::fs::write(git.join("说明.txt"), "软件").unwrap();
+    let other = directory.join("软件.txt");
+    std::fs::write(&other, "软件").unwrap();
+
+    let mut request = directory_scan_request(&git, FileMode::Both, None);
+    request.paths.push(other.to_string_lossy().into_owned());
+    let skipped = FileService::new()
+        .plan(shared_conversion(), request.clone(), noop())
+        .await
+        .unwrap();
+    assert_eq!(
+        skipped.ignored_inputs,
+        vec![git.to_string_lossy().into_owned()]
+    );
+    assert_eq!(skipped.items.len(), 1);
+    assert_eq!(skipped.items[0].source_path, other.to_string_lossy());
+    assert!(skipped
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("版本控制資料夾")));
+
+    // 直接指定 .git 內的檔案也算。
+    let inner = git.join("说明.txt");
+    let inner_plan = FileService::new()
+        .plan(
+            shared_conversion(),
+            binary_file_request(&inner, FileMode::Both),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert!(inner_plan.items.is_empty());
+    assert_eq!(inner_plan.ignored_inputs.len(), 1);
+
+    request.include_ignored = true;
+    let allowed = FileService::new()
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert!(allowed.ignored_inputs.is_empty());
+    assert_eq!(allowed.items.len(), 2, "{:?}", allowed.items);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[test]
+fn version_control_detection_matches_components_only() {
+    assert!(is_inside_version_control("/repo/.git"));
+    assert!(is_inside_version_control("/repo/.GIT/config"));
+    assert!(is_inside_version_control("/repo/.svn/entries"));
+    assert!(is_inside_version_control("/repo/.hg"));
+    assert!(is_inside_version_control("/repo/.bzr/x"));
+    assert!(!is_inside_version_control("/repo/.gitignore"));
+    assert!(!is_inside_version_control("/repo/my.git.txt"));
+    assert!(!is_inside_version_control("/home/u/.config/a.txt"));
+}
+
+#[test]
+fn streaming_compare_detects_equal_and_different_files() {
+    let directory = temp_dir();
+    let left = directory.join("left.bin");
+    let right = directory.join("right.bin");
+    let data = (0..(STREAM_CHUNK_BYTES * 3 + 17))
+        .map(|index| (index % 251) as u8)
+        .collect::<Vec<_>>();
+    std::fs::write(&left, &data).unwrap();
+    std::fs::write(&right, &data).unwrap();
+    assert!(files_equal(&left, &right).unwrap());
+    assert!(file_equals_bytes(&left, &data).unwrap());
+    let mut changed = data.clone();
+    let last = changed.len() - 1;
+    changed[last] ^= 1;
+    std::fs::write(&right, &changed).unwrap();
+    assert!(!files_equal(&left, &right).unwrap());
+    assert!(!file_equals_bytes(&left, &changed).unwrap());
+    assert!(!file_equals_bytes(&left, &data[..data.len() - 1]).unwrap());
+    assert!(verify_stage(&right, Some(&data), &left).is_err());
+    assert!(!right.exists(), "驗證失敗應刪除暫存檔");
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+/// 檔頭是 ID3 的大型稀疏檔：只讀檔頭就略過，不會整檔讀入。
+fn sparse_binary(path: &Path, size: u64) {
+    let file = std::fs::File::create(path).unwrap();
+    use std::io::Write;
+    (&file)
+        .write_all(b"ID3\x03\x00\x00\x00\x00\x00\x0a")
+        .unwrap();
+    file.set_len(size).unwrap();
+}
+
+#[tokio::test]
+async fn large_binary_is_skipped_from_header_and_renamed_without_copy() {
+    let directory = temp_dir();
+    let source = directory.join("简体影片.bin");
+    // 遠大於文字上限；若整檔讀入會非常慢且吃大量記憶體。
+    sparse_binary(&source, 4 * 1024 * 1024 * 1024);
+    #[cfg(unix)]
+    let inode = {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::metadata(&source).unwrap().ino()
+    };
+
+    let (content_result, content_item) = preview_and_apply(&source, FileMode::Content).await;
+    assert!(content_result.succeeded.is_empty(), "{content_result:?}");
+    assert!(content_item
+        .warning
+        .as_deref()
+        .unwrap_or_default()
+        .contains("二進位"));
+    assert_eq!(
+        std::fs::metadata(&source).unwrap().len(),
+        4 * 1024 * 1024 * 1024
+    );
+
+    let (both_result, _) = preview_and_apply(&source, FileMode::Both).await;
+    let renamed = directory.join("簡體影片.bin");
+    assert_eq!(both_result.succeeded.len(), 1, "{both_result:?}");
+    assert!(!source.exists());
+    assert_eq!(
+        std::fs::metadata(&renamed).unwrap().len(),
+        4 * 1024 * 1024 * 1024
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        assert_eq!(
+            std::fs::metadata(&renamed).unwrap().ino(),
+            inode,
+            "同一磁碟區應直接 rename，不複製"
+        );
+    }
+    assert!(names(&directory)
+        .into_iter()
+        .all(|name| !name.starts_with(".convertzz-")));
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn text_over_size_cap_is_skipped_with_warning() {
+    let directory = temp_dir();
+    let source = directory.join("大檔.txt");
+    {
+        use std::io::Write;
+        let mut file = std::io::BufWriter::new(std::fs::File::create(&source).unwrap());
+        let line = "软件开发测试\n".repeat(1024);
+        while file.get_ref().metadata().unwrap().len() <= MAX_TEXT_FILE_BYTES {
+            file.write_all(line.as_bytes()).unwrap();
+            file.flush().unwrap();
+        }
+    }
+    let size = std::fs::metadata(&source).unwrap().len();
+    let (result, item) = preview_and_apply(&source, FileMode::Content).await;
+    assert!(result.succeeded.is_empty(), "{result:?}");
+    assert!(item
+        .warning
+        .as_deref()
+        .unwrap_or_default()
+        .contains("64 MiB"));
+    assert!(result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("64 MiB")));
+    assert_eq!(std::fs::metadata(&source).unwrap().len(), size);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn rename_only_commit_moves_into_output_directory_and_handles_conflict() {
+    let directory = temp_dir();
+    let source = directory.join("简体.bin");
+    let tagged = std::fs::read(audio_fixture("测试音乐.mp3")).unwrap();
+    std::fs::write(&source, &tagged).unwrap();
+    let existing = directory.join("簡體.bin");
+    std::fs::write(&existing, b"old").unwrap();
+
+    // Skip：既有檔保留，來源不動。
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            binary_file_request(&source, FileMode::Both),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(plan.items[0].status, PlanStatus::Conflict);
+
+    // Overwrite：既有檔被取代，內容與來源相同，沒有殘留暫存檔。
+    let mut request = binary_file_request(&source, FileMode::Both);
+    request.conflict_policy = ConflictPolicy::Overwrite;
+    let service = FileService::new();
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.succeeded.len(), 1, "{result:?}");
+    assert!(!source.exists());
+    assert_eq!(std::fs::read(&existing).unwrap(), tagged);
+    assert!(names(&directory)
+        .into_iter()
+        .all(|name| !name.starts_with(".convertzz-")));
     let _ = std::fs::remove_dir_all(&directory);
 }

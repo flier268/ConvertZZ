@@ -417,3 +417,85 @@ fn star_dot_star_means_all_files_and_unparsed_filter_is_empty() {
         Some(default_extension_list())
     );
 }
+
+#[test]
+fn include_ignored_flag_parses() {
+    assert!(!parse_cli(&args(&["--headless", "--file", "a.txt"]), None).include_ignored);
+    assert!(
+        parse_cli(
+            &args(&["--headless", "--file", "--include-ignored", "a.txt"]),
+            None
+        )
+        .include_ignored
+    );
+}
+
+fn headless_s2t_both(extra: &[&str], path: &str) -> i32 {
+    let mut items = vec![
+        "--headless",
+        "--file",
+        "--filename",
+        "--direction",
+        "s2t",
+        "--vocabulary",
+        "off",
+        "--engine",
+        "segmented",
+        "--no-backup",
+        "--yes",
+    ];
+    items.extend_from_slice(extra);
+    items.push(path);
+    run(&args(&items), None)
+}
+
+#[test]
+fn headless_skips_directly_selected_git_folder_without_flag() {
+    let dir = temp_dir("ignored");
+    let git = dir.join(".git");
+    fs::create_dir_all(&git).expect("git dir");
+    fs::write(git.join("COMMIT_EDITMSG"), "修正软件\n").expect("write");
+    fs::write(git.join("说明.txt"), "软件").expect("write");
+
+    let code = headless_s2t_both(&[], git.to_str().unwrap());
+    assert_eq!(code, 0);
+    assert_eq!(
+        fs::read_to_string(git.join("COMMIT_EDITMSG")).unwrap(),
+        "修正软件\n"
+    );
+    assert!(git.join("说明.txt").exists(), "未加旗標不應改名");
+
+    // 直接指定 .git 內的檔案也一樣略過。
+    let inner = git.join("说明.txt");
+    assert_eq!(headless_s2t_both(&[], inner.to_str().unwrap()), 0);
+    assert_eq!(fs::read_to_string(&inner).unwrap(), "软件");
+
+    let code = headless_s2t_both(&["--include-ignored"], git.to_str().unwrap());
+    assert_eq!(code, 0);
+    assert!(
+        git.join("說明.txt").exists(),
+        "加上 --include-ignored 後應處理"
+    );
+    assert_eq!(fs::read_to_string(git.join("說明.txt")).unwrap(), "軟件");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn headless_recursive_scan_never_enters_dot_folders() {
+    let dir = temp_dir("dotscan");
+    let git = dir.join(".git");
+    let hidden = dir.join(".cache");
+    fs::create_dir_all(&git).expect("git dir");
+    fs::create_dir_all(&hidden).expect("hidden dir");
+    fs::write(git.join("config.txt"), "软件").expect("write");
+    fs::write(hidden.join("软件.txt"), "软件").expect("write");
+    fs::write(dir.join("软件.txt"), "软件").expect("write");
+
+    // 加上 --include-ignored 也只影響直接指定的路徑，遞迴掃描一律略過點開頭資料夾。
+    let code = headless_s2t_both(&["--include-ignored"], dir.to_str().unwrap());
+    assert_eq!(code, 0);
+    assert_eq!(fs::read_to_string(dir.join("軟件.txt")).unwrap(), "軟件");
+    assert_eq!(fs::read_to_string(git.join("config.txt")).unwrap(), "软件");
+    assert!(hidden.join("软件.txt").exists());
+    let _ = fs::remove_dir_all(&dir);
+}

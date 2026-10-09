@@ -205,6 +205,7 @@ async fn prepare_files(
             .map(|kb| kb.saturating_mul(1024)),
         conflict_policy: ConflictPolicy::Skip,
         backup: Some(parsed.backup),
+        include_ignored: parsed.include_ignored,
         conversion: ConversionOptions {
             direction,
             engine: parsed.engine,

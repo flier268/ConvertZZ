@@ -149,18 +149,39 @@ impl FileService {
             request.paths.first().map(String::as_str),
             request.output_path.as_deref(),
         )?;
+        let mut request = request;
+        let ignored_inputs = if request.include_ignored {
+            Vec::new()
+        } else {
+            request
+                .paths
+                .iter()
+                .filter(|path| is_inside_version_control(path))
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        if !ignored_inputs.is_empty() {
+            request.paths.retain(|path| !ignored_inputs.contains(path));
+        }
         let paths = collect_files(
             &request.paths,
             request.recursive,
             request.allowed_extensions.as_deref(),
         )?;
-        let directories = if request.mode == FileMode::Content {
+        // 空的副檔名清單代表資料夾掃描不收任何檔案，子資料夾也不能在 both／檔名模式下被改名。
+        let directories = if request.mode == FileMode::Content
+            || scan_collects_nothing(request.allowed_extensions.as_deref())
+        {
             Vec::new()
         } else {
             collect_directories(&request.paths, request.recursive)?
         };
         let mut files = Vec::new();
-        let mut warnings = Vec::new();
+        let mut warnings = ignored_inputs
+            .iter()
+            .map(|path| ignored_input_warning(path))
+            .collect::<Vec<_>>();
+        warnings.extend(empty_folder_warnings(&request.paths, &paths));
 
         for (index, source_path) in paths.iter().enumerate() {
             match self.enumerate_file(conversion, &request, source_path).await {
@@ -240,6 +261,7 @@ impl FileService {
             created_at: Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             items: files.iter().map(|file| file.item.clone()).collect(),
             warnings: unique(warnings),
+            ignored_inputs,
         };
         if let Ok(mut plans) = self.plans.lock() {
             plans.insert(
@@ -297,8 +319,7 @@ impl FileService {
             .preview_max_bytes
             .unwrap_or(6 * 1024)
             .clamp(1024, 1024 * 1024) as usize;
-        let buffer = fs::read(&source_path)?;
-        let inspected = inspect_file_bytes(&buffer, plan_request.input_encoding)?;
+        let inspected = inspect_file(&source_path, plan_request.input_encoding)?;
         let (source_preview, output_preview, detected_encoding, content_warning) = match inspected {
             InspectedBytes::Skip(reason) => (String::new(), String::new(), None, Some(reason)),
             InspectedBytes::Text { text, encoding } => {
@@ -436,15 +457,11 @@ impl FileService {
         if is_cancelled.as_ref().is_some_and(|check| check()) {
             return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
         }
-        let source_buffer = if request.mode == FileMode::Filename {
+        let inspected = if request.mode == FileMode::Filename {
             None
         } else {
-            Some(fs::read(source_path)?)
+            Some(inspect_file(source_path, request.input_encoding)?)
         };
-        let inspected = source_buffer
-            .as_deref()
-            .map(|buffer| inspect_file_bytes(buffer, request.input_encoding))
-            .transpose()?;
         let content_skip = match &inspected {
             Some(InspectedBytes::Skip(reason)) => Some(*reason),
             _ => None,
@@ -1319,6 +1336,9 @@ fn commit_prepared_file(
             warnings,
         });
     }
+    let Some(content) = file.content.as_deref() else {
+        return commit_unchanged_content(file, stage_validator);
+    };
     let source = PathBuf::from(&file.item.source_path);
     assert_source_writable(&source)?;
     let output = PathBuf::from(&file.item.output_path);
@@ -1326,11 +1346,7 @@ fn commit_prepared_file(
     if let Some(parent) = stage_path.parent() {
         fs::create_dir_all(parent)?;
     }
-    if let Some(content) = &file.content {
-        write_stage(&stage_path, content, &source)?;
-    } else {
-        fs::copy(&source, &stage_path)?;
-    }
+    write_stage(&stage_path, content, &source)?;
     verify_stage(&stage_path, file.content.as_deref(), &source)?;
     if let Some(validator) = stage_validator {
         if let Err(error) = validator(&stage_path, file.content.as_deref(), &source) {
@@ -1395,6 +1411,89 @@ fn commit_prepared_file(
         Ok(skipped @ FileCommitOutcome::Skipped { .. }) => Ok(skipped),
         Err(error) => {
             rollback_transaction(std::slice::from_ref(&entry));
+            Err(error)
+        }
+    }
+}
+
+/// 內容不變、只改名或移到輸出資料夾（例如 both 模式略過內容的二進位檔）。
+/// 同一磁碟區直接 rename，不複製也不讀內容；跨磁碟區才串流複製到輸出旁的暫存檔，
+/// 串流比對後再 rename，最後刪除來源。任何一步失敗都還原來源與被覆寫的既有檔。
+fn commit_unchanged_content(
+    file: PreparedFile,
+    stage_validator: Option<&StageValidator>,
+) -> Result<FileCommitOutcome, CoreError> {
+    let source = PathBuf::from(&file.item.source_path);
+    assert_source_writable(&source)?;
+    let output = PathBuf::from(&file.item.output_path);
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    // 先把來源移開再檢查輸出，與一般提交相同；不分大小寫的檔案系統上只差大小寫時才不會誤判衝突。
+    let original = transaction_path(&source, "original");
+    fs::rename(&source, &original)?;
+    let mut conflict_backup = None;
+    let mut stage_path = None;
+    let result = (|| -> Result<bool, CoreError> {
+        if output != source && output.exists() {
+            if file.conflict_policy == ConflictPolicy::Skip {
+                return Ok(false);
+            }
+            let conflict = transaction_path(&output, "conflict");
+            fs::rename(&output, &conflict)?;
+            conflict_backup = Some(conflict);
+        }
+        match fs::rename(&original, &output) {
+            Ok(()) => return Ok(true),
+            Err(error) if error.kind() == std::io::ErrorKind::CrossesDevices => {}
+            Err(error) => return Err(error.into()),
+        }
+        let stage = transaction_path(&output, "stage");
+        stage_path = Some(stage.clone());
+        // fs::copy 以串流（或系統的 copy_file_range）複製，不會整檔讀進記憶體。
+        fs::copy(&original, &stage)?;
+        verify_stage(&stage, None, &original)?;
+        if let Some(validator) = stage_validator {
+            validator(&stage, None, &source)?;
+        }
+        fs::rename(&stage, &output)?;
+        stage_path = None;
+        let _ = fs::remove_file(&original);
+        Ok(true)
+    })();
+    let restore = |restore_output: bool| {
+        if let Some(stage) = &stage_path {
+            let _ = fs::remove_file(stage);
+        }
+        if original.exists() && !source.exists() {
+            let _ = fs::rename(&original, &source);
+        }
+        if let Some(conflict) = &conflict_backup {
+            if restore_output && conflict.exists() && !output.exists() {
+                let _ = fs::rename(conflict, &output);
+            }
+        }
+    };
+    match result {
+        Ok(true) => {
+            if let Some(conflict) = conflict_backup {
+                let _ = fs::remove_file(&conflict).or_else(|_| fs::remove_dir_all(&conflict));
+            }
+            let warnings = content_skip_warnings(&file);
+            Ok(FileCommitOutcome::Succeeded {
+                output_path: output,
+                warnings,
+            })
+        }
+        Ok(false) => {
+            restore(false);
+            Ok(FileCommitOutcome::Skipped {
+                path: file.item.source_path.clone(),
+                warnings: content_skip_warnings(&file),
+            })
+        }
+        Err(error) => {
+            restore(true);
             Err(error)
         }
     }
@@ -1509,6 +1608,55 @@ fn include_file(discovered: bool, gate: &ExtensionGate, path: &Path) -> bool {
     }
 }
 
+/// 版本控制資料夾。直接指定這些資料夾（或其中的路徑）時需要明確允許。
+const VERSION_CONTROL_DIRECTORIES: &[&str] = &[".git", ".svn", ".hg", ".bzr"];
+
+/// 遞迴掃描時略過的資料夾：版本控制資料夾與其他以點開頭的隱藏資料夾。
+/// 只套用在掃描途中發現的資料夾；使用者直接指定的資料夾本身不受影響（版本控制資料夾另需確認）。
+fn is_ignored_scan_directory(name: &std::ffi::OsStr) -> bool {
+    name.as_encoded_bytes().first() == Some(&b'.')
+}
+
+/// 路徑本身或任一上層是版本控制資料夾。
+pub(crate) fn is_inside_version_control(path: &str) -> bool {
+    resolve_path(path)
+        .components()
+        .any(|component| match component {
+            std::path::Component::Normal(name) => name.to_str().is_some_and(|name| {
+                VERSION_CONTROL_DIRECTORIES
+                    .iter()
+                    .any(|candidate| name.eq_ignore_ascii_case(candidate))
+            }),
+            _ => false,
+        })
+}
+
+fn ignored_input_warning(path: &str) -> String {
+    format!("已略過版本控制資料夾內的路徑：{path}。轉換可能損壞儲存庫；確定要處理請明確允許。")
+}
+
+fn scan_collects_nothing(allowed_extensions: Option<&[String]>) -> bool {
+    allowed_extensions.is_some_and(|extensions| normalize_extension_list(extensions).is_empty())
+}
+
+/// 直接指定的資料夾掃描後沒有任何檔案時提示，避免畫面只顯示 0 項而沒有原因。
+fn empty_folder_warnings(inputs: &[String], files: &[PathBuf]) -> Vec<String> {
+    inputs
+        .iter()
+        .filter(|input| !input.contains(['*', '?']))
+        .filter_map(|input| {
+            let absolute = resolve_path(input);
+            let metadata = fs::symlink_metadata(&absolute).ok()?;
+            if !metadata.is_dir() || files.iter().any(|file| file.starts_with(&absolute)) {
+                return None;
+            }
+            Some(format!(
+                "資料夾「{input}」中沒有符合副檔名篩選器的檔案（隱藏資料夾與版本控制資料夾不會掃描）。"
+            ))
+        })
+        .collect()
+}
+
 fn collect_files(
     inputs: &[String],
     recursive: bool,
@@ -1572,7 +1720,10 @@ fn visit_files(
         }
         if entry.file_type()?.is_file() && include_file(true, gate, &entry.path()) {
             collected.insert(entry.path());
-        } else if recursive && entry.file_type()?.is_dir() {
+        } else if recursive
+            && entry.file_type()?.is_dir()
+            && !is_ignored_scan_directory(&entry.file_name())
+        {
             visit_files(&entry.path().to_string_lossy(), true, true, gate, collected)?;
         }
     }
@@ -1600,7 +1751,10 @@ fn visit_directories(path: &Path, collected: &mut HashSet<PathBuf>) -> Result<()
     }
     for entry in fs::read_dir(path)? {
         let entry = entry?;
-        if entry.file_type()?.is_symlink() || !entry.file_type()?.is_dir() {
+        if entry.file_type()?.is_symlink()
+            || !entry.file_type()?.is_dir()
+            || is_ignored_scan_directory(&entry.file_name())
+        {
             continue;
         }
         collected.insert(entry.path());
@@ -1879,13 +2033,13 @@ fn assert_source_writable(path: &Path) -> Result<(), CoreError> {
     Ok(())
 }
 
+/// 以串流比對暫存檔，不把整個檔案讀進記憶體。`expected` 為 `None` 時與來源檔逐塊比對。
 fn verify_stage(path: &Path, expected: Option<&[u8]>, source_path: &Path) -> Result<(), CoreError> {
-    let staged = fs::read(path)?;
-    let comparison = match expected {
-        Some(bytes) => bytes.to_vec(),
-        None => fs::read(source_path)?,
+    let same = match expected {
+        Some(bytes) => file_equals_bytes(path, bytes)?,
+        None => files_equal(path, source_path)?,
     };
-    if staged != comparison {
+    if !same {
         let _ = fs::remove_file(path);
         return Err(CoreError::with_details(
             "FILE_VERIFY",
@@ -1894,6 +2048,59 @@ fn verify_stage(path: &Path, expected: Option<&[u8]>, source_path: &Path) -> Res
         ));
     }
     Ok(())
+}
+
+fn read_chunk(reader: &mut impl std::io::Read, buffer: &mut [u8]) -> std::io::Result<usize> {
+    let mut filled = 0;
+    while filled < buffer.len() {
+        match reader.read(&mut buffer[filled..]) {
+            Ok(0) => break,
+            Ok(read) => filled += read,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(filled)
+}
+
+fn file_equals_bytes(path: &Path, expected: &[u8]) -> Result<bool, CoreError> {
+    let mut file = fs::File::open(path)?;
+    if file.metadata()?.len() != expected.len() as u64 {
+        return Ok(false);
+    }
+    let mut buffer = vec![0u8; STREAM_CHUNK_BYTES];
+    let mut offset = 0;
+    loop {
+        let read = read_chunk(&mut file, &mut buffer)?;
+        if read == 0 {
+            return Ok(offset == expected.len());
+        }
+        if offset + read > expected.len() || buffer[..read] != expected[offset..offset + read] {
+            return Ok(false);
+        }
+        offset += read;
+    }
+}
+
+/// 兩個檔案逐塊比對內容，記憶體用量固定為兩個區塊。
+fn files_equal(left: &Path, right: &Path) -> Result<bool, CoreError> {
+    let mut left = fs::File::open(left)?;
+    let mut right = fs::File::open(right)?;
+    if left.metadata()?.len() != right.metadata()?.len() {
+        return Ok(false);
+    }
+    let mut left_buffer = vec![0u8; STREAM_CHUNK_BYTES];
+    let mut right_buffer = vec![0u8; STREAM_CHUNK_BYTES];
+    loop {
+        let left_read = read_chunk(&mut left, &mut left_buffer)?;
+        let right_read = read_chunk(&mut right, &mut right_buffer)?;
+        if left_read != right_read || left_buffer[..left_read] != right_buffer[..right_read] {
+            return Ok(false);
+        }
+        if left_read == 0 {
+            return Ok(true);
+        }
+    }
 }
 
 fn rollback_transaction(transaction: &[TransactionEntry]) {
@@ -1984,6 +2191,13 @@ fn resolve_committed_directory_path(
 
 const BINARY_CONTENT_WARNING: &str = "此檔案為二進位內容，已略過內容轉換。";
 const DECODE_ERROR_WARNING: &str = "解碼時發生錯誤，已略過內容轉換。";
+const TOO_LARGE_WARNING: &str = "文字檔超過 64 MiB，已略過內容轉換。";
+/// 二進位判斷只讀檔頭這麼多位元組（檔頭 magic、MPEG 下一幀、NUL）。
+const INSPECT_HEAD_BYTES: usize = 64 * 1024;
+/// 內容轉換會把整個文字檔讀進記憶體並解碼；超過此大小直接略過，避免大型檔案吃光記憶體。
+const MAX_TEXT_FILE_BYTES: u64 = 64 * 1024 * 1024;
+/// 串流比對與複製的區塊大小。
+const STREAM_CHUNK_BYTES: usize = 64 * 1024;
 /// 少於這個數量的 U+FFFD 不視為二進位。只用於 UTF-16；其他編碼看 `had_errors`。
 const REPLACEMENT_MIN_COUNT: usize = 4;
 /// 替換字元佔解碼後字元數的比例達到此值，且數量達下限，才視為二進位。
@@ -1993,6 +2207,7 @@ const REPLACEMENT_RATIO: f64 = 0.02;
 enum ContentSkip {
     Binary,
     DecodeError,
+    TooLarge,
 }
 
 #[derive(Debug)]
@@ -2008,11 +2223,14 @@ fn content_skip_message(reason: ContentSkip) -> &'static str {
     match reason {
         ContentSkip::Binary => BINARY_CONTENT_WARNING,
         ContentSkip::DecodeError => DECODE_ERROR_WARNING,
+        ContentSkip::TooLarge => TOO_LARGE_WARNING,
     }
 }
 
 fn is_content_skip_warning(warning: &str) -> bool {
-    warning.contains(BINARY_CONTENT_WARNING) || warning.contains(DECODE_ERROR_WARNING)
+    warning.contains(BINARY_CONTENT_WARNING)
+        || warning.contains(DECODE_ERROR_WARNING)
+        || warning.contains(TOO_LARGE_WARNING)
 }
 
 fn content_skip_warnings(file: &PreparedFile) -> Vec<String> {
@@ -2042,6 +2260,52 @@ fn merge_warning(incoming: Option<String>, existing: Option<String>) -> Option<S
         (Some(incoming), _) => Some(incoming),
         (None, existing) => existing,
     }
+}
+
+/// 先只讀檔頭判斷二進位，是二進位或超過大小上限就不再讀整個檔案。
+/// 只有通過檢查的文字檔（不超過 `MAX_TEXT_FILE_BYTES`）才整檔讀入解碼。
+fn inspect_file(path: &Path, requested: TextEncoding) -> Result<InspectedBytes, CoreError> {
+    use std::io::Read;
+    let mut file = fs::File::open(path)?;
+    let size = file.metadata()?.len();
+    let mut head = Vec::with_capacity(INSPECT_HEAD_BYTES.min(size as usize));
+    (&mut file)
+        .take(INSPECT_HEAD_BYTES as u64)
+        .read_to_end(&mut head)?;
+    if let Some(reason) = inspect_head(&head, requested) {
+        return Ok(InspectedBytes::Skip(reason));
+    }
+    if size > MAX_TEXT_FILE_BYTES {
+        return Ok(InspectedBytes::Skip(ContentSkip::TooLarge));
+    }
+    if (head.len() as u64) < size {
+        // 檔案可能在讀檔頭後變大；最多讀到上限加一個位元組，超過就略過。
+        let mut buffer = head;
+        (&mut file)
+            .take(MAX_TEXT_FILE_BYTES + 1 - buffer.len() as u64)
+            .read_to_end(&mut buffer)?;
+        if buffer.len() as u64 > MAX_TEXT_FILE_BYTES {
+            return Ok(InspectedBytes::Skip(ContentSkip::TooLarge));
+        }
+        return inspect_file_bytes(&buffer, requested);
+    }
+    inspect_file_bytes(&head, requested)
+}
+
+/// 只看檔頭的快速判斷：檔頭 magic，以及非 UTF-16 時的 NUL。
+fn inspect_head(head: &[u8], requested: TextEncoding) -> Option<ContentSkip> {
+    if has_binary_magic(head) {
+        return Some(ContentSkip::Binary);
+    }
+    let encoding = if requested == TextEncoding::Auto {
+        detect_encoding(head)
+    } else {
+        requested
+    };
+    if !matches!(encoding, TextEncoding::Utf16le | TextEncoding::Utf16be) && head.contains(&0) {
+        return Some(ContentSkip::Binary);
+    }
+    None
 }
 
 fn inspect_file_bytes(buffer: &[u8], requested: TextEncoding) -> Result<InspectedBytes, CoreError> {

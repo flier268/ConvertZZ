@@ -269,8 +269,11 @@ ConvertZZ --headless --file --config ./my-settings.json -y a.txt
 | `--filename` | 只轉檔名；與 `--file`／`--audio` 併用＝內容或標籤＋檔名 |
 | `--operation` | `content`／`filename`／`both`（進階） |
 | `--backup`／`--no-backup` | 轉換前 `.bak` 備份（預設開啟） |
+| `--include-ignored` | 直接指定 `.git`、`.svn`、`.hg`、`.bzr` 資料夾（或其中的檔案）時照樣轉換；未指定時略過並警告 |
 
 無頭預設**不讀設定**，必要參數（至少 `--direction`）須由命令列提供；需要沿用 GUI 設定時加上 `--globalconfig` 或 `--config`。無頭行程在 GUI／single-instance 之前結束，因此不論主程式視窗是否已開啟，行為都相同。
+
+遞迴掃描資料夾時一律略過以點開頭的資料夾（`.git`、`.svn` 等）。直接指定版本控制資料夾時，GUI 會先跳出確認視窗，無頭模式則略過並警告，除非加上 `--include-ignored`。
 
 未指定 `--file`／`--audio` 時，第二個位置參數仍為輸出路徑；輸入／輸出路徑支援 `*` 萬用字元。
 

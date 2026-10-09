@@ -224,6 +224,7 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
       planId: "plan-1",
       createdAt: "2026-08-15T00:00:00.000Z",
       warnings: [],
+      ignoredInputs: [],
       items: [lastFilePlanItem],
     };
   }

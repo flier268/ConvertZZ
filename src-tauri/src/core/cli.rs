@@ -41,6 +41,7 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
         vocabulary_explicit: false,
         backup_explicit: false,
         use_global_config: false,
+        include_ignored: false,
         config_path: None,
         parse_errors: Vec::new(),
     };
@@ -145,6 +146,7 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
             "--headless" => headless = true,
             "--yes" | "-y" => confirm_write = true,
             "--globalconfig" => use_global_config = true,
+            "--include-ignored" => parsed.include_ignored = true,
             "--no-backup" => {
                 parsed.backup = false;
                 backup_explicit = true;
@@ -434,6 +436,8 @@ ConvertZZ 命令列
   --config <路徑>        無頭時載入指定設定檔（不可與 --globalconfig 併用）
   --operation <模式>     content｜filename｜both（進階；預設 content）
   --backup / --no-backup 轉換前 .bak 備份（預設開啟）
+  --include-ignored      直接指定 .git、.svn、.hg、.bzr 資料夾（或其中的檔案）時照樣轉換；
+                         未指定時略過並警告（遞迴掃描一律略過以點開頭的資料夾）
   --help, -h             顯示此說明
 
 無頭預設不讀設定，請用命令列提供必要參數；需要設定時加上 --globalconfig 或 --config。

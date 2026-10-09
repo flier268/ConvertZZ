@@ -70,6 +70,11 @@ export interface FilePlanRequest {
   conflictPolicy: ConflictPolicy;
   /** 轉換前自動建立 .bak 備份；省略時預設啟用。 */
   backup?: boolean;
+  /**
+   * 直接指定版本控制資料夾（.git、.svn、.hg、.bzr）或其中的路徑時是否照樣處理。
+   * 省略或 false：這些輸入會被略過並列在 `FileConversionPlan.ignoredInputs`。
+   */
+  includeIgnored?: boolean;
   conversion: Omit<ConversionRequest, "text">;
 }
 
@@ -92,6 +97,8 @@ export interface FileConversionPlan {
   createdAt: string;
   items: FilePlanItem[];
   warnings: string[];
+  /** 因位於版本控制資料夾而略過的直接輸入（`includeIgnored` 未開啟時）。 */
+  ignoredInputs?: string[];
 }
 
 /** 對計畫內單一檔案載入截斷後的內容預覽。 */
@@ -208,6 +215,8 @@ export interface ParsedCli {
   useGlobalConfig?: boolean;
   /** 無頭時載入指定設定檔（`--config <路徑>`）。 */
   configPath?: string;
+  /** `--include-ignored`：直接指定的版本控制資料夾也照樣處理。 */
+  includeIgnored?: boolean;
   /** 已知旗標但值無效時的解析錯誤。 */
   parseErrors?: string[];
 }

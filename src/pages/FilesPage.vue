@@ -17,6 +17,11 @@ import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { cliInvocation } from "../lib/cli";
 import { summarizeFileApplyWarnings } from "../lib/fileApplyMessages";
 import {
+  dropIgnoredInputWarnings,
+  ignoredInputsConfirmMessage,
+  withoutIgnoredInputs,
+} from "../lib/ignoredInputs";
+import {
   dialogFileFilters,
   ensureSupportedFilesFilter,
   folderScanExtensions,
@@ -430,42 +435,65 @@ async function createPlan() {
   try {
     const settings = await loadSettings();
     const extensionFilter = folderScanExtensions(fileFilters.value);
-    plan.value = await core.request<FileConversionPlan>(
-      "files.plan",
-      {
-        paths: paths.value,
-        outputPath: outputPath.value,
-        outputDirectory: outputDirectory.value,
-        mode: options.mode,
-        recursive: options.recursive,
-        inputEncoding: options.inputEncoding,
-        outputEncoding: options.outputEncoding,
-        addBom: options.addBom,
-        fixCharsetDeclaration: options.fixCharsetDeclaration,
-        fixCharsetExtensions: fixCharsetExtensions.value,
-        ...(extensionFilter.kind === "list"
-          ? { allowedExtensions: extensionFilter.extensions }
-          : {}),
-        previewMaxBytes: previewMaxBytes.value,
-        conflictPolicy: options.conflictPolicy,
-        backup: backup.value,
-        conversion: {
-          direction: options.direction,
-          engine: options.engine,
-          vocabularyCorrection: options.vocabularyCorrection,
-          zhconvert: zhConvertOptions(settings, options.direction),
-          dictionaryPath: settings.dictionaryPath,
+    const requestPlan = (includeIgnored: boolean) =>
+      core.request<FileConversionPlan>(
+        "files.plan",
+        {
+          paths: paths.value,
+          outputPath: outputPath.value,
+          outputDirectory: outputDirectory.value,
+          mode: options.mode,
+          recursive: options.recursive,
+          inputEncoding: options.inputEncoding,
+          outputEncoding: options.outputEncoding,
+          addBom: options.addBom,
+          fixCharsetDeclaration: options.fixCharsetDeclaration,
+          fixCharsetExtensions: fixCharsetExtensions.value,
+          ...(extensionFilter.kind === "list"
+            ? { allowedExtensions: extensionFilter.extensions }
+            : {}),
+          previewMaxBytes: previewMaxBytes.value,
+          conflictPolicy: options.conflictPolicy,
+          backup: backup.value,
+          includeIgnored,
+          conversion: {
+            direction: options.direction,
+            engine: options.engine,
+            vocabularyCorrection: options.vocabularyCorrection,
+            zhconvert: zhConvertOptions(settings, options.direction),
+            dictionaryPath: settings.dictionaryPath,
+          },
+        } satisfies FilePlanRequest,
+        {
+          onProgress: (value) => {
+            progress.value = value;
+          },
+          onRequestId: (id) => {
+            activeRequestId.value = id;
+          },
         },
-      } satisfies FilePlanRequest,
-      {
-        onProgress: (value) => {
-          progress.value = value;
-        },
-        onRequestId: (id) => {
-          activeRequestId.value = id;
-        },
-      },
-    );
+      );
+    let created = await requestPlan(false);
+    const ignored = created.ignoredInputs ?? [];
+    if (ignored.length) {
+      const accepted = await confirm(ignoredInputsConfirmMessage(ignored), {
+        title: "確認轉換版本控制資料夾",
+        kind: "warning",
+      });
+      if (accepted) {
+        // 第一份計畫略過了這些路徑；釋放它再以允許的設定重建。
+        await core.request("files.cancel", { planId: created.planId }).catch(() => undefined);
+        created = await requestPlan(true);
+      } else {
+        // 取消：從來源清單移除這些路徑；計畫本身已略過它們，不必重建。
+        paths.value = withoutIgnoredInputs(paths.value, ignored);
+        created = { ...created, warnings: dropIgnoredInputWarnings(created.warnings, ignored) };
+      }
+    }
+    plan.value = created;
+    if (!created.items.length) {
+      ElMessage.warning(created.warnings[0] ?? "沒有找到可轉換的檔案。");
+    }
     // 大型清單先讓虛擬表格掛上，再載入第一筆預覽，避免主執行緒連續長任務。
     await nextTick();
     const first = plan.value.items.find((item) => item.status === "ready") ?? plan.value.items[0];

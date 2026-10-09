@@ -9,10 +9,10 @@ function readProjectFile(path: string): string {
 describe("CI 工作流程契約", () => {
   const ci = readProjectFile(".github/workflows/ci.yml");
 
-  it("避免同一次推送重複跑 CI：master／migrate-to-nodejs push + PR，且略過 tags", () => {
+  it("避免同一次推送重複跑 CI：只有 master push + PR，且略過 tags", () => {
     expect(ci).toMatch(/^\s+branches:\s*$/m);
     expect(ci).toContain("- master");
-    expect(ci).toContain("- migrate-to-nodejs");
+    expect(ci).not.toContain("- migrate-to-nodejs");
     expect(ci).toContain("pull_request:");
     expect(ci).not.toMatch(/^on:\s*\n\s+push:\s*\n\s+pull_request:/m);
     expect(ci).toContain("concurrency:");

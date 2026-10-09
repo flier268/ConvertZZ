@@ -1,6 +1,6 @@
 use super::super::conversion::shared_conversion;
 use super::super::encoding::encode_text;
-use super::super::headless::extensions_from_type_filter;
+use super::super::headless::{extensions_from_type_filter, ParsedTypeExtensions};
 use super::super::settings::migrate;
 use super::super::types::{ConversionOptions, Direction, EngineKind, FileMode};
 use super::*;
@@ -9,6 +9,7 @@ use serde_json::json;
 use std::collections::HashSet;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
 use uuid::Uuid;
 
 fn noop() -> ProgressReporter {
@@ -1872,13 +1873,18 @@ fn migrated_bracketless_type_filter_does_not_visit_audio_files() {
             .find(|case| case.name == name)
             .unwrap_or_else(|| panic!("缺少向量 {name}"));
         assert!(
-            extensions_from_type_filter(&case.input).is_none(),
+            matches!(
+                extensions_from_type_filter(&case.input),
+                ParsedTypeExtensions::List(ref items) if items.is_empty()
+            ),
             "{name} 遷移前不該解析出副檔名"
         );
         let migrated = migrate(json!({ "FileConvert": { "TypeFilter": case.input } }));
         let filter = migrated["files"]["typeFilter"].as_str().unwrap();
-        let extensions = extensions_from_type_filter(filter)
-            .unwrap_or_else(|| panic!("{name} 遷移後仍解析不到副檔名"));
+        let ParsedTypeExtensions::List(extensions) = extensions_from_type_filter(filter) else {
+            panic!("{name} 遷移後不應變成所有檔案");
+        };
+        assert!(!extensions.is_empty(), "{name} 遷移後仍解析不到副檔名");
         assert!(extensions.iter().any(|extension| extension == ".txt"));
         assert!(extensions.iter().any(|extension| extension == ".html"));
         assert!(!extensions
@@ -1890,7 +1896,7 @@ fn migrated_bracketless_type_filter_does_not_visit_audio_files() {
             &directory.to_string_lossy(),
             true,
             false,
-            &allowed,
+            &ExtensionGate::Only(allowed),
             &mut collected,
         )
         .unwrap();
@@ -1908,5 +1914,231 @@ fn migrated_bracketless_type_filter_does_not_visit_audio_files() {
             "{name} 收進了非預設副檔名：{names:?}"
         );
     }
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+fn directory_scan_request(
+    path: &Path,
+    mode: FileMode,
+    allowed_extensions: Option<Vec<String>>,
+) -> FilePlanRequest {
+    FilePlanRequest {
+        paths: vec![path.to_string_lossy().into_owned()],
+        output_path: None,
+        output_directory: None,
+        mode,
+        recursive: true,
+        input_encoding: TextEncoding::Utf8,
+        output_encoding: TextEncoding::Utf8,
+        add_bom: false,
+        fix_charset_declaration: false,
+        fix_charset_extensions: None,
+        allowed_extensions,
+        preview_max_bytes: Some(4096),
+        conflict_policy: ConflictPolicy::Skip,
+        backup: Some(false),
+        conversion: conversion_s2t(),
+    }
+}
+
+fn sorted_file_names(plan: &super::super::types::FileConversionPlan) -> Vec<String> {
+    let mut names = plan
+        .items
+        .iter()
+        .map(|item| {
+            Path::new(&item.source_path)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect::<Vec<_>>();
+    names.sort();
+    names
+}
+
+#[tokio::test]
+async fn all_files_directory_scan_includes_every_file() {
+    let directory = temp_dir();
+    std::fs::write(directory.join("note.txt"), "甲").unwrap();
+    std::fs::write(directory.join("custom.mytxt"), "软件").unwrap();
+    std::fs::write(directory.join("song.mp3"), b"mp3").unwrap();
+    std::fs::write(directory.join("noext"), "乙").unwrap();
+    let nested = directory.join("nested");
+    std::fs::create_dir(&nested).unwrap();
+    std::fs::write(nested.join("inner.log"), "丙").unwrap();
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Content, None),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        sorted_file_names(&plan),
+        ["custom.mytxt", "inner.log", "noext", "note.txt", "song.mp3"]
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn all_files_directory_scan_converts_custom_text_extension() {
+    let directory = temp_dir();
+    let source = directory.join("note.mytxt");
+    std::fs::write(&source, "软件").unwrap();
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Content, None),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(sorted_file_names(&plan), ["note.mytxt"]);
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert_eq!(std::fs::read_to_string(&source).unwrap(), "軟件");
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn all_files_directory_scan_keeps_mp3_bytes_for_content_and_both() {
+    let original = std::fs::read(audio_fixture("测试音乐.mp3")).unwrap();
+    let directory = temp_dir();
+    let source = directory.join("测试音乐.mp3");
+    std::fs::write(&source, &original).unwrap();
+    let service = FileService::new();
+    let content_plan = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Content, None),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(sorted_file_names(&content_plan), ["测试音乐.mp3"]);
+    let content_result = service
+        .apply(
+            shared_conversion(),
+            &content_plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(content_result.failed.is_empty(), "{content_result:?}");
+    assert!(content_result.succeeded.is_empty(), "{content_result:?}");
+    assert!(content_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("已略過內容轉換")));
+    assert_eq!(std::fs::read(&source).unwrap(), original);
+
+    let both_plan = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Both, None),
+            noop(),
+        )
+        .await
+        .unwrap();
+    let renamed = directory.join("測試音樂.mp3");
+    assert_eq!(
+        both_plan.items[0].output_path,
+        renamed.to_string_lossy().into_owned()
+    );
+    let both_result = service
+        .apply(
+            shared_conversion(),
+            &both_plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(both_result.failed.is_empty(), "{both_result:?}");
+    assert!(both_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("已略過內容轉換")));
+    assert_eq!(std::fs::read(&renamed).unwrap(), original);
+    assert!(!source.exists());
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn empty_extension_list_collects_no_files() {
+    let directory = temp_dir();
+    std::fs::write(directory.join("note.txt"), "甲").unwrap();
+    std::fs::write(directory.join("custom.mytxt"), "软件").unwrap();
+    std::fs::write(directory.join("song.mp3"), b"mp3").unwrap();
+    let service = FileService::new();
+    let scanned = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Content, Some(vec![])),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert!(scanned.items.is_empty(), "{:?}", scanned.items);
+    let starred = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(
+                &directory,
+                FileMode::Content,
+                Some(vec!["*".into(), "*.*".into()]),
+            ),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        starred.items.is_empty(),
+        "清單裡的 * 不是所有檔案：{:?}",
+        starred.items
+    );
+    let explicit = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory.join("note.txt"), FileMode::Content, Some(vec![])),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        explicit.items.len(),
+        1,
+        "直接指定的檔案即使清單為空也收：{:?}",
+        explicit.items
+    );
+    let picked = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(
+                &directory.join("custom.mytxt"),
+                FileMode::Content,
+                Some(vec![".txt".into()]),
+            ),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(sorted_file_names(&picked), ["custom.mytxt"]);
     let _ = std::fs::remove_dir_all(&directory);
 }

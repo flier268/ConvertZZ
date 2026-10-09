@@ -165,6 +165,22 @@ describe("設定分頁", () => {
     wrapper.unmount();
   });
 
+  it("檔案篩選器可加入所有檔案", async () => {
+    const settings = settingsFixture();
+    getLoadedSettings.mockReturnValue(settings);
+    loadSettings.mockResolvedValue(settings);
+    const wrapper = await mountPage();
+    await wrapper.get('[id^="tab-files"]').trigger("click");
+    await flushPromises();
+    const button = wrapper.get("#pane-files .filter-editor-actions button");
+    expect(button.text()).toBe("加入所有檔案");
+    await button.trigger("click");
+    expect(settings.files.typeFilter).toBe("<文字|*.txt>/<所有檔案|*.*>");
+    await button.trigger("click");
+    expect(settings.files.typeFilter).toBe("<文字|*.txt>/<所有檔案|*.*>");
+    wrapper.unmount();
+  });
+
   it("Windows 整合只出現在一般分頁", async () => {
     invoke.mockImplementation(async (command: string) => {
       if (command === "platform_capabilities") {

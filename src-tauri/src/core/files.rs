@@ -1455,25 +1455,69 @@ fn map_progress(
     })
 }
 
+/// 資料夾掃描的副檔名閘門。`All` 只來自明確的所有檔案（請求省略清單）。
+/// `Only` 的空集合表示沒有符合的副檔名，不收任何檔案。
+enum ExtensionGate {
+    All,
+    Only(HashSet<String>),
+}
+
+fn extension_gate(allowed_extensions: Option<&[String]>) -> ExtensionGate {
+    match allowed_extensions {
+        None => ExtensionGate::All,
+        Some(extensions) => ExtensionGate::Only(normalize_extension_list(extensions)),
+    }
+}
+
+fn is_all_files_token(value: &str) -> bool {
+    value == "*" || value.eq_ignore_ascii_case("*.*")
+}
+
+/// `*` 與 `*.*` 不是副檔名。清單裡只剩這些標記時變成空集合，而不是所有檔案。
+fn normalize_extension_list(extensions: &[String]) -> HashSet<String> {
+    extensions
+        .iter()
+        .filter_map(|extension| {
+            let trimmed = extension.trim();
+            if trimmed.is_empty() || is_all_files_token(trimmed) {
+                return None;
+            }
+            let lowered = trimmed.to_ascii_lowercase();
+            if let Some(rest) = lowered.strip_prefix('.') {
+                if rest.is_empty() || is_all_files_token(rest) {
+                    None
+                } else {
+                    Some(lowered)
+                }
+            } else {
+                Some(format!(".{lowered}"))
+            }
+        })
+        .collect()
+}
+
+/// 直接指定的檔案一律收，因為選擇對話框不會回報使用者選了哪個篩選，
+/// 使用者明確點選的檔案不應被副檔名擋下（包含空清單時）。
+/// 資料夾掃描找到的檔案：`All` 全收；`Only` 必須符合副檔名，空集合時一個都不收。
+fn include_file(discovered: bool, gate: &ExtensionGate, path: &Path) -> bool {
+    if !discovered {
+        return true;
+    }
+    match gate {
+        ExtensionGate::All => true,
+        ExtensionGate::Only(allowed) => allowed.contains(&extension_of(path)),
+    }
+}
+
 fn collect_files(
     inputs: &[String],
     recursive: bool,
     allowed_extensions: Option<&[String]>,
 ) -> Result<Vec<PathBuf>, CoreError> {
     let mut collected = HashSet::new();
-    let allowed = allowed_extensions
-        .unwrap_or(&[])
-        .iter()
-        .map(|extension| {
-            if extension.starts_with('.') {
-                extension.to_ascii_lowercase()
-            } else {
-                format!(".{}", extension.to_ascii_lowercase())
-            }
-        })
-        .collect::<HashSet<_>>();
+    let gate = extension_gate(allowed_extensions);
     for path in inputs {
-        visit_files(path, recursive, false, &allowed, &mut collected)?;
+        visit_files(path, recursive, false, &gate, &mut collected)?;
     }
     let mut files = collected.into_iter().collect::<Vec<_>>();
     files.sort();
@@ -1484,7 +1528,7 @@ fn visit_files(
     path: &str,
     recursive: bool,
     discovered: bool,
-    allowed: &HashSet<String>,
+    gate: &ExtensionGate,
     collected: &mut HashSet<PathBuf>,
 ) -> Result<(), CoreError> {
     let absolute = resolve_path(path);
@@ -1513,7 +1557,7 @@ fn visit_files(
         return Ok(());
     }
     if metadata.is_file() {
-        if !discovered || allowed.is_empty() || allowed.contains(&extension_of(&absolute)) {
+        if include_file(discovered, gate, &absolute) {
             collected.insert(absolute);
         }
         return Ok(());
@@ -1526,18 +1570,10 @@ fn visit_files(
         if entry.file_type()?.is_symlink() {
             continue;
         }
-        if entry.file_type()?.is_file()
-            && (allowed.is_empty() || allowed.contains(&extension_of(&entry.path())))
-        {
+        if entry.file_type()?.is_file() && include_file(true, gate, &entry.path()) {
             collected.insert(entry.path());
         } else if recursive && entry.file_type()?.is_dir() {
-            visit_files(
-                &entry.path().to_string_lossy(),
-                true,
-                true,
-                allowed,
-                collected,
-            )?;
+            visit_files(&entry.path().to_string_lossy(), true, true, gate, collected)?;
         }
     }
     Ok(())

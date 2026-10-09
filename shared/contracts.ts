@@ -61,6 +61,10 @@ export interface FilePlanRequest {
   addBom: boolean;
   fixCharsetDeclaration: boolean;
   fixCharsetExtensions?: string[];
+  /**
+   * 資料夾掃描允許的副檔名（含前導點）。省略表示所有檔案，只在明確的所有檔案狀態使用。
+   * 空陣列表示資料夾掃描不收任何檔案；直接指定的檔案仍收。
+   */
   allowedExtensions?: string[];
   previewMaxBytes?: number;
   conflictPolicy: ConflictPolicy;

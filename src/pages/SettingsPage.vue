@@ -21,6 +21,7 @@ import { applyDesktopSettings } from "../lib/desktop";
 import { acceleratorFromKeyboardEvent, assignShortcutAccelerator } from "../lib/hotkey";
 import { LEGACY_ACTIONS } from "../lib/legacyActions";
 import { importFailureMessage } from "../lib/settingsApply";
+import { appendAllFilesTypeFilter } from "../lib/fileFilters";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 defineOptions({ name: "SettingsPage" });
@@ -168,6 +169,11 @@ async function importLegacyJson() {
   }
 }
 
+function addAllFilesFilter(): void {
+  if (!settings.value) return;
+  settings.value.files.typeFilter = appendAllFilesTypeFilter(settings.value.files.typeFilter);
+}
+
 async function saveApiKey() {
   const persisted = await invoke<boolean>("save_zhconvert_api_key", { apiKey: apiKey.value }).catch(
     () => false,
@@ -288,7 +294,11 @@ async function saveApiKey() {
                 v-model="settings.files.typeFilter"
                 type="textarea"
                 :rows="3"
-                placeholder="<文字|*.txt;*.log>/<網頁|*.html;*.htm>" /></el-form-item
+                placeholder="<文字|*.txt;*.log>/<網頁|*.html;*.htm>"
+              />
+              <div class="filter-editor-actions">
+                <el-button @click="addAllFilesFilter">加入所有檔案</el-button>
+              </div></el-form-item
             ><el-form-item label="修正 charset 的副檔名"
               ><el-select
                 v-model="settings.files.fixCharsetExtensions"

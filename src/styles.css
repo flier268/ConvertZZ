@@ -561,6 +561,9 @@ html.floating-window * {
 .switch-row {
   margin-top: 8px;
 }
+.filter-editor-actions {
+  margin-top: 8px;
+}
 .settings-note {
   display: flex;
   align-items: center;

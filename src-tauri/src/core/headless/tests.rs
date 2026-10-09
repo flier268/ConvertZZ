@@ -344,3 +344,76 @@ fn confirm_tags_then_rename_yes_flag() {
     );
     assert!(confirm_tags_then_rename(&mut parsed, 2, 2).expect("yes"));
 }
+
+fn default_extension_list() -> Vec<String> {
+    DEFAULT_ALLOWED_EXTENSIONS
+        .iter()
+        .map(|item| (*item).to_string())
+        .collect()
+}
+
+#[test]
+fn star_dot_star_means_all_files_and_unparsed_filter_is_empty() {
+    assert_eq!(
+        extensions_from_type_filter("<所有檔案|*.*>"),
+        ParsedTypeExtensions::All
+    );
+    assert_eq!(
+        extensions_from_type_filter("<全部|*>"),
+        ParsedTypeExtensions::All
+    );
+    assert_eq!(
+        extensions_from_type_filter("<文字|*.txt>/<所有檔案|*.*>"),
+        ParsedTypeExtensions::All
+    );
+    assert_eq!(
+        extensions_from_type_filter("<文字|*.txt;*.*>"),
+        ParsedTypeExtensions::All
+    );
+    assert_eq!(
+        extensions_from_type_filter("不是篩選"),
+        ParsedTypeExtensions::List(vec![])
+    );
+    assert_eq!(
+        extensions_from_type_filter(""),
+        ParsedTypeExtensions::List(vec![])
+    );
+    assert_eq!(
+        extensions_from_type_filter("任意檔案(*.*)|*.*"),
+        ParsedTypeExtensions::List(vec![])
+    );
+    assert_eq!(
+        extensions_from_type_filter("<文字|*.txt;*.log>"),
+        ParsedTypeExtensions::List(vec![".txt".into(), ".log".into()])
+    );
+
+    assert_eq!(
+        allowed_extensions(Some(
+            &json!({ "files": { "typeFilter": "<所有檔案|*.*>" } })
+        )),
+        None
+    );
+    assert_eq!(
+        allowed_extensions(Some(&json!({ "files": { "typeFilter": "<全部|*>" } }))),
+        None
+    );
+    assert_eq!(
+        allowed_extensions(Some(&json!({ "files": { "typeFilter": "無法解析" } }))),
+        Some(vec![])
+    );
+    assert_eq!(
+        allowed_extensions(Some(&json!({ "files": { "typeFilter": "" } }))),
+        Some(vec![])
+    );
+    assert_eq!(
+        allowed_extensions(Some(
+            &json!({ "files": { "typeFilter": "<文字|*.TXT;*.log>" } })
+        )),
+        Some(vec![".txt".into(), ".log".into()])
+    );
+    assert_eq!(allowed_extensions(None), Some(default_extension_list()));
+    assert_eq!(
+        allowed_extensions(Some(&json!({ "files": {} }))),
+        Some(default_extension_list())
+    );
+}

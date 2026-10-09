@@ -4,6 +4,11 @@ export interface LegacyFileFilter {
 }
 
 export const SUPPORTED_FILES_FILTER_NAME = "支援的檔案";
+export const ALL_FILES_FILTER_NAME = "所有檔案";
+/** 對話框篩選與掃描狀態用的所有檔案標記。不是副檔名。 */
+export const ALL_FILES_EXTENSION = "*";
+/** 使用者在篩選器字串裡加入所有檔案時的群組。預設字串不含這項。 */
+export const ALL_FILES_TYPE_FILTER_GROUP = "<所有檔案|*.*>";
 
 export const DEFAULT_FILE_TYPE_FILTER =
   "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>";
@@ -67,22 +72,38 @@ function isRemovableAudioGroup(group: string): boolean {
   return name.includes("音訊") || name.includes("音頻");
 }
 
+function extensionFromLegacyPattern(pattern: string): string | null {
+  const trimmed = pattern.trim();
+  if (trimmed === "*" || trimmed.toLowerCase() === "*.*") return ALL_FILES_EXTENSION;
+  const extension = trimmed.replace(/^\*\.?/u, "").replace(/^\./u, "");
+  if (!extension || extension === "*") return null;
+  return extension;
+}
+
 export function parseLegacyFileFilters(value: string): LegacyFileFilter[] {
   const filters: LegacyFileFilter[] = [];
   for (const match of value.matchAll(/<([^|<>]+)\|([^<>]+)>/gu)) {
     const extensions = match[2]
       .split(";")
-      .map((pattern) =>
-        pattern
-          .trim()
-          .replace(/^\*\.?/u, "")
-          .replace(/^\./u, ""),
-      )
-      .filter((extension) => extension && extension !== "*");
+      .map((pattern) => extensionFromLegacyPattern(pattern))
+      .filter((extension): extension is string => extension !== null);
     if (extensions.length)
       filters.push({ name: match[1].trim(), extensions: Array.from(new Set(extensions)) });
   }
   return filters;
+}
+
+/** 設定字串已有 `*`／`*.*` 時不重複加入。空字串只寫入所有檔案群組。 */
+export function appendAllFilesTypeFilter(value: string): string {
+  if (
+    parseLegacyFileFilters(value).some((filter) => filter.extensions.includes(ALL_FILES_EXTENSION))
+  ) {
+    return value;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) return ALL_FILES_TYPE_FILTER_GROUP;
+  const separator = trimmed.endsWith("/") ? "" : "/";
+  return `${trimmed}${separator}${ALL_FILES_TYPE_FILTER_GROUP}`;
 }
 
 /** 執行時在對話框篩選最前方加上「支援的檔案」聯集；設定字串本身不必也不應寫入此項。 */
@@ -91,10 +112,55 @@ export function ensureSupportedFilesFilter(filters: LegacyFileFilter[]): LegacyF
   const extensions = Array.from(
     new Set(
       (categories.length ? categories : filters).flatMap((filter) =>
-        filter.extensions.map((extension) => extension.toLowerCase()),
+        filter.extensions
+          .filter((extension) => extension !== ALL_FILES_EXTENSION)
+          .map((extension) => extension.toLowerCase()),
       ),
     ),
   );
   if (!extensions.length) return filters;
   return [{ name: SUPPORTED_FILES_FILTER_NAME, extensions }, ...categories];
+}
+
+/**
+ * 檔案對話框用。固定在「支援的檔案」之後加上「所有檔案」。
+ * 這項不寫入設定字串，也不應進入資料夾掃描的副檔名聯集。
+ */
+export function dialogFileFilters(filters: LegacyFileFilter[]): LegacyFileFilter[] {
+  const withSupported = ensureSupportedFilesFilter(filters);
+  const supportedIndex = withSupported.findIndex(
+    (filter) => filter.name === SUPPORTED_FILES_FILTER_NAME,
+  );
+  const alreadyListed = withSupported.some(
+    (filter, index) =>
+      index > supportedIndex &&
+      filter.name === ALL_FILES_FILTER_NAME &&
+      filter.extensions.includes(ALL_FILES_EXTENSION),
+  );
+  if (alreadyListed) return withSupported;
+  const allFiles = { name: ALL_FILES_FILTER_NAME, extensions: [ALL_FILES_EXTENSION] };
+  const insertAt = supportedIndex >= 0 ? supportedIndex + 1 : 0;
+  return [...withSupported.slice(0, insertAt), allFiles, ...withSupported.slice(insertAt)];
+}
+
+/** 資料夾掃描。`*` 是所有檔案；沒有任何副檔名時是空清單，不是所有檔案。 */
+export type FolderScanExtensions = { kind: "all" } | { kind: "list"; extensions: string[] };
+
+export function folderScanExtensions(filters: LegacyFileFilter[]): FolderScanExtensions {
+  if (
+    filters.some((filter) =>
+      filter.extensions.some((extension) => extension === ALL_FILES_EXTENSION),
+    )
+  ) {
+    return { kind: "all" };
+  }
+  const extensions = Array.from(
+    new Set(
+      filters
+        .flatMap((filter) => filter.extensions)
+        .filter((extension) => extension && extension !== ALL_FILES_EXTENSION)
+        .map((extension) => `.${extension.toLowerCase()}`),
+    ),
+  );
+  return { kind: "list", extensions };
 }

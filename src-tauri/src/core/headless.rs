@@ -198,7 +198,7 @@ async fn prepare_files(
             .unwrap_or(false),
         fix_charset_declaration: true,
         fix_charset_extensions: Some(fix_charset_extensions(settings)),
-        allowed_extensions: Some(allowed_extensions(settings)),
+        allowed_extensions: allowed_extensions(settings),
         preview_max_bytes: settings
             .and_then(|value| value.get("previewMaxKb"))
             .and_then(Value::as_u64)
@@ -726,27 +726,41 @@ fn fix_charset_extensions(settings: Option<&Value>) -> Vec<String> {
         .collect()
 }
 
-fn allowed_extensions(settings: Option<&Value>) -> Vec<String> {
-    if let Some(settings) = settings {
-        if let Some(from_filter) = allowed_extensions_from_settings(settings) {
-            return from_filter;
-        }
+/// `None` 表示所有檔案。設定裡沒有篩選字串時用預設副檔名，不把缺欄位當成所有檔案。
+fn allowed_extensions(settings: Option<&Value>) -> Option<Vec<String>> {
+    let Some(settings) = settings else {
+        return Some(default_allowed_extensions());
+    };
+    let Some(filter) = settings
+        .pointer("/files/typeFilter")
+        .and_then(Value::as_str)
+    else {
+        return Some(default_allowed_extensions());
+    };
+    match extensions_from_type_filter(filter) {
+        ParsedTypeExtensions::All => None,
+        ParsedTypeExtensions::List(extensions) => Some(extensions),
     }
+}
+
+fn default_allowed_extensions() -> Vec<String> {
     DEFAULT_ALLOWED_EXTENSIONS
         .iter()
         .map(|item| (*item).to_string())
         .collect()
 }
 
-fn allowed_extensions_from_settings(settings: &Value) -> Option<Vec<String>> {
-    let filter = settings
-        .pointer("/files/typeFilter")
-        .and_then(Value::as_str)?;
-    extensions_from_type_filter(filter)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ParsedTypeExtensions {
+    /// 篩選字串含 `*` 或 `*.*`。
+    All,
+    /// 解析出的副檔名。空清單表示一個都沒有，不是所有檔案。
+    List(Vec<String>),
 }
 
-pub(crate) fn extensions_from_type_filter(filter: &str) -> Option<Vec<String>> {
+pub(crate) fn extensions_from_type_filter(filter: &str) -> ParsedTypeExtensions {
     let mut extensions = Vec::new();
+    let mut allow_all = false;
     for (index, _) in filter.match_indices('<') {
         let rest = &filter[index..];
         let Some(end) = rest.find('>') else {
@@ -757,8 +771,12 @@ pub(crate) fn extensions_from_type_filter(filter: &str) -> Option<Vec<String>> {
             continue;
         };
         for pattern in patterns.split(';') {
-            let extension = pattern
-                .trim()
+            let trimmed = pattern.trim();
+            if trimmed == "*" || trimmed.eq_ignore_ascii_case("*.*") {
+                allow_all = true;
+                continue;
+            }
+            let extension = trimmed
                 .trim_start_matches('*')
                 .trim_start_matches('.')
                 .to_ascii_lowercase();
@@ -771,10 +789,10 @@ pub(crate) fn extensions_from_type_filter(filter: &str) -> Option<Vec<String>> {
             }
         }
     }
-    if extensions.is_empty() {
-        None
+    if allow_all {
+        ParsedTypeExtensions::All
     } else {
-        Some(extensions)
+        ParsedTypeExtensions::List(extensions)
     }
 }
 

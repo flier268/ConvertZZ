@@ -16,7 +16,11 @@ import { core, isCancellationError } from "../lib/coreClient";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { cliInvocation } from "../lib/cli";
 import { summarizeFileApplyWarnings } from "../lib/fileApplyMessages";
-import { ensureSupportedFilesFilter } from "../lib/fileFilters";
+import {
+  dialogFileFilters,
+  ensureSupportedFilesFilter,
+  folderScanExtensions,
+} from "../lib/fileFilters";
 import { fileConversionDefaults } from "../lib/settingsApply";
 import { buildFileDiffSections, type DiffSection } from "../lib/fileDiff";
 import { formatProgressLabel, progressPercentage, type ProgressSnapshot } from "../lib/progressEta";
@@ -278,7 +282,7 @@ async function chooseFiles() {
   const selected = await open({
     multiple: true,
     defaultPath: defaultPath.value,
-    filters: fileFilters.value.length ? fileFilters.value : undefined,
+    filters: dialogFileFilters(fileFilters.value),
   });
   if (selected) {
     paths.value = Array.isArray(selected) ? selected : [selected];
@@ -425,13 +429,7 @@ async function createPlan() {
   clearPreviewState();
   try {
     const settings = await loadSettings();
-    const allowedExtensions = Array.from(
-      new Set(
-        fileFilters.value
-          .flatMap((filter) => filter.extensions)
-          .map((extension) => `.${extension.toLowerCase()}`),
-      ),
-    );
+    const extensionFilter = folderScanExtensions(fileFilters.value);
     plan.value = await core.request<FileConversionPlan>(
       "files.plan",
       {
@@ -445,7 +443,9 @@ async function createPlan() {
         addBom: options.addBom,
         fixCharsetDeclaration: options.fixCharsetDeclaration,
         fixCharsetExtensions: fixCharsetExtensions.value,
-        allowedExtensions,
+        ...(extensionFilter.kind === "list"
+          ? { allowedExtensions: extensionFilter.extensions }
+          : {}),
         previewMaxBytes: previewMaxBytes.value,
         conflictPolicy: options.conflictPolicy,
         backup: backup.value,

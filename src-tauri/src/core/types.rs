@@ -178,6 +178,7 @@ pub struct FilePlanRequest {
     pub fix_charset_declaration: bool,
     #[serde(default)]
     pub fix_charset_extensions: Option<Vec<String>>,
+    /// 省略（`None`）表示所有檔案。空陣列表示資料夾掃描不收任何檔案；直接指定的檔案仍收。
     #[serde(default)]
     pub allowed_extensions: Option<Vec<String>>,
     #[serde(default)]

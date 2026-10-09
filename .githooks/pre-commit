@@ -1,0 +1,39 @@
+#!/bin/sh
+set -eu
+
+staged="$(git diff --cached --name-only --diff-filter=ACM || true)"
+[ -n "$staged" ] || exit 0
+
+js_files="$(printf '%s\n' "$staged" | grep -E '\.(cjs|css|html|js|json|mjs|ts|tsx|vue|ya?ml)$' || true)"
+rs_files="$(printf '%s\n' "$staged" | grep '\.rs$' || true)"
+
+if [ -n "$js_files" ]; then
+  if ! command -v pnpm >/dev/null 2>&1; then
+    printf '%s\n' "pnpm 不存在，無法自動格式化 Vue 與 Node.js。" >&2
+    exit 1
+  fi
+  set --
+  while IFS= read -r file; do
+    [ -f "$file" ] || continue
+    set -- "$@" "$file"
+  done <<EOF
+$js_files
+EOF
+  if [ "$#" -gt 0 ]; then
+    pnpm exec prettier --write --ignore-unknown -- "$@"
+    git add -- "$@"
+  fi
+fi
+
+if [ -n "$rs_files" ]; then
+  if ! command -v cargo >/dev/null 2>&1; then
+    printf '%s\n' "cargo 不存在，無法自動格式化 Rust。" >&2
+    exit 1
+  fi
+  cargo fmt --manifest-path src-tauri/Cargo.toml
+  printf '%s\n' "$rs_files" | while IFS= read -r file; do
+    if [ -f "$file" ]; then
+      git add -- "$file"
+    fi
+  done
+fi

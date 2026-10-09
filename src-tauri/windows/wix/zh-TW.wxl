@@ -1,0 +1,6 @@
+<WixLocalization Culture="zh-TW" xmlns="http://schemas.microsoft.com/wix/2006/localization">
+  <String Id="LaunchApp">啟動 ConvertZZ</String>
+  <String Id="DowngradeErrorMessage">已安裝較新版本的 ConvertZZ。</String>
+  <String Id="PathEnvVarFeature">將 ConvertZZ 執行檔的安裝位置加入 PATH 系統環境變數，以便從任何位置呼叫 ConvertZZ。</String>
+  <String Id="InstallAppFeature">安裝 ConvertZZ。</String>
+</WixLocalization>

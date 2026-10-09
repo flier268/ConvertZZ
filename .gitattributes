@@ -1,7 +1,8 @@
 ###############################################################################
-# Set default behavior to automatically normalize line endings.
+# Normalize text to LF in the working tree too. Windows runners otherwise
+# check out CRLF, and Prettier --check (endOfLine: lf) fails in release CI.
 ###############################################################################
-* text=auto
+* text=auto eol=lf
 
 ###############################################################################
 # Set default behavior for command prompt diff.

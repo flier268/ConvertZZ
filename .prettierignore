@@ -1,0 +1,12 @@
+node_modules
+dist
+src-tauri
+ConvertZZ
+coverage
+tests/.cache
+tests/fixtures
+pnpm-lock.yaml
+*.csv
+*.md
+LICENSE
+licenses

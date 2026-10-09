@@ -1,0 +1,38 @@
+name: Prerelease channel tags
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prerelease-channel-tags
+  cancel-in-progress: false
+
+jobs:
+  retarget:
+    if: >-
+      startsWith(github.event.release.tag_name, 'v') &&
+      contains(github.event.release.tag_name, '-')
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - name: 移動 alpha／beta／rc 通道標籤
+        env:
+          VERSION_TAG: ${{ github.event.release.tag_name }}
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          channel="$(node scripts/prerelease-channel.mjs --tag "$VERSION_TAG")"
+          if [ -z "$channel" ]; then
+            echo "不是 alpha／beta／rc 預發佈，略過。"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f -a "$channel" -m "$VERSION_TAG" "$TARGET_SHA"
+          git push origin "refs/tags/$channel" --force

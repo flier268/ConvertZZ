@@ -13,8 +13,9 @@ use super::types::{
 use chrono::Utc;
 use futures::stream::{self, StreamExt};
 use std::collections::HashSet;
+use std::ffi::OsStr;
 use std::fs;
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -163,16 +164,16 @@ impl FileService {
         if !ignored_inputs.is_empty() {
             request.paths.retain(|path| !ignored_inputs.contains(path));
         }
-        let paths = collect_files(
+        let (paths, scan_warnings) = collect_files(
             &request.paths,
             request.recursive,
             request.allowed_extensions.as_deref(),
         )?;
         // 空的副檔名清單代表資料夾掃描不收任何檔案，子資料夾也不能在 both／檔名模式下被改名。
-        let directories = if request.mode == FileMode::Content
+        let (directories, directory_warnings) = if request.mode == FileMode::Content
             || scan_collects_nothing(request.allowed_extensions.as_deref())
         {
-            Vec::new()
+            (Vec::new(), Vec::new())
         } else {
             collect_directories(&request.paths, request.recursive)?
         };
@@ -181,6 +182,8 @@ impl FileService {
             .iter()
             .map(|path| ignored_input_warning(path))
             .collect::<Vec<_>>();
+        warnings.extend(scan_warnings);
+        warnings.extend(directory_warnings);
         warnings.extend(empty_folder_warnings(&request.paths, &paths));
 
         for (index, source_path) in paths.iter().enumerate() {
@@ -1283,7 +1286,7 @@ impl FileService {
                 warnings,
             });
         }
-        commit_prepared_file(file, self.stage_validator.as_ref())
+        commit_prepared_file(file, self.stage_validator.as_ref(), Some(&is_cancelled))
     }
 
     fn clear_cancelled(&self, plan_id: &str) {
@@ -1314,6 +1317,7 @@ fn outputs_overlap_sources(files: &[PreparedFile]) -> bool {
     })
 }
 
+#[derive(Debug)]
 enum FileCommitOutcome {
     Succeeded {
         output_path: PathBuf,
@@ -1328,6 +1332,7 @@ enum FileCommitOutcome {
 fn commit_prepared_file(
     file: PreparedFile,
     stage_validator: Option<&StageValidator>,
+    is_cancelled: Option<&CancelCheck>,
 ) -> Result<FileCommitOutcome, CoreError> {
     if file.item.output_path == file.item.source_path && file.content.is_none() {
         let warnings = content_skip_warnings(&file);
@@ -1337,7 +1342,7 @@ fn commit_prepared_file(
         });
     }
     let Some(content) = file.content.as_deref() else {
-        return commit_unchanged_content(file, stage_validator);
+        return commit_unchanged_content(file, stage_validator, is_cancelled);
     };
     let source = PathBuf::from(&file.item.source_path);
     assert_source_writable(&source)?;
@@ -1417,60 +1422,134 @@ fn commit_prepared_file(
 }
 
 /// 內容不變、只改名或移到輸出資料夾（例如 both 模式略過內容的二進位檔）。
-/// 同一磁碟區直接 rename，不複製也不讀內容；跨磁碟區才串流複製到輸出旁的暫存檔，
-/// 串流比對後再 rename，最後刪除來源。任何一步失敗都還原來源與被覆寫的既有檔。
+/// 同一磁碟區直接 rename；跨磁碟區先分段複製到輸出旁的暫存檔，比對通過後才把來源移開。
+/// 先把來源搬開只用於同一磁碟區、只差大小寫的改名。任何一步在來源移開前失敗時，來源保持原位。
 fn commit_unchanged_content(
     file: PreparedFile,
     stage_validator: Option<&StageValidator>,
+    is_cancelled: Option<&CancelCheck>,
 ) -> Result<FileCommitOutcome, CoreError> {
+    commit_unchanged_content_with(
+        file,
+        stage_validator,
+        is_cancelled,
+        rename_path,
+        copy_file_chunked,
+    )
+}
+
+fn rename_path(from: &Path, to: &Path) -> io::Result<()> {
+    fs::rename(from, to)
+}
+
+fn commit_unchanged_content_with<R, C>(
+    file: PreparedFile,
+    stage_validator: Option<&StageValidator>,
+    is_cancelled: Option<&CancelCheck>,
+    try_rename: R,
+    copy: C,
+) -> Result<FileCommitOutcome, CoreError>
+where
+    R: Fn(&Path, &Path) -> io::Result<()>,
+    C: Fn(&Path, &Path, Option<&CancelCheck>) -> Result<(), CoreError>,
+{
     let source = PathBuf::from(&file.item.source_path);
     assert_source_writable(&source)?;
     let output = PathBuf::from(&file.item.output_path);
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)?;
     }
-    // 先把來源移開再檢查輸出，與一般提交相同；不分大小寫的檔案系統上只差大小寫時才不會誤判衝突。
-    let original = transaction_path(&source, "original");
-    fs::rename(&source, &original)?;
+    if is_cancelled.is_some_and(|check| check()) {
+        return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+    }
+    if is_case_only_rename(&source, &output) {
+        return commit_case_only_rename(file, &source, &output);
+    }
+
     let mut conflict_backup = None;
-    let mut stage_path = None;
+    if output != source && output.exists() {
+        if file.conflict_policy == ConflictPolicy::Skip {
+            return Ok(FileCommitOutcome::Skipped {
+                path: file.item.source_path.clone(),
+                warnings: content_skip_warnings(&file),
+            });
+        }
+        let conflict = transaction_path(&output, "conflict");
+        fs::rename(&output, &conflict)?;
+        conflict_backup = Some(conflict);
+    }
+
+    let restore_conflict = |restore_output: bool, conflict_backup: &Option<PathBuf>| {
+        if let Some(conflict) = conflict_backup {
+            if restore_output && conflict.exists() && !output.exists() {
+                let _ = fs::rename(conflict, &output);
+            }
+        }
+    };
+
+    match try_rename(&source, &output) {
+        Ok(()) => {
+            if let Some(conflict) = conflict_backup {
+                let _ = fs::remove_file(&conflict).or_else(|_| fs::remove_dir_all(&conflict));
+            }
+            return Ok(FileCommitOutcome::Succeeded {
+                output_path: output,
+                warnings: content_skip_warnings(&file),
+            });
+        }
+        Err(error) if is_cross_device_error(&error) => {}
+        Err(error) => {
+            restore_conflict(true, &conflict_backup);
+            return Err(error.into());
+        }
+    }
+
+    let result = commit_cross_device_copy(&source, &output, stage_validator, is_cancelled, &copy);
+    match result {
+        Ok(()) => {
+            if let Some(conflict) = conflict_backup {
+                let _ = fs::remove_file(&conflict).or_else(|_| fs::remove_dir_all(&conflict));
+            }
+            Ok(FileCommitOutcome::Succeeded {
+                output_path: output,
+                warnings: content_skip_warnings(&file),
+            })
+        }
+        Err(error) => {
+            restore_conflict(true, &conflict_backup);
+            Err(error)
+        }
+    }
+}
+
+/// 不分大小寫的檔案系統上，來源與輸出只差大小寫時必須先把來源搬開，否則會把來源誤判成衝突。
+fn commit_case_only_rename(
+    file: PreparedFile,
+    source: &Path,
+    output: &Path,
+) -> Result<FileCommitOutcome, CoreError> {
+    let original = transaction_path(source, "original");
+    fs::rename(source, &original)?;
+    let mut conflict_backup = None;
     let result = (|| -> Result<bool, CoreError> {
-        if output != source && output.exists() {
+        if output.exists() {
             if file.conflict_policy == ConflictPolicy::Skip {
                 return Ok(false);
             }
-            let conflict = transaction_path(&output, "conflict");
-            fs::rename(&output, &conflict)?;
+            let conflict = transaction_path(output, "conflict");
+            fs::rename(output, &conflict)?;
             conflict_backup = Some(conflict);
         }
-        match fs::rename(&original, &output) {
-            Ok(()) => return Ok(true),
-            Err(error) if error.kind() == std::io::ErrorKind::CrossesDevices => {}
-            Err(error) => return Err(error.into()),
-        }
-        let stage = transaction_path(&output, "stage");
-        stage_path = Some(stage.clone());
-        // fs::copy 以串流（或系統的 copy_file_range）複製，不會整檔讀進記憶體。
-        fs::copy(&original, &stage)?;
-        verify_stage(&stage, None, &original)?;
-        if let Some(validator) = stage_validator {
-            validator(&stage, None, &source)?;
-        }
-        fs::rename(&stage, &output)?;
-        stage_path = None;
-        let _ = fs::remove_file(&original);
+        fs::rename(&original, output)?;
         Ok(true)
     })();
     let restore = |restore_output: bool| {
-        if let Some(stage) = &stage_path {
-            let _ = fs::remove_file(stage);
-        }
         if original.exists() && !source.exists() {
-            let _ = fs::rename(&original, &source);
+            let _ = fs::rename(&original, source);
         }
         if let Some(conflict) = &conflict_backup {
             if restore_output && conflict.exists() && !output.exists() {
-                let _ = fs::rename(conflict, &output);
+                let _ = fs::rename(conflict, output);
             }
         }
     };
@@ -1479,10 +1558,9 @@ fn commit_unchanged_content(
             if let Some(conflict) = conflict_backup {
                 let _ = fs::remove_file(&conflict).or_else(|_| fs::remove_dir_all(&conflict));
             }
-            let warnings = content_skip_warnings(&file);
             Ok(FileCommitOutcome::Succeeded {
-                output_path: output,
-                warnings,
+                output_path: output.to_path_buf(),
+                warnings: content_skip_warnings(&file),
             })
         }
         Ok(false) => {
@@ -1498,6 +1576,67 @@ fn commit_unchanged_content(
         }
     }
 }
+
+/// 跨磁碟區：先把來源分段複製到輸出同目錄的 stage，串流比對通過後才把來源 rename 成 original，
+/// 再把 stage rename 成 output，最後刪除 original。來源被移開之前失敗時刪除 stage、來源保持原位。
+fn commit_cross_device_copy<C>(
+    source: &Path,
+    output: &Path,
+    stage_validator: Option<&StageValidator>,
+    is_cancelled: Option<&CancelCheck>,
+    copy: &C,
+) -> Result<(), CoreError>
+where
+    C: Fn(&Path, &Path, Option<&CancelCheck>) -> Result<(), CoreError>,
+{
+    let stage = transaction_path(output, "stage");
+    let result = (|| -> Result<(), CoreError> {
+        copy(source, &stage, is_cancelled)?;
+        verify_stage(&stage, None, source)?;
+        if let Some(validator) = stage_validator {
+            validator(&stage, None, source)?;
+        }
+        if is_cancelled.is_some_and(|check| check()) {
+            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+        }
+        let original = transaction_path(source, "original");
+        fs::rename(source, &original)?;
+        if let Err(error) = fs::rename(&stage, output) {
+            if original.exists() && !source.exists() {
+                let _ = fs::rename(&original, source);
+            }
+            return Err(error.into());
+        }
+        let _ = fs::remove_file(&original);
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&stage);
+    }
+    result
+}
+
+fn is_case_only_rename(source: &Path, output: &Path) -> bool {
+    source != output && source.as_os_str().eq_ignore_ascii_case(output.as_os_str())
+}
+
+fn is_cross_device_error(error: &io::Error) -> bool {
+    if error.kind() == io::ErrorKind::CrossesDevices {
+        return true;
+    }
+    match error.raw_os_error() {
+        #[cfg(unix)]
+        Some(EXDEV) => true,
+        #[cfg(windows)]
+        Some(ERROR_NOT_SAME_DEVICE) => true,
+        _ => false,
+    }
+}
+
+#[cfg(unix)]
+const EXDEV: i32 = 18;
+#[cfg(windows)]
+const ERROR_NOT_SAME_DEVICE: i32 = 17;
 
 fn commit_directory(item: PreparedFile) -> Result<Option<DirectoryTransactionEntry>, CoreError> {
     let mut entry = DirectoryTransactionEntry {
@@ -1602,10 +1741,17 @@ fn include_file(discovered: bool, gate: &ExtensionGate, path: &Path) -> bool {
     if !discovered {
         return true;
     }
+    if path.file_name().is_some_and(is_transaction_temp_name) {
+        return false;
+    }
     match gate {
         ExtensionGate::All => true,
         ExtensionGate::Only(allowed) => allowed.contains(&extension_of(path)),
     }
+}
+
+fn is_transaction_temp_name(name: &OsStr) -> bool {
+    name.as_encoded_bytes().starts_with(b".convertzz-")
 }
 
 /// 版本控制資料夾。直接指定這些資料夾（或其中的路徑）時需要明確允許。
@@ -1661,15 +1807,16 @@ fn collect_files(
     inputs: &[String],
     recursive: bool,
     allowed_extensions: Option<&[String]>,
-) -> Result<Vec<PathBuf>, CoreError> {
+) -> Result<(Vec<PathBuf>, Vec<String>), CoreError> {
     let mut collected = HashSet::new();
+    let mut warnings = Vec::new();
     let gate = extension_gate(allowed_extensions);
     for path in inputs {
-        visit_files(path, recursive, false, &gate, &mut collected)?;
+        visit_files(path, recursive, false, &gate, &mut collected, &mut warnings)?;
     }
     let mut files = collected.into_iter().collect::<Vec<_>>();
     files.sort();
-    Ok(files)
+    Ok((files, warnings))
 }
 
 fn visit_files(
@@ -1678,6 +1825,7 @@ fn visit_files(
     discovered: bool,
     gate: &ExtensionGate,
     collected: &mut HashSet<PathBuf>,
+    warnings: &mut Vec<String>,
 ) -> Result<(), CoreError> {
     let absolute = resolve_path(path);
     if path.contains(['*', '?']) {
@@ -1692,7 +1840,7 @@ fn visit_files(
             let entry = entry?;
             if entry.file_type()?.is_file() {
                 if let Some(name) = entry.file_name().to_str() {
-                    if matcher.is_match(name) {
+                    if matcher.is_match(name) && !is_transaction_temp_name(&entry.file_name()) {
                         collected.insert(entry.path());
                     }
                 }
@@ -1713,7 +1861,15 @@ fn visit_files(
     if !metadata.is_dir() {
         return Ok(());
     }
-    for entry in fs::read_dir(&absolute)? {
+    let entries = match fs::read_dir(&absolute) {
+        Ok(entries) => entries,
+        Err(_) if discovered => {
+            warnings.push(unreadable_directory_warning(&absolute));
+            return Ok(());
+        }
+        Err(error) => return Err(error.into()),
+    };
+    for entry in entries {
         let entry = entry?;
         if entry.file_type()?.is_symlink() {
             continue;
@@ -1724,32 +1880,56 @@ fn visit_files(
             && entry.file_type()?.is_dir()
             && !is_ignored_scan_directory(&entry.file_name())
         {
-            visit_files(&entry.path().to_string_lossy(), true, true, gate, collected)?;
+            visit_files(
+                &entry.path().to_string_lossy(),
+                true,
+                true,
+                gate,
+                collected,
+                warnings,
+            )?;
         }
     }
     Ok(())
 }
 
-fn collect_directories(inputs: &[String], recursive: bool) -> Result<Vec<PathBuf>, CoreError> {
+fn collect_directories(
+    inputs: &[String],
+    recursive: bool,
+) -> Result<(Vec<PathBuf>, Vec<String>), CoreError> {
     if !recursive {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), Vec::new()));
     }
     let mut collected = HashSet::new();
+    let mut warnings = Vec::new();
     for path in inputs {
         if path.contains(['*', '?']) {
             continue;
         }
-        visit_directories(&resolve_path(path), &mut collected)?;
+        visit_directories(&resolve_path(path), &mut collected, &mut warnings, true)?;
     }
-    Ok(collected.into_iter().collect())
+    Ok((collected.into_iter().collect(), warnings))
 }
 
-fn visit_directories(path: &Path, collected: &mut HashSet<PathBuf>) -> Result<(), CoreError> {
+fn visit_directories(
+    path: &Path,
+    collected: &mut HashSet<PathBuf>,
+    warnings: &mut Vec<String>,
+    top_level: bool,
+) -> Result<(), CoreError> {
     let metadata = fs::symlink_metadata(path)?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
         return Ok(());
     }
-    for entry in fs::read_dir(path)? {
+    let entries = match fs::read_dir(path) {
+        Ok(entries) => entries,
+        Err(_) if !top_level => {
+            warnings.push(unreadable_directory_warning(path));
+            return Ok(());
+        }
+        Err(error) => return Err(error.into()),
+    };
+    for entry in entries {
         let entry = entry?;
         if entry.file_type()?.is_symlink()
             || !entry.file_type()?.is_dir()
@@ -1758,9 +1938,13 @@ fn visit_directories(path: &Path, collected: &mut HashSet<PathBuf>) -> Result<()
             continue;
         }
         collected.insert(entry.path());
-        visit_directories(&entry.path(), collected)?;
+        visit_directories(&entry.path(), collected, warnings, false)?;
     }
     Ok(())
+}
+
+fn unreadable_directory_warning(path: &Path) -> String {
+    format!("無法讀取資料夾「{}」，已略過。", path.to_string_lossy())
 }
 
 fn validate_output_pattern(
@@ -1986,6 +2170,40 @@ fn fix_charset_declaration(
         .into_owned()
 }
 
+fn copy_file_chunked(
+    source: &Path,
+    destination: &Path,
+    is_cancelled: Option<&CancelCheck>,
+) -> Result<(), CoreError> {
+    let result = (|| -> Result<(), CoreError> {
+        let mut reader = fs::File::open(source)?;
+        let mut writer = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(destination)?;
+        let mut buffer = vec![0u8; COPY_CHUNK_BYTES];
+        loop {
+            if is_cancelled.is_some_and(|check| check()) {
+                return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+            }
+            let read = read_chunk(&mut reader, &mut buffer)?;
+            if read == 0 {
+                break;
+            }
+            writer.write_all(&buffer[..read])?;
+        }
+        writer.sync_all()?;
+        if let Ok(source_meta) = fs::metadata(source) {
+            let _ = writer.set_permissions(source_meta.permissions());
+        }
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(destination);
+    }
+    result
+}
+
 fn write_stage(path: &Path, content: &[u8], source_path: &Path) -> Result<(), CoreError> {
     let result = (|| -> Result<(), CoreError> {
         let mut file = fs::OpenOptions::new()
@@ -2198,6 +2416,7 @@ const INSPECT_HEAD_BYTES: usize = 64 * 1024;
 const MAX_TEXT_FILE_BYTES: u64 = 64 * 1024 * 1024;
 /// 串流比對與複製的區塊大小。
 const STREAM_CHUNK_BYTES: usize = 64 * 1024;
+const COPY_CHUNK_BYTES: usize = 1024 * 1024;
 /// 少於這個數量的 U+FFFD 不視為二進位。只用於 UTF-16；其他編碼看 `had_errors`。
 const REPLACEMENT_MIN_COUNT: usize = 4;
 /// 替換字元佔解碼後字元數的比例達到此值，且數量達下限，才視為二進位。
@@ -2254,10 +2473,10 @@ fn finalize_apply(mut result: ApplyResult) -> ApplyResult {
 
 fn merge_warning(incoming: Option<String>, existing: Option<String>) -> Option<String> {
     match (incoming, existing) {
-        (Some(incoming), Some(existing)) if !existing.contains(&incoming) => {
-            Some(format!("{incoming} {existing}"))
-        }
-        (Some(incoming), _) => Some(incoming),
+        (Some(incoming), Some(existing)) if existing.contains(&incoming) => Some(existing),
+        (Some(incoming), Some(existing)) if incoming.contains(&existing) => Some(incoming),
+        (Some(incoming), Some(existing)) => Some(format!("{incoming} {existing}")),
+        (Some(incoming), None) => Some(incoming),
         (None, existing) => existing,
     }
 }

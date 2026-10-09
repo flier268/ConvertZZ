@@ -7,9 +7,11 @@ use super::*;
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::HashSet;
+use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
+use std::sync::atomic::Ordering;
 use uuid::Uuid;
 
 fn noop() -> ProgressReporter {
@@ -1915,6 +1917,7 @@ fn migrated_bracketless_type_filter_does_not_visit_audio_files() {
             false,
             &ExtensionGate::Only(allowed),
             &mut collected,
+            &mut Vec::new(),
         )
         .unwrap();
         let names = collected
@@ -2464,4 +2467,406 @@ async fn rename_only_commit_moves_into_output_directory_and_handles_conflict() {
         .into_iter()
         .all(|name| !name.starts_with(".convertzz-")));
     let _ = std::fs::remove_dir_all(&directory);
+}
+
+fn prepared_unchanged_file(source: &Path, output: &Path, policy: ConflictPolicy) -> PreparedFile {
+    PreparedFile {
+        item: FilePlanItem {
+            source_path: source.to_string_lossy().into_owned(),
+            output_path: output.to_string_lossy().into_owned(),
+            kind: FileItemKind::File,
+            selected: true,
+            detected_encoding: None,
+            source_preview: String::new(),
+            output_preview: String::new(),
+            preview_loaded: true,
+            status: PlanStatus::Ready,
+            warning: None,
+        },
+        content: None,
+        conflict_policy: policy,
+    }
+}
+
+fn convertzz_temps(directory: &Path) -> Vec<String> {
+    names(directory)
+        .into_iter()
+        .filter(|name| name.starts_with(".convertzz-"))
+        .collect()
+}
+
+fn crosses_devices_for<'a>(
+    source: &'a Path,
+    output: &'a Path,
+) -> impl Fn(&Path, &Path) -> std::io::Result<()> + 'a {
+    move |from, to| {
+        if from == source && to == output {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::CrossesDevices,
+                "cross-device",
+            ))
+        } else {
+            std::fs::rename(from, to)
+        }
+    }
+}
+
+fn exdev_os_error_for<'a>(
+    source: &'a Path,
+    output: &'a Path,
+) -> impl Fn(&Path, &Path) -> std::io::Result<()> + 'a {
+    move |from, to| {
+        if from == source && to == output {
+            #[cfg(unix)]
+            {
+                Err(std::io::Error::from_raw_os_error(18))
+            }
+            #[cfg(windows)]
+            {
+                Err(std::io::Error::from_raw_os_error(17))
+            }
+            #[cfg(not(any(unix, windows)))]
+            {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::CrossesDevices,
+                    "cross-device",
+                ))
+            }
+        } else {
+            std::fs::rename(from, to)
+        }
+    }
+}
+
+fn copy_fail_after_bytes(
+    limit: u64,
+) -> impl Fn(&Path, &Path, Option<&CancelCheck>) -> Result<(), CoreError> {
+    move |from, to, is_cancelled| {
+        let mut reader = std::fs::File::open(from).map_err(CoreError::from)?;
+        let mut writer = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(to)
+            .map_err(CoreError::from)?;
+        let mut buffer = vec![0u8; COPY_CHUNK_BYTES];
+        let mut written = 0u64;
+        loop {
+            if is_cancelled.is_some_and(|check| check()) {
+                let _ = std::fs::remove_file(to);
+                return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+            }
+            let read = super::read_chunk(&mut reader, &mut buffer).map_err(CoreError::from)?;
+            if read == 0 {
+                break;
+            }
+            let remaining = limit.saturating_sub(written);
+            if remaining == 0 {
+                return Err(CoreError::new("IO_ERROR", "受控複製失敗"));
+            }
+            let take = read.min(remaining as usize);
+            writer.write_all(&buffer[..take]).map_err(CoreError::from)?;
+            written += take as u64;
+            if take < read {
+                return Err(CoreError::new("IO_ERROR", "受控複製失敗"));
+            }
+        }
+        Ok(())
+    }
+}
+
+fn assert_no_transaction_temps(directories: &[&Path]) {
+    for directory in directories {
+        assert!(
+            convertzz_temps(directory).is_empty(),
+            "{} 殘留 {:?}",
+            directory.display(),
+            convertzz_temps(directory)
+        );
+    }
+}
+
+#[test]
+fn cross_device_rename_copy_failure_keeps_source_and_clears_temps() {
+    let directory = temp_dir();
+    let source_dir = directory.join("src");
+    let output_dir = directory.join("out");
+    std::fs::create_dir_all(&source_dir).unwrap();
+    std::fs::create_dir_all(&output_dir).unwrap();
+    let source = source_dir.join("payload.bin");
+    let output = output_dir.join("payload.bin");
+    let original = vec![7u8; COPY_CHUNK_BYTES + 32];
+    std::fs::write(&source, &original).unwrap();
+    let error = commit_unchanged_content_with(
+        prepared_unchanged_file(&source, &output, ConflictPolicy::Overwrite),
+        None,
+        None,
+        crosses_devices_for(&source, &output),
+        copy_fail_after_bytes(64),
+    )
+    .unwrap_err();
+    assert_eq!(error.message, "受控複製失敗");
+    assert_eq!(std::fs::read(&source).unwrap(), original);
+    assert!(!output.exists());
+    assert_no_transaction_temps(&[&source_dir, &output_dir]);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[test]
+fn cross_device_rename_cancel_keeps_source_and_clears_temps() {
+    let directory = temp_dir();
+    let source_dir = directory.join("src");
+    let output_dir = directory.join("out");
+    std::fs::create_dir_all(&source_dir).unwrap();
+    std::fs::create_dir_all(&output_dir).unwrap();
+    let source = source_dir.join("payload.bin");
+    let output = output_dir.join("payload.bin");
+    let original = vec![9u8; COPY_CHUNK_BYTES + 8];
+    std::fs::write(&source, &original).unwrap();
+    let checks = std::sync::atomic::AtomicU64::new(0);
+    let cancelled: CancelCheck = Arc::new(move || checks.fetch_add(1, Ordering::Relaxed) >= 2);
+    let error = commit_unchanged_content_with(
+        prepared_unchanged_file(&source, &output, ConflictPolicy::Overwrite),
+        None,
+        Some(&cancelled),
+        crosses_devices_for(&source, &output),
+        copy_file_chunked,
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "PLAN_CANCELLED");
+    assert_eq!(std::fs::read(&source).unwrap(), original);
+    assert!(!output.exists());
+    assert_no_transaction_temps(&[&source_dir, &output_dir]);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[test]
+fn cross_device_rename_success_matches_bytes_and_clears_source() {
+    let directory = temp_dir();
+    let source_dir = directory.join("src");
+    let output_dir = directory.join("out");
+    std::fs::create_dir_all(&source_dir).unwrap();
+    std::fs::create_dir_all(&output_dir).unwrap();
+    let source = source_dir.join("payload.bin");
+    let output = output_dir.join("payload.bin");
+    let original = (0..(COPY_CHUNK_BYTES + 51))
+        .map(|index| (index % 251) as u8)
+        .collect::<Vec<_>>();
+    std::fs::write(&source, &original).unwrap();
+    let result = commit_unchanged_content_with(
+        prepared_unchanged_file(&source, &output, ConflictPolicy::Overwrite),
+        None,
+        None,
+        crosses_devices_for(&source, &output),
+        copy_file_chunked,
+    )
+    .unwrap();
+    let FileCommitOutcome::Succeeded { output_path, .. } = result else {
+        panic!("跨磁碟區複製後應寫入輸出檔");
+    };
+    assert_eq!(output_path, output);
+    assert!(!source.exists());
+    assert_eq!(std::fs::read(&output).unwrap(), original);
+    assert_no_transaction_temps(&[&source_dir, &output_dir]);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[test]
+fn cross_device_os_error_and_verify_failure_keep_source() {
+    let directory = temp_dir();
+    let source_dir = directory.join("src");
+    let output_dir = directory.join("out");
+    std::fs::create_dir_all(&source_dir).unwrap();
+    std::fs::create_dir_all(&output_dir).unwrap();
+    let source = source_dir.join("payload.bin");
+    let output = output_dir.join("payload.bin");
+    let original = b"verify-me".to_vec();
+    std::fs::write(&source, &original).unwrap();
+    let error = commit_unchanged_content_with(
+        prepared_unchanged_file(&source, &output, ConflictPolicy::Overwrite),
+        None,
+        None,
+        exdev_os_error_for(&source, &output),
+        |from, to, _| {
+            std::fs::write(to, b"tampered").map_err(CoreError::from)?;
+            let _ = from;
+            Ok(())
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "FILE_VERIFY");
+    assert_eq!(std::fs::read(&source).unwrap(), original);
+    assert!(!output.exists());
+    assert_no_transaction_temps(&[&source_dir, &output_dir]);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[test]
+fn cross_device_conflict_copy_failure_restores_existing_output() {
+    let directory = temp_dir();
+    let source_dir = directory.join("src");
+    let output_dir = directory.join("out");
+    std::fs::create_dir_all(&source_dir).unwrap();
+    std::fs::create_dir_all(&output_dir).unwrap();
+    let source = source_dir.join("payload.bin");
+    let output = output_dir.join("payload.bin");
+    let original = b"source-bytes".to_vec();
+    std::fs::write(&source, &original).unwrap();
+    std::fs::write(&output, b"existing").unwrap();
+    let error = commit_unchanged_content_with(
+        prepared_unchanged_file(&source, &output, ConflictPolicy::Overwrite),
+        None,
+        None,
+        crosses_devices_for(&source, &output),
+        copy_fail_after_bytes(1),
+    )
+    .unwrap_err();
+    assert_eq!(error.message, "受控複製失敗");
+    assert_eq!(std::fs::read(&source).unwrap(), original);
+    assert_eq!(std::fs::read(&output).unwrap(), b"existing");
+    assert_no_transaction_temps(&[&source_dir, &output_dir]);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn folder_scan_skips_convertzz_transaction_residue() {
+    let directory = temp_dir();
+    std::fs::write(directory.join("软件.txt"), "软件").unwrap();
+    std::fs::write(directory.join(".convertzz-original-deadbeef.txt"), "殘留").unwrap();
+    std::fs::write(directory.join(".convertzz-stage-abcd.bin"), b"stage").unwrap();
+    let plan = FileService::new()
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Content, None),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(sorted_file_names(&plan), ["软件.txt"]);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[cfg(unix)]
+struct RestoreMode<'a> {
+    path: &'a Path,
+    mode: u32,
+}
+
+#[cfg(unix)]
+impl Drop for RestoreMode<'_> {
+    fn drop(&mut self) {
+        let _ = std::fs::set_permissions(self.path, std::fs::Permissions::from_mode(self.mode));
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn unreadable_subdirectory_is_skipped_with_plan_warning() {
+    let directory = temp_dir();
+    std::fs::write(directory.join("ok.txt"), "软件").unwrap();
+    let blocked = directory.join("blocked");
+    std::fs::create_dir(&blocked).unwrap();
+    std::fs::write(blocked.join("secret.txt"), "里面").unwrap();
+    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let _restore = RestoreMode {
+        path: &blocked,
+        mode: 0o755,
+    };
+    if std::fs::read_dir(&blocked).is_ok() {
+        drop(_restore);
+        let _ = std::fs::remove_dir_all(&directory);
+        return;
+    }
+    let plan = FileService::new()
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Both, None),
+            noop(),
+        )
+        .await
+        .unwrap();
+    let sources = plan
+        .items
+        .iter()
+        .map(|item| {
+            Path::new(&item.source_path)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect::<Vec<_>>();
+    assert!(sources.iter().any(|name| name == "ok.txt"), "{sources:?}");
+    assert!(
+        !sources.iter().any(|name| name == "secret.txt"),
+        "{sources:?}"
+    );
+    assert!(
+        plan.warnings
+            .iter()
+            .any(|warning| warning.contains(&blocked.to_string_lossy().into_owned())),
+        "{:?}",
+        plan.warnings
+    );
+    drop(_restore);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn unreadable_top_level_directory_still_fails_plan() {
+    let directory = temp_dir();
+    std::fs::write(directory.join("ok.txt"), "软件").unwrap();
+    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let _restore = RestoreMode {
+        path: &directory,
+        mode: 0o755,
+    };
+    if std::fs::read_dir(&directory).is_ok() {
+        drop(_restore);
+        let _ = std::fs::remove_dir_all(&directory);
+        return;
+    }
+    let error = FileService::new()
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Content, None),
+            noop(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, "IO_ERROR");
+    drop(_restore);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[test]
+fn merge_warning_does_not_duplicate_existing_text() {
+    assert_eq!(
+        merge_warning(
+            Some("輸出路徑已存在。".into()),
+            Some("輸出路徑已存在。".into())
+        ),
+        Some("輸出路徑已存在。".into())
+    );
+    assert_eq!(
+        merge_warning(
+            Some("二進位檔案，已略過內容轉換。".into()),
+            Some("二進位檔案，已略過內容轉換。 輸出路徑已存在。".into())
+        ),
+        Some("二進位檔案，已略過內容轉換。 輸出路徑已存在。".into())
+    );
+    assert_eq!(
+        merge_warning(
+            Some("二進位檔案，已略過內容轉換。 輸出路徑已存在。".into()),
+            Some("輸出路徑已存在。".into())
+        ),
+        Some("二進位檔案，已略過內容轉換。 輸出路徑已存在。".into())
+    );
+    assert_eq!(
+        merge_warning(
+            Some("二進位檔案，已略過內容轉換。".into()),
+            Some("輸出路徑已存在。".into())
+        ),
+        Some("二進位檔案，已略過內容轉換。 輸出路徑已存在。".into())
+    );
 }

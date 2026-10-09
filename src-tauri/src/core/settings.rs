@@ -1,6 +1,12 @@
 use super::error::CoreError;
 use serde_json::{json, Map, Value};
 
+/// 與 `src/lib/fileFilters.ts` 的 `DEFAULT_FILE_TYPE_FILTER` 保持一致。不含音訊副檔名。
+const DEFAULT_TYPE_FILTER: &str = "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>";
+
+/// 2.0 早期預設。載入時改為 `DEFAULT_TYPE_FILTER`，避免檔案轉換對話框再帶入音訊。
+const LEGACY_TYPE_FILTER_WITH_AUDIO: &str = "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音訊文件|*.mp3;*.ape;*.ogg;*.oga;*.opus>";
+
 pub fn migrate_from_path(path: &str) -> Result<Value, CoreError> {
     let raw = std::fs::read_to_string(path)?
         .trim_start_matches('\u{feff}')
@@ -45,7 +51,7 @@ pub fn default_settings() -> Value {
         },
         "files": {
             "defaultPath": "!",
-            "typeFilter": "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音訊文件|*.mp3;*.ape;*.ogg;*.oga;*.opus>",
+            "typeFilter": DEFAULT_TYPE_FILTER,
             "fixCharsetExtensions": [".htm", ".html", ".shtm", ".shtml", ".asp", ".aspx", ".php", ".css"],
             "unicodeAddBom": false
         },
@@ -147,7 +153,7 @@ pub fn migrate(input: Value) -> Value {
         },
         "files": {
             "defaultPath": nonempty(string_value(file_convert.get("DefaultPath")), defaults["files"]["defaultPath"].as_str().unwrap_or("!")),
-            "typeFilter": nonempty(string_value(file_convert.get("TypeFilter")), defaults["files"]["typeFilter"].as_str().unwrap_or("")),
+            "typeFilter": normalize_type_filter(&string_value(file_convert.get("TypeFilter")), defaults["files"]["typeFilter"].as_str().unwrap_or(DEFAULT_TYPE_FILTER)),
             "fixCharsetExtensions": fix_label(file_convert.get("FixLabel"), &defaults),
             "unicodeAddBom": boolean_value(file_convert.get("UnicodeAddBOM"), false)
         },
@@ -209,7 +215,36 @@ fn merge_v2(input: Value) -> Value {
     if !merged.contains_key("engine") {
         merged.insert("engine".into(), json!("segmented"));
     }
+    if let Some(filter) = merged
+        .get("files")
+        .and_then(|files| files.get("typeFilter"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+    {
+        let normalized = normalize_saved_type_filter(&filter);
+        if normalized != filter {
+            if let Some(files) = merged.get_mut("files").and_then(Value::as_object_mut) {
+                files.insert("typeFilter".into(), json!(normalized));
+            }
+        }
+    }
     Value::Object(merged)
+}
+
+fn normalize_type_filter(value: &str, fallback: &str) -> String {
+    if value.is_empty() {
+        return fallback.to_string();
+    }
+    normalize_saved_type_filter(value)
+}
+
+/// 自訂篩選保留；只有與早期內建音訊預設完全相同時才改掉。空白字串不在這裡補預設。
+fn normalize_saved_type_filter(value: &str) -> String {
+    if value == LEGACY_TYPE_FILTER_WITH_AUDIO {
+        DEFAULT_TYPE_FILTER.to_string()
+    } else {
+        value.to_string()
+    }
 }
 
 fn merge_object(defaults: Option<&Value>, value: &Value) -> Value {

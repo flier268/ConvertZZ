@@ -152,6 +152,8 @@ export interface ApplyResult {
   succeeded: string[];
   skipped: string[];
   failed: Array<{ path: string; message: string }>;
+  /** 略過二進位內容或解碼失敗等警告。可能省略。 */
+  warnings?: string[];
 }
 
 export interface PlatformCapabilities {

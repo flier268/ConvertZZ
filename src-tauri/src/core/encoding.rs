@@ -27,10 +27,25 @@ pub fn detect_encoding(buffer: &[u8]) -> TextEncoding {
         .unwrap_or(TextEncoding::Utf8)
 }
 
+pub struct DecodedText {
+    pub text: String,
+    pub encoding: TextEncoding,
+    /// `encoding_rs` 回報無法對應的位元組。UTF-16 路徑不經 `encoding_rs`，此旗標為 false。
+    pub had_errors: bool,
+}
+
 pub fn decode_text(
     buffer: &[u8],
     requested: TextEncoding,
 ) -> Result<(String, TextEncoding), CoreError> {
+    let decoded = decode_text_detailed(buffer, requested)?;
+    Ok((decoded.text, decoded.encoding))
+}
+
+pub fn decode_text_detailed(
+    buffer: &[u8],
+    requested: TextEncoding,
+) -> Result<DecodedText, CoreError> {
     let encoding = if requested == TextEncoding::Auto {
         detect_encoding(buffer)
     } else {
@@ -38,13 +53,19 @@ pub fn decode_text(
     };
     let without_bom = strip_bom(buffer, encoding);
     if encoding == TextEncoding::HzGb2312 {
-        return Ok((decode_hz(without_bom)?, encoding));
+        let (text, had_errors) = decode_hz(without_bom)?;
+        return Ok(DecodedText {
+            text,
+            encoding,
+            had_errors,
+        });
     }
-    if encoding == TextEncoding::Utf16le {
-        return Ok((decode_utf16(without_bom, true), encoding));
-    }
-    if encoding == TextEncoding::Utf16be {
-        return Ok((decode_utf16(without_bom, false), encoding));
+    if encoding == TextEncoding::Utf16le || encoding == TextEncoding::Utf16be {
+        return Ok(DecodedText {
+            text: decode_utf16(without_bom, encoding == TextEncoding::Utf16le),
+            encoding,
+            had_errors: false,
+        });
     }
     let Some(codec) = encoding_codec(encoding) else {
         return Err(CoreError::new(
@@ -52,8 +73,12 @@ pub fn decode_text(
             format!("不支援編碼 {encoding:?}。"),
         ));
     };
-    let (text, _, _) = codec.decode(without_bom);
-    Ok((text.into_owned(), encoding))
+    let (text, _, had_errors) = codec.decode(without_bom);
+    Ok(DecodedText {
+        text: text.into_owned(),
+        encoding,
+        had_errors,
+    })
 }
 
 pub fn encode_text(
@@ -232,7 +257,7 @@ fn prepend_bom(output: &mut Vec<u8>, encoding: TextEncoding) {
     }
 }
 
-fn decode_hz(buffer: &[u8]) -> Result<String, CoreError> {
+fn decode_hz(buffer: &[u8]) -> Result<(String, bool), CoreError> {
     let mut bytes = Vec::new();
     let mut ascii = Vec::new();
     let mut chinese = false;
@@ -281,8 +306,8 @@ fn decode_hz(buffer: &[u8]) -> Result<String, CoreError> {
         }
     }
     flush_ascii(&mut ascii, &mut bytes);
-    let (text, _, _) = encoding_rs::GBK.decode(&bytes);
-    Ok(text.into_owned())
+    let (text, _, had_errors) = encoding_rs::GBK.decode(&bytes);
+    Ok((text.into_owned(), had_errors))
 }
 
 fn encode_hz(text: &str) -> Result<Vec<u8>, CoreError> {

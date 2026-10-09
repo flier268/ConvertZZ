@@ -2,7 +2,7 @@ use super::backup::{
     create_user_backups, resolve_backup_roots, resolve_path, wildcard_matcher, BackupRoot,
 };
 use super::conversion::{base_convert, ConversionService};
-use super::encoding::{can_roundtrip, decode_text, encode_text};
+use super::encoding::{can_roundtrip, decode_text_detailed, detect_encoding, encode_text};
 use super::error::CoreError;
 use super::parallelism::default_convert_jobs;
 use super::types::{
@@ -298,39 +298,47 @@ impl FileService {
             .unwrap_or(6 * 1024)
             .clamp(1024, 1024 * 1024) as usize;
         let buffer = fs::read(&source_path)?;
-        let (text, encoding) = decode_text(&buffer, plan_request.input_encoding)?;
-        let source_preview = truncate(&text, preview_max_bytes);
-        let file_label = file_name(&source_path);
-        let convert_progress = map_progress(progress, 0, 1, move |current, total, _message| {
-            format!("正在預覽：{file_label}（{current}/{total}）")
-        });
-        let converted = self
-            .convert_text(
-                conversion,
-                &plan_request.conversion,
-                source_preview.clone(),
-                Some(convert_progress),
-                Some(is_cancelled),
-            )
-            .await?;
-        let output_encoding = resolve_output_encoding(plan_request.output_encoding, Some(encoding));
-        let mut output_text = converted.text;
-        if plan_request.fix_charset_declaration {
-            output_text = fix_charset_declaration(
-                &output_text,
-                output_encoding,
-                source_path
-                    .extension()
-                    .and_then(|value| value.to_str())
-                    .unwrap_or(""),
-                plan_request.fix_charset_extensions.as_deref(),
-            );
-        }
-        if plan_request.conversion.direction == super::types::Direction::None
-            && output_encoding == TextEncoding::Big5
-        {
-            output_text = repair_unrepresentable_big5(&output_text);
-        }
+        let inspected = inspect_file_bytes(&buffer, plan_request.input_encoding)?;
+        let (source_preview, output_preview, detected_encoding, content_warning) = match inspected {
+            InspectedBytes::Skip(reason) => (String::new(), String::new(), None, Some(reason)),
+            InspectedBytes::Text { text, encoding } => {
+                let source_preview = truncate(&text, preview_max_bytes);
+                let file_label = file_name(&source_path);
+                let convert_progress =
+                    map_progress(progress, 0, 1, move |current, total, _message| {
+                        format!("正在預覽：{file_label}（{current}/{total}）")
+                    });
+                let converted = self
+                    .convert_text(
+                        conversion,
+                        &plan_request.conversion,
+                        source_preview.clone(),
+                        Some(convert_progress),
+                        Some(is_cancelled),
+                    )
+                    .await?;
+                let output_encoding =
+                    resolve_output_encoding(plan_request.output_encoding, Some(encoding));
+                let mut output_text = converted.text;
+                if plan_request.fix_charset_declaration {
+                    output_text = fix_charset_declaration(
+                        &output_text,
+                        output_encoding,
+                        source_path
+                            .extension()
+                            .and_then(|value| value.to_str())
+                            .unwrap_or(""),
+                        plan_request.fix_charset_extensions.as_deref(),
+                    );
+                }
+                if plan_request.conversion.direction == super::types::Direction::None
+                    && output_encoding == TextEncoding::Big5
+                {
+                    output_text = repair_unrepresentable_big5(&output_text);
+                }
+                (source_preview, output_text, Some(encoding), None)
+            }
+        };
 
         let mut plans = self
             .plans
@@ -344,10 +352,17 @@ impl FileService {
             .iter_mut()
             .find(|file| resolve_path(&file.item.source_path) == resolve_path(&request.source_path))
             .ok_or_else(|| CoreError::new("PLAN_PATH", "預覽路徑不在目前的檔案轉換計畫內。"))?;
-        file.item.detected_encoding = Some(encoding);
+        file.item.detected_encoding = detected_encoding;
         file.item.source_preview = source_preview;
-        file.item.output_preview = output_text;
+        file.item.output_preview = output_preview;
         file.item.preview_loaded = true;
+        if content_warning.is_some() && plan_request.mode == FileMode::Content {
+            file.item.output_path = file.item.source_path.clone();
+        }
+        file.item.warning = merge_warning(
+            content_warning.map(|reason| content_skip_message(reason).to_string()),
+            file.item.warning.clone(),
+        );
         Ok(file.item.clone())
     }
 
@@ -426,10 +441,18 @@ impl FileService {
         } else {
             Some(fs::read(source_path)?)
         };
-        let decoded = source_buffer
+        let inspected = source_buffer
             .as_deref()
-            .map(|buffer| decode_text(buffer, request.input_encoding))
+            .map(|buffer| inspect_file_bytes(buffer, request.input_encoding))
             .transpose()?;
+        let content_skip = match &inspected {
+            Some(InspectedBytes::Skip(reason)) => Some(*reason),
+            _ => None,
+        };
+        let decoded = match inspected {
+            Some(InspectedBytes::Text { text, encoding }) => Some((text, encoding)),
+            _ => None,
+        };
         let converted_content = if let Some((text, _)) = &decoded {
             Some(
                 self.convert_text(
@@ -457,9 +480,12 @@ impl FileService {
             .await?
             .text
         };
-        let output_path = self
+        let mut output_path = self
             .resolve_item_output_path(conversion, request, source_path, &converted_name)
             .await?;
+        if content_skip.is_some() && request.mode == FileMode::Content {
+            output_path = source_path.to_path_buf();
+        }
         let output_encoding =
             resolve_output_encoding(request.output_encoding, decoded.as_ref().map(|item| item.1));
         let mut output_text = converted_content
@@ -484,11 +510,16 @@ impl FileService {
             output_text = repair_unrepresentable_big5(&output_text);
         }
         let conflict = output_path != source_path && output_path.exists();
-        let warnings = converted_content
+        let mut warnings = converted_content
             .as_ref()
             .map(|item| item.warnings.clone())
             .unwrap_or_default();
-        let content = if converted_content.is_some() {
+        if let Some(reason) = content_skip {
+            warnings.push(content_skip_message(reason).to_string());
+        }
+        let content = if content_skip.is_some() {
+            None
+        } else if converted_content.is_some() {
             Some(encode_text(&output_text, output_encoding, request.add_bom)?)
         } else {
             None
@@ -497,25 +528,26 @@ impl FileService {
             .preview_max_bytes
             .unwrap_or(6 * 1024)
             .clamp(1024, 1024 * 1024) as usize;
-        let (source_preview, output_preview, preview_loaded) =
-            if let Some(item) = existing_item.filter(|item| item.preview_loaded) {
-                (
-                    item.source_preview.clone(),
-                    item.output_preview.clone(),
-                    true,
-                )
-            } else if converted_content.is_some() {
-                (
-                    decoded
-                        .as_ref()
-                        .map(|(text, _)| truncate(text, preview_max_bytes))
-                        .unwrap_or_default(),
-                    truncate(&output_text, preview_max_bytes),
-                    true,
-                )
-            } else {
-                (file_name(source_path), converted_name, true)
-            };
+        let (source_preview, output_preview, preview_loaded) = if content_skip.is_some() {
+            (String::new(), String::new(), true)
+        } else if let Some(item) = existing_item.filter(|item| item.preview_loaded) {
+            (
+                item.source_preview.clone(),
+                item.output_preview.clone(),
+                true,
+            )
+        } else if converted_content.is_some() {
+            (
+                decoded
+                    .as_ref()
+                    .map(|(text, _)| truncate(text, preview_max_bytes))
+                    .unwrap_or_default(),
+                truncate(&output_text, preview_max_bytes),
+                true,
+            )
+        } else {
+            (file_name(source_path), converted_name, true)
+        };
         let status = if let Some(item) = existing_item {
             if item.status == PlanStatus::Conflict
                 || (conflict && request.conflict_policy == ConflictPolicy::Skip)
@@ -529,9 +561,12 @@ impl FileService {
         } else {
             PlanStatus::Ready
         };
-        let warning = existing_item
-            .and_then(|item| item.warning.clone())
-            .or_else(|| conflict.then(|| "輸出路徑已存在。".into()));
+        let skipped_content = content_skip.is_some();
+        let warning = merge_warning(
+            content_skip.map(|reason| content_skip_message(reason).to_string()),
+            existing_item.and_then(|item| item.warning.clone()),
+        );
+        let warning = merge_warning(warning, conflict.then(|| "輸出路徑已存在。".into()));
         Ok((
             PreparedFile {
                 item: FilePlanItem {
@@ -539,10 +574,14 @@ impl FileService {
                     output_path: output_path.to_string_lossy().into_owned(),
                     kind: FileItemKind::File,
                     selected,
-                    detected_encoding: decoded
-                        .as_ref()
-                        .map(|item| item.1)
-                        .or_else(|| existing_item.and_then(|item| item.detected_encoding)),
+                    detected_encoding: if skipped_content {
+                        None
+                    } else {
+                        decoded
+                            .as_ref()
+                            .map(|item| item.1)
+                            .or_else(|| existing_item.and_then(|item| item.detected_encoding))
+                    },
                     source_preview,
                     output_preview,
                     preview_loaded,
@@ -614,6 +653,7 @@ impl FileService {
             succeeded: Vec::new(),
             skipped: Vec::new(),
             failed: Vec::new(),
+            warnings: Vec::new(),
         };
         let selection = selected_paths.map(|paths| {
             paths
@@ -669,7 +709,7 @@ impl FileService {
                     message: error.message,
                 });
                 self.clear_cancelled(plan_id);
-                return Ok(result);
+                return Ok(finalize_apply(result));
             }
         }
 
@@ -697,6 +737,7 @@ impl FileService {
                         committed_outputs.extend(batch.committed_outputs);
                         result.skipped.extend(batch.skipped);
                         result.failed.extend(batch.failed);
+                        result.warnings.extend(batch.warnings);
                         stopped = batch.stopped;
                     }
                     Err(error)
@@ -741,7 +782,7 @@ impl FileService {
                     .into_iter()
                     .map(|path| path.to_string_lossy().into_owned()),
             );
-            return Ok(result);
+            return Ok(finalize_apply(result));
         }
 
         pending_directories
@@ -817,7 +858,7 @@ impl FileService {
         if stopped && result.succeeded.is_empty() && result.failed.is_empty() {
             return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
         }
-        Ok(result)
+        Ok(finalize_apply(result))
     }
 
     async fn materialize_and_commit_files_incrementally(
@@ -867,15 +908,22 @@ impl FileService {
                     )
                     .await
                 {
-                    Ok(FileCommitOutcome::Succeeded { output_path }) => {
+                    Ok(FileCommitOutcome::Succeeded {
+                        output_path,
+                        warnings,
+                    }) => {
                         committed_outputs.push(output_path);
+                        result.warnings.extend(warnings);
                         progress(ProgressEvent {
                             current: (offset + 1) as u64,
                             total,
                             message: format!("已寫入：{file_label}"),
                         });
                     }
-                    Ok(FileCommitOutcome::Skipped(path)) => result.skipped.push(path),
+                    Ok(FileCommitOutcome::Skipped { path, warnings }) => {
+                        result.skipped.push(path);
+                        result.warnings.extend(warnings);
+                    }
                     Err(error)
                         if error.code == "PLAN_CANCELLED" || error.code == "CONVERT_CANCELLED" =>
                     {
@@ -939,10 +987,17 @@ impl FileService {
         let mut stopped = false;
         for (source_path, outcome) in outcomes {
             match outcome {
-                Ok(FileCommitOutcome::Succeeded { output_path }) => {
+                Ok(FileCommitOutcome::Succeeded {
+                    output_path,
+                    warnings,
+                }) => {
                     committed_outputs.push(output_path);
+                    result.warnings.extend(warnings);
                 }
-                Ok(FileCommitOutcome::Skipped(path)) => result.skipped.push(path),
+                Ok(FileCommitOutcome::Skipped { path, warnings }) => {
+                    result.skipped.push(path);
+                    result.warnings.extend(warnings);
+                }
                 Err(error)
                     if error.code == "PLAN_CANCELLED" || error.code == "CONVERT_CANCELLED" =>
                 {
@@ -1020,12 +1075,14 @@ impl FileService {
 
         let mut transaction = Vec::new();
         let mut skipped_during_commit = Vec::new();
+        let mut skipped_warnings = Vec::new();
         let stage_result = (|| -> Result<(), CoreError> {
             for file in prepared_files {
                 if is_cancelled() {
                     return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
                 }
-                if file.item.output_path == file.item.source_path && file.content.is_none() {
+                if leaves_source_unchanged(request, &file) {
+                    skipped_warnings.extend(content_skip_warnings(&file));
                     skipped_during_commit.push(file.item.source_path);
                     continue;
                 }
@@ -1084,6 +1141,7 @@ impl FileService {
                         if let Some(backup) = entry.original_backup.take() {
                             let _ = fs::rename(backup, &source);
                         }
+                        skipped_warnings.extend(content_skip_warnings(&entry.file));
                         skipped_during_commit.push(entry.file.item.source_path.clone());
                         continue;
                     }
@@ -1103,6 +1161,7 @@ impl FileService {
         })();
 
         batch.skipped.extend(skipped_during_commit);
+        batch.warnings.extend(skipped_warnings);
 
         if let Err(error) = stage_result {
             rollback_transaction(&transaction);
@@ -1120,6 +1179,7 @@ impl FileService {
             if !entry.committed {
                 continue;
             }
+            batch.warnings.extend(content_skip_warnings(&entry.file));
             batch
                 .committed_outputs
                 .push(PathBuf::from(&entry.file.item.output_path));
@@ -1191,10 +1251,20 @@ impl FileService {
             )
             .await?
         else {
-            return Ok(FileCommitOutcome::Skipped(source_path));
+            return Ok(FileCommitOutcome::Skipped {
+                path: source_path,
+                warnings: Vec::new(),
+            });
         };
         if is_cancelled() {
             return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+        }
+        if leaves_source_unchanged(request, &file) {
+            let warnings = content_skip_warnings(&file);
+            return Ok(FileCommitOutcome::Skipped {
+                path: file.item.source_path,
+                warnings,
+            });
         }
         commit_prepared_file(file, self.stage_validator.as_ref())
     }
@@ -1211,6 +1281,7 @@ struct OverlapBatchResult {
     committed_outputs: Vec<PathBuf>,
     skipped: Vec<String>,
     failed: Vec<ApplyFailure>,
+    warnings: Vec<String>,
     stopped: bool,
 }
 
@@ -1227,8 +1298,14 @@ fn outputs_overlap_sources(files: &[PreparedFile]) -> bool {
 }
 
 enum FileCommitOutcome {
-    Succeeded { output_path: PathBuf },
-    Skipped(String),
+    Succeeded {
+        output_path: PathBuf,
+        warnings: Vec<String>,
+    },
+    Skipped {
+        path: String,
+        warnings: Vec<String>,
+    },
 }
 
 fn commit_prepared_file(
@@ -1236,7 +1313,11 @@ fn commit_prepared_file(
     stage_validator: Option<&StageValidator>,
 ) -> Result<FileCommitOutcome, CoreError> {
     if file.item.output_path == file.item.source_path && file.content.is_none() {
-        return Ok(FileCommitOutcome::Skipped(file.item.source_path));
+        let warnings = content_skip_warnings(&file);
+        return Ok(FileCommitOutcome::Skipped {
+            path: file.item.source_path,
+            warnings,
+        });
     }
     let source = PathBuf::from(&file.item.source_path);
     assert_source_writable(&source)?;
@@ -1278,9 +1359,10 @@ fn commit_prepared_file(
                 if let Some(backup) = entry.original_backup.take() {
                     let _ = fs::rename(backup, &source);
                 }
-                return Ok(FileCommitOutcome::Skipped(
-                    entry.file.item.source_path.clone(),
-                ));
+                return Ok(FileCommitOutcome::Skipped {
+                    path: entry.file.item.source_path.clone(),
+                    warnings: content_skip_warnings(&entry.file),
+                });
             }
             let conflict = transaction_path(&output, "conflict");
             fs::rename(&output, &conflict)?;
@@ -1290,20 +1372,27 @@ fn commit_prepared_file(
         entry.committed = true;
         Ok(FileCommitOutcome::Succeeded {
             output_path: output,
+            warnings: content_skip_warnings(&entry.file),
         })
     })();
 
     match commit_result {
-        Ok(FileCommitOutcome::Succeeded { output_path }) => {
+        Ok(FileCommitOutcome::Succeeded {
+            output_path,
+            warnings,
+        }) => {
             for backup in [entry.original_backup.take(), entry.conflict_backup.take()]
                 .into_iter()
                 .flatten()
             {
                 let _ = fs::remove_file(&backup).or_else(|_| fs::remove_dir_all(&backup));
             }
-            Ok(FileCommitOutcome::Succeeded { output_path })
+            Ok(FileCommitOutcome::Succeeded {
+                output_path,
+                warnings,
+            })
         }
-        Ok(skipped @ FileCommitOutcome::Skipped(_)) => Ok(skipped),
+        Ok(skipped @ FileCommitOutcome::Skipped { .. }) => Ok(skipped),
         Err(error) => {
             rollback_transaction(std::slice::from_ref(&entry));
             Err(error)
@@ -1855,6 +1944,175 @@ fn resolve_committed_directory_path(
                 .map(|suffix| Path::new(&entry.item.output_path).join(suffix))
                 .unwrap_or(current)
         })
+}
+
+const BINARY_CONTENT_WARNING: &str = "此檔案為二進位內容，已略過內容轉換。";
+const DECODE_ERROR_WARNING: &str = "解碼時發生錯誤，已略過內容轉換。";
+/// 少於這個數量的 U+FFFD 不視為二進位，避免正常文字裡的個別替換字元被擋下。
+const REPLACEMENT_MIN_COUNT: usize = 4;
+/// 替換字元佔解碼後字元數的比例達到此值，且數量達下限，才視為二進位。
+const REPLACEMENT_RATIO: f64 = 0.02;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ContentSkip {
+    Binary,
+    DecodeError,
+}
+
+#[derive(Debug)]
+enum InspectedBytes {
+    Skip(ContentSkip),
+    Text {
+        text: String,
+        encoding: TextEncoding,
+    },
+}
+
+fn content_skip_message(reason: ContentSkip) -> &'static str {
+    match reason {
+        ContentSkip::Binary => BINARY_CONTENT_WARNING,
+        ContentSkip::DecodeError => DECODE_ERROR_WARNING,
+    }
+}
+
+fn is_content_skip_warning(warning: &str) -> bool {
+    warning.contains(BINARY_CONTENT_WARNING) || warning.contains(DECODE_ERROR_WARNING)
+}
+
+fn content_skip_warnings(file: &PreparedFile) -> Vec<String> {
+    file.item
+        .warning
+        .iter()
+        .filter(|warning| is_content_skip_warning(warning))
+        .map(|warning| format!("{}：{warning}", file.item.source_path))
+        .collect()
+}
+
+fn leaves_source_unchanged(request: &FilePlanRequest, file: &PreparedFile) -> bool {
+    file.content.is_none()
+        && (request.mode == FileMode::Content || file.item.output_path == file.item.source_path)
+}
+
+fn finalize_apply(mut result: ApplyResult) -> ApplyResult {
+    result.warnings = unique(result.warnings);
+    result
+}
+
+fn merge_warning(incoming: Option<String>, existing: Option<String>) -> Option<String> {
+    match (incoming, existing) {
+        (Some(incoming), Some(existing)) if !existing.contains(&incoming) => {
+            Some(format!("{incoming} {existing}"))
+        }
+        (Some(incoming), _) => Some(incoming),
+        (None, existing) => existing,
+    }
+}
+
+fn inspect_file_bytes(buffer: &[u8], requested: TextEncoding) -> Result<InspectedBytes, CoreError> {
+    if has_binary_magic(buffer) {
+        return Ok(InspectedBytes::Skip(ContentSkip::Binary));
+    }
+    let encoding = if requested == TextEncoding::Auto {
+        detect_encoding(buffer)
+    } else {
+        requested
+    };
+    // UTF-16 文字的 ASCII 會含 NUL；那不是二進位檔。
+    if !matches!(encoding, TextEncoding::Utf16le | TextEncoding::Utf16be) && buffer.contains(&0) {
+        return Ok(InspectedBytes::Skip(ContentSkip::Binary));
+    }
+    let decoded = decode_text_detailed(buffer, encoding)?;
+    if decoded.had_errors {
+        return Ok(InspectedBytes::Skip(ContentSkip::DecodeError));
+    }
+    if replacement_ratio_too_high(&decoded.text) {
+        return Ok(InspectedBytes::Skip(ContentSkip::Binary));
+    }
+    Ok(InspectedBytes::Text {
+        text: decoded.text,
+        encoding: decoded.encoding,
+    })
+}
+
+fn replacement_ratio_too_high(text: &str) -> bool {
+    let mut chars = 0usize;
+    let mut replacements = 0usize;
+    for character in text.chars() {
+        chars += 1;
+        if character == '\u{FFFD}' {
+            replacements += 1;
+        }
+    }
+    chars > 0
+        && replacements >= REPLACEMENT_MIN_COUNT
+        && (replacements as f64) / (chars as f64) >= REPLACEMENT_RATIO
+}
+
+fn has_binary_magic(buffer: &[u8]) -> bool {
+    buffer.starts_with(b"ID3")
+        || buffer.starts_with(b"fLaC")
+        || buffer.starts_with(b"OggS")
+        || buffer.starts_with(b"RIFF")
+        || buffer.starts_with(b"%PDF")
+        || buffer.starts_with(b"PK\x03\x04")
+        || buffer.starts_with(b"PK\x05\x06")
+        || buffer.starts_with(b"PK\x07\x08")
+        || buffer.starts_with(b"\x89PNG\r\n\x1a\n")
+        || buffer.starts_with(b"\xFF\xD8\xFF")
+        || buffer.starts_with(b"GIF87a")
+        || buffer.starts_with(b"GIF89a")
+        || buffer.starts_with(b"\x7FELF")
+        || buffer.starts_with(b"Rar!\x1A\x07")
+        || buffer.starts_with(b"7z\xBC\xAF\x27\x1C")
+        || buffer.starts_with(b"\x1F\x8B")
+        || buffer.starts_with(b"BZh")
+        || buffer.starts_with(b"\xFD7zXZ\x00")
+        || buffer.starts_with(b"MAC ")
+        || buffer.starts_with(b"APETAGEX")
+        || buffer.starts_with(b"caff")
+        || buffer.starts_with(b"MThd")
+        || buffer.starts_with(b"wvpk")
+        || buffer.starts_with(b"\x30\x26\xB2\x75")
+        || buffer.starts_with(b"FLV\x01")
+        || is_mpeg_audio_sync(buffer)
+        || is_iso_bmff(buffer)
+        || is_aiff(buffer)
+        || is_pe_executable(buffer)
+}
+
+fn is_mpeg_audio_sync(buffer: &[u8]) -> bool {
+    // UTF-16LE BOM 是 FF FE，第二個位元組落在 E0–FF，不能當成 MPEG 幀同步。
+    if buffer.len() < 2 || buffer.starts_with(&[0xFF, 0xFE]) {
+        return false;
+    }
+    if buffer[0] != 0xFF || buffer[1] & 0xE0 != 0xE0 {
+        return false;
+    }
+    let version = (buffer[1] >> 3) & 0b11;
+    let layer = (buffer[1] >> 1) & 0b11;
+    version != 0b01 && layer != 0b00
+}
+
+fn is_iso_bmff(buffer: &[u8]) -> bool {
+    buffer.len() >= 12 && &buffer[4..8] == b"ftyp"
+}
+
+fn is_aiff(buffer: &[u8]) -> bool {
+    buffer.len() >= 12
+        && buffer.starts_with(b"FORM")
+        && (&buffer[8..12] == b"AIFF" || &buffer[8..12] == b"AIFC")
+}
+
+fn is_pe_executable(buffer: &[u8]) -> bool {
+    if buffer.len() < 0x40 || !buffer.starts_with(b"MZ") {
+        return false;
+    }
+    let offset =
+        u32::from_le_bytes([buffer[0x3C], buffer[0x3D], buffer[0x3E], buffer[0x3F]]) as usize;
+    let Some(end) = offset.checked_add(4) else {
+        return false;
+    };
+    buffer.len() >= end && &buffer[offset..end] == b"PE\0\0"
 }
 
 fn file_name(path: &Path) -> String {

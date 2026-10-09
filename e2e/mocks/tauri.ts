@@ -36,7 +36,7 @@ const defaultSettings: SettingsV2 = {
   files: {
     defaultPath: "!",
     typeFilter:
-      "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音訊文件|*.mp3;*.ape;*.ogg;*.oga;*.opus>",
+      "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>",
     fixCharsetExtensions: [".htm", ".html", ".shtm", ".shtml", ".asp", ".aspx", ".php", ".css"],
     unicodeAddBom: false,
   },

@@ -229,6 +229,7 @@ impl AudioService {
             succeeded: Vec::new(),
             skipped: Vec::new(),
             failed: Vec::new(),
+            warnings: Vec::new(),
         };
         let writable = plan
             .files

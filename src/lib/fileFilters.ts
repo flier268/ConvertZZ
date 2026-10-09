@@ -6,6 +6,10 @@ export interface LegacyFileFilter {
 export const SUPPORTED_FILES_FILTER_NAME = "支援的檔案";
 
 export const DEFAULT_FILE_TYPE_FILTER =
+  "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>";
+
+/** 2.0 早期預設把音訊副檔名放進文字轉換篩選；載入時改回不含音訊的預設。 */
+export const LEGACY_FILE_TYPE_FILTER_WITH_AUDIO =
   "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音訊文件|*.mp3;*.ape;*.ogg;*.oga;*.opus>";
 
 export function parseLegacyFileFilters(value: string): LegacyFileFilter[] {

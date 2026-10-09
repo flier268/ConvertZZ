@@ -353,6 +353,9 @@ pub struct ApplyResult {
     pub succeeded: Vec<String>,
     pub skipped: Vec<String>,
     pub failed: Vec<ApplyFailure>,
+    /// 略過內容轉換等非致命警告。空陣列不輸出，以維持舊回應。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

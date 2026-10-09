@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { LEGACY_FILE_TYPE_FILTER_WITH_AUDIO } from "./fileFilters";
 import { defaultCheckPreReleaseUpdates, defaultSettings, migrateSettings } from "./settingsMigrate";
 
 describe("開發／預發佈更新預設", () => {
@@ -28,5 +29,27 @@ describe("開發／預發佈更新預設", () => {
     expect(migrateSettings({ CheckVersion: false }, "2.0.0-rc.1").checkPreReleaseUpdates).toBe(
       true,
     );
+  });
+
+  it("早期內建音訊篩選會改成不含音訊的預設，自訂篩選保留", () => {
+    const defaults = defaultSettings("2.0.0");
+    expect(defaults.files.typeFilter).not.toMatch(/mp3|flac|ogg|wav|m4a/iu);
+    expect(
+      migrateSettings(
+        { version: 2, files: { typeFilter: LEGACY_FILE_TYPE_FILTER_WITH_AUDIO } },
+        "2.0.0",
+      ).files.typeFilter,
+    ).toBe(defaults.files.typeFilter);
+    expect(
+      migrateSettings({ FileConvert: { TypeFilter: LEGACY_FILE_TYPE_FILTER_WITH_AUDIO } }, "2.0.0")
+        .files.typeFilter,
+    ).toBe(defaults.files.typeFilter);
+    expect(
+      migrateSettings({ version: 2, files: { typeFilter: "<日誌|*.log>" } }, "2.0.0").files
+        .typeFilter,
+    ).toBe("<日誌|*.log>");
+    expect(
+      migrateSettings({ version: 2, files: { typeFilter: "" } }, "2.0.0").files.typeFilter,
+    ).toBe("");
   });
 });

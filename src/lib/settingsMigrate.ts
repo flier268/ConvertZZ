@@ -2,7 +2,7 @@ import type { EngineKind, SettingsV2 } from "@shared/contracts";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { version as appVersion } from "../../package.json";
-import { DEFAULT_FILE_TYPE_FILTER } from "./fileFilters";
+import { DEFAULT_FILE_TYPE_FILTER, LEGACY_FILE_TYPE_FILTER_WITH_AUDIO } from "./fileFilters";
 import { isPreReleaseVersion } from "./update";
 
 type LegacySettings = Record<string, unknown>;
@@ -101,7 +101,11 @@ export function migrateSettings(input: unknown, currentVersion = appVersion): Se
       floatingBall: { ...defaults.floatingBall, ...input.floatingBall },
       hotkeys: { ...defaults.hotkeys, ...input.hotkeys },
       quickActions: { ...defaults.quickActions, ...input.quickActions },
-      files: { ...defaults.files, ...input.files },
+      files: {
+        ...defaults.files,
+        ...input.files,
+        typeFilter: normalizeSavedTypeFilter(input.files?.typeFilter, defaults.files.typeFilter),
+      },
       zhconvert: { ...defaults.zhconvert, ...input.zhconvert },
       lastDropAction: { ...defaults.lastDropAction, ...input.lastDropAction },
     };
@@ -159,7 +163,10 @@ export function migrateSettings(input: unknown, currentVersion = appVersion): Se
     },
     files: {
       defaultPath: stringValue(fileConvert.DefaultPath) || defaults.files.defaultPath,
-      typeFilter: stringValue(fileConvert.TypeFilter) || defaults.files.typeFilter,
+      typeFilter: normalizeTypeFilter(
+        stringValue(fileConvert.TypeFilter),
+        defaults.files.typeFilter,
+      ),
       fixCharsetExtensions: (
         stringValue(fileConvert.FixLabel) || defaults.files.fixCharsetExtensions.join("|")
       )
@@ -188,6 +195,16 @@ export function migrateSettings(input: unknown, currentVersion = appVersion): Se
     checkVersionOnStart: booleanValue(legacy.CheckVersion, true),
     checkPreReleaseUpdates: defaultCheckPreReleaseUpdates(currentVersion),
   };
+}
+
+function normalizeSavedTypeFilter(value: string | undefined, fallback: string): string {
+  if (value == null || value === LEGACY_FILE_TYPE_FILTER_WITH_AUDIO) return fallback;
+  return value;
+}
+
+function normalizeTypeFilter(value: string, fallback: string): string {
+  if (!value || value === LEGACY_FILE_TYPE_FILTER_WITH_AUDIO) return fallback;
+  return value;
 }
 
 function isSettingsV2(value: unknown): value is SettingsV2 {

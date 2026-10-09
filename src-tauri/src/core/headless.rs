@@ -21,7 +21,7 @@ const APP_IDENTIFIER: &str = "dev.flier268.convertzz";
 /// 無頭且未載入設定時，與 GUI 預設一致的副檔名過濾。
 const DEFAULT_ALLOWED_EXTENSIONS: &[&str] = &[
     ".txt", ".log", ".ini", ".inf", ".bat", ".cmd", ".srt", ".ass", ".lang", ".htm", ".html",
-    ".php", ".asp", ".css", ".js", ".mp3", ".ape", ".ogg", ".oga", ".opus",
+    ".php", ".asp", ".css", ".js",
 ];
 
 const DEFAULT_FIX_CHARSET_EXTENSIONS: &[&str] = &[
@@ -521,6 +521,9 @@ fn print_apply_result(result: &ApplyResult) {
     }
     for failure in &result.failed {
         eprintln!("  失敗：{}（{}）", failure.path, failure.message);
+    }
+    for warning in &result.warnings {
+        eprintln!("  警告：{warning}");
     }
 }
 

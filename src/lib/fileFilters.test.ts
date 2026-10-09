@@ -22,11 +22,8 @@ describe("舊版檔案篩選器", () => {
 
   it("預設篩選字串只含分類，不含支援的檔案", () => {
     const filters = parseLegacyFileFilters(DEFAULT_FILE_TYPE_FILTER);
-    expect(filters.map((filter) => filter.name)).toEqual([
-      "常用文字檔案",
-      "常用網頁文件",
-      "音訊文件",
-    ]);
+    expect(filters.map((filter) => filter.name)).toEqual(["常用文字檔案", "常用網頁文件"]);
+    expect(DEFAULT_FILE_TYPE_FILTER).not.toMatch(/mp3|flac|ogg|wav|m4a|ape|opus/iu);
     expect(ensureSupportedFilesFilter(filters)[0]?.name).toBe(SUPPORTED_FILES_FILTER_NAME);
   });
 

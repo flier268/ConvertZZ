@@ -1350,3 +1350,274 @@ async fn apply_only_writes_selected_files() {
     assert_eq!(std::fs::read_to_string(&second).unwrap(), "头发");
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+fn audio_fixture(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../tests/fixtures")
+        .join(name)
+}
+
+fn assert_text(bytes: &[u8], encoding: TextEncoding) {
+    match super::inspect_file_bytes(bytes, encoding).unwrap() {
+        super::InspectedBytes::Text { .. } => {}
+        other => panic!("不應把文字判成 {other:?}"),
+    }
+}
+
+fn assert_skip(bytes: &[u8], encoding: TextEncoding, expected: super::ContentSkip) {
+    match super::inspect_file_bytes(bytes, encoding).unwrap() {
+        super::InspectedBytes::Skip(reason) => assert_eq!(reason, expected),
+        super::InspectedBytes::Text { text, .. } => panic!("不應當成文字：{text:?}"),
+    }
+}
+
+#[test]
+fn binary_detection_rejects_nul_magic_and_replacement_chars() {
+    assert_skip(b"abc\0def", TextEncoding::Utf8, super::ContentSkip::Binary);
+    assert_skip(b"ID3abc", TextEncoding::Auto, super::ContentSkip::Binary);
+    assert_skip(
+        b"\xFF\xFB\x90\x64AAAA",
+        TextEncoding::Utf8,
+        super::ContentSkip::Binary,
+    );
+    assert_skip(
+        b"fLaC\x01\x02\x03\x04",
+        TextEncoding::Utf8,
+        super::ContentSkip::Binary,
+    );
+    assert_skip(b"OggSabcd", TextEncoding::Utf8, super::ContentSkip::Binary);
+    assert_skip(
+        b"RIFFWAVEWAVE",
+        TextEncoding::Utf8,
+        super::ContentSkip::Binary,
+    );
+    assert_skip(
+        b"\x89PNG\r\n\x1a\nrest",
+        TextEncoding::Utf8,
+        super::ContentSkip::Binary,
+    );
+    assert_skip(
+        b"\xFF\xD8\xFF\xE0JFIF",
+        TextEncoding::Utf8,
+        super::ContentSkip::Binary,
+    );
+    assert_skip(
+        b"PK\x03\x04\x14\x01",
+        TextEncoding::Utf8,
+        super::ContentSkip::Binary,
+    );
+    assert_skip(
+        b"%PDF-1.4\n",
+        TextEncoding::Utf8,
+        super::ContentSkip::Binary,
+    );
+    let mut m4a = b"    ".to_vec();
+    m4a.extend_from_slice(b"ftypM4A ");
+    assert_skip(&m4a, TextEncoding::Utf8, super::ContentSkip::Binary);
+
+    let replacements = "\u{FFFD}".repeat(8);
+    assert_skip(
+        replacements.as_bytes(),
+        TextEncoding::Utf8,
+        super::ContentSkip::Binary,
+    );
+    assert!(super::replacement_ratio_too_high(&replacements));
+    let rare = format!("{}{}", "測試".repeat(80), "\u{FFFD}");
+    assert!(!super::replacement_ratio_too_high(&rare));
+    assert_text(rare.as_bytes(), TextEncoding::Utf8);
+
+    assert_skip(
+        b"abc\x80\x80xyz",
+        TextEncoding::Utf8,
+        super::ContentSkip::DecodeError,
+    );
+}
+
+#[test]
+fn binary_detection_keeps_plain_text() {
+    let utf8 = "檔案轉換測試，軟體裡面開發。\n";
+    assert_text(utf8.as_bytes(), TextEncoding::Utf8);
+    assert_text(utf8.as_bytes(), TextEncoding::Auto);
+
+    let (gbk, _, gbk_errors) = encoding_rs::GBK.encode("软件测试，里面开发。");
+    assert!(!gbk_errors);
+    assert_text(&gbk, TextEncoding::Gbk);
+    assert_text(&gbk, TextEncoding::Auto);
+
+    let (big5, _, big5_errors) = encoding_rs::BIG5.encode("軟體測試，裡面開發。");
+    assert!(!big5_errors);
+    assert_text(&big5, TextEncoding::Big5);
+    assert_text(&big5, TextEncoding::Auto);
+
+    let mut utf16 = vec![0xFF, 0xFE];
+    for unit in "測試ab".encode_utf16() {
+        utf16.extend(unit.to_le_bytes());
+    }
+    assert!(utf16.contains(&0));
+    assert_text(&utf16, TextEncoding::Auto);
+    assert_text(&utf16, TextEncoding::Utf16le);
+}
+
+#[test]
+fn mp3_fixtures_keep_id3_or_mpeg_headers() {
+    // 產生方式見 tests/fixtures/README.md。
+    let tagged = std::fs::read(audio_fixture("测试音乐.mp3")).unwrap();
+    assert!(tagged.starts_with(b"ID3"), "{:02x?}", &tagged[..4]);
+    let raw = std::fs::read(audio_fixture("测试音乐b.mp3")).unwrap();
+    assert!(
+        raw.len() >= 2 && raw[0] == 0xFF && raw[1] & 0xE0 == 0xE0,
+        "{:02x?}",
+        &raw[..4]
+    );
+    assert!(!raw.starts_with(b"ID3"));
+}
+
+fn binary_file_request(path: &Path, mode: FileMode) -> FilePlanRequest {
+    FilePlanRequest {
+        paths: vec![path.to_string_lossy().into_owned()],
+        output_path: None,
+        output_directory: None,
+        mode,
+        recursive: false,
+        input_encoding: TextEncoding::Auto,
+        output_encoding: TextEncoding::Utf8,
+        add_bom: false,
+        fix_charset_declaration: false,
+        fix_charset_extensions: None,
+        allowed_extensions: None,
+        preview_max_bytes: Some(4096),
+        conflict_policy: ConflictPolicy::Skip,
+        backup: Some(false),
+        conversion: ConversionOptions {
+            vocabulary_correction: Some(false),
+            ..conversion_s2t()
+        },
+    }
+}
+
+async fn preview_and_apply(
+    path: &Path,
+    mode: FileMode,
+) -> (
+    super::super::types::ApplyResult,
+    super::super::types::FilePlanItem,
+) {
+    let service = FileService::new();
+    let plan = service
+        .plan(shared_conversion(), binary_file_request(path, mode), noop())
+        .await
+        .unwrap();
+    let previewed = service
+        .preview(
+            shared_conversion(),
+            FilePreviewRequest {
+                plan_id: plan.plan_id.clone(),
+                source_path: path.to_string_lossy().into_owned(),
+            },
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    (result, previewed)
+}
+
+fn assert_binary_preview(previewed: &super::super::types::FilePlanItem) {
+    let warning = previewed.warning.as_deref().unwrap_or("");
+    assert!(
+        warning.contains("二進位") && warning.contains("已略過內容轉換"),
+        "{warning}"
+    );
+    assert!(
+        previewed.source_preview.is_empty(),
+        "{:?}",
+        previewed.source_preview
+    );
+    assert!(
+        previewed.output_preview.is_empty(),
+        "{:?}",
+        previewed.output_preview
+    );
+    assert!(!previewed.source_preview.contains('\u{FFFD}'));
+    assert!(!previewed.output_preview.contains('\u{FFFD}'));
+}
+
+async fn assert_mp3_content_and_name(source_name: &str, converted_name: &str) {
+    let original = std::fs::read(audio_fixture(source_name)).unwrap();
+    let directory = temp_dir();
+    let source = directory.join(source_name);
+    std::fs::write(&source, &original).unwrap();
+
+    let (content_result, content_preview) = preview_and_apply(&source, FileMode::Content).await;
+    assert_binary_preview(&content_preview);
+    assert!(
+        content_result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("已略過內容轉換")),
+        "{content_result:?}"
+    );
+    assert!(content_result.succeeded.is_empty(), "{content_result:?}");
+    assert!(content_result.failed.is_empty(), "{content_result:?}");
+    assert_eq!(std::fs::read(&source).unwrap(), original);
+
+    let renamed = directory.join(converted_name);
+    std::fs::remove_file(&source).unwrap();
+    std::fs::write(&source, &original).unwrap();
+    let (both_result, both_preview) = preview_and_apply(&source, FileMode::Both).await;
+    assert_binary_preview(&both_preview);
+    assert!(
+        both_result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("已略過內容轉換")),
+        "{both_result:?}"
+    );
+    assert!(both_result.failed.is_empty(), "{both_result:?}");
+    assert_eq!(std::fs::read(&renamed).unwrap(), original);
+    assert!(!source.exists());
+    assert!(both_result
+        .succeeded
+        .iter()
+        .any(|path| path.ends_with(converted_name)));
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn mp3_fixtures_skip_content_and_only_rename_in_both_mode() {
+    // 產生方式見 tests/fixtures/README.md（ffmpeg 正弦波，含 ID3 與純 MPEG 幀）。
+    assert_mp3_content_and_name("测试音乐.mp3", "測試音樂.mp3").await;
+    assert_mp3_content_and_name("测试音乐b.mp3", "測試音樂b.mp3").await;
+}
+
+#[tokio::test]
+async fn decode_errors_are_not_written_back() {
+    let directory = temp_dir();
+    let source = directory.join("broken.txt");
+    let original = b"abc\x80\x80xyz".to_vec();
+    std::fs::write(&source, &original).unwrap();
+    let (result, previewed) = preview_and_apply(&source, FileMode::Content).await;
+    let warning = previewed.warning.as_deref().unwrap_or("");
+    assert!(warning.contains("解碼時發生錯誤"), "{warning}");
+    assert!(previewed.source_preview.is_empty());
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("解碼時發生錯誤")),
+        "{result:?}"
+    );
+    assert_eq!(std::fs::read(&source).unwrap(), original);
+    assert!(result.succeeded.is_empty());
+    let _ = std::fs::remove_dir_all(&directory);
+}

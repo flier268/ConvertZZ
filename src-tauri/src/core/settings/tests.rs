@@ -218,4 +218,26 @@ fn preserves_raw_saved_paths() {
         r"\\?\C:\Program Files\ConvertZZ\Dictionary.csv"
     );
     assert_eq!(result["files"]["defaultPath"], r"\\?\D:\Text");
+    assert_eq!(result["files"]["typeFilter"], "");
+}
+
+#[test]
+fn legacy_audio_type_filter_is_replaced_by_text_default() {
+    let legacy = "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音訊文件|*.mp3;*.ape;*.ogg;*.oga;*.opus>";
+    let defaults = default_settings();
+    let expected = defaults["files"]["typeFilter"].as_str().unwrap();
+    assert!(!expected.contains("mp3"));
+    assert_eq!(
+        migrate(json!({ "version": 2, "files": { "typeFilter": legacy } }))["files"]["typeFilter"],
+        expected
+    );
+    assert_eq!(
+        migrate(json!({ "FileConvert": { "TypeFilter": legacy } }))["files"]["typeFilter"],
+        expected
+    );
+    assert_eq!(
+        migrate(json!({ "version": 2, "files": { "typeFilter": "<日誌|*.log>" } }))["files"]
+            ["typeFilter"],
+        "<日誌|*.log>"
+    );
 }

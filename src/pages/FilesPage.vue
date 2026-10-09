@@ -4,6 +4,7 @@ import { open, confirm } from "@tauri-apps/plugin-dialog";
 import { ElCheckbox, ElMessage } from "element-plus";
 import type { CheckboxValueType, Column, RowEventHandlers } from "element-plus";
 import type {
+  ApplyResult,
   Direction,
   EngineKind,
   FileConversionPlan,
@@ -501,11 +502,7 @@ async function applyPlan() {
     const selectedPaths = plan.value.items
       .filter((item) => item.selected)
       .map((item) => item.sourcePath);
-    const result = await core.request<{
-      succeeded: string[];
-      skipped?: string[];
-      failed: Array<{ path: string; message: string }>;
-    }>(
+    const result = await core.request<ApplyResult>(
       "files.apply",
       { planId: plan.value.planId, selectedPaths },
       {
@@ -517,7 +514,9 @@ async function applyPlan() {
         },
       },
     );
-    const skippedCount = result.skipped?.length ?? 0;
+    const skippedCount = result.skipped.length;
+    const warnings = result.warnings ?? [];
+    for (const warning of warnings) ElMessage.warning(warning);
     if (promptAfterConversion.value) {
       if (result.succeeded.length && skippedCount)
         ElMessage.success(
@@ -525,7 +524,9 @@ async function applyPlan() {
         );
       else if (result.succeeded.length)
         ElMessage.success(`已完成 ${result.succeeded.length} 個檔案。`);
-      else if (skippedCount) ElMessage.info("已停止檔案轉換；沒有寫入任何檔案。");
+      else if (skippedCount && warnings.length === 0)
+        ElMessage.info("已停止檔案轉換；沒有寫入任何檔案。");
+      else if (skippedCount) ElMessage.info(`已略過 ${skippedCount} 個檔案。`);
     }
     if (result.failed.length)
       ElMessage.error(

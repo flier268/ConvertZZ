@@ -1,7 +1,12 @@
 use super::super::conversion::shared_conversion;
 use super::super::encoding::encode_text;
+use super::super::headless::extensions_from_type_filter;
+use super::super::settings::migrate;
 use super::super::types::{ConversionOptions, Direction, EngineKind, FileMode};
 use super::*;
+use serde::Deserialize;
+use serde_json::json;
+use std::collections::HashSet;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use uuid::Uuid;
@@ -1829,5 +1834,79 @@ async fn binary_output_directory_and_backup_keep_bytes() {
         .warnings
         .iter()
         .any(|warning| warning.contains("已略過內容轉換")));
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[derive(Deserialize)]
+struct TypeFilterMigrationFixture {
+    cases: Vec<TypeFilterMigrationCase>,
+}
+
+#[derive(Deserialize)]
+struct TypeFilterMigrationCase {
+    name: String,
+    input: String,
+}
+
+#[test]
+fn migrated_bracketless_type_filter_does_not_visit_audio_files() {
+    // 舊格式字串來源：e7c3aeb ConvertZZ/Settings.cs:112、03204e6 ConvertZZ/Settings.cs:109。
+    let fixture: TypeFilterMigrationFixture = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/type-filter-migration.json"
+    ))
+    .expect("type-filter-migration.json");
+    let directory = temp_dir();
+    std::fs::write(directory.join("note.txt"), "甲").unwrap();
+    std::fs::write(directory.join("page.html"), "<p>乙</p>").unwrap();
+    std::fs::write(directory.join("song.mp3"), b"mp3").unwrap();
+    std::fs::write(directory.join("clip.wav"), b"wav").unwrap();
+    let nested = directory.join("nested");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(nested.join("inner.txt"), "丙").unwrap();
+    std::fs::write(nested.join("inner.mp3"), b"mp3").unwrap();
+
+    for name in ["e7c3aeb 舊格式", "03204e6 舊格式"] {
+        let case = fixture
+            .cases
+            .iter()
+            .find(|case| case.name == name)
+            .unwrap_or_else(|| panic!("缺少向量 {name}"));
+        assert!(
+            extensions_from_type_filter(&case.input).is_none(),
+            "{name} 遷移前不該解析出副檔名"
+        );
+        let migrated = migrate(json!({ "FileConvert": { "TypeFilter": case.input } }));
+        let filter = migrated["files"]["typeFilter"].as_str().unwrap();
+        let extensions = extensions_from_type_filter(filter)
+            .unwrap_or_else(|| panic!("{name} 遷移後仍解析不到副檔名"));
+        assert!(extensions.iter().any(|extension| extension == ".txt"));
+        assert!(extensions.iter().any(|extension| extension == ".html"));
+        assert!(!extensions
+            .iter()
+            .any(|extension| extension == ".mp3" || extension == ".wav"));
+        let allowed = extensions.into_iter().collect::<HashSet<_>>();
+        let mut collected = HashSet::new();
+        visit_files(
+            &directory.to_string_lossy(),
+            true,
+            false,
+            &allowed,
+            &mut collected,
+        )
+        .unwrap();
+        let names = collected
+            .iter()
+            .map(|path| path.file_name().unwrap().to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert!(names.iter().any(|item| item == "note.txt"), "{name}");
+        assert!(names.iter().any(|item| item == "page.html"), "{name}");
+        assert!(names.iter().any(|item| item == "inner.txt"), "{name}");
+        assert!(
+            !names
+                .iter()
+                .any(|item| item.ends_with(".mp3") || item.ends_with(".wav")),
+            "{name} 收進了非預設副檔名：{names:?}"
+        );
+    }
     let _ = std::fs::remove_dir_all(&directory);
 }

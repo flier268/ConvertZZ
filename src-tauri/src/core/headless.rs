@@ -742,9 +742,13 @@ fn allowed_extensions_from_settings(settings: &Value) -> Option<Vec<String>> {
     let filter = settings
         .pointer("/files/typeFilter")
         .and_then(Value::as_str)?;
+    extensions_from_type_filter(filter)
+}
+
+pub(crate) fn extensions_from_type_filter(filter: &str) -> Option<Vec<String>> {
     let mut extensions = Vec::new();
-    for matched in filter.match_indices('<') {
-        let rest = &filter[matched.0..];
+    for (index, _) in filter.match_indices('<') {
+        let rest = &filter[index..];
         let Some(end) = rest.find('>') else {
             continue;
         };

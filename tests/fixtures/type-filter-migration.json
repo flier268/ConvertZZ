@@ -1,0 +1,89 @@
+{
+  "defaultTypeFilter": "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>",
+  "cases": [
+    {
+      "name": "e7c3aeb 舊格式",
+      "source": "commit e7c3aeb ConvertZZ/Settings.cs:112（tag 1.0.0.0–1.0.0.2）",
+      "input": "*.txt|*.log|*.ini|*.inf|*.bat|*.cmd|*.srt|*.lang",
+      "expected": "default"
+    },
+    {
+      "name": "03204e6 舊格式",
+      "source": "commit 03204e6（601019c 的父 commit）ConvertZZ/Settings.cs:109",
+      "input": "*.txt|*.log|*.ini|*.inf|*.bat|*.cmd|*.srt|*.ass|*.lang",
+      "expected": "default"
+    },
+    {
+      "name": "不含角括號的 *.mp3",
+      "source": "非空且不含 <，與 C# Contains(\"<\") 相同，重設為不含音訊的新預設",
+      "input": "*.mp3",
+      "expected": "default"
+    },
+    {
+      "name": "只有空白",
+      "source": "非空且不含 <；不先 trim",
+      "input": "   ",
+      "expected": "default"
+    },
+    {
+      "name": "新預設",
+      "source": "目前不含音訊的內建預設",
+      "input": "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>",
+      "expected": "keep"
+    },
+    {
+      "name": "2.0 音訊版預設",
+      "source": "2.0 早期預設，群組名是音訊",
+      "input": "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音訊文件|*.mp3;*.ape;*.ogg;*.oga;*.opus>",
+      "expected": "default"
+    },
+    {
+      "name": "C# 音頻版預設",
+      "source": "origin/master ConvertZZ/Settings.cs:141，commit 00c2e902；群組名是音頻",
+      "input": "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音頻文件|*.mp3>",
+      "expected": "default"
+    },
+    {
+      "name": "預設後接不完整群組",
+      "source": "<junk> 沒有 |，不是可移除的音訊群組，整段參加比較，視為自訂",
+      "input": "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<junk>",
+      "expected": "keep"
+    },
+    {
+      "name": "自訂並含音頻群組",
+      "source": "拿掉音頻群組後仍不等於新預設，原樣保留",
+      "input": "<日誌|*.log>/<音頻文件|*.mp3>",
+      "expected": "keep"
+    },
+    {
+      "name": "音訊群組夾在中間",
+      "source": "只移除格式完整的音訊群組後等於新預設",
+      "input": "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<音訊文件|*.wav>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>",
+      "expected": "default"
+    },
+    {
+      "name": "未閉合角括號接在預設後",
+      "source": "未閉合的 < 從該字元留到結尾並參加比較，因此不等於新預設，原樣保留",
+      "input": "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js><未閉合",
+      "expected": "keep"
+    },
+    {
+      "name": "只有未閉合角括號",
+      "source": "沒有可移除的完整音訊群組；未閉合片段參加比較，原樣保留",
+      "input": "<未閉合",
+      "expected": "keep"
+    },
+    {
+      "name": "預設後接沒有直線的音訊片段",
+      "source": "<音訊> 沒有 |，格式不完整，不移除，原樣保留",
+      "input": "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音訊>",
+      "expected": "keep"
+    },
+    {
+      "name": "自訂單一群組",
+      "source": "不是舊內建預設",
+      "input": "<日誌|*.log>",
+      "expected": "keep"
+    }
+  ]
+}

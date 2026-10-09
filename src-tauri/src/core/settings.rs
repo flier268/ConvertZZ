@@ -242,8 +242,9 @@ fn normalize_type_filter(value: &str, fallback: &str) -> String {
     normalize_saved_type_filter(value)
 }
 
-/// 自訂篩選保留。已知的舊內建預設，或拿掉音訊／音頻群組後與新預設相同，才改掉。
-/// 空白字串不在這裡補預設。
+/// 自訂篩選保留。空字串不在這裡補預設，由 `normalize_type_filter` 的 fallback 處理。
+/// 非空且不含 `<`（C# 1.0.0.0–1.0.0.3，例如 e7c3aeb、03204e6）、已知舊內建預設，
+/// 或拿掉音訊／音頻群組後與新預設相同，才改成不含音訊的預設。
 fn normalize_saved_type_filter(value: &str) -> String {
     if is_legacy_builtin_type_filter(value) {
         DEFAULT_TYPE_FILTER.to_string()
@@ -253,28 +254,47 @@ fn normalize_saved_type_filter(value: &str) -> String {
 }
 
 fn is_legacy_builtin_type_filter(value: &str) -> bool {
+    if value.is_empty() {
+        return false;
+    }
+    // 只看 `<`，與 C# `Contains("<")` 相同；不含這個字元的非空字串一律視為舊內建格式。
+    if !value.contains('<') {
+        return true;
+    }
     value == LEGACY_TYPE_FILTER_WITH_AUDIO
         || value == CSHARP_TYPE_FILTER_WITH_AUDIO
         || without_audio_groups(value) == DEFAULT_TYPE_FILTER
 }
 
-/// 去掉名稱含「音訊」或「音頻」的 `<名稱|樣式>` 群組，其餘照原順序用 `/` 接回。
+/// 只移除格式完整、且名稱含「音訊」或「音頻」的 `<名稱|樣式>`。
+/// 其餘 `<...>`（沒有 `|`、未閉合）留在比較字串。未閉合時從該 `<` 留到結尾。
+/// 群組之間的其他文字不參加比較，剩下的片段用 `/` 接回。
 fn without_audio_groups(value: &str) -> String {
     let mut groups = Vec::new();
     let mut rest = value;
     while let Some(start) = rest.find('<') {
         let Some(relative_end) = rest[start..].find('>') else {
+            groups.push(&rest[start..]);
             break;
         };
         let end = start + relative_end;
         let group = &rest[start..=end];
-        let name = group[1..].split('|').next().unwrap_or("");
-        if !name.contains("音訊") && !name.contains("音頻") {
+        if !is_removable_audio_group(group) {
             groups.push(group);
         }
         rest = &rest[end + 1..];
     }
     groups.join("/")
+}
+
+fn is_removable_audio_group(group: &str) -> bool {
+    let Some(inner) = group.get(1..group.len().saturating_sub(1)) else {
+        return false;
+    };
+    let Some((name, _)) = inner.split_once('|') else {
+        return false;
+    };
+    name.contains("音訊") || name.contains("音頻")
 }
 
 fn merge_object(defaults: Option<&Value>, value: &Value) -> Value {

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   CSHARP_FILE_TYPE_FILTER_WITH_AUDIO,
@@ -5,6 +8,28 @@ import {
   LEGACY_FILE_TYPE_FILTER_WITH_AUDIO,
 } from "./fileFilters";
 import { defaultCheckPreReleaseUpdates, defaultSettings, migrateSettings } from "./settingsMigrate";
+
+interface TypeFilterMigrationCase {
+  name: string;
+  source: string;
+  input: string;
+  expected: "default" | "keep";
+}
+
+interface TypeFilterMigrationFixture {
+  defaultTypeFilter: string;
+  cases: TypeFilterMigrationCase[];
+}
+
+const typeFilterVectors = JSON.parse(
+  readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../tests/fixtures/type-filter-migration.json",
+    ),
+    "utf8",
+  ),
+) as TypeFilterMigrationFixture;
 
 describe("開發／預發佈更新預設", () => {
   it("正式版預設不檢查開發通道，非正式版預設檢查", () => {
@@ -35,50 +60,40 @@ describe("開發／預發佈更新預設", () => {
     );
   });
 
-  it("早期內建音訊篩選會改成不含音訊的預設，自訂篩選保留", () => {
+  it("空字串維持原行為：v2 保留空字串，舊版缺值才用預設", () => {
     const defaults = defaultSettings("2.0.0");
+    expect(defaults.files.typeFilter).toBe(DEFAULT_FILE_TYPE_FILTER);
     expect(defaults.files.typeFilter).not.toMatch(/mp3|flac|ogg|wav|m4a/iu);
-    expect(
-      migrateSettings(
-        { version: 2, files: { typeFilter: LEGACY_FILE_TYPE_FILTER_WITH_AUDIO } },
-        "2.0.0",
-      ).files.typeFilter,
-    ).toBe(defaults.files.typeFilter);
-    expect(
-      migrateSettings({ FileConvert: { TypeFilter: LEGACY_FILE_TYPE_FILTER_WITH_AUDIO } }, "2.0.0")
-        .files.typeFilter,
-    ).toBe(defaults.files.typeFilter);
-    expect(
-      migrateSettings({ version: 2, files: { typeFilter: "<日誌|*.log>" } }, "2.0.0").files
-        .typeFilter,
-    ).toBe("<日誌|*.log>");
     expect(
       migrateSettings({ version: 2, files: { typeFilter: "" } }, "2.0.0").files.typeFilter,
     ).toBe("");
-  });
-
-  it("C# 預設音頻篩選會改成不含音訊的預設，自訂音頻群組保留", () => {
-    const csharp =
-      "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音頻文件|*.mp3>";
-    expect(CSHARP_FILE_TYPE_FILTER_WITH_AUDIO).toBe(csharp);
-    const defaults = defaultSettings("2.0.0");
-    expect(
-      migrateSettings({ version: 2, files: { typeFilter: csharp } }, "2.0.0").files.typeFilter,
-    ).toBe(defaults.files.typeFilter);
-    expect(migrateSettings({ FileConvert: { TypeFilter: csharp } }, "2.0.0").files.typeFilter).toBe(
+    expect(migrateSettings({ FileConvert: { TypeFilter: "" } }, "2.0.0").files.typeFilter).toBe(
       defaults.files.typeFilter,
     );
-    const audioInTheMiddle = `${DEFAULT_FILE_TYPE_FILTER.split("/").join("/<音訊文件|*.wav>/")}`;
-    expect(audioInTheMiddle).toContain("音訊文件");
+  });
+
+  it("共用向量與程式內建字串一致", () => {
+    // 舊格式字串來源寫在 tests/fixtures/type-filter-migration.json 的 source：
+    // e7c3aeb ConvertZZ/Settings.cs:112、03204e6 ConvertZZ/Settings.cs:109。
+    expect(typeFilterVectors.defaultTypeFilter).toBe(DEFAULT_FILE_TYPE_FILTER);
+    const byName = new Map(typeFilterVectors.cases.map((item) => [item.name, item]));
+    expect(byName.get("2.0 音訊版預設")?.input).toBe(LEGACY_FILE_TYPE_FILTER_WITH_AUDIO);
+    expect(byName.get("C# 音頻版預設")?.input).toBe(CSHARP_FILE_TYPE_FILTER_WITH_AUDIO);
+    expect(byName.get("新預設")?.input).toBe(DEFAULT_FILE_TYPE_FILTER);
+    expect(byName.get("e7c3aeb 舊格式")?.source).toContain("e7c3aeb");
+    expect(byName.get("e7c3aeb 舊格式")?.source).toContain("Settings.cs:112");
+    expect(byName.get("03204e6 舊格式")?.source).toContain("03204e6");
+    expect(byName.get("03204e6 舊格式")?.source).toContain("Settings.cs:109");
+  });
+
+  it.each(typeFilterVectors.cases)("$name", (item) => {
+    const expected = item.expected === "default" ? typeFilterVectors.defaultTypeFilter : item.input;
+    expect(item.source.length).toBeGreaterThan(0);
     expect(
-      migrateSettings({ version: 2, files: { typeFilter: audioInTheMiddle } }, "2.0.0").files
-        .typeFilter,
-    ).toBe(defaults.files.typeFilter);
+      migrateSettings({ version: 2, files: { typeFilter: item.input } }, "2.0.0").files.typeFilter,
+    ).toBe(expected);
     expect(
-      migrateSettings(
-        { version: 2, files: { typeFilter: "<日誌|*.log>/<音頻文件|*.mp3>" } },
-        "2.0.0",
-      ).files.typeFilter,
-    ).toBe("<日誌|*.log>/<音頻文件|*.mp3>");
+      migrateSettings({ FileConvert: { TypeFilter: item.input } }, "2.0.0").files.typeFilter,
+    ).toBe(expected);
   });
 });

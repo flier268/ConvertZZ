@@ -221,55 +221,95 @@ fn preserves_raw_saved_paths() {
     assert_eq!(result["files"]["typeFilter"], "");
 }
 
-#[test]
-fn legacy_audio_type_filter_is_replaced_by_text_default() {
-    let legacy = "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音訊文件|*.mp3;*.ape;*.ogg;*.oga;*.opus>";
-    let defaults = default_settings();
-    let expected = defaults["files"]["typeFilter"].as_str().unwrap();
-    assert!(!expected.contains("mp3"));
-    assert_eq!(
-        migrate(json!({ "version": 2, "files": { "typeFilter": legacy } }))["files"]["typeFilter"],
-        expected
-    );
-    assert_eq!(
-        migrate(json!({ "FileConvert": { "TypeFilter": legacy } }))["files"]["typeFilter"],
-        expected
-    );
-    assert_eq!(
-        migrate(json!({ "version": 2, "files": { "typeFilter": "<日誌|*.log>" } }))["files"]
-            ["typeFilter"],
-        "<日誌|*.log>"
-    );
+#[derive(serde::Deserialize)]
+struct TypeFilterMigrationFixture {
+    #[serde(rename = "defaultTypeFilter")]
+    default_type_filter: String,
+    cases: Vec<TypeFilterMigrationCase>,
+}
+
+#[derive(serde::Deserialize)]
+struct TypeFilterMigrationCase {
+    name: String,
+    source: String,
+    input: String,
+    expected: String,
+}
+
+fn type_filter_migration_fixture() -> TypeFilterMigrationFixture {
+    serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/type-filter-migration.json"
+    ))
+    .expect("type-filter-migration.json")
+}
+
+fn expected_type_filter<'a>(case: &'a TypeFilterMigrationCase, default_filter: &'a str) -> &'a str {
+    match case.expected.as_str() {
+        "default" => default_filter,
+        "keep" => case.input.as_str(),
+        other => panic!("{} 的期望不是 default 或 keep：{other}", case.name),
+    }
 }
 
 #[test]
-fn csharp_default_type_filter_is_replaced_by_text_default() {
-    // origin/master ConvertZZ/Settings.cs:141，commit 00c2e902。群組名是「音頻」。
-    let csharp = "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>/<音頻文件|*.mp3>";
-    assert_eq!(super::CSHARP_TYPE_FILTER_WITH_AUDIO, csharp);
-    let expected = default_settings()["files"]["typeFilter"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    assert!(!expected.contains("mp3"));
+fn type_filter_migration_vectors_match_shared_fixture() {
+    // 舊格式字串來源寫在 tests/fixtures/type-filter-migration.json 的 source：
+    // e7c3aeb ConvertZZ/Settings.cs:112、03204e6 ConvertZZ/Settings.cs:109。
+    let fixture = type_filter_migration_fixture();
+    assert_eq!(super::DEFAULT_TYPE_FILTER, fixture.default_type_filter);
+    assert!(fixture
+        .cases
+        .iter()
+        .any(|case| case.source.contains("e7c3aeb") && case.source.contains("Settings.cs:112")));
+    assert!(fixture
+        .cases
+        .iter()
+        .any(|case| case.source.contains("03204e6") && case.source.contains("Settings.cs:109")));
+    let legacy = fixture
+        .cases
+        .iter()
+        .find(|case| case.name == "2.0 音訊版預設")
+        .expect("2.0 音訊版預設");
+    let csharp = fixture
+        .cases
+        .iter()
+        .find(|case| case.name == "C# 音頻版預設")
+        .expect("C# 音頻版預設");
+    let current = fixture
+        .cases
+        .iter()
+        .find(|case| case.name == "新預設")
+        .expect("新預設");
+    assert_eq!(legacy.input, super::LEGACY_TYPE_FILTER_WITH_AUDIO);
+    assert_eq!(csharp.input, super::CSHARP_TYPE_FILTER_WITH_AUDIO);
+    assert_eq!(current.input, fixture.default_type_filter);
+    assert!(!fixture.default_type_filter.contains("mp3"));
+
+    for case in &fixture.cases {
+        assert!(!case.source.is_empty(), "{}", case.name);
+        let expected = expected_type_filter(case, &fixture.default_type_filter);
+        assert_eq!(
+            migrate(json!({ "version": 2, "files": { "typeFilter": case.input } }))["files"]
+                ["typeFilter"],
+            expected,
+            "v2 {}",
+            case.name
+        );
+        assert_eq!(
+            migrate(json!({ "FileConvert": { "TypeFilter": case.input } }))["files"]["typeFilter"],
+            expected,
+            "legacy {}",
+            case.name
+        );
+    }
+
+    // 空字串維持原行為：v2 保留空字串，舊版缺值才走 fallback。
     assert_eq!(
-        migrate(json!({ "version": 2, "files": { "typeFilter": csharp } }))["files"]["typeFilter"],
-        expected
+        migrate(json!({ "version": 2, "files": { "typeFilter": "" } }))["files"]["typeFilter"],
+        ""
     );
     assert_eq!(
-        migrate(json!({ "FileConvert": { "TypeFilter": csharp } }))["files"]["typeFilter"],
-        expected
-    );
-    let audio_in_the_middle = "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<音訊文件|*.wav>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>";
-    assert_eq!(
-        migrate(json!({ "version": 2, "files": { "typeFilter": audio_in_the_middle } }))["files"]
-            ["typeFilter"],
-        expected
-    );
-    let custom_with_audio = "<日誌|*.log>/<音頻文件|*.mp3>";
-    assert_eq!(
-        migrate(json!({ "version": 2, "files": { "typeFilter": custom_with_audio } }))["files"]
-            ["typeFilter"],
-        custom_with_audio
+        migrate(json!({ "FileConvert": { "TypeFilter": "" } }))["files"]["typeFilter"],
+        fixture.default_type_filter
     );
 }

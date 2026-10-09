@@ -24,19 +24,47 @@ const LEGACY_BUILTIN_FILE_TYPE_FILTERS = [
   CSHARP_FILE_TYPE_FILTER_WITH_AUDIO,
 ];
 
-/** 已知舊內建預設，或拿掉音訊／音頻群組後與新預設相同。 */
+/**
+ * 空字串不是舊內建預設。非空且不含 `<`（C# 1.0.0.0–1.0.0.3）、已知舊內建預設，
+ * 或拿掉音訊／音頻群組後與新預設相同。
+ */
 export function isLegacyBuiltinFileTypeFilter(value: string): boolean {
+  if (!value) return false;
+  if (!value.includes("<")) return true;
   return (
     LEGACY_BUILTIN_FILE_TYPE_FILTERS.includes(value) ||
     fileTypeFilterWithoutAudioGroups(value) === DEFAULT_FILE_TYPE_FILTER
   );
 }
 
+/**
+ * 只移除格式完整、且名稱含「音訊」或「音頻」的 `<名稱|樣式>`。
+ * 其餘 `<...>`（沒有 `|`、未閉合）留在比較字串。未閉合時從該 `<` 留到結尾。
+ */
 function fileTypeFilterWithoutAudioGroups(value: string): string {
-  const groups = [...value.matchAll(/<([^|<>]*)\|[^<>]*>/gu)].filter(
-    (match) => !match[1].includes("音訊") && !match[1].includes("音頻"),
-  );
-  return groups.map((match) => match[0]).join("/");
+  const groups: string[] = [];
+  let rest = value;
+  while (rest.length) {
+    const start = rest.indexOf("<");
+    if (start < 0) break;
+    const relativeEnd = rest.indexOf(">", start);
+    if (relativeEnd < 0) {
+      groups.push(rest.slice(start));
+      break;
+    }
+    const group = rest.slice(start, relativeEnd + 1);
+    if (!isRemovableAudioGroup(group)) groups.push(group);
+    rest = rest.slice(relativeEnd + 1);
+  }
+  return groups.join("/");
+}
+
+function isRemovableAudioGroup(group: string): boolean {
+  const inner = group.slice(1, -1);
+  const pipe = inner.indexOf("|");
+  if (pipe < 0) return false;
+  const name = inner.slice(0, pipe);
+  return name.includes("音訊") || name.includes("音頻");
 }
 
 export function parseLegacyFileFilters(value: string): LegacyFileFilter[] {

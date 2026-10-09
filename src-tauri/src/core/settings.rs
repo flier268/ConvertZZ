@@ -242,9 +242,10 @@ fn normalize_type_filter(value: &str, fallback: &str) -> String {
     normalize_saved_type_filter(value)
 }
 
-/// 自訂篩選保留。空字串不在這裡補預設，由 `normalize_type_filter` 的 fallback 處理。
-/// 非空且不含 `<`（C# 1.0.0.0–1.0.0.3，例如 e7c3aeb、03204e6）、已知舊內建預設，
-/// 或拿掉音訊／音頻群組後與新預設相同，才改成不含音訊的預設。
+/// 自訂篩選保留。空字串（beta1–8 把篩選器清空時存成 `""`，當時代表所有檔案；
+/// 現在空清單代表資料夾掃描不收任何檔案）、非空且不含 `<`（C# 1.0.0.0–1.0.0.3，
+/// 例如 e7c3aeb、03204e6）、已知舊內建預設，或拿掉音訊／音頻群組後與新預設相同，
+/// 才改成不含音訊的預設。
 fn normalize_saved_type_filter(value: &str) -> String {
     if is_legacy_builtin_type_filter(value) {
         DEFAULT_TYPE_FILTER.to_string()
@@ -255,7 +256,7 @@ fn normalize_saved_type_filter(value: &str) -> String {
 
 fn is_legacy_builtin_type_filter(value: &str) -> bool {
     if value.is_empty() {
-        return false;
+        return true;
     }
     // 只看 `<`，與 C# `Contains("<")` 相同；不含這個字元的非空字串一律視為舊內建格式。
     if !value.contains('<') {

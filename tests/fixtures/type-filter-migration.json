@@ -2,6 +2,12 @@
   "defaultTypeFilter": "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>",
   "cases": [
     {
+      "name": "v2 空字串",
+      "source": "beta1–8 在設定頁清空篩選器會存成空字串（當時代表所有檔案）；現在空清單資料夾掃描不收任何檔，改回預設",
+      "input": "",
+      "expected": "default"
+    },
+    {
       "name": "e7c3aeb 舊格式",
       "source": "commit e7c3aeb ConvertZZ/Settings.cs:112（tag 1.0.0.0–1.0.0.2）",
       "input": "*.txt|*.log|*.ini|*.inf|*.bat|*.cmd|*.srt|*.lang",

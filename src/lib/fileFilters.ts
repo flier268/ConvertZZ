@@ -30,11 +30,12 @@ const LEGACY_BUILTIN_FILE_TYPE_FILTERS = [
 ];
 
 /**
- * 空字串不是舊內建預設。非空且不含 `<`（C# 1.0.0.0–1.0.0.3）、已知舊內建預設，
- * 或拿掉音訊／音頻群組後與新預設相同。
+ * 空字串（beta1–8 清空篩選器時存成 `""`，當時代表所有檔案；現在空清單代表資料夾掃描
+ * 不收任何檔案）、非空且不含 `<`（C# 1.0.0.0–1.0.0.3）、已知舊內建預設，
+ * 或拿掉音訊／音頻群組後與新預設相同，都改成新預設。
  */
 export function isLegacyBuiltinFileTypeFilter(value: string): boolean {
-  if (!value) return false;
+  if (!value) return true;
   if (!value.includes("<")) return true;
   return (
     LEGACY_BUILTIN_FILE_TYPE_FILTERS.includes(value) ||
@@ -93,15 +94,26 @@ export function parseLegacyFileFilters(value: string): LegacyFileFilter[] {
   return filters;
 }
 
-/** 設定字串已有 `*`／`*.*` 時不重複加入。空字串只寫入所有檔案群組。 */
+function hasAllFilesGroup(value: string): boolean {
+  return parseLegacyFileFilters(value).some((filter) =>
+    filter.extensions.includes(ALL_FILES_EXTENSION),
+  );
+}
+
+/** 最後一個 `<` 之後沒有 `>` 時補上，避免接著寫入的群組被吞進未閉合的群組。 */
+function closeTrailingGroup(value: string): string {
+  return value.lastIndexOf("<") > value.lastIndexOf(">") ? `${value}>` : value;
+}
+
+/**
+ * 設定字串已有 `*`／`*.*` 時不重複加入。空字串只寫入所有檔案群組。
+ * 結尾有未閉合的群組（例如 `<所有檔案|*.*`）先補上 `>`，再判斷是否需要加入。
+ */
 export function appendAllFilesTypeFilter(value: string): string {
-  if (
-    parseLegacyFileFilters(value).some((filter) => filter.extensions.includes(ALL_FILES_EXTENSION))
-  ) {
-    return value;
-  }
-  const trimmed = value.trim();
+  if (hasAllFilesGroup(value)) return value;
+  const trimmed = closeTrailingGroup(value.trim());
   if (!trimmed) return ALL_FILES_TYPE_FILTER_GROUP;
+  if (hasAllFilesGroup(trimmed)) return trimmed;
   const separator = trimmed.endsWith("/") ? "" : "/";
   return `${trimmed}${separator}${ALL_FILES_TYPE_FILTER_GROUP}`;
 }

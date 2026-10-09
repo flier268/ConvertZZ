@@ -48,6 +48,19 @@ describe("舊版檔案篩選器", () => {
     expect(appendAllFilesTypeFilter("<全部|*>")).toBe("<全部|*>");
   });
 
+  it("加入所有檔案遇到未閉合群組時先補上 >，不產生壞字串", () => {
+    expect(appendAllFilesTypeFilter("<所有檔案|*.*")).toBe("<所有檔案|*.*>");
+    expect(appendAllFilesTypeFilter("<文字|*.txt>/<所有檔案|*.*")).toBe(
+      "<文字|*.txt>/<所有檔案|*.*>",
+    );
+    expect(appendAllFilesTypeFilter("<文字|*.txt")).toBe(
+      `<文字|*.txt>/${ALL_FILES_TYPE_FILTER_GROUP}`,
+    );
+    expect(appendAllFilesTypeFilter("<未閉合")).toBe(`<未閉合>/${ALL_FILES_TYPE_FILTER_GROUP}`);
+    const once = appendAllFilesTypeFilter("<文字|*.txt");
+    expect(appendAllFilesTypeFilter(once)).toBe(once);
+  });
+
   it("預設篩選字串只含分類，不含支援的檔案", () => {
     const filters = parseLegacyFileFilters(DEFAULT_FILE_TYPE_FILTER);
     expect(filters.map((filter) => filter.name)).toEqual(["常用文字檔案", "常用網頁文件"]);

@@ -218,7 +218,7 @@ fn preserves_raw_saved_paths() {
         r"\\?\C:\Program Files\ConvertZZ\Dictionary.csv"
     );
     assert_eq!(result["files"]["defaultPath"], r"\\?\D:\Text");
-    assert_eq!(result["files"]["typeFilter"], "");
+    assert_eq!(result["files"]["typeFilter"], super::DEFAULT_TYPE_FILTER);
 }
 
 #[derive(serde::Deserialize)]
@@ -303,10 +303,10 @@ fn type_filter_migration_vectors_match_shared_fixture() {
         );
     }
 
-    // 空字串維持原行為：v2 保留空字串，舊版缺值才走 fallback。
+    // 空字串：v2（beta1–8 清空篩選器）與舊版缺值都改回預設，不再變成「不收任何檔案」。
     assert_eq!(
         migrate(json!({ "version": 2, "files": { "typeFilter": "" } }))["files"]["typeFilter"],
-        ""
+        fixture.default_type_filter
     );
     assert_eq!(
         migrate(json!({ "FileConvert": { "TypeFilter": "" } }))["files"]["typeFilter"],

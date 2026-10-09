@@ -60,13 +60,13 @@ describe("開發／預發佈更新預設", () => {
     );
   });
 
-  it("空字串維持原行為：v2 保留空字串，舊版缺值才用預設", () => {
+  it("空字串（beta1–8 清空篩選器）與舊版缺值都改回預設", () => {
     const defaults = defaultSettings("2.0.0");
     expect(defaults.files.typeFilter).toBe(DEFAULT_FILE_TYPE_FILTER);
     expect(defaults.files.typeFilter).not.toMatch(/mp3|flac|ogg|wav|m4a/iu);
     expect(
       migrateSettings({ version: 2, files: { typeFilter: "" } }, "2.0.0").files.typeFilter,
-    ).toBe("");
+    ).toBe(DEFAULT_FILE_TYPE_FILTER);
     expect(migrateSettings({ FileConvert: { TypeFilter: "" } }, "2.0.0").files.typeFilter).toBe(
       defaults.files.typeFilter,
     );

@@ -4254,3 +4254,56 @@ async fn filename_mode_preview_shows_invalid_utf8_name_instead_of_blank() {
     );
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn invalid_utf8_name_is_skipped_when_output_goes_elsewhere() {
+    use std::os::unix::ffi::OsStrExt;
+    for mode in [FileMode::Filename, FileMode::Content] {
+        let directory = temp_dir();
+        let source_directory = directory.join("source");
+        let output_directory = directory.join("output");
+        std::fs::create_dir(&source_directory).unwrap();
+        let mut raw = encode_text("中国", TextEncoding::Gbk, false).unwrap();
+        raw.extend_from_slice(b".txt");
+        let source = source_directory.join(std::ffi::OsStr::from_bytes(&raw));
+        std::fs::write(&source, "里面开发").unwrap();
+
+        let service = FileService::new();
+        let mut request = filename_request(&source_directory, ConflictPolicy::Skip);
+        request.mode = mode;
+        request.input_encoding = TextEncoding::Utf8;
+        request.output_encoding = TextEncoding::Utf8;
+        request.output_directory = Some(output_directory.to_string_lossy().into_owned());
+        let plan = service
+            .plan(shared_conversion(), request, noop())
+            .await
+            .unwrap();
+        assert_eq!(plan.items.len(), 1);
+        let item = &plan.items[0];
+        assert_eq!(item.status, PlanStatus::Skipped, "{mode:?}");
+        assert_eq!(item.output_path, item.source_path, "{mode:?}");
+        assert!(
+            item.warning.as_deref().unwrap_or("").contains("UTF-8"),
+            "{:?}",
+            item.warning
+        );
+
+        service
+            .apply(
+                shared_conversion(),
+                &plan.plan_id,
+                None,
+                noop(),
+                never_cancel(),
+            )
+            .await
+            .unwrap();
+        let written = std::fs::read_dir(&output_directory)
+            .map(|entries| entries.count())
+            .unwrap_or(0);
+        assert_eq!(written, 0, "{mode:?}：不得寫出含 � 的輸出檔");
+        assert_eq!(std::fs::read_to_string(&source).unwrap(), "里面开发");
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+}

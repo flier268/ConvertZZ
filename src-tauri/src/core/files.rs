@@ -449,7 +449,8 @@ impl FileService {
             .await?;
         let mut name_warnings = name_warnings;
         name_warnings.extend(path_warnings);
-        keep_invalid_utf8_name(request, source_path, &mut output_path, &mut name_warnings);
+        let skip_invalid_name =
+            keep_invalid_utf8_name(source_path, &mut output_path, &mut name_warnings);
         let conflict = output_path != source_path && output_path.exists();
         let (source_preview, output_preview, preview_loaded) = if request.mode == FileMode::Filename
         {
@@ -468,7 +469,9 @@ impl FileService {
                     source_preview,
                     output_preview,
                     preview_loaded,
-                    status: if conflict && request.conflict_policy == ConflictPolicy::Skip {
+                    status: if skip_invalid_name {
+                        PlanStatus::Skipped
+                    } else if conflict && request.conflict_policy == ConflictPolicy::Skip {
                         PlanStatus::Conflict
                     } else {
                         PlanStatus::Ready
@@ -596,7 +599,8 @@ impl FileService {
         if content_skip.is_some() && request.mode == FileMode::Content {
             output_path = source_path.to_path_buf();
         }
-        keep_invalid_utf8_name(request, source_path, &mut output_path, &mut name_warnings);
+        let skip_invalid_name =
+            keep_invalid_utf8_name(source_path, &mut output_path, &mut name_warnings);
         let output_encoding =
             resolve_output_encoding(request.output_encoding, decoded.as_ref().map(|item| item.1));
         let mut output_text = converted_content
@@ -660,7 +664,9 @@ impl FileService {
         } else {
             (file_name(source_path), converted_name, true)
         };
-        let status = if let Some(item) = existing_item {
+        let status = if skip_invalid_name {
+            PlanStatus::Skipped
+        } else if let Some(item) = existing_item {
             if item.status == PlanStatus::Conflict
                 || (conflict && request.conflict_policy == ConflictPolicy::Skip)
             {
@@ -3246,20 +3252,20 @@ fn has_invalid_utf8_name(path: &Path) -> bool {
 }
 
 /// 檔名不是有效 UTF-8（常見於 Linux 上以 GBK／Big5 解壓出的亂碼檔名）時，
-/// 預覽以替代字元顯示，但來源路徑無法無損回傳，因此不改名。
+/// 預覽以替代字元顯示，但來源路徑無法無損回傳，因此不改名；
+/// 輸出到他處時也略過，避免寫出含 � 的檔名。回傳 `true` 表示應略過。
 fn keep_invalid_utf8_name(
-    request: &FilePlanRequest,
     source_path: &Path,
     output_path: &mut PathBuf,
     warnings: &mut Vec<String>,
-) {
+) -> bool {
     if !has_invalid_utf8_name(source_path) {
-        return;
+        return false;
     }
     warnings.push("檔名不是有效的 UTF-8，預覽以 � 顯示原始位元組，無法改名，已保留原檔名。".into());
-    if request.output_directory.is_none() && request.output_path.is_none() {
-        *output_path = source_path.to_path_buf();
-    }
+    let elsewhere = output_path.as_path() != source_path;
+    *output_path = source_path.to_path_buf();
+    elsewhere
 }
 
 fn extension_of(path: &Path) -> String {

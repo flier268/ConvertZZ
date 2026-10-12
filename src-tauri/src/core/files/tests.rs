@@ -2,7 +2,7 @@ use super::super::conversion::shared_conversion;
 use super::super::encoding::encode_text;
 use super::super::headless::{extensions_from_type_filter, ParsedTypeExtensions};
 use super::super::settings::migrate;
-use super::super::types::{ConversionOptions, Direction, EngineKind, FileMode};
+use super::super::types::{ConversionOptions, Direction, EngineKind, FileMode, TextEncoding};
 use super::*;
 use serde::Deserialize;
 use serde_json::json;
@@ -2393,6 +2393,223 @@ async fn all_files_filter_renames_empty_folders_and_folders_of_empty_folders() {
     );
     assert!(!empty.exists());
     assert!(!outer.exists());
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+/// 省略 `allowed_extensions` 才是「所有檔案」（前端 `kind: "all"`、headless `ParsedTypeExtensions::All`）。
+/// 無副檔名與子資料夾裡的檔案都要收，不能出現空資料夾警告。
+#[tokio::test]
+async fn all_files_includes_extensionless_and_nested_files_without_empty_warning() {
+    let directory = temp_dir();
+    std::fs::write(directory.join("README"), "软件").unwrap();
+    let nested = directory.join("简体子夹");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(nested.join("画面.png"), b"png").unwrap();
+    let hidden = directory.join(".git").join("简体");
+    std::fs::create_dir_all(&hidden).unwrap();
+    std::fs::write(hidden.join("软件.txt"), "软件").unwrap();
+
+    let plan = FileService::new()
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Filename, None),
+            noop(),
+        )
+        .await
+        .unwrap();
+    let files = plan
+        .items
+        .iter()
+        .filter(|item| item.kind == FileItemKind::File)
+        .map(|item| {
+            Path::new(&item.source_path)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        files,
+        ["README".to_string(), "画面.png".to_string()]
+            .into_iter()
+            .collect()
+    );
+    assert!(plan.items.iter().any(|item| {
+        item.kind == FileItemKind::Directory && item.source_path == nested.to_string_lossy()
+    }));
+    assert!(plan
+        .items
+        .iter()
+        .all(|item| !item.source_path.contains(".git")));
+    assert!(
+        plan.warnings
+            .iter()
+            .all(|warning| !warning.contains("沒有符合副檔名篩選器的檔案")),
+        "{:?}",
+        plan.warnings
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+/// 所有檔案且樹上只有空子資料夾時，警告不該聲稱「副檔名篩選器」排除了檔案，也不帶計數。
+#[tokio::test]
+async fn all_files_empty_tree_warning_does_not_mention_extension_filter() {
+    let directory = temp_dir();
+    let outer = directory.join("只有空层");
+    std::fs::create_dir_all(outer.join("简体内层")).unwrap();
+    let plan = FileService::new()
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Filename, None),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert!(plan
+        .items
+        .iter()
+        .all(|item| item.kind == FileItemKind::Directory));
+    assert!(!plan.items.is_empty());
+    let warning = plan
+        .warnings
+        .iter()
+        .find(|warning| warning.contains(&directory.to_string_lossy().to_string()))
+        .unwrap_or_else(|| panic!("{:?}", plan.warnings));
+    assert!(
+        warning.contains("沒有檔案"),
+        "所有檔案不該說成副檔名篩選：{warning}"
+    );
+    assert!(
+        !warning.contains("副檔名"),
+        "所有檔案不該說成副檔名篩選：{warning}"
+    );
+    assert!(!warning.contains("個"), "空資料夾警告不帶數量：{warning}");
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+/// `*.*`／`*` 出現在清單裡會被 `normalize_extension_list` 清成空集合。
+/// 前端 `folderScanExtensions` 與 headless `allowed_extensions` 都改送省略清單（`None`），不會走這條。
+#[tokio::test]
+async fn star_tokens_in_extension_list_collect_nothing_and_warn() {
+    let directory = temp_dir();
+    std::fs::write(directory.join("README"), "软件").unwrap();
+    let nested = directory.join("简体子夹");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(nested.join("画面.BIN"), b"bin").unwrap();
+    for tokens in [vec!["*.*".to_string()], vec!["*".to_string()]] {
+        let plan = FileService::new()
+            .plan(
+                shared_conversion(),
+                directory_scan_request(&directory, FileMode::Filename, Some(tokens.clone())),
+                noop(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            plan.items.is_empty(),
+            "{tokens:?} 不是所有檔案：{:?}",
+            plan.items
+        );
+        assert!(
+            plan.warnings
+                .iter()
+                .any(|warning| warning.contains("沒有符合副檔名篩選器的檔案")),
+            "{tokens:?} {:?}",
+            plan.warnings
+        );
+    }
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+/// 同一棵樹被兩個來源各走一次時，略過數必須是不重複的資料夾數。
+#[tokio::test]
+async fn skip_count_is_unique_when_nested_input_overlaps_parent() {
+    let directory = temp_dir();
+    let audio = directory.join("简体甲");
+    let inner = audio.join("内层");
+    std::fs::create_dir_all(&inner).unwrap();
+    std::fs::write(audio.join("歌曲.mp3"), b"mp3").unwrap();
+    std::fs::write(inner.join("歌曲.mp3"), b"mp3").unwrap();
+    let text = directory.join("简体乙");
+    std::fs::create_dir_all(&text).unwrap();
+    std::fs::write(text.join("笔记.txt"), "软件").unwrap();
+
+    let mut request = directory_scan_request(
+        &directory,
+        FileMode::Filename,
+        Some(default_type_filter_extensions()),
+    );
+    request.paths.push(audio.to_string_lossy().into_owned());
+    let plan = FileService::new()
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let directories = plan
+        .items
+        .iter()
+        .filter(|item| item.kind == FileItemKind::Directory)
+        .map(|item| item.source_path.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(directories, vec![text.to_string_lossy().into_owned()]);
+    assert!(
+        plan.warnings.iter().any(|warning| {
+            warning.contains("已略過 2 個不含符合篩選器檔案的資料夾改名")
+        }),
+        "簡體甲與內層各算一次：{:?}",
+        plan.warnings
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+/// issue #76 截圖：預設篩選、檔名模式、多層資料夾裡只有 .BIN／.HEX／.png。
+/// beta9（7b0f540）的 `collect_directories` 不看篩選，預覽會只剩資料夾並附空資料夾警告。
+/// 目前只略過那些資料夾，預覽不應再只列出 directory。
+#[tokio::test]
+async fn default_filter_binary_tree_does_not_preview_directories_only() {
+    let directory = temp_dir();
+    let layer = directory.join("简体层").join("更深层");
+    std::fs::create_dir_all(&layer).unwrap();
+    std::fs::write(layer.join("資料.BIN"), b"bin").unwrap();
+    std::fs::write(layer.join("資料.HEX"), b"hex").unwrap();
+    std::fs::write(directory.join("简体层").join("圖.png"), b"png").unwrap();
+    let side = directory.join("另一层");
+    std::fs::create_dir_all(&side).unwrap();
+    std::fs::write(side.join("空圖.png"), b"png").unwrap();
+    let mut request = directory_scan_request(
+        &directory,
+        FileMode::Filename,
+        Some(default_type_filter_extensions()),
+    );
+    request.input_encoding = TextEncoding::Gbk;
+    request.output_encoding = TextEncoding::Big5;
+    let plan = FileService::new()
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert!(
+        plan.items
+            .iter()
+            .all(|item| item.kind != FileItemKind::Directory),
+        "不含通過篩選檔案的子資料夾不應出現在預覽：{:?}",
+        plan.items
+    );
+    assert!(plan.items.is_empty(), "{:?}", plan.items);
+    assert!(
+        plan.warnings
+            .iter()
+            .any(|warning| warning.contains("沒有符合副檔名篩選器的檔案")),
+        "{:?}",
+        plan.warnings
+    );
+    // 简体层、更深层、另一层，各一次。
+    assert!(
+        plan.warnings.iter().any(|warning| {
+            warning.contains("已略過 3 個不含符合篩選器檔案的資料夾改名")
+        }),
+        "{:?}",
+        plan.warnings
+    );
     let _ = std::fs::remove_dir_all(&directory);
 }
 

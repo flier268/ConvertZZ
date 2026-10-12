@@ -153,6 +153,18 @@ describe("舊版檔案篩選器", () => {
     ).toEqual({ kind: "all" });
     expect(folderScanExtensions(parseLegacyFileFilters("<所有檔案|*.*>"))).toEqual({ kind: "all" });
     expect(folderScanExtensions(parseLegacyFileFilters("<全部|*>"))).toEqual({ kind: "all" });
+    expect(folderScanExtensions(parseLegacyFileFilters("<文字|*.txt>/<所有檔案|*.*>"))).toEqual({
+      kind: "all",
+    });
+    expect(folderScanExtensions(parseLegacyFileFilters("<文字|*.txt;*.*>"))).toEqual({
+      kind: "all",
+    });
+    const listed = folderScanExtensions(parseLegacyFileFilters("<文字|*.txt;*.log>"));
+    expect(listed.kind).toBe("list");
+    if (listed.kind === "list") {
+      expect(listed.extensions).not.toContain("*");
+      expect(listed.extensions).not.toContain("*.*");
+    }
     expect(folderScanExtensions(parseLegacyFileFilters("不是篩選"))).toEqual({
       kind: "list",
       extensions: [],

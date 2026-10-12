@@ -192,7 +192,11 @@ impl FileService {
             .collect::<Vec<_>>();
         warnings.extend(scan_warnings);
         warnings.extend(directory_warnings);
-        warnings.extend(empty_folder_warnings(&request.paths, &paths));
+        warnings.extend(empty_folder_warnings(
+            &request.paths,
+            &paths,
+            request.allowed_extensions.as_deref(),
+        ));
 
         for (index, source_path) in paths.iter().enumerate() {
             match self.enumerate_file(conversion, &request, source_path).await {
@@ -1909,7 +1913,13 @@ fn scan_collects_nothing(allowed_extensions: Option<&[String]>) -> bool {
 }
 
 /// 直接指定的資料夾掃描後沒有任何檔案時提示，避免畫面只顯示 0 項而沒有原因。
-fn empty_folder_warnings(inputs: &[String], files: &[PathBuf]) -> Vec<String> {
+/// 所有檔案（省略清單）不提副檔名篩選器；有清單時才說是篩選排除。
+fn empty_folder_warnings(
+    inputs: &[String],
+    files: &[PathBuf],
+    allowed_extensions: Option<&[String]>,
+) -> Vec<String> {
+    let all_files = matches!(extension_gate(allowed_extensions), ExtensionGate::All);
     inputs
         .iter()
         .filter(|input| !input.contains(['*', '?']))
@@ -1919,9 +1929,15 @@ fn empty_folder_warnings(inputs: &[String], files: &[PathBuf]) -> Vec<String> {
             if !metadata.is_dir() || files.iter().any(|file| file.starts_with(&absolute)) {
                 return None;
             }
-            Some(format!(
-                "資料夾「{input}」中沒有符合副檔名篩選器的檔案（隱藏資料夾與版本控制資料夾不會掃描）。"
-            ))
+            Some(if all_files {
+                format!(
+                    "資料夾「{input}」中沒有檔案（隱藏資料夾與版本控制資料夾不會掃描）。"
+                )
+            } else {
+                format!(
+                    "資料夾「{input}」中沒有符合副檔名篩選器的檔案（隱藏資料夾與版本控制資料夾不會掃描）。"
+                )
+            })
         })
         .collect()
 }
@@ -2028,7 +2044,8 @@ fn collect_directories(
     let gate = extension_gate(allowed_extensions);
     let included_ancestors = included_file_ancestor_dirs(files);
     let mut collected = HashSet::new();
-    let mut skipped = 0usize;
+    let mut seen = HashSet::new();
+    let mut skipped = HashSet::new();
     let mut warnings = Vec::new();
     for path in inputs {
         if path.contains(['*', '?']) {
@@ -2039,13 +2056,17 @@ fn collect_directories(
             &included_ancestors,
             &gate,
             &mut collected,
+            &mut seen,
             &mut skipped,
             &mut warnings,
             true,
         )?;
     }
-    if skipped > 0 {
-        warnings.push(format!("已略過 {skipped} 個不含符合篩選器檔案的資料夾改名"));
+    if !skipped.is_empty() {
+        let skipped_count = skipped.len();
+        warnings.push(format!(
+            "已略過 {skipped_count} 個不含符合篩選器檔案的資料夾改名"
+        ));
     }
     Ok((collected.into_iter().collect(), warnings))
 }
@@ -2075,10 +2096,15 @@ fn visit_directories(
     included_ancestors: &HashSet<PathBuf>,
     gate: &ExtensionGate,
     collected: &mut HashSet<PathBuf>,
-    skipped: &mut usize,
+    seen: &mut HashSet<PathBuf>,
+    skipped: &mut HashSet<PathBuf>,
     warnings: &mut Vec<String>,
     top_level: bool,
 ) -> Result<(), CoreError> {
+    // 父資料夾與子資料夾同時列為輸入時，第二次進入同一路徑不再走訪、不再計數。
+    if !seen.insert(path.to_path_buf()) {
+        return Ok(());
+    }
     let metadata = fs::symlink_metadata(path)?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
         return Ok(());
@@ -2106,13 +2132,14 @@ fn visit_directories(
         {
             collected.insert(directory.clone());
         } else {
-            *skipped += 1;
+            skipped.insert(directory.clone());
         }
         visit_directories(
             &directory,
             included_ancestors,
             gate,
             collected,
+            seen,
             skipped,
             warnings,
             false,

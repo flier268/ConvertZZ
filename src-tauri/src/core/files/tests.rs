@@ -4140,3 +4140,75 @@ async fn unchanged_ready_file_still_allows_folder_rename() {
     assert!(directory.join("簡體資料").join("正確.txt").exists());
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+#[tokio::test]
+async fn unchanged_content_file_still_lets_folder_rename() {
+    let directory = temp_dir();
+    let nested = directory.join("简体资料");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(nested.join("a.txt"), "plain ascii").unwrap();
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Both, Some(vec![".txt".into()])),
+            noop(),
+        )
+        .await
+        .unwrap();
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{:?}", result.failed);
+    assert!(directory.join("簡體資料").join("a.txt").is_file());
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn unreadable_content_file_does_not_let_folder_rename() {
+    let directory = temp_dir();
+    let nested = directory.join("简体资料");
+    std::fs::create_dir_all(&nested).unwrap();
+    // 含 NUL 位元組，內容模式會判為二進位並略過。
+    std::fs::write(nested.join("a.txt"), b"abc\0\0def").unwrap();
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Both, Some(vec![".txt".into()])),
+            noop(),
+        )
+        .await
+        .unwrap();
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{:?}", result.failed);
+    assert!(
+        nested.join("a.txt").is_file(),
+        "讀取失敗的檔案不應讓資料夾改名"
+    );
+    assert!(!directory.join("簡體資料").exists());
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[test]
+fn trailing_dot_name_has_no_extension() {
+    assert_eq!(extension_of(Path::new("a.")), "");
+    assert_eq!(extension_of(Path::new(".bashrc")), "");
+    assert_eq!(extension_of(Path::new("a.TXT")), ".txt");
+}

@@ -852,6 +852,7 @@ impl FileService {
         let file_total = pending_files.len();
         let total = (file_total + pending_directories.len()).max(1) as u64;
         let mut committed_outputs = Vec::new();
+        let mut unchanged_sources: Vec<String> = Vec::new();
         let mut stopped = false;
 
         if !pending_files.is_empty() {
@@ -871,6 +872,7 @@ impl FileService {
                 {
                     Ok(batch) => {
                         committed_outputs.extend(batch.committed_outputs);
+                        unchanged_sources.extend(batch.unchanged);
                         result.skipped.extend(batch.skipped);
                         result.failed.extend(batch.failed);
                         result.warnings.extend(batch.warnings);
@@ -899,6 +901,7 @@ impl FileService {
                         Arc::clone(&is_cancelled),
                         total,
                         &mut committed_outputs,
+                        &mut unchanged_sources,
                         &mut result,
                     )
                     .await;
@@ -909,8 +912,7 @@ impl FileService {
             .iter()
             .map(|path| resolve_path(&path.to_string_lossy()))
             .collect::<HashSet<_>>();
-        let skipped_set = result
-            .skipped
+        let unchanged_set = unchanged_sources
             .iter()
             .map(|path| resolve_path(path))
             .collect::<HashSet<_>>();
@@ -919,7 +921,7 @@ impl FileService {
                 .into_iter()
                 .filter(|(source, output)| {
                     committed_set.contains(output)
-                        || (source == output && skipped_set.contains(source))
+                        || (source == output && unchanged_set.contains(source))
                 })
                 .map(|(source, _)| source)
                 .collect::<Vec<_>>(),
@@ -1033,6 +1035,7 @@ impl FileService {
         is_cancelled: CancelCheck,
         total: u64,
         committed_outputs: &mut Vec<PathBuf>,
+        unchanged_sources: &mut Vec<String>,
         result: &mut ApplyResult,
     ) -> bool {
         let file_total = pending_files.len();
@@ -1086,6 +1089,10 @@ impl FileService {
                     Ok(FileCommitOutcome::Skipped { path, warnings }) => {
                         result.skipped.push(path);
                         result.warnings.extend(warnings);
+                    }
+                    Ok(FileCommitOutcome::Unchanged { path }) => {
+                        unchanged_sources.push(path.clone());
+                        result.skipped.push(path);
                     }
                     Err(error)
                         if error.code == "PLAN_CANCELLED" || error.code == "CONVERT_CANCELLED" =>
@@ -1160,6 +1167,10 @@ impl FileService {
                 Ok(FileCommitOutcome::Skipped { path, warnings }) => {
                     result.skipped.push(path);
                     result.warnings.extend(warnings);
+                }
+                Ok(FileCommitOutcome::Unchanged { path }) => {
+                    unchanged_sources.push(path.clone());
+                    result.skipped.push(path);
                 }
                 Err(error)
                     if error.code == "PLAN_CANCELLED" || error.code == "CONVERT_CANCELLED" =>
@@ -1238,6 +1249,7 @@ impl FileService {
 
         let mut transaction = Vec::new();
         let mut skipped_during_commit = Vec::new();
+        let mut unchanged_during_commit = Vec::new();
         let mut skipped_warnings = Vec::new();
         let stage_result = (|| -> Result<(), CoreError> {
             for file in prepared_files {
@@ -1245,6 +1257,9 @@ impl FileService {
                     return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
                 }
                 if leaves_source_unchanged(request, &file) {
+                    if is_truly_unchanged(request, &file) {
+                        unchanged_during_commit.push(file.item.source_path.clone());
+                    }
                     skipped_warnings.extend(content_skip_warnings(&file));
                     skipped_during_commit.push(file.item.source_path);
                     continue;
@@ -1324,6 +1339,7 @@ impl FileService {
         })();
 
         batch.skipped.extend(skipped_during_commit);
+        batch.unchanged.extend(unchanged_during_commit);
         batch.warnings.extend(skipped_warnings);
 
         if let Err(error) = stage_result {
@@ -1422,6 +1438,11 @@ impl FileService {
         if is_cancelled() {
             return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
         }
+        if is_truly_unchanged(request, &file) {
+            return Ok(FileCommitOutcome::Unchanged {
+                path: file.item.source_path,
+            });
+        }
         if leaves_source_unchanged(request, &file) {
             let warnings = content_skip_warnings(&file);
             return Ok(FileCommitOutcome::Skipped {
@@ -1443,6 +1464,7 @@ impl FileService {
 struct OverlapBatchResult {
     committed_outputs: Vec<PathBuf>,
     skipped: Vec<String>,
+    unchanged: Vec<String>,
     failed: Vec<ApplyFailure>,
     warnings: Vec<String>,
     stopped: bool,
@@ -1470,6 +1492,10 @@ enum FileCommitOutcome {
         path: String,
         warnings: Vec<String>,
     },
+    /// 內容確實不需變更（Ready 且沒有讀取失敗）。與 `Skipped` 不同，資料夾改名可視為已套用。
+    Unchanged {
+        path: String,
+    },
 }
 
 fn commit_prepared_file(
@@ -1479,6 +1505,11 @@ fn commit_prepared_file(
 ) -> Result<FileCommitOutcome, CoreError> {
     if file.item.output_path == file.item.source_path && file.content.is_none() {
         let warnings = content_skip_warnings(&file);
+        if file.item.status == PlanStatus::Ready && warnings.is_empty() {
+            return Ok(FileCommitOutcome::Unchanged {
+                path: file.item.source_path,
+            });
+        }
         return Ok(FileCommitOutcome::Skipped {
             path: file.item.source_path,
             warnings,
@@ -1556,7 +1587,9 @@ fn commit_prepared_file(
                 warnings,
             })
         }
-        Ok(skipped @ FileCommitOutcome::Skipped { .. }) => Ok(skipped),
+        Ok(skipped @ (FileCommitOutcome::Skipped { .. } | FileCommitOutcome::Unchanged { .. })) => {
+            Ok(skipped)
+        }
         Err(error) => {
             rollback_transaction(std::slice::from_ref(&entry));
             Err(error)
@@ -2837,6 +2870,13 @@ fn content_skip_warnings(file: &PreparedFile) -> Vec<String> {
         .collect()
 }
 
+/// 來源保持不變且不是因為讀取失敗（二進位、解碼失敗、過大）或非 Ready。
+fn is_truly_unchanged(request: &FilePlanRequest, file: &PreparedFile) -> bool {
+    file.item.status == PlanStatus::Ready
+        && leaves_source_unchanged(request, file)
+        && content_skip_warnings(file).is_empty()
+}
+
 fn leaves_source_unchanged(request: &FilePlanRequest, file: &PreparedFile) -> bool {
     file.content.is_none()
         && (request.mode == FileMode::Content || file.item.output_path == file.item.source_path)
@@ -3203,6 +3243,7 @@ fn file_name(path: &Path) -> String {
 fn extension_of(path: &Path) -> String {
     path.extension()
         .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
         .map(|value| format!(".{}", value.to_ascii_lowercase()))
         .unwrap_or_default()
 }

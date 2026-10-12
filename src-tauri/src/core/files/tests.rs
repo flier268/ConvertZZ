@@ -1937,6 +1937,18 @@ fn migrated_bracketless_type_filter_does_not_visit_audio_files() {
     let _ = std::fs::remove_dir_all(&directory);
 }
 
+/// 與 `src/lib/fileFilters.ts` 的 `DEFAULT_FILE_TYPE_FILTER` 相同，不含音訊。
+fn default_type_filter_extensions() -> Vec<String> {
+    let ParsedTypeExtensions::List(extensions) = extensions_from_type_filter(
+        "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>",
+    ) else {
+        panic!("預設篩選不應是所有檔案");
+    };
+    assert!(extensions.iter().any(|extension| extension == ".txt"));
+    assert!(!extensions.iter().any(|extension| extension == ".mp3"));
+    extensions
+}
+
 fn directory_scan_request(
     path: &Path,
     mode: FileMode,
@@ -2201,6 +2213,111 @@ async fn empty_extension_list_collects_nothing_and_does_not_rename_subfolders() 
         assert!(result.succeeded.is_empty());
         assert!(nested.exists(), "子資料夾不應被改名");
     }
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn default_filter_skips_rename_of_folders_that_only_contain_mp3() {
+    let directory = temp_dir();
+    for name in ["音乐一", "音乐二", "音乐三"] {
+        let nested = directory.join(name);
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("歌曲.mp3"), b"mp3").unwrap();
+    }
+    let plan = FileService::new()
+        .plan(
+            shared_conversion(),
+            directory_scan_request(
+                &directory,
+                FileMode::Filename,
+                Some(default_type_filter_extensions()),
+            ),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        plan.items
+            .iter()
+            .all(|item| item.kind != FileItemKind::Directory),
+        "不含通過篩選檔案的子資料夾不應改名：{:?}",
+        plan.items
+    );
+    assert!(
+        plan.warnings.iter().any(|warning| {
+            warning.contains("已略過 3 個不含符合篩選器檔案的資料夾改名")
+        }),
+        "{:?}",
+        plan.warnings
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn default_filter_renames_folder_when_it_contains_txt() {
+    let directory = temp_dir();
+    let nested = directory.join("音乐资料");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(nested.join("歌曲.txt"), "软件").unwrap();
+    let plan = FileService::new()
+        .plan(
+            shared_conversion(),
+            directory_scan_request(
+                &directory,
+                FileMode::Filename,
+                Some(default_type_filter_extensions()),
+            ),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert!(plan.items.iter().any(|item| {
+        item.kind == FileItemKind::Directory
+            && item.source_path == nested.to_string_lossy()
+            && item.output_path == directory.join("音樂資料").to_string_lossy()
+    }));
+    assert!(plan
+        .items
+        .iter()
+        .any(|item| item.kind == FileItemKind::File && item.source_path.ends_with("歌曲.txt")));
+    assert!(
+        !plan
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("不含符合篩選器檔案的資料夾改名")),
+        "{:?}",
+        plan.warnings
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn all_files_filter_still_renames_mp3_only_folders() {
+    let directory = temp_dir();
+    let nested = directory.join("音乐资料");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(nested.join("歌曲.mp3"), b"mp3").unwrap();
+    let plan = FileService::new()
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Filename, None),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert!(plan.items.iter().any(|item| {
+        item.kind == FileItemKind::Directory
+            && item.source_path == nested.to_string_lossy()
+            && item.output_path == directory.join("音樂資料").to_string_lossy()
+    }));
+    assert!(
+        !plan
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("不含符合篩選器檔案的資料夾改名")),
+        "{:?}",
+        plan.warnings
+    );
     let _ = std::fs::remove_dir_all(&directory);
 }
 

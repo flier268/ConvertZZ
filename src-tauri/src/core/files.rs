@@ -172,12 +172,18 @@ impl FileService {
             request.allowed_extensions.as_deref(),
         )?;
         // 空的副檔名清單代表資料夾掃描不收任何檔案，子資料夾也不能在 both／檔名模式下被改名。
+        // 有篩選時，只改名子樹內至少有一個通過篩選檔案的資料夾。
         let (directories, directory_warnings) = if request.mode == FileMode::Content
             || scan_collects_nothing(request.allowed_extensions.as_deref())
         {
             (Vec::new(), Vec::new())
         } else {
-            collect_directories(&request.paths, request.recursive)?
+            collect_directories(
+                &request.paths,
+                request.recursive,
+                &paths,
+                request.allowed_extensions.as_deref(),
+            )?
         };
         let mut files = Vec::new();
         let mut warnings = ignored_inputs
@@ -1959,24 +1965,46 @@ fn visit_files(
 fn collect_directories(
     inputs: &[String],
     recursive: bool,
+    files: &[PathBuf],
+    allowed_extensions: Option<&[String]>,
 ) -> Result<(Vec<PathBuf>, Vec<String>), CoreError> {
     if !recursive {
         return Ok((Vec::new(), Vec::new()));
     }
+    let gate = extension_gate(allowed_extensions);
     let mut collected = HashSet::new();
+    let mut skipped = 0usize;
     let mut warnings = Vec::new();
     for path in inputs {
         if path.contains(['*', '?']) {
             continue;
         }
-        visit_directories(&resolve_path(path), &mut collected, &mut warnings, true)?;
+        visit_directories(
+            &resolve_path(path),
+            files,
+            &gate,
+            &mut collected,
+            &mut skipped,
+            &mut warnings,
+            true,
+        )?;
+    }
+    if skipped > 0 {
+        warnings.push(format!("已略過 {skipped} 個不含符合篩選器檔案的資料夾改名"));
     }
     Ok((collected.into_iter().collect(), warnings))
 }
 
+fn directory_has_included_file(directory: &Path, files: &[PathBuf]) -> bool {
+    files.iter().any(|file| file.starts_with(directory))
+}
+
 fn visit_directories(
     path: &Path,
+    files: &[PathBuf],
+    gate: &ExtensionGate,
     collected: &mut HashSet<PathBuf>,
+    skipped: &mut usize,
     warnings: &mut Vec<String>,
     top_level: bool,
 ) -> Result<(), CoreError> {
@@ -2000,8 +2028,14 @@ fn visit_directories(
         {
             continue;
         }
-        collected.insert(entry.path());
-        visit_directories(&entry.path(), collected, warnings, false)?;
+        let directory = entry.path();
+        // 「所有檔案」不過濾。有篩選時，子樹內沒有通過篩選的檔案就不改名。
+        if matches!(gate, ExtensionGate::All) || directory_has_included_file(&directory, files) {
+            collected.insert(directory.clone());
+        } else {
+            *skipped += 1;
+        }
+        visit_directories(&directory, files, gate, collected, skipped, warnings, false)?;
     }
     Ok(())
 }

@@ -191,8 +191,8 @@ describe("已匯入 SettingsV2 欄位會影響實際行為", () => {
         path: ["files", "defaultPath"],
       },
       {
-        name: "files.typeFilter",
-        change: (value) => (value.files.typeFilter = "<日誌|*.log>"),
+        name: "files.defaultFilterProfileId",
+        change: (value) => (value.files.defaultFilterProfileId = "builtin-all"),
         path: ["files", "fileFilters"],
       },
       {

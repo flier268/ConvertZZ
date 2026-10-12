@@ -97,3 +97,40 @@ describe("開發／預發佈更新預設", () => {
     ).toBe(expected);
   });
 });
+
+describe("副檔名篩選 profile 遷移", () => {
+  it("預設設定含內建 profile 與舊預設群組，流程行為預設為記住上次", () => {
+    const files = defaultSettings("2.0.0").files;
+    expect(files.filterProfiles.map((item) => item.id)).toEqual([
+      "builtin-text",
+      "builtin-all",
+      "legacy-2",
+    ]);
+    expect(files.defaultFilterProfileId).toBe("builtin-text");
+    expect(files.folderPickBehavior).toBe("rememberLast");
+  });
+
+  it("v2 設定缺 profile 時由自己的 typeFilter 遷移並保留舊字串", () => {
+    const migrated = migrateSettings({
+      ...defaultSettings("2.0.0"),
+      files: { defaultPath: "!", typeFilter: "<字幕|*.srt>/<所有檔案|*.*>" },
+    });
+    expect(migrated.files.typeFilter).toBe("<字幕|*.srt>/<所有檔案|*.*>");
+    expect(migrated.files.filterProfiles.map((item) => item.id)).toEqual([
+      "builtin-text",
+      "builtin-all",
+      "legacy-1",
+    ]);
+    expect(migrated.files.defaultFilterProfileId).toBe("legacy-1");
+  });
+
+  it("舊版 ConvertZZ.json 匯入也產生 profile", () => {
+    const migrated = migrateSettings({ FileConvert: { TypeFilter: "<文字|*.txt>/<網頁|*.html>" } });
+    expect(migrated.files.filterProfiles.map((item) => item.name)).toEqual([
+      "常用文字檔案",
+      "所有檔案",
+      "文字",
+      "網頁",
+    ]);
+  });
+});

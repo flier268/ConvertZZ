@@ -3,6 +3,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import ElementPlus from "element-plus";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlatformCapabilities, SettingsV2 } from "@shared/contracts";
+import { withFilterProfiles } from "../lib/filterProfiles";
 
 const invoke = vi.fn();
 const getLoadedSettings = vi.fn();
@@ -64,12 +65,12 @@ function settingsFixture(): SettingsV2 {
       rightDropAlt: "0",
       rightDropShift: "0",
     },
-    files: {
+    files: withFilterProfiles({
       defaultPath: "!",
       typeFilter: "<文字|*.txt>",
       fixCharsetExtensions: [".html"],
       unicodeAddBom: false,
-    },
+    }),
     zhconvert: {
       converterS2T: "Taiwan",
       converterT2S: "Simplified",
@@ -165,19 +166,73 @@ describe("設定分頁", () => {
     wrapper.unmount();
   });
 
-  it("檔案篩選器可加入所有檔案", async () => {
+  it("檔案分頁以 profile 表格取代舊 textarea，內建 profile 不可刪除", async () => {
     const settings = settingsFixture();
     getLoadedSettings.mockReturnValue(settings);
     loadSettings.mockResolvedValue(settings);
     const wrapper = await mountPage();
     await wrapper.get('[id^="tab-files"]').trigger("click");
     await flushPromises();
-    const button = wrapper.get("#pane-files .filter-editor-actions button");
-    expect(button.text()).toBe("加入所有檔案");
-    await button.trigger("click");
-    expect(settings.files.typeFilter).toBe("<文字|*.txt>/<所有檔案|*.*>");
-    await button.trigger("click");
-    expect(settings.files.typeFilter).toBe("<文字|*.txt>/<所有檔案|*.*>");
+    const pane = wrapper.get("#pane-files");
+    expect(pane.find("textarea").exists()).toBe(false);
+    expect(pane.text()).toContain("常用文字檔案");
+    expect(pane.text()).toContain("所有檔案");
+    expect(pane.text()).toContain("白名單");
+    const rows = pane.findAll(".el-table__body tr");
+    const labels = rows.map((row) => row.text());
+    const builtin = labels.find((text) => text.includes("常用文字檔案"))!;
+    expect(builtin).not.toContain("刪除");
+    const custom = labels.find((text) => text.includes("文字") && !text.includes("常用"))!;
+    expect(custom).toContain("刪除");
+    wrapper.unmount();
+  });
+
+  it("複製、刪除 profile 與切換流程行為直接改設定", async () => {
+    const settings = settingsFixture();
+    getLoadedSettings.mockReturnValue(settings);
+    loadSettings.mockResolvedValue(settings);
+    const wrapper = await mountPage();
+    await wrapper.get('[id^="tab-files"]').trigger("click");
+    await flushPromises();
+    const buttonIn = (row: ReturnType<typeof wrapper.get>, text: string) =>
+      row.findAll("button").find((button) => button.text() === text)!;
+    const customRow = () =>
+      wrapper
+        .get("#pane-files")
+        .findAll(".el-table__body tr")
+        .find((row) => row.text().includes("文字") && !row.text().includes("常用"))!;
+    await buttonIn(customRow(), "複製").trigger("click");
+    expect(settings.files.filterProfiles.map((item) => item.name)).toContain("文字 副本");
+    await buttonIn(customRow(), "刪除").trigger("click");
+    expect(settings.files.filterProfiles.map((item) => item.name)).not.toContain("文字");
+    const radios = wrapper.get("#pane-files").findAll('input[type="radio"]');
+    const always = radios.find(
+      (radio) => (radio.element as HTMLInputElement).value === "alwaysWizard",
+    )!;
+    await always.setValue();
+    expect(settings.files.folderPickBehavior).toBe("alwaysWizard");
+    wrapper.unmount();
+  });
+
+  it("匯出只含自訂 profile，匯入同名會改名", async () => {
+    const settings = settingsFixture();
+    getLoadedSettings.mockReturnValue(settings);
+    loadSettings.mockResolvedValue(settings);
+    const wrapper = await mountPage();
+    await wrapper.get('[id^="tab-files"]').trigger("click");
+    await flushPromises();
+    const panelButton = (text: string) =>
+      wrapper
+        .get("#pane-files")
+        .findAll("button")
+        .find((button) => button.text() === text)!;
+    await panelButton("匯出").trigger("click");
+    await flushPromises();
+    const exported = (
+      document.body.querySelector('textarea[aria-label="profile JSON"]') as HTMLTextAreaElement
+    ).value;
+    const parsed = JSON.parse(exported) as { profiles: Array<{ name: string }> };
+    expect(parsed.profiles.map((item) => item.name)).toEqual(["文字"]);
     wrapper.unmount();
   });
 
@@ -192,7 +247,7 @@ describe("設定分頁", () => {
     expect(wrapper.get("#pane-general").text()).toContain("SendTo 捷徑");
     await wrapper.get('[id^="tab-files"]').trigger("click");
     await flushPromises();
-    expect(wrapper.get("#pane-files").text()).toContain("檔案篩選器");
+    expect(wrapper.get("#pane-files").text()).toContain("副檔名篩選 profile");
     expect(wrapper.get("#pane-files").text()).not.toContain("SendTo 捷徑");
     wrapper.unmount();
   });

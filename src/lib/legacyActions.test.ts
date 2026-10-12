@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingsV2 } from "@shared/contracts";
+import { withFilterProfiles } from "./filterProfiles";
 
 const invoke = vi.fn();
 const emit = vi.fn();
@@ -72,12 +73,12 @@ function settingsFixture(overrides: Partial<SettingsV2> = {}): SettingsV2 {
       rightDropAlt: "0",
       rightDropShift: "0",
     },
-    files: {
+    files: withFilterProfiles({
       defaultPath: "!",
       typeFilter: "",
       fixCharsetExtensions: [],
       unicodeAddBom: false,
-    },
+    }),
     zhconvert: {
       converterS2T: "Taiwan",
       converterT2S: "Simplified",

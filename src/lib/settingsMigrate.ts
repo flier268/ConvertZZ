@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { version as appVersion } from "../../package.json";
 import { DEFAULT_FILE_TYPE_FILTER, isLegacyBuiltinFileTypeFilter } from "./fileFilters";
+import { withFilterProfiles } from "./filterProfiles";
 import { isPreReleaseVersion } from "./update";
 
 type LegacySettings = Record<string, unknown>;
@@ -50,12 +51,12 @@ export function defaultSettings(currentVersion = appVersion): SettingsV2 {
       rightDropAlt: "0",
       rightDropShift: "0",
     },
-    files: {
+    files: withFilterProfiles({
       defaultPath: "!",
       typeFilter: DEFAULT_FILE_TYPE_FILTER,
       fixCharsetExtensions: [".htm", ".html", ".shtm", ".shtml", ".asp", ".aspx", ".php", ".css"],
       unicodeAddBom: false,
-    },
+    }),
     zhconvert: {
       converterS2T: "Taiwan",
       converterT2S: "Simplified",
@@ -88,6 +89,11 @@ export function defaultSettings(currentVersion = appVersion): SettingsV2 {
 export function migrateSettings(input: unknown, currentVersion = appVersion): SettingsV2 {
   if (isSettingsV2(input)) {
     const defaults = defaultSettings(currentVersion);
+    const baseFiles = {
+      defaultPath: defaults.files.defaultPath,
+      fixCharsetExtensions: defaults.files.fixCharsetExtensions,
+      unicodeAddBom: defaults.files.unicodeAddBom,
+    };
     return {
       ...defaults,
       ...input,
@@ -101,11 +107,12 @@ export function migrateSettings(input: unknown, currentVersion = appVersion): Se
       floatingBall: { ...defaults.floatingBall, ...input.floatingBall },
       hotkeys: { ...defaults.hotkeys, ...input.hotkeys },
       quickActions: { ...defaults.quickActions, ...input.quickActions },
-      files: {
-        ...defaults.files,
+      // 預設 profile 不參與合併：缺欄位時由輸入自己的 typeFilter 遷移。
+      files: withFilterProfiles({
+        ...baseFiles,
         ...input.files,
         typeFilter: normalizeSavedTypeFilter(input.files?.typeFilter, defaults.files.typeFilter),
-      },
+      }),
       zhconvert: { ...defaults.zhconvert, ...input.zhconvert },
       lastDropAction: { ...defaults.lastDropAction, ...input.lastDropAction },
     };
@@ -161,7 +168,7 @@ export function migrateSettings(input: unknown, currentVersion = appVersion): Se
       rightDropAlt: stringValue(quickStart.RightDrop_Alt) || "0",
       rightDropShift: stringValue(quickStart.RightDrop_Shift) || "0",
     },
-    files: {
+    files: withFilterProfiles({
       defaultPath: stringValue(fileConvert.DefaultPath) || defaults.files.defaultPath,
       typeFilter: normalizeTypeFilter(
         stringValue(fileConvert.TypeFilter),
@@ -173,7 +180,7 @@ export function migrateSettings(input: unknown, currentVersion = appVersion): Se
         .split("|")
         .filter(Boolean),
       unicodeAddBom: booleanValue(fileConvert.UnicodeAddBOM, false),
-    },
+    }),
     zhconvert: {
       ...defaults.zhconvert,
       converterS2T: converterValue(fanhuaji.Converter_S_to_T, defaults.zhconvert.converterS2T),

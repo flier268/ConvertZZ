@@ -1,5 +1,6 @@
 import type { SettingsV2, TextEncoding } from "@shared/contracts";
-import { ensureSupportedFilesFilter, parseLegacyFileFilters } from "./fileFilters";
+import { ensureSupportedFilesFilter } from "./fileFilters";
+import { dialogFiltersForProfile, resolveProfile } from "./filterProfiles";
 import { floatingBallPosition } from "./desktop";
 import { zhConvertOptions } from "./settings";
 
@@ -16,7 +17,11 @@ export function fileConversionDefaults(settings: SettingsV2) {
       settings.files.defaultPath && settings.files.defaultPath !== "!"
         ? settings.files.defaultPath
         : undefined,
-    fileFilters: ensureSupportedFilesFilter(parseLegacyFileFilters(settings.files.typeFilter)),
+    fileFilters: ensureSupportedFilesFilter(
+      dialogFiltersForProfile(
+        resolveProfile(settings.files, settings.files.lastFilterProfileId || undefined),
+      ),
+    ),
     promptAfterConversion: settings.promptAfterConversion,
     autoBackupBeforeConversion: settings.autoBackupBeforeConversion,
     dictionaryPath: settings.dictionaryPath,

@@ -2926,6 +2926,27 @@ async fn filename_mode_keeps_names_when_encoding_is_auto() {
 }
 
 #[tokio::test]
+async fn filename_mode_keeps_emoji_name_when_reinterpret_fails() {
+    let directory = temp_dir();
+    let name = "😀简体中文.txt";
+    let source = directory.join(name);
+    std::fs::write(&source, "甲").unwrap();
+    let mut request = filename_request(&source, ConflictPolicy::Skip);
+    request.conversion.direction = Direction::None;
+    request.input_encoding = TextEncoding::Gbk;
+    request.output_encoding = TextEncoding::Big5;
+    let plan = FileService::new()
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert_eq!(plan.items.len(), 1);
+    assert_eq!(output_file_name(&plan.items[0]), name);
+    let warning = plan.items[0].warning.as_deref().unwrap_or("");
+    assert!(warning.contains("已略過重新解讀"), "{warning}");
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
 async fn filename_reinterpret_failure_keeps_converted_name_and_warns() {
     let directory = temp_dir();
     let source = directory.join("甲€.txt");

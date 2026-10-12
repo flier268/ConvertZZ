@@ -91,11 +91,26 @@ pub fn decode_text_detailed(
     })
 }
 
+#[derive(Debug)]
+pub struct EncodedText {
+    pub bytes: Vec<u8>,
+    /// 編碼器無法表示的字元。encoding_rs 預設改寫成 `&#數字;`，不可當成成功。
+    pub had_errors: bool,
+}
+
 pub fn encode_text(
     text: &str,
     encoding: TextEncoding,
     add_bom: bool,
 ) -> Result<Vec<u8>, CoreError> {
+    Ok(encode_text_detailed(text, encoding, add_bom)?.bytes)
+}
+
+pub fn encode_text_detailed(
+    text: &str,
+    encoding: TextEncoding,
+    add_bom: bool,
+) -> Result<EncodedText, CoreError> {
     if encoding == TextEncoding::Auto {
         return Err(CoreError::new(
             "ENCODING_AUTO_OUTPUT",
@@ -103,14 +118,20 @@ pub fn encode_text(
         ));
     }
     if encoding == TextEncoding::HzGb2312 {
-        return encode_hz(text);
+        return Ok(EncodedText {
+            bytes: encode_hz(text)?,
+            had_errors: false,
+        });
     }
     if encoding == TextEncoding::Utf16le || encoding == TextEncoding::Utf16be {
         let mut output = encode_utf16(text, encoding == TextEncoding::Utf16le);
         if add_bom {
             prepend_bom(&mut output, encoding);
         }
-        return Ok(output);
+        return Ok(EncodedText {
+            bytes: output,
+            had_errors: false,
+        });
     }
     let Some(codec) = encoding_codec(encoding) else {
         return Err(CoreError::new(
@@ -118,12 +139,15 @@ pub fn encode_text(
             format!("不支援編碼 {encoding:?}。"),
         ));
     };
-    let (encoded, _, _) = codec.encode(text);
+    let (encoded, _, had_errors) = codec.encode(text);
     let mut output = encoded.into_owned();
     if add_bom || encoding == TextEncoding::Utf8Bom {
         prepend_bom(&mut output, encoding);
     }
-    Ok(output)
+    Ok(EncodedText {
+        bytes: output,
+        had_errors,
+    })
 }
 
 pub fn reinterpret_text(
@@ -137,8 +161,21 @@ pub fn reinterpret_text(
             "重新解讀文字時必須指定來源與目標編碼。",
         ));
     }
-    let encoded = encode_text(text, source, false)?;
-    Ok(decode_text(&encoded, target)?.0)
+    let encoded = encode_text_detailed(text, source, false)?;
+    if encoded.had_errors {
+        return Err(CoreError::new(
+            "ENCODING_UNREPRESENTABLE",
+            format!("有字元無法用 {source:?} 表示，已中止重新解讀。"),
+        ));
+    }
+    let decoded = decode_text_detailed(&encoded.bytes, target)?;
+    if decoded.had_errors {
+        return Err(CoreError::new(
+            "ENCODING_DECODE_ERROR",
+            format!("以 {target:?} 解碼時遇到無法對應的位元組，已中止重新解讀。"),
+        ));
+    }
+    Ok(decoded.text)
 }
 
 pub fn can_roundtrip(text: &str, encoding: TextEncoding) -> bool {

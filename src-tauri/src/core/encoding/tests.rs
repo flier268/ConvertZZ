@@ -50,6 +50,51 @@ fn utf16_odd_length_and_lone_surrogate_report_errors() {
 }
 
 #[test]
+fn reinterpret_rejects_unmappable_characters() {
+    let emoji = reinterpret_text("😀简体中文.txt", TextEncoding::Big5, TextEncoding::Gbk);
+    assert!(emoji.is_err(), "{emoji:?}");
+    let emoji_other = reinterpret_text("😀中文.txt", TextEncoding::Gbk, TextEncoding::Big5);
+    assert!(emoji_other.is_err(), "{emoji_other:?}");
+
+    let simplified = reinterpret_text("简体", TextEncoding::Big5, TextEncoding::Gbk);
+    assert!(simplified.is_err(), "{simplified:?}");
+
+    let outside_gbk = reinterpret_text("𠀀", TextEncoding::Gbk, TextEncoding::Big5);
+    assert!(outside_gbk.is_err(), "{outside_gbk:?}");
+
+    // U+3000 的 Shift_JIS 位元組在 Big5 無法解碼。編碼本身沒有錯誤。
+    let decode_error = reinterpret_text("\u{3000}", TextEncoding::ShiftJis, TextEncoding::Big5);
+    assert!(decode_error.is_err(), "{decode_error:?}");
+
+    let lossy = encode_text("😀简", TextEncoding::Big5, false).unwrap();
+    assert_eq!(std::str::from_utf8(&lossy).unwrap(), "&#128512;&#31616;");
+    assert!(
+        encode_text_detailed("😀简", TextEncoding::Big5, false)
+            .unwrap()
+            .had_errors
+    );
+}
+
+fn reinterpret_back(text: &str, stored_as: TextEncoding, read_as: TextEncoding) -> String {
+    let bytes = encode_text(text, stored_as, false).unwrap();
+    decode_text(&bytes, read_as).unwrap().0
+}
+
+#[test]
+fn reinterpret_roundtrips_shared_cjk() {
+    let big5_view = reinterpret_back("中文ABC.txt", TextEncoding::Gbk, TextEncoding::Big5);
+    assert_eq!(
+        reinterpret_text(&big5_view, TextEncoding::Big5, TextEncoding::Gbk).unwrap(),
+        "中文ABC.txt"
+    );
+    let gbk_view = reinterpret_back("中文ABC.txt", TextEncoding::Big5, TextEncoding::Gbk);
+    assert_eq!(
+        reinterpret_text(&gbk_view, TextEncoding::Gbk, TextEncoding::Big5).unwrap(),
+        "中文ABC.txt"
+    );
+}
+
+#[test]
 fn detects_bom() {
     assert_eq!(
         detect_encoding(&encode_text("測試", TextEncoding::Utf8Bom, true).unwrap()),

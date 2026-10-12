@@ -1,3 +1,4 @@
+use super::super::types::TextEncoding;
 use super::*;
 
 #[test]
@@ -48,6 +49,18 @@ fn unicode_escape_roundtrip() {
         .unwrap(),
         "A裡😀"
     );
+}
+
+#[test]
+fn encoding_reinterpret_rejects_unmappable_text() {
+    let error = convert(UtilityConvertRequest {
+        kind: UtilityKind::Encoding,
+        text: "😀简体".into(),
+        source_encoding: Some(TextEncoding::Big5),
+        target_encoding: Some(TextEncoding::Gbk),
+    })
+    .unwrap_err();
+    assert_eq!(error.code, "ENCODING_UNREPRESENTABLE");
 }
 
 #[test]

@@ -444,11 +444,12 @@ impl FileService {
             )
             .await?
         };
-        let (output_path, path_warnings) = self
+        let (mut output_path, path_warnings) = self
             .resolve_item_output_path(conversion, request, source_path, &converted_name)
             .await?;
         let mut name_warnings = name_warnings;
         name_warnings.extend(path_warnings);
+        keep_invalid_utf8_name(request, source_path, &mut output_path, &mut name_warnings);
         let conflict = output_path != source_path && output_path.exists();
         let (source_preview, output_preview, preview_loaded) = if request.mode == FileMode::Filename
         {
@@ -595,6 +596,7 @@ impl FileService {
         if content_skip.is_some() && request.mode == FileMode::Content {
             output_path = source_path.to_path_buf();
         }
+        keep_invalid_utf8_name(request, source_path, &mut output_path, &mut name_warnings);
         let output_encoding =
             resolve_output_encoding(request.output_encoding, decoded.as_ref().map(|item| item.1));
         let mut output_text = converted_content
@@ -3235,9 +3237,29 @@ fn is_pe_executable(buffer: &[u8]) -> bool {
 
 fn file_name(path: &Path) -> String {
     path.file_name()
-        .and_then(|name| name.to_str())
+        .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default()
-        .to_string()
+}
+
+fn has_invalid_utf8_name(path: &Path) -> bool {
+    path.file_name().is_some_and(|name| name.to_str().is_none())
+}
+
+/// 檔名不是有效 UTF-8（常見於 Linux 上以 GBK／Big5 解壓出的亂碼檔名）時，
+/// 預覽以替代字元顯示，但來源路徑無法無損回傳，因此不改名。
+fn keep_invalid_utf8_name(
+    request: &FilePlanRequest,
+    source_path: &Path,
+    output_path: &mut PathBuf,
+    warnings: &mut Vec<String>,
+) {
+    if !has_invalid_utf8_name(source_path) {
+        return;
+    }
+    warnings.push("檔名不是有效的 UTF-8，預覽以 � 顯示原始位元組，無法改名，已保留原檔名。".into());
+    if request.output_directory.is_none() && request.output_path.is_none() {
+        *output_path = source_path.to_path_buf();
+    }
 }
 
 fn extension_of(path: &Path) -> String {

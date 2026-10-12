@@ -310,6 +310,13 @@ function save(): void {
           * 與 *.* 不是副檔名；要收所有檔案請改選「全部」模式或「所有檔案」profile。
         </p>
         <el-checkbox v-model="draft.includeNoExtension">{{ noExtensionLabel }}</el-checkbox>
+        <p class="profile-hint">
+          點開頭的檔案（例如 .bashrc）與檔名以點結尾的檔案都算「無副檔名」。{{
+            draft.mode === "deny"
+              ? "黑名單勾選此項代表排除無副檔名檔案。"
+              : "白名單勾選此項代表收進無副檔名檔案。"
+          }}
+        </p>
       </template>
       <p v-if="validation.error" class="profile-error" role="alert">{{ validation.error }}</p>
       <p v-else-if="validation.warning" class="profile-warning" role="status">

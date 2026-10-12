@@ -12,6 +12,13 @@ export function baseName(path: string): string {
   return path.split(/[\\/]/).at(-1) ?? path;
 }
 
+/** 清單用：改名時顯示「原檔名 → 新檔名」，否則只顯示檔名。 */
+export function nameChangeLabel(item: FilePlanItem): string {
+  const sourceName = baseName(item.sourcePath);
+  const outputName = baseName(item.outputPath);
+  return sourceName === outputName ? sourceName : `${sourceName} → ${outputName}`;
+}
+
 /** 依路徑與預覽內容組出檔名／內容差異區段，避免檔名模式重複顯示。 */
 export function buildFileDiffSections(item: FilePlanItem): DiffSection[] {
   const sourceName = baseName(item.sourcePath);

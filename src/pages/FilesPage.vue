@@ -38,7 +38,7 @@ import {
   summarizeProfile,
 } from "../lib/filterProfiles";
 import { fileConversionDefaults } from "../lib/settingsApply";
-import { buildFileDiffSections, type DiffSection } from "../lib/fileDiff";
+import { buildFileDiffSections, nameChangeLabel, type DiffSection } from "../lib/fileDiff";
 import { formatProgressLabel, progressPercentage, type ProgressSnapshot } from "../lib/progressEta";
 import PreviewDiffDialog from "../components/PreviewDiffDialog.vue";
 import SideBySideDiffView from "../components/SideBySideDiffView.vue";
@@ -96,6 +96,7 @@ const columnWidths = reactive<Record<string, number>>({
   selected: 64,
   kind: 88,
   status: 88,
+  nameChange: 240,
   sourcePath: 260,
   outputPath: 260,
   detectedEncoding: 100,
@@ -267,6 +268,16 @@ const planColumns = computed<Column<FilePlanItem>[]>(() => [
     title: "狀態",
     width: columnWidths.status,
     headerCellRenderer: resizableHeader("status", "狀態"),
+  },
+  {
+    key: "nameChange",
+    title: "檔名",
+    width: columnWidths.nameChange,
+    headerCellRenderer: resizableHeader("nameChange", "檔名"),
+    cellRenderer: ({ rowData }) => {
+      const label = nameChangeLabel(rowData);
+      return h("span", { class: "file-plan-name-change", title: label }, label);
+    },
   },
   {
     key: "sourcePath",
@@ -1073,6 +1084,7 @@ watch(
 .file-plan-list :deep(.file-plan-col-resizer:hover::after) {
   background: var(--el-color-primary);
 }
+.file-plan-name-change,
 .file-plan-warning {
   display: block;
   overflow: hidden;

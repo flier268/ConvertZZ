@@ -1,10 +1,13 @@
 use super::cli::parse_cli;
-use super::settings::{migrate, migrate_from_path};
+use super::settings::{
+    ensure_filter_profiles, legacy_pattern_extension, migrate, migrate_from_path,
+    sanitize_filter_profiles,
+};
 use super::types::{
     ApplyResult, AudioTagField, AudioTagFile, AudioTagPlan, AudioTagPlanRequest, CliMode,
-    ConflictPolicy, ConversionOptions, Direction, EngineKind, FileConversionPlan, FileMode,
-    FilePlanRequest, ParsedCli, PlanStatus, ProgressEvent, TextEncoding, VocabularyCorrection,
-    ZhConvertModules, ZhConvertOptions,
+    ConflictPolicy, ConversionOptions, Direction, EngineKind, ExtensionFilter, FileConversionPlan,
+    FileMode, FilePlanRequest, ParsedCli, PlanStatus, ProgressEvent, TextEncoding,
+    VocabularyCorrection, ZhConvertModules, ZhConvertOptions,
 };
 use super::{dispatch, zhconvert_client, CoreError, CoreState};
 use serde_json::{json, Value};
@@ -199,7 +202,7 @@ async fn prepare_files(
         fix_charset_declaration: true,
         fix_charset_extensions: Some(fix_charset_extensions(settings)),
         allowed_extensions: allowed_extensions(settings),
-        extension_filter: None,
+        extension_filter: settings_extension_filter(settings),
         preview_max_bytes: settings
             .and_then(|value| value.get("previewMaxKb"))
             .and_then(Value::as_u64)
@@ -728,6 +731,30 @@ fn fix_charset_extensions(settings: Option<&Value>) -> Vec<String> {
         .collect()
 }
 
+/// 設定檔 `defaultFilterProfileId` 指向的篩選 profile。找不到（或沒有 profile）時退回由舊
+/// `typeFilter` 遷移出的 profile。沒有設定檔時回 `None`，由 `allowed_extensions` 的預設處理。
+fn settings_extension_filter(settings: Option<&Value>) -> Option<ExtensionFilter> {
+    let settings = settings?;
+    let profile = default_profile(settings).or_else(|| {
+        let mut migrated = settings.clone();
+        let files = migrated.get_mut("files")?.as_object_mut()?;
+        files.remove("filterProfiles");
+        files.remove("defaultFilterProfileId");
+        ensure_filter_profiles(&mut migrated);
+        default_profile(&migrated)
+    })?;
+    serde_json::from_value(profile).ok()
+}
+
+fn default_profile(settings: &Value) -> Option<Value> {
+    let files = settings.get("files")?;
+    let id = files.get("defaultFilterProfileId")?.as_str()?;
+    let profiles = sanitize_filter_profiles(files.get("filterProfiles")?.as_array()?);
+    profiles
+        .into_iter()
+        .find(|item| item.get("id").and_then(Value::as_str) == Some(id))
+}
+
 /// `None` 表示所有檔案。設定裡沒有篩選字串時用預設副檔名，不把缺欄位當成所有檔案。
 fn allowed_extensions(settings: Option<&Value>) -> Option<Vec<String>> {
     let Some(settings) = settings else {
@@ -778,14 +805,9 @@ pub(crate) fn extensions_from_type_filter(filter: &str) -> ParsedTypeExtensions 
                 allow_all = true;
                 continue;
             }
-            let extension = trimmed
-                .trim_start_matches('*')
-                .trim_start_matches('.')
-                .to_ascii_lowercase();
-            if extension.is_empty() || extension == "*" {
+            let Some(dotted) = legacy_pattern_extension(trimmed) else {
                 continue;
-            }
-            let dotted = format!(".{extension}");
+            };
             if !extensions.contains(&dotted) {
                 extensions.push(dotted);
             }

@@ -303,6 +303,43 @@ export function profilesFromTypeFilter(typeFilter: string): {
   return { profiles, defaultId: defaultId ?? BUILTIN_TEXT_ID };
 }
 
+/**
+ * 丟棄格式錯誤的 profile，規則與核心 `sanitize_filter_profiles` 相同（共用向量
+ * `tests/fixtures/filter-profile-normalize.json`）：id 須為非空字串且不重複、name 須為字串、
+ * mode 只能是 allow／deny／all、extensions 須為字串陣列、includeNoExtension 若存在須為布林。
+ */
+export function sanitizeFilterProfiles(items: unknown): FileFilterProfile[] {
+  if (!Array.isArray(items)) return [];
+  const seen = new Set<string>();
+  const result: FileFilterProfile[] = [];
+  for (const item of items as Record<string, unknown>[]) {
+    if (!item || typeof item !== "object") continue;
+    const { id, name, mode, extensions, includeNoExtension, builtin } = item;
+    if (typeof id !== "string" || !id || typeof name !== "string") continue;
+    if (mode !== "allow" && mode !== "deny" && mode !== "all") continue;
+    if (!Array.isArray(extensions) || !extensions.every((value) => typeof value === "string")) {
+      continue;
+    }
+    if (includeNoExtension !== undefined && typeof includeNoExtension !== "boolean") continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const normalized: string[] = [];
+    for (const raw of extensions as string[]) {
+      const extension = normalizeExtension(raw);
+      if (extension && !normalized.includes(extension)) normalized.push(extension);
+    }
+    result.push({
+      id,
+      name,
+      builtin: builtin === true,
+      mode,
+      extensions: normalized,
+      includeNoExtension: includeNoExtension === true,
+    });
+  }
+  return result;
+}
+
 /** 補齊 `files` 的 profile 欄位。已有 profile 時保留，沒有時由舊字串遷移。 */
 export function withFilterProfiles<T extends Partial<SettingsV2["files"]> & { typeFilter: string }>(
   files: T,
@@ -311,9 +348,7 @@ export function withFilterProfiles<T extends Partial<SettingsV2["files"]> & { ty
     SettingsV2["files"],
     "filterProfiles" | "defaultFilterProfileId" | "lastFilterProfileId" | "folderPickBehavior"
   > {
-  const existing = Array.isArray(files.filterProfiles)
-    ? files.filterProfiles.filter((item) => item && typeof item.id === "string" && item.mode)
-    : [];
+  const existing = sanitizeFilterProfiles(files.filterProfiles);
   const derived = existing.length ? undefined : profilesFromTypeFilter(files.typeFilter);
   const profiles = ensureBuiltinProfiles(existing.length ? existing : derived!.profiles);
   const defaultId = profiles.some((item) => item.id === files.defaultFilterProfileId)

@@ -280,6 +280,17 @@ fn builtin_all_profile() -> Value {
     })
 }
 
+/// 舊篩選器單一樣式轉副檔名（小寫、含前導點）。多段（`*.tar.gz`）只取最後一段，
+/// 與核心 `extension_of` 一致；`*` 與空字串不是副檔名。
+pub(crate) fn legacy_pattern_extension(pattern: &str) -> Option<String> {
+    let cleaned = pattern.trim().trim_start_matches('*');
+    let last = cleaned.rsplit('.').next().unwrap_or_default();
+    if last.is_empty() || last.contains('*') {
+        return None;
+    }
+    Some(format!(".{}", last.to_lowercase()))
+}
+
 /// 舊 `<名稱|*.a;*.b>/<...>` 字串逐群組解析。含 `*`／`*.*` 的群組是所有檔案。
 /// 回傳 `(名稱, 副檔名（小寫、含前導點）, 是否為所有檔案)`。
 fn parse_legacy_groups(value: &str) -> Vec<(String, Vec<String>, bool)> {
@@ -306,14 +317,9 @@ fn parse_legacy_groups(value: &str) -> Vec<(String, Vec<String>, bool)> {
                 all_files = true;
                 continue;
             }
-            let extension = trimmed
-                .trim_start_matches('*')
-                .trim_start_matches('.')
-                .to_lowercase();
-            if extension.is_empty() || extension == "*" {
+            let Some(extension) = legacy_pattern_extension(trimmed) else {
                 continue;
-            }
-            let extension = format!(".{extension}");
+            };
             if !extensions.contains(&extension) {
                 extensions.push(extension);
             }
@@ -362,25 +368,78 @@ fn profiles_from_type_filter(type_filter: &str) -> (Vec<Value>, String) {
     )
 }
 
+/// 丟棄格式錯誤的 profile：id 須為非空字串且不重複、name 須為字串、mode 只能是
+/// allow／deny／all、extensions 須為字串陣列、includeNoExtension 若存在須為布林。
+/// 副檔名以 `legacy_pattern_extension` 正規化並去重。
+pub(crate) fn sanitize_filter_profiles(items: &[Value]) -> Vec<Value> {
+    let mut seen = std::collections::HashSet::new();
+    let mut result = Vec::new();
+    for item in items {
+        let Some(id) = item
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty())
+        else {
+            continue;
+        };
+        let Some(name) = item.get("name").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(mode) = item
+            .get("mode")
+            .and_then(Value::as_str)
+            .filter(|mode| matches!(*mode, "allow" | "deny" | "all"))
+        else {
+            continue;
+        };
+        let Some(raw_extensions) = item.get("extensions").and_then(Value::as_array) else {
+            continue;
+        };
+        let Some(raw_extensions) = raw_extensions
+            .iter()
+            .map(Value::as_str)
+            .collect::<Option<Vec<_>>>()
+        else {
+            continue;
+        };
+        let include_no_extension = match item.get("includeNoExtension") {
+            None => false,
+            Some(Value::Bool(value)) => *value,
+            Some(_) => continue,
+        };
+        if !seen.insert(id.to_string()) {
+            continue;
+        }
+        let mut extensions: Vec<String> = Vec::new();
+        for raw in raw_extensions {
+            if let Some(extension) = legacy_pattern_extension(raw) {
+                if !extensions.contains(&extension) {
+                    extensions.push(extension);
+                }
+            }
+        }
+        result.push(json!({
+            "id": id,
+            "name": name,
+            "builtin": item.get("builtin").and_then(Value::as_bool).unwrap_or(false),
+            "mode": mode,
+            "extensions": extensions,
+            "includeNoExtension": include_no_extension
+        }));
+    }
+    result
+}
+
 /// 補齊 `files.filterProfiles` 等欄位。profile 不存在時由舊 `typeFilter` 遷移產生；
 /// `typeFilter` 字串本身保留，供回滾。
-fn ensure_filter_profiles(settings: &mut Value) {
+pub(crate) fn ensure_filter_profiles(settings: &mut Value) {
     let Some(files) = settings.get_mut("files").and_then(Value::as_object_mut) else {
         return;
     };
     let existing = files
         .get("filterProfiles")
         .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter(|item| {
-                    item.get("id").and_then(Value::as_str).is_some()
-                        && item.get("mode").and_then(Value::as_str).is_some()
-                })
-                .cloned()
-                .collect::<Vec<_>>()
-        })
+        .map(|items| sanitize_filter_profiles(items))
         .filter(|items| !items.is_empty());
     let type_filter = files
         .get("typeFilter")

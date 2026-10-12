@@ -429,3 +429,25 @@ fn migration_is_idempotent() {
     }));
     assert_eq!(migrate(once.clone()), once);
 }
+
+#[test]
+fn filter_profile_normalize_vectors_match_ts() {
+    let vectors: Value = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/filter-profile-normalize.json"
+    ))
+    .expect("filter-profile-normalize.json");
+    for case in vectors["legacyPatterns"].as_array().expect("patterns") {
+        let input = case["input"].as_str().expect("input");
+        let expected = case["expected"].as_str().map(str::to_string);
+        assert_eq!(legacy_pattern_extension(input), expected, "{input}");
+    }
+    for case in vectors["profiles"].as_array().expect("profiles") {
+        let input = case["input"].as_array().expect("input");
+        assert_eq!(
+            Value::Array(sanitize_filter_profiles(input)),
+            case["expected"],
+            "{}",
+            case["name"]
+        );
+    }
+}

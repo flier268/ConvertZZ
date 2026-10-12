@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import vectors from "../../tests/fixtures/filter-profile-normalize.json";
+import { parseLegacyFileFilters } from "./fileFilters";
 import type { ExtensionFilter, ExtensionStats, FileFilterProfile } from "@shared/contracts";
 import { removeProfile, upsertProfile } from "./filterProfileActions";
 import {
@@ -15,6 +17,7 @@ import {
   parseImportedProfiles,
   profilesFromTypeFilter,
   resolveProfile,
+  sanitizeFilterProfiles,
   summarizeProfile,
   validateProfile,
   withFilterProfiles,
@@ -294,5 +297,24 @@ describe("匯入匯出", () => {
   it("格式錯誤回傳錯誤", () => {
     expect(parseImportedProfiles("不是 json", []).error).toBeTruthy();
     expect(parseImportedProfiles('{"format":"x"}', []).error).toBeTruthy();
+  });
+});
+
+describe("共用正規化向量", () => {
+  it.each(vectors.legacyPatterns)("舊樣式 $input", ({ input, expected }) => {
+    const [group] = parseLegacyFileFilters(`<n|${input};*.zzz>`);
+    const extensions = group.extensions.filter(
+      (extension) => extension !== "zzz" && extension !== "*",
+    );
+    expect(extensions.map((extension) => `.${extension.toLowerCase()}`)).toEqual(
+      expected ? [expected] : [],
+    );
+  });
+
+  it.each(vectors.profiles)("$name", ({ input, expected }) => {
+    expect(sanitizeFilterProfiles(input)).toEqual(expected);
+    expect(
+      withFilterProfiles({ typeFilter: "", filterProfiles: input as never }).filterProfiles,
+    ).toEqual(expect.arrayContaining(expected));
   });
 });

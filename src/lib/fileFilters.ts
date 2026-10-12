@@ -76,8 +76,9 @@ function isRemovableAudioGroup(group: string): boolean {
 function extensionFromLegacyPattern(pattern: string): string | null {
   const trimmed = pattern.trim();
   if (trimmed === "*" || trimmed.toLowerCase() === "*.*") return ALL_FILES_EXTENSION;
-  const extension = trimmed.replace(/^\*\.?/u, "").replace(/^\./u, "");
-  if (!extension || extension === "*") return null;
+  const cleaned = trimmed.replace(/^\*+/u, "");
+  const extension = cleaned.slice(cleaned.lastIndexOf(".") + 1);
+  if (!extension || extension.includes("*")) return null;
   return extension;
 }
 

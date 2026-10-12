@@ -499,3 +499,46 @@ fn headless_recursive_scan_never_enters_dot_folders() {
     assert!(hidden.join("软件.txt").exists());
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn settings_extension_filter_uses_default_profile() {
+    use crate::core::types::ExtensionFilterMode;
+    let settings = json!({ "files": {
+        "typeFilter": "<文字|*.txt>",
+        "defaultFilterProfileId": "deny-log",
+        "filterProfiles": [
+            { "id": "deny-log", "name": "排除", "builtin": false, "mode": "deny",
+              "extensions": [".LOG", "*.tar.gz"], "includeNoExtension": true }
+        ]
+    }});
+    let filter = settings_extension_filter(Some(&settings)).expect("filter");
+    assert_eq!(filter.mode, ExtensionFilterMode::Deny);
+    assert_eq!(
+        filter.extensions,
+        vec![".log".to_string(), ".gz".to_string()]
+    );
+    assert!(filter.include_no_extension);
+}
+
+#[test]
+fn settings_extension_filter_falls_back_to_migrated_type_filter() {
+    use crate::core::types::ExtensionFilterMode;
+    let settings = json!({ "files": {
+        "typeFilter": "<自訂|*.md;*.rst>",
+        "defaultFilterProfileId": "missing",
+        "filterProfiles": [
+            { "id": "x", "name": "x", "mode": "bogus", "extensions": [] }
+        ]
+    }});
+    let filter = settings_extension_filter(Some(&settings)).expect("filter");
+    assert_eq!(filter.mode, ExtensionFilterMode::Allow);
+    assert_eq!(
+        filter.extensions,
+        vec![".md".to_string(), ".rst".to_string()]
+    );
+
+    let all = json!({ "files": { "typeFilter": "<全部|*.*>" } });
+    let filter = settings_extension_filter(Some(&all)).expect("filter");
+    assert_eq!(filter.mode, ExtensionFilterMode::All);
+    assert!(settings_extension_filter(None).is_none());
+}

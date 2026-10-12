@@ -182,7 +182,9 @@ fn parse_args() -> Result<Command, String> {
         }
         Some("check-synonym-orientation") => {
             argv.next();
-            Ok(Command::CheckOrientation(parse_orientation_args(&mut argv)?))
+            Ok(Command::CheckOrientation(parse_orientation_args(
+                &mut argv,
+            )?))
         }
         Some("merge-extra") => {
             argv.next();

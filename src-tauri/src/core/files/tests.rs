@@ -59,6 +59,18 @@ fn filename_request(path: &Path, policy: ConflictPolicy) -> FilePlanRequest {
     }
 }
 
+fn set_readonly(path: &Path) {
+    let mut permissions = std::fs::metadata(path).unwrap().permissions();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(path, permissions).unwrap();
+}
+
+fn clear_readonly(path: &Path) {
+    let mut permissions = std::fs::metadata(path).unwrap().permissions();
+    permissions.set_readonly(false);
+    std::fs::set_permissions(path, permissions).unwrap();
+}
+
 fn names(directory: &Path) -> Vec<String> {
     let mut items = std::fs::read_dir(directory)
         .unwrap()
@@ -2324,6 +2336,69 @@ async fn all_files_filter_still_renames_mp3_only_folders() {
 /// 「所有檔案」下，子樹裡沒有任何檔案項目的資料夾仍要改名。
 /// 只有在子樹裡有規劃檔案、卻沒有 Ready 檔案時才不改名。
 #[tokio::test]
+async fn all_files_filter_renames_empty_folders_and_folders_of_empty_folders() {
+    let directory = temp_dir();
+    let empty = directory.join("简体空夹");
+    std::fs::create_dir_all(&empty).unwrap();
+    let outer = directory.join("只有空层");
+    let inner = outer.join("简体内层");
+    std::fs::create_dir_all(&inner).unwrap();
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Filename, None),
+            noop(),
+        )
+        .await
+        .unwrap();
+    let directory_sources = plan
+        .items
+        .iter()
+        .filter(|item| item.kind == FileItemKind::Directory)
+        .map(|item| item.source_path.clone())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        directory_sources,
+        [
+            empty.to_string_lossy().into_owned(),
+            outer.to_string_lossy().into_owned(),
+            inner.to_string_lossy().into_owned(),
+        ]
+        .into_iter()
+        .collect(),
+        "空資料夾與只有空子資料夾的資料夾應有改名項目：{:?}",
+        plan.items
+    );
+    assert!(plan
+        .items
+        .iter()
+        .all(|item| { item.kind != FileItemKind::Directory || item.status == PlanStatus::Ready }));
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{:?}", result.failed);
+    assert!(directory.join("簡體空夾").is_dir(), "{:?}", result);
+    assert!(
+        directory.join("只有空層").join("簡體內層").is_dir(),
+        "{:?}",
+        result
+    );
+    assert!(!empty.exists());
+    assert!(!outer.exists());
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+/// 大量檔案時，資料夾是否改名必須與「子樹內有通過篩選的檔案」一致。
+/// 「音乐」與「音乐资料」名稱前綴相鄰，用來鎖住元件邊界，而不是字串前綴。
+#[tokio::test]
 async fn many_files_only_rename_directories_that_contain_included_files() {
     let directory = temp_dir();
     let audio_only = directory.join("音乐");
@@ -2383,6 +2458,165 @@ async fn many_files_only_rename_directories_that_contain_included_files() {
         "{:?}",
         plan.warnings
     );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn plan_error_on_only_file_does_not_rename_folder() {
+    let directory = temp_dir();
+    let nested = directory.join("简体资料");
+    std::fs::create_dir_all(&nested).unwrap();
+    let source = nested.join("软件.txt");
+    std::fs::write(&source, "软件").unwrap();
+    set_readonly(&source);
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Filename, Some(vec![".txt".into()])),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert!(plan.items.iter().any(|item| {
+        item.kind == FileItemKind::File
+            && item.source_path == source.to_string_lossy()
+            && item.status == PlanStatus::Error
+    }));
+    assert!(
+        plan.items
+            .iter()
+            .all(|item| item.kind != FileItemKind::Directory),
+        "唯一檔案規劃失敗時，子資料夾不應成為改名項目：{:?}",
+        plan.items
+    );
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.succeeded.is_empty(), "{:?}", result.succeeded);
+    assert!(nested.exists(), "子資料夾不應被改名");
+    assert!(!directory.join("簡體資料").exists());
+    clear_readonly(&source);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn unchecked_only_file_skips_folder_rename_on_apply() {
+    let directory = temp_dir();
+    let nested = directory.join("简体资料");
+    std::fs::create_dir_all(&nested).unwrap();
+    let source = nested.join("软件.txt");
+    std::fs::write(&source, "软件").unwrap();
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Filename, Some(vec![".txt".into()])),
+            noop(),
+        )
+        .await
+        .unwrap();
+    let folder = plan
+        .items
+        .iter()
+        .find(|item| item.kind == FileItemKind::Directory)
+        .expect("資料夾改名項目");
+    assert_eq!(folder.source_path, nested.to_string_lossy());
+    // 資料夾項目可獨立勾選。這裡只勾資料夾、取消檔案，模擬預覽取消勾選。
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            Some(&[folder.source_path.clone()]),
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        result.succeeded.is_empty(),
+        "沒有勾選檔案時不應改名：{:?}",
+        result.succeeded
+    );
+    assert!(
+        result
+            .skipped
+            .iter()
+            .any(|path| path == &nested.to_string_lossy()),
+        "應略過資料夾改名：{:?}",
+        result.skipped
+    );
+    assert!(nested.exists());
+    assert!(source.exists());
+    assert!(!directory.join("簡體資料").exists());
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn folder_still_renames_when_another_selected_file_remains() {
+    let directory = temp_dir();
+    let nested = directory.join("简体资料");
+    std::fs::create_dir_all(&nested).unwrap();
+    let kept = nested.join("软件.txt");
+    let dropped = nested.join("说明.txt");
+    std::fs::write(&kept, "软件").unwrap();
+    std::fs::write(&dropped, "说明").unwrap();
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Filename, Some(vec![".txt".into()])),
+            noop(),
+        )
+        .await
+        .unwrap();
+    let selected = plan
+        .items
+        .iter()
+        .filter(|item| {
+            item.kind == FileItemKind::Directory || item.source_path == kept.to_string_lossy()
+        })
+        .map(|item| item.source_path.clone())
+        .collect::<Vec<_>>();
+    let folder_output = plan
+        .items
+        .iter()
+        .find(|item| item.kind == FileItemKind::Directory)
+        .unwrap()
+        .output_path
+        .clone();
+    let kept_output = plan
+        .items
+        .iter()
+        .find(|item| item.source_path == kept.to_string_lossy())
+        .unwrap()
+        .output_path
+        .clone();
+    let dropped_name = dropped.file_name().unwrap().to_owned();
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            Some(&selected),
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{:?}", result.failed);
+    let renamed = PathBuf::from(&folder_output);
+    assert!(renamed
+        .join(PathBuf::from(&kept_output).file_name().unwrap())
+        .is_file());
+    assert!(renamed.join(&dropped_name).is_file());
+    assert!(!nested.exists());
     let _ = std::fs::remove_dir_all(&directory);
 }
 

@@ -225,7 +225,30 @@ impl FileService {
         }
 
         if request.output_directory.is_none() && request.output_path.is_none() {
+            let planned_file_ancestors = included_file_ancestor_dirs(
+                &files
+                    .iter()
+                    .filter(|file| file.item.kind == FileItemKind::File)
+                    .map(|file| PathBuf::from(&file.item.source_path))
+                    .collect::<Vec<_>>(),
+            );
+            let ready_ancestors = included_file_ancestor_dirs(
+                &files
+                    .iter()
+                    .filter(|file| {
+                        file.item.kind == FileItemKind::File
+                            && file.item.status == PlanStatus::Ready
+                    })
+                    .map(|file| PathBuf::from(&file.item.source_path))
+                    .collect::<Vec<_>>(),
+            );
             let mut directories = directories;
+            // 子樹裡有規劃檔案、卻沒有 Ready 時不改名（Conflict 與 Error 都不算成立）。
+            // 子樹裡完全沒有檔案項目的資料夾維持原行為（所有檔案時仍改名）。
+            directories.retain(|directory| {
+                !directory_has_included_file(directory, &planned_file_ancestors)
+                    || directory_has_included_file(directory, &ready_ancestors)
+            });
             directories.sort_by_key(|path| std::cmp::Reverse(path_depth(path)));
             for source_path in directories {
                 let (converted_name, name_warnings) = self
@@ -750,6 +773,30 @@ impl FileService {
                 .map(|path| resolve_path(path))
                 .collect::<HashSet<_>>()
         });
+        // 資料夾項目可獨立勾選。子樹裡有檔案項目、卻沒有已勾選且 Ready 的檔案時不改名。
+        // Conflict 與 Error 不算成立。子樹裡完全沒有檔案項目的資料夾維持原行為。
+        let planned_file_ancestors = included_file_ancestor_dirs(
+            &plan
+                .files
+                .iter()
+                .filter(|file| file.item.kind == FileItemKind::File)
+                .map(|file| resolve_path(&file.item.source_path))
+                .collect::<Vec<_>>(),
+        );
+        let selected_ready_ancestors = included_file_ancestor_dirs(
+            &plan
+                .files
+                .iter()
+                .filter(|file| {
+                    file.item.kind == FileItemKind::File
+                        && file.item.status == PlanStatus::Ready
+                        && selection
+                            .as_ref()
+                            .is_none_or(|set| set.contains(&resolve_path(&file.item.source_path)))
+                })
+                .map(|file| resolve_path(&file.item.source_path))
+                .collect::<Vec<_>>(),
+        );
         let request = Arc::new(plan.request.clone());
         let mut pending_files = Vec::new();
         let mut pending_directories = Vec::new();
@@ -888,6 +935,13 @@ impl FileService {
                 break;
             }
             if item.item.output_path == item.item.source_path {
+                result.skipped.push(item.item.source_path);
+                continue;
+            }
+            let directory = resolve_path(&item.item.source_path);
+            if directory_has_included_file(&directory, &planned_file_ancestors)
+                && !directory_has_included_file(&directory, &selected_ready_ancestors)
+            {
                 result.skipped.push(item.item.source_path);
                 continue;
             }

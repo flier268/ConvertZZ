@@ -81,6 +81,12 @@ function extensionFromLegacyPattern(pattern: string): string | null {
   return extension;
 }
 
+/** 路徑最後一段沒有 `.` 時，當成會做資料夾掃描的來源。明確選取的資料夾不必靠這個判斷。 */
+export function basenameLooksLikeDirectory(path: string): boolean {
+  const name = path.split(/[/\\]/u).filter(Boolean).pop() ?? "";
+  return name.length > 0 && !name.includes(".");
+}
+
 export function parseLegacyFileFilters(value: string): LegacyFileFilter[] {
   const filters: LegacyFileFilter[] = [];
   for (const match of value.matchAll(/<([^|<>]+)\|([^<>]+)>/gu)) {

@@ -267,16 +267,20 @@ const canConfirm = computed(() => Boolean(filtered.value && filtered.value.inclu
           class="profile-row"
           :class="{ selected: profile.id === selected?.id }"
           data-testid="profile-row"
+          @click="emit('update:profileId', profile.id)"
         >
           <el-radio :value="profile.id" :aria-label="profile.name">
             <span class="profile-name">{{ profile.name }}</span>
-            <el-tag size="small" :type="profile.mode === 'deny' ? 'danger' : 'success'">{{
-              modeLabel(profile.mode)
-            }}</el-tag>
+            <el-tag
+              disable-transitions
+              size="small"
+              :type="profile.mode === 'deny' ? 'danger' : 'success'"
+              >{{ modeLabel(profile.mode) }}</el-tag
+            >
             <small v-if="profile.builtin" class="wizard-hint">內建・不可刪除</small>
             <span class="profile-summary">{{ summarizeProfile(profile) }}</span>
           </el-radio>
-          <span class="profile-row-actions">
+          <span class="profile-row-actions" @click.stop>
             <el-button text type="primary" @click="openEditor(profile)">編輯</el-button>
             <el-button v-if="!profile.builtin" text type="primary" @click="copyProfile(profile)"
               >複製</el-button
@@ -335,33 +339,40 @@ const canConfirm = computed(() => Boolean(filtered.value && filtered.value.inclu
           :closable="false"
           :title="warning"
         />
-        <table class="stat-table" aria-label="副檔名統計">
-          <thead>
-            <tr>
-              <th>副檔名</th>
-              <th>檔案數</th>
-              <th>狀態</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in filtered.rows"
-              :key="row.extension ?? ''"
-              :class="{ off: !row.included }"
-            >
-              <td>{{ row.extension ?? NO_EXTENSION_LABEL }}</td>
-              <td>{{ formatCount(row.count) }}</td>
-              <td>
-                <el-tag size="small" :type="row.included ? 'success' : 'info'">{{
-                  row.included ? "包含" : "排除"
-                }}</el-tag>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="stat-table-wrap">
+          <table class="stat-table" aria-label="副檔名統計">
+            <thead>
+              <tr>
+                <th>副檔名</th>
+                <th>檔案數</th>
+                <th>狀態</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in filtered.rows"
+                :key="row.extension ?? ''"
+                :class="{ off: !row.included }"
+              >
+                <td>{{ row.extension ?? NO_EXTENSION_LABEL }}</td>
+                <td>{{ formatCount(row.count) }}</td>
+                <td>
+                  <el-tag
+                    disable-transitions
+                    size="small"
+                    :type="row.included ? 'success' : 'info'"
+                    >{{ row.included ? "包含" : "排除" }}</el-tag
+                  >
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p class="wizard-hint profile-line">
           profile：<strong>{{ selected?.name }}</strong>
-          <el-tag size="small">{{ selected ? modeLabel(selected.mode) : "" }}</el-tag>
+          <el-tag disable-transitions size="small">{{
+            selected ? modeLabel(selected.mode) : ""
+          }}</el-tag>
           <el-button text type="primary" @click="goTo(2)">更換</el-button>
           <span v-if="scanSeconds !== undefined" class="scan-time"
             >掃描 {{ scanSeconds.toFixed(1) }} 秒</span
@@ -481,12 +492,13 @@ const canConfirm = computed(() => Boolean(filtered.value && filtered.value.inclu
   font-size: 24px;
   color: #0f8f82;
 }
+.stat-table-wrap {
+  max-height: 260px;
+  overflow: auto;
+}
 .stat-table {
   width: 100%;
   border-collapse: collapse;
-  max-height: 260px;
-  display: block;
-  overflow: auto;
 }
 .stat-table th,
 .stat-table td {

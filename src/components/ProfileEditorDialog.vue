@@ -248,6 +248,7 @@ function save(): void {
           <el-tab-pane label="手動輸入" name="typed">
             <div class="ext-tags" aria-label="副檔名清單">
               <el-tag
+                disable-transitions
                 v-for="extension in draft.extensions"
                 :key="extension"
                 closable

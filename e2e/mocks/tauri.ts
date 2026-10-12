@@ -37,6 +37,35 @@ const defaultSettings: SettingsV2 = {
     defaultPath: "!",
     typeFilter:
       "<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>/<常用網頁文件|*.htm;*.html;*.php;*.asp;*.css;*.js>",
+    filterProfiles: [
+      {
+        id: "builtin-text",
+        name: "常用文字檔案",
+        builtin: true,
+        mode: "allow",
+        extensions: [".txt", ".log", ".ini", ".inf", ".bat", ".cmd", ".srt", ".ass", ".lang"],
+        includeNoExtension: false,
+      },
+      {
+        id: "builtin-all",
+        name: "所有檔案",
+        builtin: true,
+        mode: "all",
+        extensions: [],
+        includeNoExtension: true,
+      },
+      {
+        id: "legacy-2",
+        name: "常用網頁文件",
+        builtin: false,
+        mode: "allow",
+        extensions: [".htm", ".html", ".php", ".asp", ".css", ".js"],
+        includeNoExtension: false,
+      },
+    ],
+    defaultFilterProfileId: "builtin-text",
+    lastFilterProfileId: "",
+    folderPickBehavior: "rememberLast",
     fixCharsetExtensions: [".htm", ".html", ".shtm", ".shtml", ".asp", ".aspx", ".php", ".css"],
     unicodeAddBom: false,
   },
@@ -74,6 +103,7 @@ export interface ConvertzzE2eConfig {
   skippedUpdateVersion?: string;
   checkVersionOnStart?: boolean;
   selectedFiles?: string | string[];
+  selectedDirectory?: string;
   clipboardText?: string;
   confirmResult?: boolean;
   update?: "none" | "install";
@@ -209,23 +239,57 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
     const mode = String(payload.mode ?? "content");
     const rename = mode === "filename" || mode === "both";
     const content = mode === "content" || mode === "both";
-    lastFilePlanItem = {
-      sourcePath: "/tmp/里面.txt",
-      outputPath: rename ? "/tmp/裡面.txt" : "/tmp/里面.txt",
-      kind: "file",
-      selected: true,
-      detectedEncoding: content ? undefined : "utf8",
-      sourcePreview: content ? "" : "里面.txt",
-      outputPreview: content ? "" : "裡面.txt",
-      previewLoaded: !content,
-      status: "ready",
-    };
+    const paths = Array.isArray(payload.paths) ? payload.paths.map(String) : [];
+    const directory = e2e().selectedDirectory;
+    const scanningFolder = Boolean(directory && paths.includes(directory));
+    const filter = payload.extensionFilter as
+      { mode: string; extensions: string[]; includeNoExtension: boolean } | undefined;
+    const candidates = scanningFolder
+      ? [`${directory}/里面.txt`, `${directory}/DATA.BIN`, `${directory}/README`]
+      : ["/tmp/里面.txt"];
+    const visible = candidates.filter((path) => {
+      if (!scanningFolder || !filter || filter.mode === "all") return true;
+      const name = path.split("/").pop() ?? path;
+      const dot = name.lastIndexOf(".");
+      const extension = dot >= 0 ? name.slice(dot).toLowerCase() : "";
+      const listed = extension ? filter.extensions.includes(extension) : filter.includeNoExtension;
+      return filter.mode === "allow" ? listed : !listed;
+    });
+    const items = visible.map((sourcePath) => {
+      const fileName = sourcePath.split("/").pop() ?? sourcePath;
+      const outputName = fileName === "里面.txt" && rename ? "裡面.txt" : fileName;
+      const outputPath = sourcePath.slice(0, sourcePath.length - fileName.length) + outputName;
+      return {
+        sourcePath,
+        outputPath,
+        kind: "file",
+        selected: true,
+        detectedEncoding: content ? undefined : "utf8",
+        sourcePreview: content ? "" : fileName,
+        outputPreview: content ? "" : outputName,
+        previewLoaded: !content,
+        status: "ready",
+      };
+    });
+    lastFilePlanItem = items[0];
     return {
       planId: "plan-1",
       createdAt: "2026-08-15T00:00:00.000Z",
       warnings: [],
       ignoredInputs: [],
-      items: [lastFilePlanItem],
+      items,
+    };
+  }
+  if (operation === "files.scanExtensions") {
+    return {
+      extensions: [
+        { extension: ".bin", count: 1 },
+        { extension: ".txt", count: 1 },
+      ],
+      noExtensionCount: 1,
+      totalFiles: 3,
+      directoryCount: 0,
+      warnings: [],
     };
   }
   if (operation === "files.preview") {
@@ -428,7 +492,10 @@ export async function confirm(message: string): Promise<boolean> {
   return config.confirmResult !== false;
 }
 
-export async function open(): Promise<string | string[] | null> {
+export async function open(
+  options: { directory?: boolean } = {},
+): Promise<string | string[] | null> {
+  if (options.directory && e2e().selectedDirectory) return e2e().selectedDirectory;
   return e2e().selectedFiles ?? "/tmp/里面.txt";
 }
 

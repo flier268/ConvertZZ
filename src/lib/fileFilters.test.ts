@@ -7,6 +7,7 @@ import {
   DEFAULT_FILE_TYPE_FILTER,
   dialogFileFilters,
   ensureSupportedFilesFilter,
+  basenameLooksLikeDirectory,
   folderScanExtensions,
   parseLegacyFileFilters,
   SUPPORTED_FILES_FILTER_NAME,
@@ -174,5 +175,12 @@ describe("舊版檔案篩選器", () => {
       kind: "list",
       extensions: [],
     });
+  });
+
+  it("沒有副檔名的路徑最後一段視為資料夾", () => {
+    expect(basenameLooksLikeDirectory("/tmp/samples")).toBe(true);
+    expect(basenameLooksLikeDirectory("C:\\docs")).toBe(true);
+    expect(basenameLooksLikeDirectory("/tmp/里面.txt")).toBe(false);
+    expect(basenameLooksLikeDirectory("/tmp/v1.0")).toBe(false);
   });
 });

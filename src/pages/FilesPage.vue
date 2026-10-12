@@ -8,12 +8,14 @@ import type {
   Direction,
   EngineKind,
   FileConversionPlan,
+  FileFilterProfile,
   FilePlanItem,
   FilePlanRequest,
+  SettingsV2,
   TextEncoding,
 } from "@shared/contracts";
 import { core, isCancellationError } from "../lib/coreClient";
-import { loadSettings, zhConvertOptions } from "../lib/settings";
+import { loadSettings, patchSavedSettings, zhConvertOptions } from "../lib/settings";
 import { cliInvocation } from "../lib/cli";
 import { summarizeFileApplyWarnings } from "../lib/fileApplyMessages";
 import {
@@ -22,15 +24,26 @@ import {
   withoutIgnoredInputs,
 } from "../lib/ignoredInputs";
 import {
+  basenameLooksLikeDirectory,
   dialogFileFilters,
   ensureSupportedFilesFilter,
-  folderScanExtensions,
 } from "../lib/fileFilters";
+import { removeProfile, upsertProfile } from "../lib/filterProfileActions";
+import {
+  dialogFiltersForProfile,
+  filterCollectsNothing,
+  modeLabel,
+  profileFilter,
+  resolveProfile,
+  summarizeProfile,
+} from "../lib/filterProfiles";
 import { fileConversionDefaults } from "../lib/settingsApply";
 import { buildFileDiffSections, type DiffSection } from "../lib/fileDiff";
 import { formatProgressLabel, progressPercentage, type ProgressSnapshot } from "../lib/progressEta";
 import PreviewDiffDialog from "../components/PreviewDiffDialog.vue";
 import SideBySideDiffView from "../components/SideBySideDiffView.vue";
+import FolderPickWizard, { type FolderPickResult } from "../components/FolderPickWizard.vue";
+import ProfileEditorDialog from "../components/ProfileEditorDialog.vue";
 
 defineOptions({ name: "FilesPage" });
 
@@ -49,13 +62,28 @@ const previewRequestId = ref(0);
 const promptAfterConversion = ref(true);
 const backup = ref(true);
 const defaultPath = ref<string>();
-const fileFilters = ref(
-  ensureSupportedFilesFilter([
-    {
-      name: "文字與網頁文件",
-      extensions: ["txt", "log", "ini", "srt", "ass", "html", "htm", "css", "js", "php", "asp"],
-    },
-  ]),
+const settingsRoot = ref<SettingsV2>();
+const filterProfiles = computed(() => settingsRoot.value?.files.filterProfiles ?? []);
+const currentProfileId = ref("");
+const currentProfile = computed<FileFilterProfile | undefined>(() =>
+  settingsRoot.value
+    ? resolveProfile(settingsRoot.value.files, currentProfileId.value || undefined)
+    : undefined,
+);
+const pickedFolder = ref(false);
+const wizardVisible = ref(false);
+const wizardQuick = ref(false);
+const wizardPath = ref("");
+const wizardProfileId = ref("");
+const profileEditorVisible = ref(false);
+const profileEditorSource = ref<FileFilterProfile | null>(null);
+const fileFilters = computed(() =>
+  ensureSupportedFilesFilter(
+    currentProfile.value ? dialogFiltersForProfile(currentProfile.value) : [],
+  ),
+);
+const folderScanMode = computed(
+  () => pickedFolder.value || paths.value.some((path) => basenameLooksLikeDirectory(path)),
 );
 const previewMaxBytes = ref(6 * 1024);
 const fixCharsetExtensions = ref<string[]>([]);
@@ -99,7 +127,11 @@ loadSettings().then((settings) => {
   promptAfterConversion.value = defaults.promptAfterConversion;
   backup.value = defaults.autoBackupBeforeConversion;
   defaultPath.value = defaults.defaultPath;
-  fileFilters.value = defaults.fileFilters.length ? defaults.fileFilters : fileFilters.value;
+  settingsRoot.value = settings;
+  currentProfileId.value = resolveProfile(
+    settings.files,
+    settings.files.lastFilterProfileId || undefined,
+  ).id;
   previewMaxBytes.value = defaults.previewMaxBytes;
   fixCharsetExtensions.value = defaults.fixCharsetExtensions;
 });
@@ -292,20 +324,76 @@ async function chooseFiles() {
   if (selected) {
     paths.value = Array.isArray(selected) ? selected : [selected];
     outputPath.value = undefined;
+    pickedFolder.value = false;
   }
 }
 
 async function chooseFolder() {
-  const selected = await open({
-    directory: true,
-    multiple: false,
-    recursive: options.recursive,
-    defaultPath: defaultPath.value,
-  });
-  if (selected) {
-    paths.value = [selected as string];
-    outputPath.value = undefined;
+  const settings = settingsRoot.value ?? (await loadSettings());
+  settingsRoot.value = settings;
+  const remembered =
+    settings.files.folderPickBehavior === "rememberLast"
+      ? settings.files.filterProfiles.find((item) => item.id === settings.files.lastFilterProfileId)
+      : undefined;
+  wizardProfileId.value = (remembered ?? resolveProfile(settings.files)).id;
+  wizardPath.value = "";
+  wizardQuick.value = false;
+  if (remembered) {
+    // 快速路徑：先用系統選擇器取資料夾，再直接顯示步驟 3。
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      recursive: options.recursive,
+      defaultPath: defaultPath.value,
+    });
+    if (!selected || Array.isArray(selected)) return;
+    wizardPath.value = selected;
+    wizardQuick.value = true;
   }
+  wizardVisible.value = true;
+}
+
+async function confirmFolderPick(result: FolderPickResult): Promise<void> {
+  paths.value = [result.path];
+  outputPath.value = undefined;
+  pickedFolder.value = true;
+  currentProfileId.value = result.profile.id;
+  if (result.remember) {
+    await patchProfiles((files) => {
+      files.lastFilterProfileId = result.profile.id;
+    });
+  }
+  await createPlan();
+}
+
+/** 只寫入磁碟上的 files 設定欄位，不帶入畫面快取裡尚未儲存的其他欄位。 */
+async function patchProfiles(patch: (files: SettingsV2["files"]) => void): Promise<void> {
+  settingsRoot.value = await patchSavedSettings((settings) => patch(settings.files));
+}
+
+async function saveProfile(profile: FileFilterProfile): Promise<void> {
+  await patchProfiles((files) => upsertProfile(files, profile));
+}
+
+function openProfileEditor(): void {
+  profileEditorSource.value = currentProfile.value ?? null;
+  profileEditorVisible.value = true;
+}
+
+async function onProfileEdited(profile: FileFilterProfile): Promise<void> {
+  await saveProfile(profile);
+  currentProfileId.value = profile.id;
+}
+
+async function deleteCurrentProfile(): Promise<void> {
+  const profile = currentProfile.value;
+  if (!profile || profile.builtin) return;
+  if (!(await confirm(`確定刪除 profile「${profile.name}」？`, { title: "刪除篩選 profile" })))
+    return;
+  await patchProfiles((files) => {
+    removeProfile(files, profile.id);
+  });
+  currentProfileId.value = resolveProfile(settingsRoot.value!.files).id;
 }
 
 async function chooseOutputFolder() {
@@ -434,7 +522,10 @@ async function createPlan() {
   clearPreviewState();
   try {
     const settings = await loadSettings();
-    const extensionFilter = folderScanExtensions(fileFilters.value);
+    const profile = currentProfile.value;
+    if (profile && filterCollectsNothing(profile)) {
+      return ElMessage.warning("目前的篩選不收任何檔案，請編輯或更換篩選。");
+    }
     const requestPlan = (includeIgnored: boolean) =>
       core.request<FileConversionPlan>(
         "files.plan",
@@ -449,9 +540,7 @@ async function createPlan() {
           addBom: options.addBom,
           fixCharsetDeclaration: options.fixCharsetDeclaration,
           fixCharsetExtensions: fixCharsetExtensions.value,
-          ...(extensionFilter.kind === "list"
-            ? { allowedExtensions: extensionFilter.extensions }
-            : {}),
+          ...(profile ? { extensionFilter: profileFilter(profile) } : {}),
           previewMaxBytes: previewMaxBytes.value,
           conflictPolicy: options.conflictPolicy,
           backup: backup.value,
@@ -608,6 +697,7 @@ watch(
     if (invocation?.options.mode !== "file") return;
     const cli = invocation.options;
     paths.value = cli.paths;
+    pickedFolder.value = cli.paths.some((path) => basenameLooksLikeDirectory(path));
     outputPath.value = cli.outputPath;
     options.mode = cli.operation;
     options.inputEncoding = cli.inputEncoding;
@@ -686,6 +776,27 @@ watch(
         ><el-checkbox v-model="options.fixCharsetDeclaration">修正 charset 宣告</el-checkbox
         ><el-checkbox v-model="options.addBom">加入 BOM</el-checkbox
         ><el-checkbox v-model="backup">轉換前備份（.bak）</el-checkbox>
+      </div>
+      <div v-if="folderScanMode && currentProfile" class="folder-filter">
+        <span class="folder-filter-label">副檔名篩選</span>
+        <el-select
+          :model-value="currentProfile.id"
+          class="folder-filter-select"
+          aria-label="目前篩選 profile"
+          @update:model-value="(value: string) => (currentProfileId = value)"
+        >
+          <el-option
+            v-for="profile in filterProfiles"
+            :key="profile.id"
+            :label="`${profile.name}（${modeLabel(profile.mode)}）`"
+            :value="profile.id"
+          />
+        </el-select>
+        <span class="folder-filter-summary">{{ summarizeProfile(currentProfile) }}</span>
+        <div class="filter-editor-actions">
+          <el-button @click="openProfileEditor">編輯篩選</el-button>
+          <el-button v-if="!currentProfile.builtin" @click="deleteCurrentProfile">刪除</el-button>
+        </div>
       </div>
       <div class="path-summary">
         <span>{{ pathSummary }}</span>
@@ -812,6 +923,24 @@ watch(
         </el-splitter>
       </div>
     </section>
+    <FolderPickWizard
+      v-model="wizardVisible"
+      v-model:recursive="options.recursive"
+      v-model:profile-id="wizardProfileId"
+      :profiles="filterProfiles"
+      :initial-path="wizardPath"
+      :quick="wizardQuick"
+      :default-path="defaultPath"
+      @save-profile="saveProfile"
+      @confirm="confirmFolderPick"
+    />
+    <ProfileEditorDialog
+      v-model="profileEditorVisible"
+      :profile="profileEditorSource"
+      :existing="filterProfiles"
+      :scan-start-path="paths[0]"
+      @save="onProfileEdited"
+    />
     <PreviewDiffDialog
       v-model="previewFullscreenVisible"
       title="檔案差異預覽"
@@ -824,6 +953,25 @@ watch(
 </template>
 
 <style scoped>
+.folder-filter {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.folder-filter-label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.folder-filter-select {
+  width: 240px;
+}
+.folder-filter-summary {
+  color: #5b746f;
+  font-size: 13px;
+}
 .file-plan-panel {
   display: flex;
   flex-direction: column;

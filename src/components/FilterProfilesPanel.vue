@@ -118,14 +118,20 @@ function setBehavior(value: unknown): void {
       </el-table-column>
       <el-table-column label="名稱" min-width="140">
         <template #default="{ row }"
-          >{{ row.name }}<el-tag v-if="row.builtin" size="small" class="builtin-tag">內建</el-tag>
+          >{{ row.name
+          }}<el-tag disable-transitions v-if="row.builtin" size="small" class="builtin-tag"
+            >內建</el-tag
+          >
         </template>
       </el-table-column>
       <el-table-column label="模式" width="90">
         <template #default="{ row }"
-          ><el-tag size="small" :type="row.mode === 'deny' ? 'danger' : 'success'">{{
-            modeLabel(row.mode)
-          }}</el-tag></template
+          ><el-tag
+            disable-transitions
+            size="small"
+            :type="row.mode === 'deny' ? 'danger' : 'success'"
+            >{{ modeLabel(row.mode) }}</el-tag
+          ></template
         >
       </el-table-column>
       <el-table-column label="副檔名" min-width="200">

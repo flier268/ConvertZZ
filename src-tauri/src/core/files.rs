@@ -2,7 +2,9 @@ use super::backup::{
     create_user_backups, resolve_backup_roots, resolve_path, wildcard_matcher, BackupRoot,
 };
 use super::conversion::{base_convert, ConversionService};
-use super::encoding::{can_roundtrip, decode_text_detailed, detect_encoding, encode_text};
+use super::encoding::{
+    can_roundtrip, decode_text_detailed, detect_encoding, encode_text, reinterpret_text,
+};
 use super::error::CoreError;
 use super::parallelism::default_convert_jobs;
 use super::types::{
@@ -220,16 +222,17 @@ impl FileService {
             let mut directories = directories;
             directories.sort_by_key(|path| std::cmp::Reverse(path_depth(path)));
             for source_path in directories {
-                let converted_name = self
-                    .convert_text(
+                let (converted_name, name_warnings) = self
+                    .convert_entry_name(
                         conversion,
                         &request.conversion,
-                        file_name(&source_path),
-                        None,
+                        request.input_encoding,
+                        request.output_encoding,
+                        &file_name(&source_path),
                         None,
                     )
-                    .await?
-                    .text;
+                    .await?;
+                warnings.extend(name_warnings.iter().cloned());
                 let output_path = source_path
                     .parent()
                     .unwrap_or(Path::new("."))
@@ -250,7 +253,12 @@ impl FileService {
                         } else {
                             PlanStatus::Ready
                         },
-                        warning: conflict.then(|| "輸出資料夾已存在。".into()),
+                        warning: merge_warning(
+                            name_warnings
+                                .into_iter()
+                                .reduce(|left, right| format!("{left} {right}")),
+                            conflict.then(|| "輸出資料夾已存在。".into()),
+                        ),
                     },
                     content: None,
                     conflict_policy: request.conflict_policy,
@@ -398,18 +406,18 @@ impl FileService {
         source_path: &Path,
     ) -> Result<(PreparedFile, Vec<String>), CoreError> {
         assert_source_writable(source_path)?;
-        let converted_name = if request.mode == FileMode::Content {
-            file_name(source_path)
+        let (converted_name, name_warnings) = if request.mode == FileMode::Content {
+            (file_name(source_path), Vec::new())
         } else {
-            self.convert_text(
+            self.convert_entry_name(
                 conversion,
                 &request.conversion,
-                file_name(source_path),
-                None,
+                request.input_encoding,
+                request.output_encoding,
+                &file_name(source_path),
                 None,
             )
             .await?
-            .text
         };
         let output_path = self
             .resolve_item_output_path(conversion, request, source_path, &converted_name)
@@ -437,13 +445,65 @@ impl FileService {
                     } else {
                         PlanStatus::Ready
                     },
-                    warning: conflict.then(|| "輸出路徑已存在。".into()),
+                    warning: merge_warning(
+                        name_warnings
+                            .iter()
+                            .cloned()
+                            .reduce(|left, right| format!("{left} {right}")),
+                        conflict.then(|| "輸出路徑已存在。".into()),
+                    ),
                 },
                 content: None,
                 conflict_policy: request.conflict_policy,
             },
-            Vec::new(),
+            name_warnings,
         ))
+    }
+
+    /// 檔名與資料夾名。對齊舊版 `ConvertString.ConvertAsync`：
+    /// `encoding[0]` 是輸入編碼（解碼），`encoding[1]` 是輸出編碼（取位元組）。
+    /// 簡轉繁先重新解讀再轉換；其餘先轉換再重新解讀。
+    /// 只有兩邊都不是 Auto 且不相同才重新解讀。無法編碼時略過重新解讀並附警告。
+    async fn convert_entry_name(
+        &self,
+        conversion: &ConversionService,
+        options: &ConversionOptions,
+        input_encoding: TextEncoding,
+        output_encoding: TextEncoding,
+        name: &str,
+        is_cancelled: Option<CancelCheck>,
+    ) -> Result<(String, Vec<String>), CoreError> {
+        let reinterpret = input_encoding != TextEncoding::Auto
+            && output_encoding != TextEncoding::Auto
+            && input_encoding != output_encoding;
+        let mut warnings = Vec::new();
+        let prepared = if reinterpret && options.direction == Direction::S2t {
+            match reinterpret_text(name, output_encoding, input_encoding) {
+                Ok(text) => text,
+                Err(error) => {
+                    warnings.push(filename_reinterpret_warning(&error));
+                    name.to_string()
+                }
+            }
+        } else {
+            name.to_string()
+        };
+        let converted = self
+            .convert_text(conversion, options, prepared, None, is_cancelled)
+            .await?;
+        warnings.extend(converted.warnings);
+        let text = if reinterpret && options.direction != Direction::S2t {
+            match reinterpret_text(&converted.text, output_encoding, input_encoding) {
+                Ok(text) => text,
+                Err(error) => {
+                    warnings.push(filename_reinterpret_warning(&error));
+                    converted.text
+                }
+            }
+        } else {
+            converted.text
+        };
+        Ok((text, warnings))
     }
 
     async fn prepare_file(
@@ -487,18 +547,18 @@ impl FileService {
         } else {
             None
         };
-        let converted_name = if request.mode == FileMode::Content {
-            file_name(source_path)
+        let (converted_name, name_warnings) = if request.mode == FileMode::Content {
+            (file_name(source_path), Vec::new())
         } else {
-            self.convert_text(
+            self.convert_entry_name(
                 conversion,
                 &request.conversion,
-                file_name(source_path),
-                None,
+                request.input_encoding,
+                request.output_encoding,
+                &file_name(source_path),
                 is_cancelled.clone(),
             )
             .await?
-            .text
         };
         let mut output_path = self
             .resolve_item_output_path(conversion, request, source_path, &converted_name)
@@ -534,6 +594,7 @@ impl FileService {
             .as_ref()
             .map(|item| item.warnings.clone())
             .unwrap_or_default();
+        warnings.extend(name_warnings);
         if let Some(reason) = content_skip {
             warnings.push(content_skip_message(reason).to_string());
         }
@@ -636,6 +697,8 @@ impl FileService {
                 converted_name,
                 request.mode,
                 &request.conversion,
+                request.input_encoding,
+                request.output_encoding,
             )
             .await
         } else if let Some(pattern) = &request.output_path {
@@ -2036,6 +2099,8 @@ async fn resolve_output_directory_path(
     converted_name: &str,
     mode: FileMode,
     conversion_request: &ConversionOptions,
+    input_encoding: TextEncoding,
+    output_encoding: TextEncoding,
 ) -> Result<PathBuf, CoreError> {
     let first_input = resolve_path(
         inputs
@@ -2066,9 +2131,16 @@ async fn resolve_output_directory_path(
         for part in relative_directory {
             parts.push(
                 files
-                    .convert_text(conversion, conversion_request, part, None, None)
+                    .convert_entry_name(
+                        conversion,
+                        conversion_request,
+                        input_encoding,
+                        output_encoding,
+                        &part,
+                        None,
+                    )
                     .await?
-                    .text,
+                    .0,
             );
         }
     }
@@ -2469,6 +2541,13 @@ fn leaves_source_unchanged(request: &FilePlanRequest, file: &PreparedFile) -> bo
 fn finalize_apply(mut result: ApplyResult) -> ApplyResult {
     result.warnings = unique(result.warnings);
     result
+}
+
+fn filename_reinterpret_warning(error: &CoreError) -> String {
+    format!(
+        "檔名無法依指定編碼重新解讀，已略過重新解讀。{}",
+        error.message
+    )
 }
 
 fn merge_warning(incoming: Option<String>, existing: Option<String>) -> Option<String> {

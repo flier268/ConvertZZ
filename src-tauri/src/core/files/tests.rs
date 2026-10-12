@@ -2727,6 +2727,114 @@ fn cross_device_conflict_copy_failure_restores_existing_output() {
     let _ = std::fs::remove_dir_all(&directory);
 }
 
+fn mojibake_name(text: &str) -> String {
+    decode_text_detailed(
+        &encode_text(text, TextEncoding::Gbk, false).unwrap(),
+        TextEncoding::Big5,
+    )
+    .unwrap()
+    .text
+}
+
+fn output_file_name(item: &FilePlanItem) -> String {
+    Path::new(&item.output_path)
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned()
+}
+
+#[tokio::test]
+async fn filename_mode_reinterprets_gbk_names_read_as_big5() {
+    let directory = temp_dir();
+    let folder_mojibake = mojibake_name("简体");
+    let file_mojibake = format!("{}.txt", mojibake_name("中国"));
+    let folder = directory.join(&folder_mojibake);
+    std::fs::create_dir(&folder).unwrap();
+    std::fs::write(folder.join(&file_mojibake), "甲").unwrap();
+
+    let mut request = filename_request(&directory, ConflictPolicy::Skip);
+    request.recursive = true;
+    request.input_encoding = TextEncoding::Gbk;
+    request.output_encoding = TextEncoding::Big5;
+    let plan = FileService::new()
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let file = plan
+        .items
+        .iter()
+        .find(|item| item.kind == FileItemKind::File)
+        .unwrap();
+    let folder_item = plan
+        .items
+        .iter()
+        .find(|item| item.kind == FileItemKind::Directory)
+        .unwrap();
+    assert_eq!(output_file_name(file), "中國.txt");
+    assert_eq!(output_file_name(folder_item), "簡體");
+    assert!(file.warning.is_none(), "{:?}", file.warning);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn filename_mode_keeps_names_when_encoding_is_auto() {
+    let directory = temp_dir();
+    let folder_mojibake = mojibake_name("简体");
+    let file_mojibake = format!("{}.txt", mojibake_name("中国"));
+    let folder = directory.join(&folder_mojibake);
+    std::fs::create_dir(&folder).unwrap();
+    std::fs::write(folder.join(&file_mojibake), "甲").unwrap();
+
+    let mut request = filename_request(&directory, ConflictPolicy::Skip);
+    request.recursive = true;
+    request.conversion.direction = Direction::None;
+    let plan = FileService::new()
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let file = plan
+        .items
+        .iter()
+        .find(|item| item.kind == FileItemKind::File)
+        .unwrap();
+    let folder_item = plan
+        .items
+        .iter()
+        .find(|item| item.kind == FileItemKind::Directory)
+        .unwrap();
+    assert_eq!(output_file_name(file), file_mojibake);
+    assert_eq!(output_file_name(folder_item), folder_mojibake);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn filename_reinterpret_failure_keeps_converted_name_and_warns() {
+    let directory = temp_dir();
+    let source = directory.join("甲€.txt");
+    std::fs::write(&source, "甲").unwrap();
+    let mut request = filename_request(&source, ConflictPolicy::Skip);
+    request.conversion.direction = Direction::None;
+    request.input_encoding = TextEncoding::Utf8;
+    request.output_encoding = TextEncoding::HzGb2312;
+    let plan = FileService::new()
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert_eq!(plan.items.len(), 1);
+    assert_eq!(output_file_name(&plan.items[0]), "甲€.txt");
+    let warning = plan.items[0].warning.as_deref().unwrap_or("");
+    assert!(warning.contains("已略過重新解讀"), "{warning}");
+    assert!(
+        plan.warnings
+            .iter()
+            .any(|item| item.contains("已略過重新解讀")),
+        "{:?}",
+        plan.warnings
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
 #[tokio::test]
 async fn folder_scan_skips_convertzz_transaction_residue() {
     let directory = temp_dir();

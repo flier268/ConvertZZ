@@ -4212,3 +4212,45 @@ fn trailing_dot_name_has_no_extension() {
     assert_eq!(extension_of(Path::new(".bashrc")), "");
     assert_eq!(extension_of(Path::new("a.TXT")), ".txt");
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn filename_mode_preview_shows_invalid_utf8_name_instead_of_blank() {
+    use std::os::unix::ffi::OsStrExt;
+    let directory = temp_dir();
+    let mut raw = encode_text("中国", TextEncoding::Gbk, false).unwrap();
+    raw.extend_from_slice(b".txt");
+    let source = directory.join(std::ffi::OsStr::from_bytes(&raw));
+    std::fs::write(&source, "甲").unwrap();
+
+    let plan = FileService::new()
+        .plan(
+            shared_conversion(),
+            filename_request(&directory, ConflictPolicy::Skip),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(plan.items.len(), 1);
+    let item = &plan.items[0];
+    assert!(
+        item.source_preview.ends_with(".txt") && item.source_preview.contains('\u{FFFD}'),
+        "來源預覽不應為空白：{:?}",
+        item.source_preview
+    );
+    assert!(
+        item.output_preview.ends_with(".txt") && !item.output_preview.is_empty(),
+        "輸出預覽不應為空白：{:?}",
+        item.output_preview
+    );
+    assert!(
+        item.warning.as_deref().unwrap_or("").contains("UTF-8"),
+        "{:?}",
+        item.warning
+    );
+    assert_eq!(
+        item.output_path, item.source_path,
+        "無法無損回傳的檔名不得改名"
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}

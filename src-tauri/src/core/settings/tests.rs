@@ -313,3 +313,119 @@ fn type_filter_migration_vectors_match_shared_fixture() {
         fixture.default_type_filter
     );
 }
+
+fn profile_ids(settings: &Value) -> Vec<String> {
+    settings["files"]["filterProfiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].as_str().unwrap().to_string())
+        .collect()
+}
+
+fn profile<'a>(settings: &'a Value, id: &str) -> &'a Value {
+    settings["files"]["filterProfiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == id)
+        .unwrap()
+}
+
+#[test]
+fn default_settings_provide_builtin_profiles_and_legacy_web_group() {
+    let settings = default_settings();
+    assert_eq!(
+        profile_ids(&settings),
+        vec!["builtin-text", "builtin-all", "legacy-2"]
+    );
+    assert_eq!(settings["files"]["defaultFilterProfileId"], "builtin-text");
+    assert_eq!(settings["files"]["folderPickBehavior"], "rememberLast");
+    assert_eq!(settings["files"]["lastFilterProfileId"], "");
+    assert_eq!(profile(&settings, "builtin-text")["builtin"], true);
+    assert_eq!(profile(&settings, "builtin-all")["mode"], "all");
+    let web = profile(&settings, "legacy-2");
+    assert_eq!(web["name"], "常用網頁文件");
+    assert_eq!(web["mode"], "allow");
+    assert_eq!(web["builtin"], false);
+    assert_eq!(
+        web["extensions"],
+        json!([".htm", ".html", ".php", ".asp", ".css", ".js"])
+    );
+}
+
+#[test]
+fn v2_type_filter_groups_become_allow_profiles_and_string_is_kept() {
+    let filter = "<字幕|*.SRT;*.ass>/<所有檔案|*.*>/<常用文字檔案|*.txt;*.log;*.ini;*.inf;*.bat;*.cmd;*.srt;*.ass;*.lang>";
+    let settings = migrate(json!({ "version": 2, "files": { "typeFilter": filter } }));
+    assert_eq!(settings["files"]["typeFilter"], filter, "舊字串保留");
+    assert_eq!(
+        profile_ids(&settings),
+        vec!["builtin-text", "builtin-all", "legacy-1"]
+    );
+    let custom = profile(&settings, "legacy-1");
+    assert_eq!(custom["name"], "字幕");
+    assert_eq!(custom["extensions"], json!([".srt", ".ass"]));
+    assert_eq!(custom["includeNoExtension"], false);
+    assert_eq!(settings["files"]["defaultFilterProfileId"], "legacy-1");
+}
+
+#[test]
+fn legacy_group_named_like_builtin_with_other_extensions_keeps_a_distinct_name() {
+    let settings = migrate(json!({
+        "version": 2,
+        "files": { "typeFilter": "<常用文字檔案|*.md>" }
+    }));
+    let custom = profile(&settings, "legacy-1");
+    assert_eq!(custom["name"], "常用文字檔案（舊版）");
+    assert_eq!(profile(&settings, "builtin-text")["name"], "常用文字檔案");
+}
+
+#[test]
+fn legacy_import_creates_profiles_from_type_filter() {
+    let settings = migrate(json!({
+        "FileConvert": { "TypeFilter": "<文字|*.txt>/<網頁|*.html;*.htm>" }
+    }));
+    assert_eq!(
+        profile_ids(&settings),
+        vec!["builtin-text", "builtin-all", "legacy-1", "legacy-2"]
+    );
+    assert_eq!(
+        profile(&settings, "legacy-2")["extensions"],
+        json!([".html", ".htm"])
+    );
+}
+
+#[test]
+fn existing_profiles_are_kept_and_missing_builtins_restored() {
+    let settings = migrate(json!({
+        "version": 2,
+        "files": {
+            "typeFilter": "<忽略|*.zzz>",
+            "filterProfiles": [
+                { "id": "u-1", "name": "排除圖片", "builtin": false, "mode": "deny",
+                  "extensions": [".png"], "includeNoExtension": true }
+            ],
+            "defaultFilterProfileId": "u-missing",
+            "lastFilterProfileId": "u-1",
+            "folderPickBehavior": "unknown"
+        }
+    }));
+    assert_eq!(
+        profile_ids(&settings),
+        vec!["builtin-text", "builtin-all", "u-1"]
+    );
+    assert_eq!(settings["files"]["defaultFilterProfileId"], "builtin-text");
+    assert_eq!(settings["files"]["lastFilterProfileId"], "u-1");
+    assert_eq!(settings["files"]["folderPickBehavior"], "rememberLast");
+    assert_eq!(profile(&settings, "u-1")["mode"], "deny");
+}
+
+#[test]
+fn migration_is_idempotent() {
+    let once = migrate(json!({
+        "version": 2,
+        "files": { "typeFilter": "<字幕|*.srt>" }
+    }));
+    assert_eq!(migrate(once.clone()), once);
+}

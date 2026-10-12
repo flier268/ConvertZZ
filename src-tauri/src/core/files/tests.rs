@@ -51,6 +51,7 @@ fn filename_request(path: &Path, policy: ConflictPolicy) -> FilePlanRequest {
         fix_charset_declaration: false,
         fix_charset_extensions: None,
         allowed_extensions: None,
+        extension_filter: None,
         preview_max_bytes: None,
         conflict_policy: policy,
         backup: Some(false),
@@ -103,6 +104,7 @@ async fn preview_limit_and_unicode_bom() {
                 fix_charset_declaration: false,
                 fix_charset_extensions: None,
                 allowed_extensions: None,
+                extension_filter: None,
                 preview_max_bytes: Some(1024),
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
@@ -178,6 +180,7 @@ async fn preview_then_safe_write_and_fix_charset() {
                 fix_charset_declaration: true,
                 fix_charset_extensions: None,
                 allowed_extensions: None,
+                extension_filter: None,
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
@@ -304,6 +307,7 @@ async fn request_cancel_stops_apply_before_write() {
                 fix_charset_declaration: false,
                 fix_charset_extensions: None,
                 allowed_extensions: None,
+                extension_filter: None,
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
@@ -397,6 +401,7 @@ async fn expands_wildcards_and_output_pattern() {
                 fix_charset_declaration: false,
                 fix_charset_extensions: None,
                 allowed_extensions: None,
+                extension_filter: None,
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
@@ -449,6 +454,7 @@ async fn rejects_mismatched_wildcard_counts() {
                 fix_charset_declaration: false,
                 fix_charset_extensions: None,
                 allowed_extensions: None,
+                extension_filter: None,
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
@@ -542,6 +548,7 @@ async fn directory_input_respects_extension_filter() {
                 fix_charset_declaration: false,
                 fix_charset_extensions: None,
                 allowed_extensions: Some(vec![".txt".into()]),
+                extension_filter: None,
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
@@ -638,6 +645,7 @@ async fn later_file_failure_keeps_earlier_writes() {
                 fix_charset_declaration: false,
                 fix_charset_extensions: None,
                 allowed_extensions: None,
+                extension_filter: None,
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
@@ -694,6 +702,7 @@ async fn cancel_after_first_file_keeps_written_changes() {
                 fix_charset_declaration: false,
                 fix_charset_extensions: None,
                 allowed_extensions: None,
+                extension_filter: None,
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
@@ -892,6 +901,7 @@ async fn creates_file_bak_before_conversion() {
                 fix_charset_declaration: false,
                 fix_charset_extensions: None,
                 allowed_extensions: None,
+                extension_filter: None,
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(true),
@@ -945,6 +955,7 @@ async fn folder_selection_backs_up_whole_folder() {
                 fix_charset_declaration: false,
                 fix_charset_extensions: None,
                 allowed_extensions: Some(vec![".txt".into()]),
+                extension_filter: None,
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(true),
@@ -1013,6 +1024,7 @@ async fn backup_false_skips_bak() {
                 fix_charset_declaration: false,
                 fix_charset_extensions: None,
                 allowed_extensions: None,
+                extension_filter: None,
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
@@ -1058,6 +1070,7 @@ async fn both_mode_converts_content_and_filename() {
                 fix_charset_declaration: false,
                 fix_charset_extensions: None,
                 allowed_extensions: None,
+                extension_filter: None,
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
@@ -1127,6 +1140,7 @@ async fn cancel_rejects_content_plan_without_writing() {
                 fix_charset_declaration: false,
                 fix_charset_extensions: None,
                 allowed_extensions: None,
+                extension_filter: None,
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
@@ -1256,6 +1270,7 @@ async fn content_plan_lists_without_converting() {
                 fix_charset_declaration: false,
                 fix_charset_extensions: None,
                 allowed_extensions: None,
+                extension_filter: None,
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
@@ -1311,6 +1326,7 @@ async fn preview_rejects_path_outside_plan() {
                 fix_charset_declaration: false,
                 fix_charset_extensions: None,
                 allowed_extensions: None,
+                extension_filter: None,
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
@@ -1360,6 +1376,7 @@ async fn apply_only_writes_selected_files() {
                 fix_charset_declaration: false,
                 fix_charset_extensions: None,
                 allowed_extensions: None,
+                extension_filter: None,
                 preview_max_bytes: None,
                 conflict_policy: ConflictPolicy::Skip,
                 backup: Some(false),
@@ -1595,6 +1612,7 @@ fn binary_file_request(path: &Path, mode: FileMode) -> FilePlanRequest {
         fix_charset_declaration: false,
         fix_charset_extensions: None,
         allowed_extensions: None,
+        extension_filter: None,
         preview_max_bytes: Some(4096),
         conflict_policy: ConflictPolicy::Skip,
         backup: Some(false),
@@ -1927,7 +1945,10 @@ fn migrated_bracketless_type_filter_does_not_visit_audio_files() {
             &directory.to_string_lossy(),
             true,
             false,
-            &ExtensionGate::Only(allowed),
+            &ExtensionGate::Only {
+                extensions: allowed,
+                no_extension: false,
+            },
             &mut collected,
             &mut Vec::new(),
         )
@@ -1978,6 +1999,7 @@ fn directory_scan_request(
         fix_charset_declaration: false,
         fix_charset_extensions: None,
         allowed_extensions,
+        extension_filter: None,
         preview_max_bytes: Some(4096),
         conflict_policy: ConflictPolicy::Skip,
         backup: Some(false),
@@ -3631,4 +3653,490 @@ fn merge_warning_does_not_duplicate_existing_text() {
         ),
         Some("二進位檔案，已略過內容轉換。 輸出路徑已存在。".into())
     );
+}
+
+fn filter_request(
+    path: &Path,
+    mode: FileMode,
+    filter_mode: ExtensionFilterMode,
+    extensions: &[&str],
+    include_no_extension: bool,
+) -> FilePlanRequest {
+    let mut request = directory_scan_request(path, mode, None);
+    request.extension_filter = Some(super::super::types::ExtensionFilter {
+        mode: filter_mode,
+        extensions: extensions.iter().map(|item| item.to_string()).collect(),
+        include_no_extension,
+    });
+    request
+}
+
+async fn planned_file_names(request: FilePlanRequest) -> Vec<String> {
+    let plan = FileService::new()
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let mut names = plan
+        .items
+        .iter()
+        .filter(|item| item.kind == FileItemKind::File)
+        .map(|item| {
+            Path::new(&item.source_path)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect::<Vec<_>>();
+    names.sort();
+    names
+}
+
+fn write_filter_fixture(directory: &Path) {
+    std::fs::write(directory.join("a.txt"), "a").unwrap();
+    std::fs::write(directory.join("b.PNG"), "b").unwrap();
+    std::fs::write(directory.join("c.srt"), "c").unwrap();
+    std::fs::write(directory.join("Makefile"), "m").unwrap();
+}
+
+#[tokio::test]
+async fn deny_filter_excludes_listed_extensions_case_insensitively() {
+    let directory = temp_dir();
+    write_filter_fixture(&directory);
+    let names = planned_file_names(filter_request(
+        &directory,
+        FileMode::Content,
+        ExtensionFilterMode::Deny,
+        &["png", ".SRT"],
+        false,
+    ))
+    .await;
+    assert_eq!(names, vec!["Makefile", "a.txt"]);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn deny_filter_with_no_extension_flag_also_excludes_extensionless_files() {
+    let directory = temp_dir();
+    write_filter_fixture(&directory);
+    let names = planned_file_names(filter_request(
+        &directory,
+        FileMode::Content,
+        ExtensionFilterMode::Deny,
+        &["png"],
+        true,
+    ))
+    .await;
+    assert_eq!(names, vec!["a.txt", "c.srt"]);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn empty_deny_filter_is_equivalent_to_all_files() {
+    let directory = temp_dir();
+    write_filter_fixture(&directory);
+    let names = planned_file_names(filter_request(
+        &directory,
+        FileMode::Content,
+        ExtensionFilterMode::Deny,
+        &[],
+        false,
+    ))
+    .await;
+    assert_eq!(names, vec!["Makefile", "a.txt", "b.PNG", "c.srt"]);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn allow_filter_controls_extensionless_files() {
+    let directory = temp_dir();
+    write_filter_fixture(&directory);
+    let without = planned_file_names(filter_request(
+        &directory,
+        FileMode::Content,
+        ExtensionFilterMode::Allow,
+        &["txt"],
+        false,
+    ))
+    .await;
+    assert_eq!(without, vec!["a.txt"]);
+    let with = planned_file_names(filter_request(
+        &directory,
+        FileMode::Content,
+        ExtensionFilterMode::Allow,
+        &["txt"],
+        true,
+    ))
+    .await;
+    assert_eq!(with, vec!["Makefile", "a.txt"]);
+    let only_extensionless = planned_file_names(filter_request(
+        &directory,
+        FileMode::Content,
+        ExtensionFilterMode::Allow,
+        &[],
+        true,
+    ))
+    .await;
+    assert_eq!(only_extensionless, vec!["Makefile"]);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn empty_allow_filter_collects_nothing_and_all_mode_collects_everything() {
+    let directory = temp_dir();
+    write_filter_fixture(&directory);
+    assert!(planned_file_names(filter_request(
+        &directory,
+        FileMode::Content,
+        ExtensionFilterMode::Allow,
+        &[],
+        false,
+    ))
+    .await
+    .is_empty());
+    let all = planned_file_names(filter_request(
+        &directory,
+        FileMode::Content,
+        ExtensionFilterMode::All,
+        &["txt"],
+        false,
+    ))
+    .await;
+    assert_eq!(all.len(), 4);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn extension_filter_takes_precedence_over_allowed_extensions() {
+    let directory = temp_dir();
+    write_filter_fixture(&directory);
+    let mut request = filter_request(
+        &directory,
+        FileMode::Content,
+        ExtensionFilterMode::Allow,
+        &["srt"],
+        false,
+    );
+    request.allowed_extensions = Some(vec![".txt".into()]);
+    assert_eq!(planned_file_names(request).await, vec!["c.srt"]);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn deny_filter_does_not_rename_folder_holding_only_excluded_files() {
+    let directory = temp_dir();
+    let kept = directory.join("简体资料");
+    let excluded = directory.join("图片资料");
+    std::fs::create_dir_all(&kept).unwrap();
+    std::fs::create_dir_all(&excluded).unwrap();
+    std::fs::write(kept.join("软件.txt"), "软件").unwrap();
+    std::fs::write(excluded.join("软件.png"), "x").unwrap();
+    let plan = FileService::new()
+        .plan(
+            shared_conversion(),
+            filter_request(
+                &directory,
+                FileMode::Filename,
+                ExtensionFilterMode::Deny,
+                &["png"],
+                false,
+            ),
+            noop(),
+        )
+        .await
+        .unwrap();
+    let folders = plan
+        .items
+        .iter()
+        .filter(|item| item.kind == FileItemKind::Directory)
+        .map(|item| item.source_path.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(folders, vec![kept.to_string_lossy().into_owned()]);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn scan_extension_stats_counts_extensions_and_extensionless_files() {
+    let directory = temp_dir();
+    write_filter_fixture(&directory);
+    std::fs::write(directory.join("d.TXT"), "d").unwrap();
+    let nested = directory.join("sub");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(nested.join("e.txt"), "e").unwrap();
+    std::fs::write(nested.join("README"), "r").unwrap();
+    let hidden = directory.join(".git");
+    std::fs::create_dir_all(&hidden).unwrap();
+    std::fs::write(hidden.join("config.ini"), "x").unwrap();
+    std::fs::write(directory.join(".convertzz-x.stage"), "x").unwrap();
+
+    let recursive = scan_extension_stats(
+        super::super::types::ScanExtensionStatsRequest {
+            path: directory.to_string_lossy().into_owned(),
+            recursive: true,
+        },
+        noop(),
+        never_cancel(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(recursive.total_files, 7);
+    assert_eq!(recursive.no_extension_count, 2);
+    assert_eq!(recursive.directory_count, 1);
+    let pairs = recursive
+        .extensions
+        .iter()
+        .map(|item| (item.extension.as_str(), item.count))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        pairs,
+        vec![(".txt", 3), (".png", 1), (".srt", 1)],
+        "依數量遞減、副檔名排序"
+    );
+
+    let flat = scan_extension_stats(
+        super::super::types::ScanExtensionStatsRequest {
+            path: directory.to_string_lossy().into_owned(),
+            recursive: false,
+        },
+        noop(),
+        never_cancel(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(flat.total_files, 5);
+    assert_eq!(flat.directory_count, 0);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn scan_extension_stats_honors_cancel_and_rejects_files() {
+    let directory = temp_dir();
+    std::fs::write(directory.join("a.txt"), "a").unwrap();
+    let cancelled = scan_extension_stats(
+        super::super::types::ScanExtensionStatsRequest {
+            path: directory.to_string_lossy().into_owned(),
+            recursive: true,
+        },
+        noop(),
+        Arc::new(|| true),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(cancelled.code, "PLAN_CANCELLED");
+    let not_directory = scan_extension_stats(
+        super::super::types::ScanExtensionStatsRequest {
+            path: directory.join("a.txt").to_string_lossy().into_owned(),
+            recursive: true,
+        },
+        noop(),
+        never_cancel(),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(not_directory.code, "INVALID_PAYLOAD");
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn output_directory_keeps_subpath_reinterpret_warning() {
+    let directory = temp_dir();
+    let output = temp_dir();
+    let nested = directory.join("sub€");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(nested.join("甲.txt"), "甲").unwrap();
+    let mut request = directory_scan_request(&directory, FileMode::Filename, None);
+    request.conversion.direction = Direction::None;
+    request.input_encoding = TextEncoding::Utf8;
+    request.output_encoding = TextEncoding::HzGb2312;
+    request.output_directory = Some(output.to_string_lossy().into_owned());
+    let plan = FileService::new()
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let file = plan
+        .items
+        .iter()
+        .find(|item| item.kind == FileItemKind::File)
+        .expect("檔案項目");
+    assert!(
+        file.warning
+            .as_deref()
+            .unwrap_or("")
+            .contains("已略過重新解讀"),
+        "{:?}",
+        file.warning
+    );
+    assert!(
+        plan.warnings
+            .iter()
+            .any(|item| item.contains("已略過重新解讀")),
+        "{:?}",
+        plan.warnings
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+    let _ = std::fs::remove_dir_all(&output);
+}
+
+#[tokio::test]
+async fn output_elsewhere_neither_plans_folder_renames_nor_counts_skipped_ones() {
+    let directory = temp_dir();
+    let output = temp_dir();
+    let kept = directory.join("简体资料");
+    let empty_of_matches = directory.join("图片资料");
+    std::fs::create_dir_all(&kept).unwrap();
+    std::fs::create_dir_all(&empty_of_matches).unwrap();
+    std::fs::write(kept.join("软件.txt"), "软件").unwrap();
+    std::fs::write(empty_of_matches.join("软件.png"), "x").unwrap();
+    for output_directory in [Some(output.to_string_lossy().into_owned()), None] {
+        let mut request =
+            directory_scan_request(&directory, FileMode::Filename, Some(vec![".txt".into()]));
+        request.output_directory = output_directory.clone();
+        let plan = FileService::new()
+            .plan(shared_conversion(), request, noop())
+            .await
+            .unwrap();
+        let skipped_warning = plan.warnings.iter().any(|item| item.contains("資料夾改名"));
+        if output_directory.is_some() {
+            assert!(
+                plan.items
+                    .iter()
+                    .all(|item| item.kind != FileItemKind::Directory),
+                "輸出到他處不改來源資料夾：{:?}",
+                plan.items
+            );
+            assert!(!skipped_warning, "{:?}", plan.warnings);
+        } else {
+            assert!(
+                skipped_warning,
+                "原地改名仍應提示略過數：{:?}",
+                plan.warnings
+            );
+        }
+    }
+    let _ = std::fs::remove_dir_all(&directory);
+    let _ = std::fs::remove_dir_all(&output);
+}
+
+#[tokio::test]
+async fn apply_failure_of_only_file_does_not_rename_folder() {
+    let directory = temp_dir();
+    let nested = directory.join("简体资料");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(nested.join("软件.txt"), "软件").unwrap();
+    let service = FileService::new()
+        .with_stage_validator(|_, _, _| Err(CoreError::new("FILE_VERIFY", "受控驗證失敗")));
+    let plan = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Both, Some(vec![".txt".into()])),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert!(plan
+        .items
+        .iter()
+        .any(|item| item.kind == FileItemKind::Directory && item.status == PlanStatus::Ready));
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.failed.len(), 1, "{:?}", result.failed);
+    assert!(
+        result.succeeded.is_empty(),
+        "檔案套用失敗時不應改資料夾名：{:?}",
+        result.succeeded
+    );
+    assert!(nested.join("软件.txt").exists());
+    assert!(!directory.join("簡體資料").exists());
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn apply_failure_of_one_file_keeps_folder_when_another_file_succeeded() {
+    let directory = temp_dir();
+    let nested = directory.join("简体资料");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(nested.join("软件.txt"), "软件").unwrap();
+    std::fs::write(nested.join("程序.txt"), "程序").unwrap();
+    let service = FileService::new().with_stage_validator(|_, _, source| {
+        if source.to_string_lossy().contains("软件") {
+            Err(CoreError::new("FILE_VERIFY", "受控驗證失敗"))
+        } else {
+            Ok(())
+        }
+    });
+    let plan = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Both, Some(vec![".txt".into()])),
+            noop(),
+        )
+        .await
+        .unwrap();
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.failed.len(), 1, "{:?}", result.failed);
+    assert!(
+        directory.join("簡體資料").is_dir(),
+        "仍有成功的檔案，資料夾應改名"
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+/// Ready 但檔名與內容都不變的檔案不阻擋資料夾改名：檔案已是正確狀態，
+/// 不應讓同資料夾「簡體」名稱因此永遠無法修正。
+#[tokio::test]
+async fn unchanged_ready_file_still_allows_folder_rename() {
+    let directory = temp_dir();
+    let nested = directory.join("简体资料");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(nested.join("正確.txt"), "正確").unwrap();
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            directory_scan_request(&directory, FileMode::Filename, Some(vec![".txt".into()])),
+            noop(),
+        )
+        .await
+        .unwrap();
+    let file = plan
+        .items
+        .iter()
+        .find(|item| item.kind == FileItemKind::File)
+        .unwrap();
+    assert_eq!(file.status, PlanStatus::Ready);
+    assert_eq!(file.source_path, file.output_path, "檔名不變");
+    assert!(plan
+        .items
+        .iter()
+        .any(|item| item.kind == FileItemKind::Directory && item.status == PlanStatus::Ready));
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{:?}", result.failed);
+    assert!(directory.join("簡體資料").join("正確.txt").exists());
+    let _ = std::fs::remove_dir_all(&directory);
 }

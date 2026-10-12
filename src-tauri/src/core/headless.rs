@@ -199,6 +199,7 @@ async fn prepare_files(
         fix_charset_declaration: true,
         fix_charset_extensions: Some(fix_charset_extensions(settings)),
         allowed_extensions: allowed_extensions(settings),
+        extension_filter: None,
         preview_max_bytes: settings
             .and_then(|value| value.get("previewMaxKb"))
             .and_then(Value::as_u64)

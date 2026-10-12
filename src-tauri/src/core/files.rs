@@ -9,8 +9,9 @@ use super::error::CoreError;
 use super::parallelism::default_convert_jobs;
 use super::types::{
     ApplyFailure, ApplyResult, CancelCheck, ConflictPolicy, ConversionOptions, Direction,
-    FileConversionPlan, FileItemKind, FileMode, FilePlanItem, FilePlanRequest, FilePreviewRequest,
-    PlanStatus, ProgressEvent, ProgressReporter, TextEncoding,
+    ExtensionCount, ExtensionFilterMode, ExtensionStats, FileConversionPlan, FileItemKind,
+    FileMode, FilePlanItem, FilePlanRequest, FilePreviewRequest, PlanStatus, ProgressEvent,
+    ProgressReporter, ScanExtensionStatsRequest, TextEncoding,
 };
 use chrono::Utc;
 use futures::stream::{self, StreamExt};
@@ -166,25 +167,20 @@ impl FileService {
         if !ignored_inputs.is_empty() {
             request.paths.retain(|path| !ignored_inputs.contains(path));
         }
-        let (paths, scan_warnings) = collect_files(
-            &request.paths,
-            request.recursive,
-            request.allowed_extensions.as_deref(),
-        )?;
+        let gate = extension_gate(&request);
+        let (paths, scan_warnings) = collect_files(&request.paths, request.recursive, &gate)?;
         // 空的副檔名清單代表資料夾掃描不收任何檔案，子資料夾也不能在 both／檔名模式下被改名。
         // 有篩選時，只改名子樹內至少有一個通過篩選檔案的資料夾。
-        let (directories, directory_warnings) = if request.mode == FileMode::Content
-            || scan_collects_nothing(request.allowed_extensions.as_deref())
-        {
-            (Vec::new(), Vec::new())
-        } else {
-            collect_directories(
-                &request.paths,
-                request.recursive,
-                &paths,
-                request.allowed_extensions.as_deref(),
-            )?
-        };
+        // 輸出到其他資料夾或指定輸出路徑時來源資料夾不會改名，因此不掃描、也不產生略過警告。
+        let renames_directories =
+            request.output_directory.is_none() && request.output_path.is_none();
+        let (directories, directory_warnings) =
+            if request.mode == FileMode::Content || !renames_directories || gate.collects_nothing()
+            {
+                (Vec::new(), Vec::new())
+            } else {
+                collect_directories(&request.paths, request.recursive, &paths, &gate)?
+            };
         let mut files = Vec::new();
         let mut warnings = ignored_inputs
             .iter()
@@ -192,11 +188,7 @@ impl FileService {
             .collect::<Vec<_>>();
         warnings.extend(scan_warnings);
         warnings.extend(directory_warnings);
-        warnings.extend(empty_folder_warnings(
-            &request.paths,
-            &paths,
-            request.allowed_extensions.as_deref(),
-        ));
+        warnings.extend(empty_folder_warnings(&request.paths, &paths, &gate));
 
         for (index, source_path) in paths.iter().enumerate() {
             match self.enumerate_file(conversion, &request, source_path).await {
@@ -228,7 +220,7 @@ impl FileService {
             });
         }
 
-        if request.output_directory.is_none() && request.output_path.is_none() {
+        if renames_directories {
             let planned_file_ancestors = included_file_ancestor_dirs(
                 &files
                     .iter()
@@ -452,9 +444,11 @@ impl FileService {
             )
             .await?
         };
-        let output_path = self
+        let (output_path, path_warnings) = self
             .resolve_item_output_path(conversion, request, source_path, &converted_name)
             .await?;
+        let mut name_warnings = name_warnings;
+        name_warnings.extend(path_warnings);
         let conflict = output_path != source_path && output_path.exists();
         let (source_preview, output_preview, preview_loaded) = if request.mode == FileMode::Filename
         {
@@ -593,9 +587,11 @@ impl FileService {
             )
             .await?
         };
-        let mut output_path = self
+        let (mut output_path, path_warnings) = self
             .resolve_item_output_path(conversion, request, source_path, &converted_name)
             .await?;
+        let mut name_warnings = name_warnings;
+        name_warnings.extend(path_warnings);
         if content_skip.is_some() && request.mode == FileMode::Content {
             output_path = source_path.to_path_buf();
         }
@@ -715,7 +711,7 @@ impl FileService {
         request: &FilePlanRequest,
         source_path: &Path,
         converted_name: &str,
-    ) -> Result<PathBuf, CoreError> {
+    ) -> Result<(PathBuf, Vec<String>), CoreError> {
         let default_output = source_path
             .parent()
             .unwrap_or(Path::new("."))
@@ -735,15 +731,18 @@ impl FileService {
             )
             .await
         } else if let Some(pattern) = &request.output_path {
-            Ok(resolve_requested_output_path(
-                source_path,
-                request.paths.first().map(String::as_str).unwrap_or(""),
-                pattern,
-                converted_name,
-                request.mode,
+            Ok((
+                resolve_requested_output_path(
+                    source_path,
+                    request.paths.first().map(String::as_str).unwrap_or(""),
+                    pattern,
+                    converted_name,
+                    request.mode,
+                ),
+                Vec::new(),
             ))
         } else {
-            Ok(default_output)
+            Ok((default_output, Vec::new()))
         }
     }
 
@@ -777,27 +776,15 @@ impl FileService {
                 .map(|path| resolve_path(path))
                 .collect::<HashSet<_>>()
         });
-        // 資料夾項目可獨立勾選。子樹裡有檔案項目、卻沒有已勾選且 Ready 的檔案時不改名。
-        // Conflict 與 Error 不算成立。子樹裡完全沒有檔案項目的資料夾維持原行為。
+        // 資料夾項目可獨立勾選。子樹裡有檔案項目、卻沒有實際套用成功的檔案時不改名。
+        // 規劃時 Conflict／Error、未勾選，以及套用時失敗或因衝突略過的檔案都不算成立；
+        // 檔名與內容都不需變動而略過的檔案算成立（已經是正確狀態）。
+        // 子樹裡完全沒有檔案項目的資料夾維持原行為。
         let planned_file_ancestors = included_file_ancestor_dirs(
             &plan
                 .files
                 .iter()
                 .filter(|file| file.item.kind == FileItemKind::File)
-                .map(|file| resolve_path(&file.item.source_path))
-                .collect::<Vec<_>>(),
-        );
-        let selected_ready_ancestors = included_file_ancestor_dirs(
-            &plan
-                .files
-                .iter()
-                .filter(|file| {
-                    file.item.kind == FileItemKind::File
-                        && file.item.status == PlanStatus::Ready
-                        && selection
-                            .as_ref()
-                            .is_none_or(|set| set.contains(&resolve_path(&file.item.source_path)))
-                })
                 .map(|file| resolve_path(&file.item.source_path))
                 .collect::<Vec<_>>(),
         );
@@ -828,6 +815,15 @@ impl FileService {
             }
             pending_files.push(file);
         }
+        let pending_file_paths = pending_files
+            .iter()
+            .map(|file| {
+                (
+                    resolve_path(&file.item.source_path),
+                    resolve_path(&file.item.output_path),
+                )
+            })
+            .collect::<Vec<_>>();
 
         if plan.backup && (!pending_files.is_empty() || !pending_directories.is_empty()) {
             progress(ProgressEvent {
@@ -909,6 +905,26 @@ impl FileService {
             }
         }
 
+        let committed_set = committed_outputs
+            .iter()
+            .map(|path| resolve_path(&path.to_string_lossy()))
+            .collect::<HashSet<_>>();
+        let skipped_set = result
+            .skipped
+            .iter()
+            .map(|path| resolve_path(path))
+            .collect::<HashSet<_>>();
+        let applied_ancestors = included_file_ancestor_dirs(
+            &pending_file_paths
+                .into_iter()
+                .filter(|(source, output)| {
+                    committed_set.contains(output)
+                        || (source == output && skipped_set.contains(source))
+                })
+                .map(|(source, _)| source)
+                .collect::<Vec<_>>(),
+        );
+
         if stopped {
             for file in pending_directories {
                 result.skipped.push(file.item.source_path);
@@ -944,7 +960,7 @@ impl FileService {
             }
             let directory = resolve_path(&item.item.source_path);
             if directory_has_included_file(&directory, &planned_file_ancestors)
-                && !directory_has_included_file(&directory, &selected_ready_ancestors)
+                && !directory_has_included_file(&directory, &applied_ancestors)
             {
                 result.skipped.push(item.item.source_path);
                 continue;
@@ -1820,17 +1836,59 @@ fn map_progress(
     })
 }
 
-/// 資料夾掃描的副檔名閘門。`All` 只來自明確的所有檔案（請求省略清單）。
-/// `Only` 的空集合表示沒有符合的副檔名，不收任何檔案。
+/// 資料夾掃描的副檔名閘門。`All` 只來自明確的所有檔案（請求省略清單，或篩選模式為全部）。
+/// `Only` 是白名單，空集合且不收無副檔名時表示沒有符合的檔案，不收任何檔案。
+/// `Except` 是黑名單；沒有任何排除項目時等同 `All`，由 `extension_gate` 轉成 `All`。
+/// `no_extension` 為真時：白名單收無副檔名檔案、黑名單排除無副檔名檔案。
 enum ExtensionGate {
     All,
-    Only(HashSet<String>),
+    Only {
+        extensions: HashSet<String>,
+        no_extension: bool,
+    },
+    Except {
+        extensions: HashSet<String>,
+        no_extension: bool,
+    },
 }
 
-fn extension_gate(allowed_extensions: Option<&[String]>) -> ExtensionGate {
-    match allowed_extensions {
-        None => ExtensionGate::All,
-        Some(extensions) => ExtensionGate::Only(normalize_extension_list(extensions)),
+impl ExtensionGate {
+    fn collects_nothing(&self) -> bool {
+        matches!(
+            self,
+            ExtensionGate::Only { extensions, no_extension } if extensions.is_empty() && !no_extension
+        )
+    }
+
+    fn is_unfiltered(&self) -> bool {
+        matches!(self, ExtensionGate::All)
+    }
+}
+
+fn extension_gate(request: &FilePlanRequest) -> ExtensionGate {
+    let Some(filter) = &request.extension_filter else {
+        return match request.allowed_extensions.as_deref() {
+            None => ExtensionGate::All,
+            Some(extensions) => ExtensionGate::Only {
+                extensions: normalize_extension_list(extensions),
+                no_extension: false,
+            },
+        };
+    };
+    let extensions = normalize_extension_list(&filter.extensions);
+    match filter.mode {
+        ExtensionFilterMode::All => ExtensionGate::All,
+        ExtensionFilterMode::Allow => ExtensionGate::Only {
+            extensions,
+            no_extension: filter.include_no_extension,
+        },
+        ExtensionFilterMode::Deny if extensions.is_empty() && !filter.include_no_extension => {
+            ExtensionGate::All
+        }
+        ExtensionFilterMode::Deny => ExtensionGate::Except {
+            extensions,
+            no_extension: filter.include_no_extension,
+        },
     }
 }
 
@@ -1871,9 +1929,29 @@ fn include_file(discovered: bool, gate: &ExtensionGate, path: &Path) -> bool {
     if path.file_name().is_some_and(is_transaction_temp_name) {
         return false;
     }
+    let extension = extension_of(path);
     match gate {
         ExtensionGate::All => true,
-        ExtensionGate::Only(allowed) => allowed.contains(&extension_of(path)),
+        ExtensionGate::Only {
+            extensions,
+            no_extension,
+        } => {
+            if extension.is_empty() {
+                *no_extension
+            } else {
+                extensions.contains(&extension)
+            }
+        }
+        ExtensionGate::Except {
+            extensions,
+            no_extension,
+        } => {
+            if extension.is_empty() {
+                !*no_extension
+            } else {
+                !extensions.contains(&extension)
+            }
+        }
     }
 }
 
@@ -1908,18 +1986,14 @@ fn ignored_input_warning(path: &str) -> String {
     format!("已略過版本控制資料夾內的路徑：{path}。轉換可能損壞儲存庫；確定要處理請明確允許。")
 }
 
-fn scan_collects_nothing(allowed_extensions: Option<&[String]>) -> bool {
-    allowed_extensions.is_some_and(|extensions| normalize_extension_list(extensions).is_empty())
-}
-
 /// 直接指定的資料夾掃描後沒有任何檔案時提示，避免畫面只顯示 0 項而沒有原因。
 /// 所有檔案（省略清單）不提副檔名篩選器；有清單時才說是篩選排除。
 fn empty_folder_warnings(
     inputs: &[String],
     files: &[PathBuf],
-    allowed_extensions: Option<&[String]>,
+    gate: &ExtensionGate,
 ) -> Vec<String> {
-    let all_files = matches!(extension_gate(allowed_extensions), ExtensionGate::All);
+    let all_files = gate.is_unfiltered();
     inputs
         .iter()
         .filter(|input| !input.contains(['*', '?']))
@@ -1945,13 +2019,12 @@ fn empty_folder_warnings(
 fn collect_files(
     inputs: &[String],
     recursive: bool,
-    allowed_extensions: Option<&[String]>,
+    gate: &ExtensionGate,
 ) -> Result<(Vec<PathBuf>, Vec<String>), CoreError> {
     let mut collected = HashSet::new();
     let mut warnings = Vec::new();
-    let gate = extension_gate(allowed_extensions);
     for path in inputs {
-        visit_files(path, recursive, false, &gate, &mut collected, &mut warnings)?;
+        visit_files(path, recursive, false, gate, &mut collected, &mut warnings)?;
     }
     let mut files = collected.into_iter().collect::<Vec<_>>();
     files.sort();
@@ -2036,12 +2109,11 @@ fn collect_directories(
     inputs: &[String],
     recursive: bool,
     files: &[PathBuf],
-    allowed_extensions: Option<&[String]>,
+    gate: &ExtensionGate,
 ) -> Result<(Vec<PathBuf>, Vec<String>), CoreError> {
     if !recursive {
         return Ok((Vec::new(), Vec::new()));
     }
-    let gate = extension_gate(allowed_extensions);
     let included_ancestors = included_file_ancestor_dirs(files);
     let mut collected = HashSet::new();
     let mut seen = HashSet::new();
@@ -2054,7 +2126,7 @@ fn collect_directories(
         visit_directories(
             &resolve_path(path),
             &included_ancestors,
-            &gate,
+            gate,
             &mut collected,
             &mut seen,
             &mut skipped,
@@ -2127,9 +2199,7 @@ fn visit_directories(
         }
         let directory = entry.path();
         // 「所有檔案」不過濾。有篩選時，子樹內沒有通過篩選的檔案就不改名。
-        if matches!(gate, ExtensionGate::All)
-            || directory_has_included_file(&directory, included_ancestors)
-        {
+        if gate.is_unfiltered() || directory_has_included_file(&directory, included_ancestors) {
             collected.insert(directory.clone());
         } else {
             skipped.insert(directory.clone());
@@ -2146,6 +2216,98 @@ fn visit_directories(
         )?;
     }
     Ok(())
+}
+
+/// 只統計副檔名分佈，不讀檔案內容。走訪規則與 `collect_files` 的資料夾掃描一致：
+/// 不跟隨符號連結、遞迴時略過以點開頭的資料夾、略過交易暫存檔。
+pub async fn scan_extension_stats(
+    request: ScanExtensionStatsRequest,
+    progress: ProgressReporter,
+    is_cancelled: CancelCheck,
+) -> Result<ExtensionStats, CoreError> {
+    tokio::task::spawn_blocking(move || {
+        scan_extension_stats_blocking(&request, &progress, &is_cancelled)
+    })
+    .await
+    .map_err(|error| CoreError::new("SCAN_FAILED", format!("掃描副檔名失敗：{error}")))?
+}
+
+fn scan_extension_stats_blocking(
+    request: &ScanExtensionStatsRequest,
+    progress: &ProgressReporter,
+    is_cancelled: &CancelCheck,
+) -> Result<ExtensionStats, CoreError> {
+    const PROGRESS_EVERY: u64 = 256;
+    let root = resolve_path(&request.path);
+    let metadata = fs::symlink_metadata(&root)?;
+    if !metadata.is_dir() {
+        return Err(CoreError::new(
+            "INVALID_PAYLOAD",
+            format!("不是資料夾：{}", request.path),
+        ));
+    }
+    let mut counts = std::collections::BTreeMap::<String, u64>::new();
+    let mut stats = ExtensionStats::default();
+    let mut pending = vec![(root, true)];
+    while let Some((directory, top_level)) = pending.pop() {
+        if is_cancelled() {
+            return Err(CoreError::new("PLAN_CANCELLED", "掃描已由使用者取消。"));
+        }
+        let entries = match fs::read_dir(&directory) {
+            Ok(entries) => entries,
+            Err(_) if !top_level => {
+                stats
+                    .warnings
+                    .push(unreadable_directory_warning(&directory));
+                continue;
+            }
+            Err(error) => return Err(error.into()),
+        };
+        for entry in entries {
+            let entry = entry?;
+            let file_type = entry.file_type()?;
+            if file_type.is_symlink() {
+                continue;
+            }
+            if file_type.is_file() {
+                if is_transaction_temp_name(&entry.file_name()) {
+                    continue;
+                }
+                let extension = extension_of(&entry.path());
+                if extension.is_empty() {
+                    stats.no_extension_count += 1;
+                } else {
+                    *counts.entry(extension).or_default() += 1;
+                }
+                stats.total_files += 1;
+                if stats.total_files % PROGRESS_EVERY == 0 {
+                    progress(ProgressEvent {
+                        current: stats.total_files,
+                        total: stats.total_files,
+                        message: format!("已掃描 {} 個檔案", stats.total_files),
+                    });
+                }
+            } else if request.recursive
+                && file_type.is_dir()
+                && !is_ignored_scan_directory(&entry.file_name())
+            {
+                stats.directory_count += 1;
+                pending.push((entry.path(), false));
+            }
+        }
+    }
+    stats.extensions = counts
+        .into_iter()
+        .map(|(extension, count)| ExtensionCount { extension, count })
+        .collect();
+    stats.extensions.sort_by(|left, right| {
+        right
+            .count
+            .cmp(&left.count)
+            .then(left.extension.cmp(&right.extension))
+    });
+    stats.warnings = unique(stats.warnings);
+    Ok(stats)
 }
 
 fn unreadable_directory_warning(path: &Path) -> String {
@@ -2243,7 +2405,7 @@ async fn resolve_output_directory_path(
     conversion_request: &ConversionOptions,
     input_encoding: TextEncoding,
     output_encoding: TextEncoding,
-) -> Result<PathBuf, CoreError> {
+) -> Result<(PathBuf, Vec<String>), CoreError> {
     let first_input = resolve_path(
         inputs
             .first()
@@ -2267,23 +2429,23 @@ async fn resolve_output_directory_path(
         })
         .unwrap_or_default();
     let mut parts = Vec::new();
+    let mut warnings = Vec::new();
     if mode == FileMode::Content {
         parts.extend(relative_directory);
     } else {
         for part in relative_directory {
-            parts.push(
-                files
-                    .convert_entry_name(
-                        conversion,
-                        conversion_request,
-                        input_encoding,
-                        output_encoding,
-                        &part,
-                        None,
-                    )
-                    .await?
-                    .0,
-            );
+            let (converted, part_warnings) = files
+                .convert_entry_name(
+                    conversion,
+                    conversion_request,
+                    input_encoding,
+                    output_encoding,
+                    &part,
+                    None,
+                )
+                .await?;
+            warnings.extend(part_warnings);
+            parts.push(converted);
         }
     }
     let mut output = resolve_path(output_directory);
@@ -2291,7 +2453,7 @@ async fn resolve_output_directory_path(
         output.push(part);
     }
     output.push(converted_name);
-    Ok(output)
+    Ok((output, warnings))
 }
 
 fn resolve_output_encoding(

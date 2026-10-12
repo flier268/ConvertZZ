@@ -20,6 +20,12 @@ pub fn migrate_from_path(path: &str) -> Result<Value, CoreError> {
 }
 
 pub fn default_settings() -> Value {
+    let mut settings = base_default_settings();
+    ensure_filter_profiles(&mut settings);
+    settings
+}
+
+fn base_default_settings() -> Value {
     json!({
         "version": 2,
         "engine": "segmented",
@@ -56,6 +62,8 @@ pub fn default_settings() -> Value {
         "files": {
             "defaultPath": "!",
             "typeFilter": DEFAULT_TYPE_FILTER,
+            "folderPickBehavior": "rememberLast",
+            "lastFilterProfileId": "",
             "fixCharsetExtensions": [".htm", ".html", ".shtm", ".shtml", ".asp", ".aspx", ".php", ".css"],
             "unicodeAddBom": false
         },
@@ -89,6 +97,12 @@ pub fn default_settings() -> Value {
 }
 
 pub fn migrate(input: Value) -> Value {
+    let mut migrated = migrate_document(input);
+    ensure_filter_profiles(&mut migrated);
+    migrated
+}
+
+fn migrate_document(input: Value) -> Value {
     if input.get("version").and_then(Value::as_u64) == Some(2) {
         return merge_v2(input);
     }
@@ -187,7 +201,8 @@ pub fn migrate(input: Value) -> Value {
 }
 
 fn merge_v2(input: Value) -> Value {
-    let defaults = default_settings();
+    // 不含預設 profile：缺欄位時要由輸入自己的 `typeFilter` 遷移，而不是套用預設清單。
+    let defaults = base_default_settings();
     let mut merged = defaults.as_object().cloned().unwrap_or_default();
     if let Some(object) = input.as_object() {
         for (key, value) in object {
@@ -233,6 +248,182 @@ fn merge_v2(input: Value) -> Value {
         }
     }
     Value::Object(merged)
+}
+
+const BUILTIN_TEXT_ID: &str = "builtin-text";
+const BUILTIN_ALL_ID: &str = "builtin-all";
+const BUILTIN_TEXT_NAME: &str = "常用文字檔案";
+const BUILTIN_ALL_NAME: &str = "所有檔案";
+const BUILTIN_TEXT_EXTENSIONS: &[&str] = &[
+    ".txt", ".log", ".ini", ".inf", ".bat", ".cmd", ".srt", ".ass", ".lang",
+];
+
+fn builtin_text_profile() -> Value {
+    json!({
+        "id": BUILTIN_TEXT_ID,
+        "name": BUILTIN_TEXT_NAME,
+        "builtin": true,
+        "mode": "allow",
+        "extensions": BUILTIN_TEXT_EXTENSIONS,
+        "includeNoExtension": false
+    })
+}
+
+fn builtin_all_profile() -> Value {
+    json!({
+        "id": BUILTIN_ALL_ID,
+        "name": BUILTIN_ALL_NAME,
+        "builtin": true,
+        "mode": "all",
+        "extensions": [],
+        "includeNoExtension": true
+    })
+}
+
+/// 舊 `<名稱|*.a;*.b>/<...>` 字串逐群組解析。含 `*`／`*.*` 的群組是所有檔案。
+/// 回傳 `(名稱, 副檔名（小寫、含前導點）, 是否為所有檔案)`。
+fn parse_legacy_groups(value: &str) -> Vec<(String, Vec<String>, bool)> {
+    let mut groups = Vec::new();
+    let mut rest = value;
+    while let Some(start) = rest.find('<') {
+        let Some(relative_end) = rest[start..].find('>') else {
+            break;
+        };
+        let end = start + relative_end;
+        let inner = &rest[start + 1..end];
+        rest = &rest[end + 1..];
+        let Some((name, patterns)) = inner.split_once('|') else {
+            continue;
+        };
+        if name.contains('<') || patterns.contains('<') {
+            continue;
+        }
+        let mut all_files = false;
+        let mut extensions = Vec::new();
+        for pattern in patterns.split(';') {
+            let trimmed = pattern.trim();
+            if trimmed == "*" || trimmed.eq_ignore_ascii_case("*.*") {
+                all_files = true;
+                continue;
+            }
+            let extension = trimmed
+                .trim_start_matches('*')
+                .trim_start_matches('.')
+                .to_lowercase();
+            if extension.is_empty() || extension == "*" {
+                continue;
+            }
+            let extension = format!(".{extension}");
+            if !extensions.contains(&extension) {
+                extensions.push(extension);
+            }
+        }
+        if all_files || !extensions.is_empty() {
+            groups.push((name.trim().to_string(), extensions, all_files));
+        }
+    }
+    groups
+}
+
+/// 舊篩選器字串每個群組轉成一個白名單 profile；所有檔案群組與完全相同的「常用文字檔案」
+/// 對應內建 profile。回傳 `(自訂 profile 以外的完整清單, 預設 profile id)`。
+fn profiles_from_type_filter(type_filter: &str) -> (Vec<Value>, String) {
+    let mut profiles = vec![builtin_text_profile(), builtin_all_profile()];
+    let mut default_id: Option<String> = None;
+    for (index, (name, extensions, all_files)) in
+        parse_legacy_groups(type_filter).into_iter().enumerate()
+    {
+        let id = if all_files {
+            BUILTIN_ALL_ID.to_string()
+        } else if name == BUILTIN_TEXT_NAME && extensions == BUILTIN_TEXT_EXTENSIONS {
+            BUILTIN_TEXT_ID.to_string()
+        } else {
+            let id = format!("legacy-{}", index + 1);
+            let name = if name.is_empty() || name == BUILTIN_TEXT_NAME || name == BUILTIN_ALL_NAME {
+                format!("{}（舊版）", if name.is_empty() { "篩選器" } else { &name })
+            } else {
+                name
+            };
+            profiles.push(json!({
+                "id": id,
+                "name": name,
+                "builtin": false,
+                "mode": "allow",
+                "extensions": extensions,
+                "includeNoExtension": false
+            }));
+            id
+        };
+        default_id.get_or_insert(id);
+    }
+    (
+        profiles,
+        default_id.unwrap_or_else(|| BUILTIN_TEXT_ID.to_string()),
+    )
+}
+
+/// 補齊 `files.filterProfiles` 等欄位。profile 不存在時由舊 `typeFilter` 遷移產生；
+/// `typeFilter` 字串本身保留，供回滾。
+fn ensure_filter_profiles(settings: &mut Value) {
+    let Some(files) = settings.get_mut("files").and_then(Value::as_object_mut) else {
+        return;
+    };
+    let existing = files
+        .get("filterProfiles")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter(|item| {
+                    item.get("id").and_then(Value::as_str).is_some()
+                        && item.get("mode").and_then(Value::as_str).is_some()
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .filter(|items| !items.is_empty());
+    let type_filter = files
+        .get("typeFilter")
+        .and_then(Value::as_str)
+        .unwrap_or(DEFAULT_TYPE_FILTER)
+        .to_string();
+    let (mut profiles, derived_default) = match existing {
+        Some(profiles) => (profiles, BUILTIN_TEXT_ID.to_string()),
+        None => profiles_from_type_filter(&type_filter),
+    };
+    for builtin in [builtin_all_profile(), builtin_text_profile()] {
+        let id = builtin["id"].as_str().unwrap_or_default().to_string();
+        if !profiles
+            .iter()
+            .any(|item| item.get("id").and_then(Value::as_str) == Some(id.as_str()))
+        {
+            profiles.insert(0, builtin);
+        }
+    }
+    let has = |id: &str| {
+        profiles
+            .iter()
+            .any(|item| item.get("id").and_then(Value::as_str) == Some(id))
+    };
+    let default_id = files
+        .get("defaultFilterProfileId")
+        .and_then(Value::as_str)
+        .filter(|id| has(id))
+        .map(str::to_string)
+        .unwrap_or(derived_default);
+    let last_id = files
+        .get("lastFilterProfileId")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let behavior = match files.get("folderPickBehavior").and_then(Value::as_str) {
+        Some("alwaysWizard") => "alwaysWizard",
+        _ => "rememberLast",
+    };
+    files.insert("filterProfiles".into(), Value::Array(profiles));
+    files.insert("defaultFilterProfileId".into(), json!(default_id));
+    files.insert("lastFilterProfileId".into(), json!(last_id));
+    files.insert("folderPickBehavior".into(), json!(behavior));
 }
 
 fn normalize_type_filter(value: &str, fallback: &str) -> String {

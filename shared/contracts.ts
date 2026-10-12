@@ -50,6 +50,39 @@ export type TextEncoding =
   | "iso-2022-jp"
   | "hz-gb-2312";
 
+export type ExtensionFilterMode = "allow" | "deny" | "all";
+
+/**
+ * 資料夾掃描的副檔名篩選。`extensions` 含前導點、小寫。
+ * `includeNoExtension`：白名單時收無副檔名檔案；黑名單時一併排除無副檔名檔案。
+ * 空白名單且不含無副檔名＝不收任何檔案；空黑名單等同所有檔案。
+ */
+export interface ExtensionFilter {
+  mode: ExtensionFilterMode;
+  extensions: string[];
+  includeNoExtension: boolean;
+}
+
+export interface ScanExtensionStatsRequest {
+  path: string;
+  recursive: boolean;
+}
+
+export interface ExtensionCount {
+  extension: string;
+  count: number;
+}
+
+/** `files.scanExtensions` 結果：只統計，不讀檔案內容。 */
+export interface ExtensionStats {
+  /** 依數量遞減、副檔名排序。 */
+  extensions: ExtensionCount[];
+  noExtensionCount: number;
+  totalFiles: number;
+  directoryCount: number;
+  warnings: string[];
+}
+
 export interface FilePlanRequest {
   paths: string[];
   outputPath?: string;
@@ -66,6 +99,8 @@ export interface FilePlanRequest {
    * 空陣列表示資料夾掃描不收任何檔案；直接指定的檔案仍收。
    */
   allowedExtensions?: string[];
+  /** 副檔名篩選（含黑名單與無副檔名）。存在時優先於 `allowedExtensions`；前端一律送這個。 */
+  extensionFilter?: ExtensionFilter;
   previewMaxBytes?: number;
   conflictPolicy: ConflictPolicy;
   /** 轉換前自動建立 .bak 備份；省略時預設啟用。 */
@@ -249,6 +284,15 @@ export interface LastDropActionSettings {
   direction: Direction;
 }
 
+export type FolderPickBehavior = "rememberLast" | "alwaysWizard";
+
+export interface FileFilterProfile extends ExtensionFilter {
+  id: string;
+  name: string;
+  /** 內建 profile 不可刪除。 */
+  builtin: boolean;
+}
+
 export interface SettingsV2 {
   version: 2;
   engine: EngineKind;
@@ -269,7 +313,12 @@ export interface SettingsV2 {
   quickActions: QuickActionSettings;
   files: {
     defaultPath: string;
+    /** 舊版篩選器字串。profile 遷移後保留一版供回滾，不再作為執行時來源。 */
     typeFilter: string;
+    filterProfiles: FileFilterProfile[];
+    defaultFilterProfileId: string;
+    lastFilterProfileId: string;
+    folderPickBehavior: FolderPickBehavior;
     fixCharsetExtensions: string[];
     unicodeAddBom: boolean;
   };
@@ -307,6 +356,7 @@ export type CoreOperation =
   | "files.plan"
   | "files.preview"
   | "files.apply"
+  | "files.scanExtensions"
   | "files.cancel"
   | "audio.scan"
   | "audio.plan"

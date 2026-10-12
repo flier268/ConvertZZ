@@ -181,6 +181,9 @@ pub struct FilePlanRequest {
     /// 省略（`None`）表示所有檔案。空陣列表示資料夾掃描不收任何檔案；直接指定的檔案仍收。
     #[serde(default)]
     pub allowed_extensions: Option<Vec<String>>,
+    /// 副檔名篩選（白名單／黑名單／全部，可含無副檔名選項）。存在時優先於 `allowed_extensions`。
+    #[serde(default)]
+    pub extension_filter: Option<ExtensionFilter>,
     #[serde(default)]
     pub preview_max_bytes: Option<u64>,
     pub conflict_policy: ConflictPolicy,
@@ -192,6 +195,51 @@ pub struct FilePlanRequest {
     #[serde(default)]
     pub include_ignored: bool,
     pub conversion: ConversionOptions,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ExtensionFilterMode {
+    Allow,
+    Deny,
+    All,
+}
+
+/// `include_no_extension`：白名單時收無副檔名檔案；黑名單時把無副檔名檔案一併排除。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionFilter {
+    pub mode: ExtensionFilterMode,
+    #[serde(default)]
+    pub extensions: Vec<String>,
+    #[serde(default)]
+    pub include_no_extension: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanExtensionStatsRequest {
+    pub path: String,
+    #[serde(default)]
+    pub recursive: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionCount {
+    /// 小寫並含前導點。
+    pub extension: String,
+    pub count: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionStats {
+    pub extensions: Vec<ExtensionCount>,
+    pub no_extension_count: u64,
+    pub total_files: u64,
+    pub directory_count: u64,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

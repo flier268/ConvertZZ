@@ -145,6 +145,10 @@ pub async fn dispatch(
                     .await?,
             )
         }
+        "files.scanExtensions" => {
+            let request = serde_json::from_value(payload)?;
+            to_value(files::scan_extension_stats(request, progress, is_cancelled).await?)
+        }
         "files.cancel" => {
             let plan_id = required_string(&payload, "planId")?;
             to_value(state.files.cancel(&plan_id))

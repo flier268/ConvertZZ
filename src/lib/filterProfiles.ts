@@ -195,7 +195,11 @@ export function summarizeProfile(profile: ExtensionFilter, maxExtensions = 8): s
   const shown = profile.extensions.slice(0, maxExtensions).join(" ");
   const more =
     profile.extensions.length > maxExtensions ? ` …等 ${profile.extensions.length} 種` : "";
-  const noExtension = profile.includeNoExtension ? "、含無副檔名" : "";
+  const noExtension = profile.includeNoExtension
+    ? profile.mode === "deny"
+      ? "、排除無副檔名"
+      : "、含無副檔名"
+    : "";
   if (!profile.extensions.length) {
     if (profile.mode === "allow") return profile.includeNoExtension ? "只含無副檔名" : "（空）";
     return profile.includeNoExtension ? "只排除無副檔名" : "（空，等同所有檔案）";

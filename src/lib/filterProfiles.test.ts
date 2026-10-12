@@ -268,6 +268,9 @@ describe("profile 操作", () => {
     expect(summarizeProfile(profile({ extensions: [], includeNoExtension: true }))).toBe(
       "只含無副檔名",
     );
+    expect(
+      summarizeProfile(profile({ mode: "deny", extensions: [".bin"], includeNoExtension: true })),
+    ).toBe(".bin、排除無副檔名");
   });
 });
 

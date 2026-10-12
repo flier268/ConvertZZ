@@ -1972,6 +1972,7 @@ fn collect_directories(
         return Ok((Vec::new(), Vec::new()));
     }
     let gate = extension_gate(allowed_extensions);
+    let included_ancestors = included_file_ancestor_dirs(files);
     let mut collected = HashSet::new();
     let mut skipped = 0usize;
     let mut warnings = Vec::new();
@@ -1981,7 +1982,7 @@ fn collect_directories(
         }
         visit_directories(
             &resolve_path(path),
-            files,
+            &included_ancestors,
             &gate,
             &mut collected,
             &mut skipped,
@@ -1995,13 +1996,29 @@ fn collect_directories(
     Ok((collected.into_iter().collect(), warnings))
 }
 
-fn directory_has_included_file(directory: &Path, files: &[PathBuf]) -> bool {
-    files.iter().any(|file| file.starts_with(directory))
+/// 每個通過篩選檔案的各層上層路徑。資料夾是否含這類檔案改為集合查詢。
+fn included_file_ancestor_dirs(files: &[PathBuf]) -> HashSet<PathBuf> {
+    let mut ancestors = HashSet::new();
+    for file in files {
+        for ancestor in file.ancestors().skip(1) {
+            if ancestor.as_os_str().is_empty() {
+                break;
+            }
+            if !ancestors.insert(ancestor.to_path_buf()) {
+                break;
+            }
+        }
+    }
+    ancestors
+}
+
+fn directory_has_included_file(directory: &Path, included_ancestors: &HashSet<PathBuf>) -> bool {
+    included_ancestors.contains(directory)
 }
 
 fn visit_directories(
     path: &Path,
-    files: &[PathBuf],
+    included_ancestors: &HashSet<PathBuf>,
     gate: &ExtensionGate,
     collected: &mut HashSet<PathBuf>,
     skipped: &mut usize,
@@ -2030,12 +2047,22 @@ fn visit_directories(
         }
         let directory = entry.path();
         // 「所有檔案」不過濾。有篩選時，子樹內沒有通過篩選的檔案就不改名。
-        if matches!(gate, ExtensionGate::All) || directory_has_included_file(&directory, files) {
+        if matches!(gate, ExtensionGate::All)
+            || directory_has_included_file(&directory, included_ancestors)
+        {
             collected.insert(directory.clone());
         } else {
             *skipped += 1;
         }
-        visit_directories(&directory, files, gate, collected, skipped, warnings, false)?;
+        visit_directories(
+            &directory,
+            included_ancestors,
+            gate,
+            collected,
+            skipped,
+            warnings,
+            false,
+        )?;
     }
     Ok(())
 }

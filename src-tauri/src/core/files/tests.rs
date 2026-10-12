@@ -2321,6 +2321,71 @@ async fn all_files_filter_still_renames_mp3_only_folders() {
     let _ = std::fs::remove_dir_all(&directory);
 }
 
+/// 「所有檔案」下，子樹裡沒有任何檔案項目的資料夾仍要改名。
+/// 只有在子樹裡有規劃檔案、卻沒有 Ready 檔案時才不改名。
+#[tokio::test]
+async fn many_files_only_rename_directories_that_contain_included_files() {
+    let directory = temp_dir();
+    let audio_only = directory.join("音乐");
+    std::fs::create_dir_all(&audio_only).unwrap();
+    for index in 0..40 {
+        std::fs::write(audio_only.join(format!("歌曲{index}.mp3")), b"mp3").unwrap();
+    }
+    let text = directory.join("音乐资料");
+    let nested = text.join("简体子夹");
+    std::fs::create_dir_all(&nested).unwrap();
+    for index in 0..40 {
+        std::fs::write(text.join(format!("笔记{index}.txt")), "软件").unwrap();
+        std::fs::write(nested.join(format!("内文{index}.txt")), "软件").unwrap();
+    }
+    let deep_audio = directory.join("只有音讯").join("更深层");
+    std::fs::create_dir_all(&deep_audio).unwrap();
+    std::fs::write(deep_audio.join("歌.mp3"), b"mp3").unwrap();
+
+    let plan = FileService::new()
+        .plan(
+            shared_conversion(),
+            directory_scan_request(
+                &directory,
+                FileMode::Filename,
+                Some(default_type_filter_extensions()),
+            ),
+            noop(),
+        )
+        .await
+        .unwrap();
+    let directories = plan
+        .items
+        .iter()
+        .filter(|item| item.kind == FileItemKind::Directory)
+        .map(|item| item.source_path.clone())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        directories,
+        [
+            text.to_string_lossy().into_owned(),
+            nested.to_string_lossy().into_owned(),
+        ]
+        .into_iter()
+        .collect()
+    );
+    assert_eq!(
+        plan.items
+            .iter()
+            .filter(|item| item.kind == FileItemKind::File)
+            .count(),
+        80
+    );
+    assert!(
+        plan.warnings.iter().any(|warning| {
+            warning.contains("已略過 3 個不含符合篩選器檔案的資料夾改名")
+        }),
+        "{:?}",
+        plan.warnings
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
 #[tokio::test]
 async fn folder_scan_with_matches_has_no_empty_folder_warning() {
     let directory = temp_dir();

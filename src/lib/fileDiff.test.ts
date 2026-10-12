@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FilePlanItem } from "@shared/contracts";
-import { baseName, buildFileDiffSections } from "./fileDiff";
+import { baseName, buildFileDiffSections, nameChangeLabel } from "./fileDiff";
 
 function item(partial: Partial<FilePlanItem>): FilePlanItem {
   return {
@@ -100,5 +100,21 @@ describe("fileDiff", () => {
         output: "裡面開發",
       },
     ]);
+  });
+
+  it("清單欄位顯示每個項目的原檔名與轉換後檔名", () => {
+    expect(nameChangeLabel(item({ sourcePath: "/d/里面.txt", outputPath: "/d/裡面.txt" }))).toBe(
+      "里面.txt → 裡面.txt",
+    );
+    expect(nameChangeLabel(item({ sourcePath: "/d/a/里面", outputPath: "/d/a/裡面" }))).toBe(
+      "里面 → 裡面",
+    );
+  });
+
+  it("檔名不變或僅換資料夾時只顯示檔名", () => {
+    expect(nameChangeLabel(item({ sourcePath: "/d/a.txt", outputPath: "/d/a.txt" }))).toBe("a.txt");
+    expect(nameChangeLabel(item({ sourcePath: "/d/a.txt", outputPath: "/out/a.txt" }))).toBe(
+      "a.txt",
+    );
   });
 });

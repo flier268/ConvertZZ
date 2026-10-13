@@ -699,8 +699,8 @@ pub(super) fn container_of_lofty(tag_type: lofty::tag::TagType) -> Option<AudioC
 }
 
 /// 給測試與掃描確認用。讀取失敗就當沒有隱藏欄位，不讓預覽整檔失敗。
-/// ID3v2 以這次掃描放進 `fields` 的欄位為準：多出來的 COMM、歌詞，
-/// 以及掃描略過的無文字 T* 都算隱藏。
+/// ID3v2 只計未顯示的文字框：多出來的 COMM、歌詞，以及掃描略過的無文字 T*。
+/// 封面等非文字框不計。
 pub(super) fn count_hidden(
     path: &Path,
     container: AudioContainer,
@@ -724,8 +724,16 @@ fn count_hidden_id3v2(path: &Path, fields: &[AudioTagField]) -> usize {
         .map(|field| field.key.as_str())
         .collect();
     tag.frames()
+        .filter(|frame| id3_countable_text_frame(frame))
         .filter(|frame| !take_shown_id3_field(frame, &mut keys))
         .count()
+}
+
+/// 隱藏欄位只看文字框：T*（含沒有純文字內容的 TIPL）、COMM、歌詞與網址文字。
+/// APIC 這類二進位框不在這裡。
+fn id3_countable_text_frame(frame: &id3::frame::Frame) -> bool {
+    let id = frame.id();
+    id.starts_with('T') || matches!(id, "COMM" | "COM" | "USLT" | "SYLT" | "USER" | "WXXX")
 }
 
 /// 這一框若對得上掃描產出的某個欄位，就把那個欄位用掉。

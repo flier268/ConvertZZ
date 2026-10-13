@@ -969,7 +969,7 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
         fs::write(&temporary, &output)?;
     }
 
-    if mp3_audio_payload(&source) != mp3_audio_payload(&fs::read(&temporary)?) {
+    if verified_mp3_audio(&source) != verified_mp3_audio(&fs::read(&temporary)?) {
         let _ = fs::remove_file(&temporary);
         return Err(CoreError::new(
             "AUDIO_VERIFY",
@@ -1056,7 +1056,7 @@ fn apply_taglib(file: &PreparedAudio) -> Result<(), CoreError> {
         }
         if file.format == AudioFormat::Ape {
             let written = fs::read(&temporary)?;
-            if ape_audio_payload(&source) != ape_audio_payload(&written) {
+            if verified_ape_audio(&source) != verified_ape_audio(&written) {
                 return Err(CoreError::new("AUDIO_VERIFY", "標籤寫入改變了音訊資料。"));
             }
         }
@@ -1385,19 +1385,22 @@ fn lofty_tag_type(container: AudioContainer) -> Option<lofty::tag::TagType> {
 }
 
 /// 去掉 APE 檔頭尾的 APEv2、ID3v2、ID3v1，留下 Monkey's Audio 本體。
+#[cfg(test)]
 fn ape_audio_payload(buffer: &[u8]) -> Vec<u8> {
     let without_v1 = strip_id3v1(buffer);
     let without_tail = strip_ape_tail(without_v1);
     strip_leading_ape(&strip_id3v2(without_tail))
 }
 
+#[cfg(test)]
 fn strip_leading_ape(buffer: &[u8]) -> Vec<u8> {
     if buffer.len() < 32 || &buffer[..8] != b"APETAGEX" {
         return buffer.to_vec();
     }
-    let version = u32::from_le_bytes(buffer[8..12].try_into().unwrap_or([0; 4]));
     let size = u32::from_le_bytes(buffer[12..16].try_into().unwrap_or([0; 4])) as usize;
-    let total = if version == 2000 {
+    let flags = u32::from_le_bytes(buffer[20..24].try_into().unwrap_or([0; 4]));
+    // size 含 footer、不含 header。bit 31 才表示前面多了 32 bytes 標頭。
+    let total = if flags & 0x8000_0000 != 0 {
         size.saturating_add(32)
     } else {
         size
@@ -1408,6 +1411,7 @@ fn strip_leading_ape(buffer: &[u8]) -> Vec<u8> {
     buffer[total..].to_vec()
 }
 
+#[cfg(test)]
 fn mp3_audio_payload(buffer: &[u8]) -> Vec<u8> {
     let without_v1 = strip_ape_tail(strip_id3v1(buffer));
     let mut start = id3v2_tag_length(without_v1);
@@ -2203,15 +2207,15 @@ fn strip_id3v2(buffer: &[u8]) -> Vec<u8> {
 }
 
 /// 去掉結尾的 APEv2（ID3v1 若還在，先視為已剝除）。
-/// lofty 對版本 2000 會把標頭的 32 位元組算進標籤長度。
+/// 標籤 size 含 footer、不含 header。footer flags 的 bit 31 才表示有標頭。
 fn strip_ape_tail(body: &[u8]) -> &[u8] {
     if body.len() < 32 || &body[body.len() - 32..body.len() - 24] != b"APETAGEX" {
         return body;
     }
     let footer = &body[body.len() - 32..];
-    let version = u32::from_le_bytes(footer[8..12].try_into().unwrap_or([0; 4]));
     let size = u32::from_le_bytes(footer[12..16].try_into().unwrap_or([0; 4])) as usize;
-    let total = if version == 2000 {
+    let flags = u32::from_le_bytes(footer[20..24].try_into().unwrap_or([0; 4]));
+    let total = if flags & 0x8000_0000 != 0 {
         size.saturating_add(32)
     } else {
         size
@@ -2220,6 +2224,55 @@ fn strip_ape_tail(body: &[u8]) -> &[u8] {
         return body;
     }
     &body[..body.len() - total]
+}
+
+/// 寫入後核對音訊用。刻意不呼叫 `strip_ape_tail`，避免同一套邊界算錯時前後比對一起通過。
+fn verified_tag_body(buffer: &[u8]) -> &[u8] {
+    let mut end = buffer.len();
+    if end >= 128 && &buffer[end - 128..end - 125] == b"TAG" {
+        end -= 128;
+    }
+    if end >= 32 && &buffer[end - 32..end - 24] == b"APETAGEX" {
+        let footer = &buffer[end - 32..end];
+        let size = u32::from_le_bytes(footer[12..16].try_into().unwrap_or([0; 4])) as usize;
+        let has_header = footer[23] & 0x80 != 0;
+        let total = if has_header {
+            size.saturating_add(32)
+        } else {
+            size
+        };
+        if total >= 32 && total <= end {
+            end -= total;
+        }
+    }
+    let start = id3v2_tag_length(&buffer[..end]);
+    let rest = &buffer[start..end];
+    if rest.len() >= 32 && &rest[..8] == b"APETAGEX" {
+        let size = u32::from_le_bytes(rest[12..16].try_into().unwrap_or([0; 4])) as usize;
+        let has_header = rest[23] & 0x80 != 0;
+        let total = if has_header {
+            size.saturating_add(32)
+        } else {
+            size
+        };
+        if total >= 32 && total <= rest.len() {
+            return &rest[total..];
+        }
+    }
+    rest
+}
+
+fn verified_mp3_audio(buffer: &[u8]) -> Vec<u8> {
+    let span = verified_tag_body(buffer);
+    let mut start = 0;
+    while start + 1 < span.len() && !(span[start] == 0xff && span[start + 1] >= 0xf0) {
+        start += 1;
+    }
+    span[start..].to_vec()
+}
+
+fn verified_ape_audio(buffer: &[u8]) -> Vec<u8> {
+    verified_tag_body(buffer).to_vec()
 }
 
 fn strip_trailing_ape(buffer: &[u8]) -> Vec<u8> {

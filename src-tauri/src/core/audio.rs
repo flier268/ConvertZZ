@@ -1031,6 +1031,9 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
                 "標籤寫入造成封面圖片數量改變。",
             ));
         }
+        if remove_v2 {
+            reject_leftover_id3_family(&fs::read(&temporary)?)?;
+        }
         Ok(())
     })();
     if let Err(error) = result {
@@ -1112,6 +1115,9 @@ fn apply_taglib(file: &PreparedAudio) -> Result<(), CoreError> {
             if verified_ape_audio(&source) != verified_ape_audio(&written) {
                 return Err(CoreError::new("AUDIO_VERIFY", "標籤寫入改變了音訊資料。"));
             }
+        }
+        if file.remove_containers.contains(&AudioContainer::Id3v2) {
+            reject_leftover_id3_family(&fs::read(&temporary)?)?;
         }
         let verification = read_tagged(&temporary).map_err(|error| {
             CoreError::new(
@@ -2305,6 +2311,63 @@ fn write_encoded_field(
 fn strip_id3v2(buffer: &[u8]) -> Vec<u8> {
     let length = id3v2_tag_length(buffer).min(buffer.len());
     buffer[length..].to_vec()
+}
+
+/// 只剝檔頭第一個 ID3v2。第二個檔頭標籤、檔尾 ID3v2 或 Lyrics3v2 還在時不能回報成功。
+fn reject_leftover_id3_family(buffer: &[u8]) -> Result<(), CoreError> {
+    if let Some(reason) = leftover_id3_family(buffer) {
+        return Err(CoreError::new(
+            "AUDIO_REMOVE",
+            format!("移除 ID3v2 後標籤仍在：{reason}"),
+        ));
+    }
+    Ok(())
+}
+
+fn leftover_id3_family(buffer: &[u8]) -> Option<&'static str> {
+    if declared_id3v2_len(buffer).is_some() {
+        return Some("檔頭仍有 ID3v2");
+    }
+    let body = strip_id3v1(buffer);
+    if lyrics3v2_footer(body) {
+        return Some("仍有 Lyrics3v2");
+    }
+    if has_trailing_id3v2(body) {
+        return Some("檔尾仍有 ID3v2");
+    }
+    None
+}
+
+fn declared_id3v2_len(buffer: &[u8]) -> Option<usize> {
+    if buffer.len() < 10 || &buffer[..3] != b"ID3" || !(2..=4).contains(&buffer[3]) {
+        return None;
+    }
+    if buffer[6..10].iter().any(|byte| byte & 0x80 != 0) {
+        return None;
+    }
+    let length = id3v2_tag_length(buffer);
+    (length >= 10 && length <= buffer.len()).then_some(length)
+}
+
+fn lyrics3v2_footer(body: &[u8]) -> bool {
+    if body.len() < 15 {
+        return false;
+    }
+    let at = body.len() - 15;
+    &body[at..at + 9] == b"LYRICS200" && body[at + 9..].iter().all(|byte| byte.is_ascii_digit())
+}
+
+fn has_trailing_id3v2(body: &[u8]) -> bool {
+    let mut offset = body.len().saturating_sub(8 * 1024 * 1024).max(1);
+    while offset + 10 <= body.len() {
+        if let Some(length) = declared_id3v2_len(&body[offset..]) {
+            if offset + length == body.len() {
+                return true;
+            }
+        }
+        offset += 1;
+    }
+    false
 }
 
 /// 去掉結尾的 APEv2（ID3v1 若還在，先視為已剝除）。

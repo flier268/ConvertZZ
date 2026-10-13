@@ -69,7 +69,7 @@ describe("音訊錯誤檔畫面", () => {
     const bulk = (name: string) =>
       wrapper.findAll("button").find((button) => button.text() === name)!;
     await bulk("全選").trigger("click");
-    await bulk("反選").trigger("click");
+    await bulk("反選目前篩選").trigger("click");
     expect((wrapper.get(".audio-row input").element as HTMLInputElement).checked).toBe(false);
     expect(wrapper.text()).toContain("已勾選 0 個檔案");
   });

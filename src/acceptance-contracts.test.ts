@@ -151,10 +151,10 @@ describe("驗收項目的自動化契約", () => {
 
   it("音訊標籤預覽可檢視欄位差異", () => {
     const page = readProjectFile("src/pages/AudioPage.vue");
-    expect(page).toContain("charDiff");
+    expect(page).toContain("buildFieldDiffs");
     expect(page).toContain('label="轉換預覽"');
     expect(page).toContain("diff-del");
-    expect(page).toContain("convertedValues");
+    expect(page).toContain("fieldDiffs");
     expect(page).toContain("隱藏不變欄位");
   });
 
@@ -192,7 +192,8 @@ describe("驗收項目的自動化契約", () => {
     expect(page).toContain("filteredFiles");
     expect(page).toContain(':data="visibleFields"');
     expect(page).toContain("scope.row.values.join");
-    expect(page).toContain("convertedValues");
+    expect(page).toContain("buildFieldDiffs");
+    expect(page).toContain("fieldDiffs");
   });
 
   it("G-02／G-05 浮動球為獨立透明視窗且無白底外框", () => {

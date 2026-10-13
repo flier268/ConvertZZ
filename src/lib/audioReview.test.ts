@@ -10,7 +10,9 @@ import {
   replaceAudioFile,
   audioRowSection,
   buildAudioListRows,
+  buildFieldDiffs,
   charDiff,
+  sortAudioFilesWithinFolders,
   filterAudioFiles,
   selectionTotals,
   stepAudioRow,
@@ -146,6 +148,17 @@ describe("audioReview", () => {
       "/tmp/song.mp3",
     ]);
     expect(filterAudioFiles(pending, "errors", "")).toHaveLength(1);
+    const counts = audioSegmentCounts(pending);
+    expect(counts).toEqual({ changed: 1, unchanged: 0, errors: 1, all: 2 });
+    for (const filter of ["changed", "unchanged", "errors", "all"] as const) {
+      expect(filterAudioFiles(pending, filter, "")).toHaveLength(counts[filter]);
+    }
+    expect(audioReviewStats(pending)).toMatchObject({
+      changed: counts.changed,
+      unchanged: counts.unchanged,
+      errors: counts.errors,
+      listedChanged: counts.changed,
+    });
   });
 
   it("搜尋檔名、專輯與標題，批次勾選只動到篩選結果", () => {
@@ -273,6 +286,72 @@ describe("audioReview", () => {
       fields: 0,
     });
     expect(audioSegmentCounts([encodingOnly]).changed).toBe(1);
+  });
+
+  it("資料夾內排序不打亂資料夾出現順序", () => {
+    const files = [
+      file({ path: "/music/乙/b.mp3", format: "mp3" }),
+      file({ path: "/music/甲/z.ogg", format: "ogg" }),
+      file({
+        path: "/music/乙/a.ape",
+        format: "ape",
+        fields: [
+          {
+            key: "title",
+            label: "標題",
+            container: "apev2",
+            values: ["里"],
+            convertedValues: ["裡"],
+            selected: true,
+          },
+        ],
+      }),
+    ];
+    expect(sortAudioFilesWithinFolders(files, "name").map((item) => item.path)).toEqual([
+      "/music/乙/a.ape",
+      "/music/乙/b.mp3",
+      "/music/甲/z.ogg",
+    ]);
+    expect(sortAudioFilesWithinFolders(files, "format").map((item) => item.path)).toEqual([
+      "/music/乙/a.ape",
+      "/music/乙/b.mp3",
+      "/music/甲/z.ogg",
+    ]);
+    expect(sortAudioFilesWithinFolders(files, "changed").map((item) => item.path)).toEqual([
+      "/music/乙/a.ape",
+      "/music/乙/b.mp3",
+      "/music/甲/z.ogg",
+    ]);
+  });
+
+  it("選取檔案的每個欄位只建立一份字元差異", () => {
+    const diffs = buildFieldDiffs(
+      file({
+        path: "/tmp/one.mp3",
+        fields: [
+          {
+            key: "title",
+            label: "標題",
+            container: "id3v2",
+            values: ["风的方向"],
+            convertedValues: ["風的方向"],
+            selected: true,
+          },
+          {
+            key: "track",
+            label: "曲目",
+            container: "id3v2",
+            values: ["1"],
+            selected: false,
+          },
+        ],
+      }),
+    );
+    expect(diffs.size).toBe(1);
+    const title = diffs.get("id3v2:title");
+    expect(title?.after.map((piece) => piece.text).join("")).toBe("風的方向");
+    expect(diffs.get("id3v2:title")).toBe(title);
+    expect(buildFieldDiffs(undefined).size).toBe(0);
   });
 
   it("字元差異把舊字與新字分開", () => {

@@ -91,7 +91,9 @@ export function changedFieldCount(file: AudioTagFile): number {
 }
 
 export function audioPreviewReady(files: readonly AudioTagFile[]): boolean {
-  return files.some((file) => file.fields.some((field) => field.convertedValues !== undefined));
+  return files.some(
+    (file) => file.previewed || file.fields.some((field) => field.convertedValues !== undefined),
+  );
 }
 
 export function audioFileBucket(
@@ -232,6 +234,64 @@ export function buildAudioListRows(
     }
   }
   return rows;
+}
+
+export type AudioSortKey = "name" | "changed" | "format";
+
+function compareAudioFiles(left: AudioTagFile, right: AudioTagFile, key: AudioSortKey): number {
+  if (key === "changed") {
+    const delta = changedFieldCount(right) - changedFieldCount(left);
+    if (delta !== 0) return delta;
+  } else if (key === "format") {
+    const delta = left.format.localeCompare(right.format);
+    if (delta !== 0) return delta;
+  }
+  return audioBaseName(left.path).localeCompare(audioBaseName(right.path), "zh-Hant");
+}
+
+/** 資料夾順序維持檔案首次出現。只排序資料夾裡的檔案。 */
+export function sortAudioFilesWithinFolders(
+  files: readonly AudioTagFile[],
+  key: AudioSortKey,
+): AudioTagFile[] {
+  const groups = new Map<string, AudioTagFile[]>();
+  const order: string[] = [];
+  for (const file of files) {
+    const dir = audioParentDir(file.path);
+    const list = groups.get(dir);
+    if (list) list.push(file);
+    else {
+      order.push(dir);
+      groups.set(dir, [file]);
+    }
+  }
+  const sorted: AudioTagFile[] = [];
+  for (const dir of order) {
+    const group = groups.get(dir) ?? [];
+    group.sort((left, right) => compareAudioFiles(left, right, key));
+    sorted.push(...group);
+  }
+  return sorted;
+}
+
+export function fieldDiffKey(field: AudioTagField): string {
+  return `${field.container}:${field.key}`;
+}
+
+/** 每個有預覽文字的欄位只算一次字元差異。 */
+export function buildFieldDiffs(
+  file: AudioTagFile | undefined,
+): Map<string, { before: DiffPiece[]; after: DiffPiece[] }> {
+  const map = new Map<string, { before: DiffPiece[]; after: DiffPiece[] }>();
+  if (!file) return map;
+  for (const field of file.fields) {
+    if (!field.convertedValues) continue;
+    map.set(
+      fieldDiffKey(field),
+      charDiff(field.values.join("\n"), field.convertedValues.join("\n")),
+    );
+  }
+  return map;
 }
 
 export function toggleFolderCollapsed(collapsed: ReadonlySet<string>, folder: string): Set<string> {

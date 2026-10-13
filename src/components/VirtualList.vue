@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 const props = withDefaults(
   defineProps<{
@@ -19,6 +19,16 @@ const scrollTop = ref(0);
 const measured = ref(0);
 
 const viewport = computed(() => props.viewportHeight ?? measured.value);
+
+function maxScrollTop(): number {
+  const view = root.value?.clientHeight || props.viewportHeight || viewport.value || 0;
+  return Math.max(0, props.count * props.itemHeight - view);
+}
+
+function clampScroll(value: number): number {
+  return Math.min(Math.max(0, value), maxScrollTop());
+}
+
 const start = computed(() =>
   Math.max(0, Math.floor(scrollTop.value / props.itemHeight) - props.overscan),
 );
@@ -44,9 +54,20 @@ const stickyIndex = computed(() => {
   return section;
 });
 
-function onScroll(event: Event) {
-  scrollTop.value = (event.target as HTMLElement).scrollTop;
+function applyClampedScroll(value: number) {
+  const next = clampScroll(value);
+  scrollTop.value = next;
+  if (root.value && root.value.scrollTop !== next) root.value.scrollTop = next;
 }
+
+function onScroll(event: Event) {
+  applyClampedScroll((event.target as HTMLElement).scrollTop);
+}
+
+watch(
+  () => [props.count, props.itemHeight, viewport.value] as const,
+  () => applyClampedScroll(scrollTop.value),
+);
 
 function measure() {
   measured.value = root.value?.clientHeight ?? 0;
@@ -71,7 +92,7 @@ function scrollToIndex(index: number) {
   else if (top + props.itemHeight > host.scrollTop + view) {
     host.scrollTop = top + props.itemHeight - view;
   }
-  scrollTop.value = host.scrollTop;
+  applyClampedScroll(host.scrollTop);
 }
 
 defineExpose({ scrollToIndex, start, end });

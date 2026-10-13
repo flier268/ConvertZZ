@@ -19,15 +19,18 @@ import { formatProgressLabel, progressPercentage, type ProgressSnapshot } from "
 import {
   applyBulkSelection,
   audioBaseName,
+  audioParentDir,
   AUDIO_TAG_READ_ERROR,
   audioWarningDetail,
   clearWarningSelection,
   audioRowSection,
   audioSegmentCounts,
   buildAudioListRows,
+  buildFieldDiffs,
   changedFieldCount,
-  charDiff,
+  fieldDiffKey,
   filterAudioFiles,
+  sortAudioFilesWithinFolders,
   replaceAudioFile,
   selectionTotals,
   stepAudioRow,
@@ -37,6 +40,7 @@ import {
   fieldAffectsAudio,
   type AudioListFilter,
   type AudioListRow,
+  type AudioSortKey,
   type DiffPiece,
 } from "../lib/audioReview";
 import VirtualList from "../components/VirtualList.vue";
@@ -55,7 +59,9 @@ const progressStartedAt = ref<number>();
 const activeRequestId = ref<string>();
 const settingsOpen = ref(false);
 const listFilter = ref<AudioListFilter>("changed");
+const sortKey = ref<AudioSortKey>("name");
 const query = ref("");
+const operationError = ref("");
 const hideUnchanged = ref(true);
 const selectedPath = ref("");
 const rescanningPath = ref("");
@@ -116,8 +122,19 @@ const containers = computed(() => ({
 const totals = computed(() => selectionTotals(files.value, containers.value));
 const segments = computed(() => audioSegmentCounts(files.value));
 const filteredFiles = computed(() => filterAudioFiles(files.value, listFilter.value, query.value));
-const listRows = computed(() => buildAudioListRows(filteredFiles.value, collapsedFolders.value));
+const sortedFiles = computed(() => sortAudioFilesWithinFolders(filteredFiles.value, sortKey.value));
+const listRows = computed(() => buildAudioListRows(sortedFiles.value, collapsedFolders.value));
 const selectedFile = computed(() => files.value.find((file) => file.path === selectedPath.value));
+const fieldDiffs = computed(() => buildFieldDiffs(plan.value ? selectedFile.value : undefined));
+const pageSubtitle = computed(() => {
+  if (!files.value.length) return "ID3、APEv2 與 Vorbis Comment 都會保留未選欄位與封面。";
+  const folder =
+    focusKind.value === "folder" && focusFolder.value
+      ? focusFolder.value
+      : audioParentDir((selectedFile.value ?? files.value[0]).path);
+  const count = files.value.filter((file) => audioParentDir(file.path) === folder).length;
+  return `${folder} · ${count} 個檔案`;
+});
 const visibleFields = computed(() => {
   const file = selectedFile.value;
   if (!file) return [];
@@ -188,8 +205,13 @@ function toggleFolder(path: string) {
   collapsedFolders.value = toggleFolderCollapsed(collapsedFolders.value, path);
 }
 
-function joinValues(values: string[] | undefined): string {
-  return (values ?? []).join("\n");
+function resetReviewView() {
+  listFilter.value = "changed";
+  query.value = "";
+  collapsedFolders.value = new Set();
+  selectedPath.value = "";
+  focusKind.value = "file";
+  focusFolder.value = "";
 }
 
 function pieceClass(piece: DiffPiece): string {
@@ -265,6 +287,8 @@ async function chooseFolder() {
 
 async function scan() {
   busy.value = true;
+  operationError.value = "";
+  resetReviewView();
   progress.value = undefined;
   progressStartedAt.value = Date.now();
   try {
@@ -289,7 +313,10 @@ async function scan() {
     clearWarningSelection(files.value);
   } catch (error) {
     if (isCancellationError(error)) ElMessage.info("已取消掃描。");
-    else ElMessage.error(error instanceof Error ? error.message : String(error));
+    else {
+      operationError.value = error instanceof Error ? error.message : String(error);
+      ElMessage.error(operationError.value);
+    }
   } finally {
     busy.value = false;
     activeRequestId.value = undefined;
@@ -342,6 +369,7 @@ async function buildPlanRequest(): Promise<AudioTagPlanRequest> {
 
 async function createPlan() {
   busy.value = true;
+  operationError.value = "";
   progress.value = undefined;
   progressStartedAt.value = Date.now();
   try {
@@ -358,7 +386,10 @@ async function createPlan() {
     listFilter.value = "changed";
   } catch (error) {
     if (isCancellationError(error)) ElMessage.info("已取消建立預覽。");
-    else ElMessage.error(error instanceof Error ? error.message : String(error));
+    else {
+      operationError.value = error instanceof Error ? error.message : String(error);
+      ElMessage.error(operationError.value);
+    }
   } finally {
     busy.value = false;
     activeRequestId.value = undefined;
@@ -582,7 +613,7 @@ watch(
       <div>
         <p class="eyebrow">AUDIO TAGS</p>
         <h1>音訊標籤</h1>
-        <p>ID3、APEv2 與 Vorbis Comment 都會保留未選欄位與封面。</p>
+        <p>{{ pageSubtitle }}</p>
       </div>
       <div class="card-actions">
         <el-button :disabled="Boolean(plan) || busy" @click="chooseFolder">選取資料夾</el-button>
@@ -608,33 +639,63 @@ watch(
         placeholder="搜尋檔名、專輯、標題"
         :disabled="!files.length"
       />
+      <el-select v-model="sortKey" class="audio-sort" :disabled="!files.length" aria-label="排序">
+        <el-option label="檔名" value="name" />
+        <el-option label="變更數" value="changed" />
+        <el-option label="格式" value="format" />
+      </el-select>
       <el-radio-group
         v-model="listFilter"
         class="audio-segments"
         :disabled="!files.length"
         aria-label="檔案篩選"
       >
-        <el-radio-button value="changed">有變更 {{ segments.changed }}</el-radio-button>
-        <el-radio-button value="unchanged">不變 {{ segments.unchanged }}</el-radio-button>
+        <el-radio-button value="changed" :aria-pressed="listFilter === 'changed'"
+          >有變更 {{ segments.changed }}</el-radio-button
+        >
+        <el-radio-button value="unchanged" :aria-pressed="listFilter === 'unchanged'"
+          >不變 {{ segments.unchanged }}</el-radio-button
+        >
         <el-radio-button
           value="errors"
+          :aria-pressed="listFilter === 'errors'"
           :class="{
             'is-alert': segments.errors > 0,
             'is-filled': listFilter === 'errors' && segments.errors > 0,
           }"
           >錯誤 {{ segments.errors }}</el-radio-button
         >
-        <el-radio-button value="all">全部 {{ segments.all }}</el-radio-button>
+        <el-radio-button value="all" :aria-pressed="listFilter === 'all'"
+          >全部 {{ segments.all }}</el-radio-button
+        >
       </el-radio-group>
     </div>
 
     <div class="page-fill-main audio-review">
-      <div v-if="!files.length" class="audio-empty">
-        <el-empty description="請選取 MP3、APE、OGG 或 Opus 檔案" />
+      <div v-if="operationError && !files.length" class="audio-empty">
+        <el-result icon="error" title="掃描失敗" :sub-title="operationError">
+          <template #extra>
+            <el-button type="primary" :disabled="!paths.length || busy" @click="scan"
+              >再試一次</el-button
+            >
+          </template>
+        </el-result>
+      </div>
+      <div v-else-if="!files.length" class="audio-empty">
+        <el-empty description="尚未掃描音訊檔案。請選取 MP3、APE、OGG 或 Opus。" />
       </div>
       <template v-else>
         <div class="audio-file-pane">
+          <el-result
+            v-if="operationError"
+            class="audio-inline-error"
+            icon="warning"
+            title="建立預覽失敗"
+            :sub-title="operationError"
+          />
+          <el-empty v-if="!listRows.length" description="沒有符合的檔案" />
           <VirtualList
+            v-else
             ref="listRef"
             role="listbox"
             aria-label="音訊檔案"
@@ -777,12 +838,9 @@ watch(
               <el-table-column prop="label" label="欄位" width="120" />
               <el-table-column label="目前內容" min-width="160">
                 <template #default="scope">
-                  <template v-if="plan && scope.row.convertedValues">
+                  <template v-if="plan && fieldDiffs.get(fieldDiffKey(scope.row))">
                     <span
-                      v-for="(piece, pieceIndex) in charDiff(
-                        joinValues(scope.row.values),
-                        joinValues(scope.row.convertedValues),
-                      ).before"
+                      v-for="(piece, pieceIndex) in fieldDiffs.get(fieldDiffKey(scope.row))!.before"
                       :key="`old-${scope.row.container}-${scope.row.key}-${pieceIndex}`"
                       :class="pieceClass(piece)"
                       >{{ piece.text }}</span
@@ -793,12 +851,9 @@ watch(
               </el-table-column>
               <el-table-column v-if="plan" label="轉換預覽" min-width="160">
                 <template #default="scope">
-                  <template v-if="scope.row.convertedValues">
+                  <template v-if="fieldDiffs.get(fieldDiffKey(scope.row))">
                     <span
-                      v-for="(piece, pieceIndex) in charDiff(
-                        joinValues(scope.row.values),
-                        joinValues(scope.row.convertedValues),
-                      ).after"
+                      v-for="(piece, pieceIndex) in fieldDiffs.get(fieldDiffKey(scope.row))!.after"
                       :key="`new-${scope.row.container}-${scope.row.key}-${pieceIndex}`"
                       :class="pieceClass(piece)"
                       >{{ piece.text }}</span
@@ -809,7 +864,7 @@ watch(
               </el-table-column>
             </el-table>
           </template>
-          <el-empty v-else description="這個篩選沒有檔案" />
+          <el-empty v-else description="沒有符合的檔案" />
         </div>
       </template>
     </div>
@@ -841,7 +896,7 @@ watch(
         :disabled="!filteredFiles.length || busy"
         title="作用於目前篩選的全部檔案，包含已摺疊資料夾裡的檔案"
         @click="applyBulkSelection(files, filteredFiles, 'invert')"
-        >反選</el-button
+        >反選目前篩選</el-button
       >
       <span class="audio-action-spacer" />
       <el-button v-if="plan || busy" @click="cancelPlan">{{

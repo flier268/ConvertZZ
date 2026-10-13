@@ -377,6 +377,12 @@ html.floating-window * {
   border: 1px solid #d5e4e1;
   border-radius: 12px;
 }
+.audio-sort {
+  width: 120px;
+}
+.audio-inline-error {
+  padding: 12px 8px 0;
+}
 .audio-empty {
   flex: 1;
   display: flex;

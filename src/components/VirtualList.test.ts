@@ -29,6 +29,21 @@ describe("VirtualList", () => {
     expect(wrapper.text()).not.toContain("列0");
   });
 
+  it("清單變短後把捲動位置夾回可捲範圍", async () => {
+    const wrapper = mount(VirtualList, {
+      props: { count: 100, itemHeight: 40, overscan: 1, viewportHeight: 80 },
+      slots: { default: ({ index }: { index: number }) => `列${index}` },
+    });
+    const host = wrapper.get(".virtual-list").element as HTMLElement;
+    host.scrollTop = 3000;
+    await wrapper.get(".virtual-list").trigger("scroll");
+    expect(wrapper.text()).toContain("列75");
+    await wrapper.setProps({ count: 3 });
+    expect(host.scrollTop).toBe(40);
+    expect(wrapper.text()).toContain("列0");
+    expect(wrapper.text()).not.toContain("列75");
+  });
+
   it("區段標題捲出視窗後黏在上方", async () => {
     const wrapper = mount(VirtualList, {
       props: {

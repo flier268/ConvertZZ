@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import ElementPlus from "element-plus";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const openDialog = vi.fn();
 const confirmDialog = vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => true);
@@ -71,6 +71,14 @@ function previewButtons(wrapper: VueWrapper) {
 }
 
 describe("音訊選取後自動預覽", () => {
+  beforeEach(() => {
+    openDialog.mockReset();
+    confirmDialog.mockReset();
+    confirmDialog.mockResolvedValue(true);
+    coreRequest.mockReset();
+    coreCancel.mockReset();
+  });
+
   it("選取檔案後立即建立預覽，且任何時候都沒有建立預覽按鈕", async () => {
     openDialog.mockResolvedValueOnce("/tmp/a.mp3");
     coreRequest.mockImplementation(async (operation: string) => {

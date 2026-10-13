@@ -91,6 +91,8 @@ const paths = ref<string[]>([]);
 const files = ref<AudioTagFile[]>([]);
 const plan = ref<AudioTagPlan>();
 const busy = ref(false);
+/** 寫入進行中。選取按鈕只在這段停用，避免取消 audio.apply。 */
+const applying = ref(false);
 const promptAfterConversion = ref(true);
 const backup = ref(true);
 const conflictPolicy = ref<AudioTagPlanRequest["conflictPolicy"]>("skip");
@@ -564,23 +566,64 @@ function toggleRuleField(rule: TagRule, key: string, checked: boolean) {
   }
 }
 
+function appendPaths(incoming: readonly string[]): string[] {
+  const seen = new Set(paths.value);
+  const added: string[] = [];
+  for (const path of incoming) {
+    if (!path || seen.has(path)) continue;
+    seen.add(path);
+    added.push(path);
+  }
+  if (added.length) paths.value = [...paths.value, ...added];
+  return added;
+}
+
+async function addPaths(incoming: readonly string[]) {
+  if (applying.value) return;
+  const added = appendPaths(incoming);
+  if (!added.length) return;
+  await scan(added);
+}
+
 async function choose() {
+  if (applying.value) return;
   const selected = await open({
     multiple: true,
     filters: [{ name: "音訊標籤", extensions: ["mp3", "ape", "ogg", "oga", "opus"] }],
   });
-  if (!selected) return;
-  paths.value = Array.isArray(selected) ? selected : [selected];
-  plan.value = undefined;
-  await scan();
+  if (!selected || applying.value) return;
+  await addPaths(Array.isArray(selected) ? selected : [selected]);
 }
 
 async function chooseFolder() {
+  if (applying.value) return;
   const selected = await open({ directory: true, multiple: false });
-  if (!selected) return;
-  paths.value = Array.isArray(selected) ? selected : [selected];
-  plan.value = undefined;
-  await scan();
+  if (!selected || applying.value) return;
+  await addPaths(Array.isArray(selected) ? selected : [selected]);
+}
+
+function selectionSnapshot(list: readonly AudioTagFile[]) {
+  return new Map(
+    list.map((file) => [
+      file.path,
+      {
+        selected: file.selected,
+        fields: new Map(file.fields.map((field) => [fieldDiffKey(field), field.selected] as const)),
+      },
+    ]),
+  );
+}
+
+function restoreSelection(list: AudioTagFile[], snapshot: ReturnType<typeof selectionSnapshot>) {
+  for (const file of list) {
+    const previous = snapshot.get(file.path);
+    if (!previous) continue;
+    file.selected = previous.selected;
+    for (const field of file.fields) {
+      const selected = previous.fields.get(fieldDiffKey(field));
+      if (selected !== undefined) field.selected = selected;
+    }
+  }
 }
 
 function beginStream(): number {
@@ -598,7 +641,7 @@ function applyStreamProgress(token: number, value: Progress) {
 
 watch(selectedPath, (path) => {
   if (!path || !busy.value) return;
-  void core.request("audio.prioritize", { path }).catch(() => undefined);
+  void Promise.resolve(core.request("audio.prioritize", { path })).catch(() => undefined);
 });
 
 async function cancelInFlight() {
@@ -635,19 +678,25 @@ function settleAudioWork() {
   progressStartedAt.value = undefined;
 }
 
-async function scan() {
+async function scan(onlyPaths?: readonly string[]) {
+  if (applying.value) return;
+  const merging = onlyPaths != null;
   previewController.invalidate();
   await cancelInFlight();
+  if (applying.value) return;
   beginAudioWork();
-  resetReviewView();
-  plan.value = undefined;
-  files.value = [];
+  if (!merging) {
+    resetReviewView();
+    plan.value = undefined;
+    files.value = [];
+  }
   const token = beginStream();
+  const requestPaths = onlyPaths ?? paths.value;
   try {
     const scanned = await core.request<AudioTagFile[]>(
       "audio.scan",
       {
-        paths: paths.value,
+        paths: [...requestPaths],
         recursive: options.recursive,
         id3v1SourceEncoding: options.id3v1SourceEncoding,
         id3v2SourceEncoding: options.id3v2SourceEncoding,
@@ -663,7 +712,9 @@ async function scan() {
       },
     );
     if (token !== streamToken) return;
+    const snapshot = selectionSnapshot(files.value);
     files.value = mergeAudioFiles(files.value, scanned);
+    restoreSelection(files.value, snapshot);
     clearWarningSelection(files.value);
   } catch (error) {
     if (token !== streamToken) return;
@@ -674,6 +725,9 @@ async function scan() {
     }
   } finally {
     if (token === streamToken) settleAudioWork();
+  }
+  if (token === streamToken && files.value.length && !applying.value) {
+    await previewController.run();
   }
 }
 
@@ -719,11 +773,13 @@ async function buildPlanRequest(): Promise<AudioTagPlanRequest> {
 
 function adoptPlan(value: unknown) {
   const next = value as AudioTagPlan;
-  const paths = new Set(next.files.map((file) => file.path));
+  const keep = new Set(next.files.map((file) => file.path));
+  const snapshot = selectionSnapshot(files.value);
   files.value = mergeAudioFiles(
-    files.value.filter((file) => paths.has(file.path)),
+    files.value.filter((file) => keep.has(file.path)),
     next.files,
   );
+  restoreSelection(files.value, snapshot);
   clearWarningSelection(files.value);
   plan.value = { ...next, files: files.value };
   listFilter.value = "changed";
@@ -803,6 +859,7 @@ async function applyPlan() {
   if (busy.value || plan.value?.planId !== planId) return;
   previewController.invalidate();
   previewController.setApplying(true);
+  applying.value = true;
   busy.value = true;
   progress.value = undefined;
   progressStartedAt.value = Date.now();
@@ -826,17 +883,18 @@ async function applyPlan() {
       ElMessage.success(`已完成 ${result.succeeded.length} 個音訊檔案。`);
     if (result.failed.length) ElMessage.warning(`${result.failed.length} 個檔案失敗。`);
     plan.value = undefined;
-    await scan();
   } catch (error) {
     if (isCancellationError(error)) ElMessage.info("已取消音訊轉換。");
     else ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     previewController.setApplying(false);
+    applying.value = false;
     busy.value = false;
     activeRequestId.value = undefined;
     progress.value = undefined;
     progressStartedAt.value = undefined;
   }
+  if (!plan.value && paths.value.length) await scan();
 }
 
 async function cancelPlan() {
@@ -1009,10 +1067,8 @@ watch(
         <p>{{ pageSubtitle }}</p>
       </div>
       <div class="card-actions">
-        <el-button :disabled="Boolean(plan) || busy" @click="chooseFolder">選取資料夾</el-button>
-        <el-button type="primary" :disabled="Boolean(plan) || busy" @click="choose"
-          >選取音訊檔案</el-button
-        >
+        <el-button :disabled="applying" @click="chooseFolder">選取資料夾</el-button>
+        <el-button type="primary" :disabled="applying" @click="choose">選取音訊檔案</el-button>
       </div>
     </header>
 
@@ -1528,13 +1584,10 @@ watch(
       <span class="audio-action-spacer" />
       <el-button v-if="busy" @click="cancelPlan">停止作業</el-button>
       <el-button v-if="plan" :disabled="busy || !totals.files" @click="createPlan"
-        >重新建立預覽</el-button
+        >重新載入</el-button
       >
       <el-button v-else :disabled="!paths.length || busy" :loading="busy" @click="scan"
         >重新掃描</el-button
-      >
-      <el-button v-if="!plan" :disabled="!totals.files || busy" :loading="busy" @click="createPlan"
-        >建立標籤預覽</el-button
       >
       <el-button
         v-if="plan"

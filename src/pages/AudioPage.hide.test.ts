@@ -66,11 +66,15 @@ const planned = {
 describe("隱藏不變欄位", () => {
   it("文字相同的欄位在開啟隱藏後不出現，即使容器要重寫編碼", async () => {
     openDialog.mockResolvedValueOnce("/tmp/enc.mp3");
-    coreRequest.mockResolvedValueOnce([scanned]);
-    coreRequest.mockResolvedValueOnce({
-      planId: "p1",
-      createdAt: "2026-08-15T00:00:00.000Z",
-      files: [planned],
+    coreRequest.mockImplementation(async (operation: string) => {
+      if (operation === "audio.scan") return [scanned];
+      if (operation === "audio.plan")
+        return {
+          planId: "p1",
+          createdAt: "2026-08-15T00:00:00.000Z",
+          files: [planned],
+        };
+      return { ok: true };
     });
     const wrapper = mount(AudioPage, {
       global: { plugins: [ElementPlus], stubs: { transition: false } },
@@ -79,11 +83,6 @@ describe("隱藏不變欄位", () => {
     await wrapper
       .findAll("button")
       .find((button) => button.text().includes("選取音訊檔案"))!
-      .trigger("click");
-    await flushPromises();
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("建立標籤預覽"))!
       .trigger("click");
     await flushPromises();
 

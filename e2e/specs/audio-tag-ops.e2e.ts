@@ -10,7 +10,6 @@ test("標籤操作規則、詳細來源與警告", async ({ page }) => {
   await openApp(page, { selectedFiles: "/tmp/song.mp3" });
   await openPage(page, "#tour-audio", "音訊標籤");
   await page.getByRole("button", { name: "選取音訊檔案" }).click();
-  await page.getByRole("button", { name: "建立標籤預覽" }).click();
   await expect(page.getByRole("button", { name: /確認寫入/ })).toBeEnabled();
 
   await page.getByRole("button", { name: "編輯設定" }).click();
@@ -43,7 +42,6 @@ test("並排標籤欄挑選來源與移除確認", async ({ page }) => {
   await openApp(page, { selectedFiles: "/tmp/song.mp3" });
   await openPage(page, "#tour-audio", "音訊標籤");
   await page.getByRole("button", { name: "選取音訊檔案" }).click();
-  await page.getByRole("button", { name: "建立標籤預覽" }).click();
   await expect(page.getByRole("button", { name: /確認寫入/ })).toBeEnabled();
 
   await page.locator(".audio-view-switch").getByText("並排標籤欄").click();

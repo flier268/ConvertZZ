@@ -93,9 +93,8 @@ describe("音訊掃描增量更新", () => {
     await flushPromises();
     expect(wrapper.text()).toContain("early.mp3");
     expect(wrapper.text()).toContain("late.mp3");
-    const preview = wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("建立標籤預覽"));
-    expect(preview!.attributes("disabled")).toBeUndefined();
+    expect(wrapper.findAll("button").some((button) => button.text().includes("建立預覽"))).toBe(
+      false,
+    );
   });
 });

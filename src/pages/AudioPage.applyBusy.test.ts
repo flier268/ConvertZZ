@@ -80,7 +80,7 @@ describe("確認寫入與忙碌狀態", () => {
     confirmDialog.mockImplementation(async () => {
       const rebuild = wrapper
         .findAll("button")
-        .find((button) => button.text().includes("重新建立預覽"));
+        .find((button) => button.text().includes("重新載入"));
       void rebuild!.trigger("click");
       await flushPromises();
       return true;
@@ -93,11 +93,6 @@ describe("確認寫入與忙碌狀態", () => {
     await wrapper
       .findAll("button")
       .find((button) => button.text().includes("選取音訊檔案"))!
-      .trigger("click");
-    await flushPromises();
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("建立標籤預覽"))!
       .trigger("click");
     await flushPromises();
 

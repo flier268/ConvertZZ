@@ -249,7 +249,7 @@ test.describe("ConvertZZ 前端", () => {
     await expect(dialog).toBeHidden();
     await expect(page.getByRole("heading", { name: "音訊標籤" })).toBeVisible();
     await expect(page.locator(".audio-name", { hasText: "song.mp3" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "建立標籤預覽" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "重新載入" })).toBeVisible();
   });
 
   test("拖放詢問會記住上次選項", async ({ page }) => {
@@ -485,7 +485,6 @@ test.describe("ConvertZZ 前端", () => {
     await page.getByRole("button", { name: "編輯設定" }).click();
     await expect(page.getByText("ID3v2 版本")).toBeVisible();
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "建立標籤預覽" }).click();
     await expect(page.getByRole("columnheader", { name: "轉換預覽" })).toBeVisible();
     await expect(page.locator(".audio-detail .diff-ins").first()).toContainText("裡");
     await expect(page.locator(".audio-detail .diff-del").first()).toContainText("里");
@@ -493,8 +492,8 @@ test.describe("ConvertZZ 前端", () => {
     await expect
       .poll(async () => (await e2eState(page)).confirms ?? [])
       .toEqual(expect.arrayContaining([expect.stringContaining("將寫入")]));
-    await expect(page.getByRole("button", { name: "確認寫入" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "建立標籤預覽" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "建立標籤預覽" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "重新載入" })).toBeVisible();
   });
 
   test("音訊備份覆寫需要額外確認", async ({ page }) => {
@@ -505,7 +504,6 @@ test.describe("ConvertZZ 前端", () => {
     await page.getByRole("option", { name: "覆寫" }).click();
     await page.getByRole("button", { name: "完成", exact: true }).click();
     await page.getByRole("button", { name: "選取音訊檔案" }).click();
-    await page.getByRole("button", { name: "建立標籤預覽" }).click();
     await page.getByRole("button", { name: "確認寫入" }).click();
     await expect
       .poll(async () => (await e2eState(page)).confirms ?? [])
@@ -521,10 +519,10 @@ test.describe("ConvertZZ 前端", () => {
     await openApp(page, { selectedFiles: "/tmp/song.mp3" });
     await openPage(page, "#tour-audio", "音訊標籤");
     await page.getByRole("button", { name: "選取音訊檔案" }).click();
-    await page.getByRole("button", { name: "建立標籤預覽" }).click();
     await expect(page.getByRole("button", { name: "確認寫入" })).toBeVisible();
     await expect(page.getByRole("button", { name: "取消計畫" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "重新建立預覽" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "重新載入" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "建立標籤預覽" })).toHaveCount(0);
     await scrollAudioRow(page, "song.mp3");
     await expect(page.locator(".audio-name", { hasText: "song.mp3" })).toBeVisible();
   });

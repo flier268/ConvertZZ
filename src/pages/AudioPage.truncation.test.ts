@@ -32,23 +32,21 @@ const notice = "「ID3v1 標題超過 30 位元組，已截斷為 測測測」";
 describe("ID3v1 截斷警告", () => {
   it("詳細面板顯示欄位截斷說明", async () => {
     openDialog.mockResolvedValueOnce("/tmp/long.mp3");
-    coreRequest.mockResolvedValueOnce([
-      {
-        path: "/tmp/long.mp3",
-        format: "mp3",
-        selected: true,
-        fields: [
-          {
-            key: "title",
-            label: "標題",
-            container: "id3v1",
-            values: ["測".repeat(15)],
-            selected: true,
-          },
-        ],
-      },
-    ]);
-    coreRequest.mockResolvedValueOnce({
+    const scanned = {
+      path: "/tmp/long.mp3",
+      format: "mp3",
+      selected: true,
+      fields: [
+        {
+          key: "title",
+          label: "標題",
+          container: "id3v1",
+          values: ["測".repeat(15)],
+          selected: true,
+        },
+      ],
+    };
+    const planned = {
       planId: "p-trunc",
       createdAt: "2026-08-15T00:00:00.000Z",
       warnings: [`/tmp/long.mp3：${notice}`],
@@ -72,6 +70,11 @@ describe("ID3v1 截斷警告", () => {
           ],
         },
       ],
+    };
+    coreRequest.mockImplementation(async (operation: string) => {
+      if (operation === "audio.scan") return [scanned];
+      if (operation === "audio.plan") return planned;
+      return undefined;
     });
     const wrapper = mount(AudioPage, {
       global: { plugins: [ElementPlus], stubs: { transition: false } },
@@ -80,11 +83,6 @@ describe("ID3v1 截斷警告", () => {
     await wrapper
       .findAll("button")
       .find((button) => button.text().includes("選取音訊檔案"))!
-      .trigger("click");
-    await flushPromises();
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("建立標籤預覽"))!
       .trigger("click");
     await flushPromises();
     const alert = wrapper.get(".audio-id3v1-truncation");

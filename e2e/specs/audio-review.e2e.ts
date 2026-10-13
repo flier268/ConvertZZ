@@ -21,7 +21,6 @@ test.describe("音訊標籤審閱", () => {
     await openApp(page, { selectedFiles: "/tmp/song.mp3" });
     await openPage(page, "#tour-audio", "音訊標籤");
     await page.getByRole("button", { name: "選取音訊檔案" }).click();
-    await page.getByRole("button", { name: "建立標籤預覽" }).click();
     await expect(page.getByRole("button", { name: "確認寫入 233 個檔案" })).toBeEnabled();
     await expect(page.getByText("已勾選 233 個檔案・467 個欄位")).toBeVisible();
     await expect(page.getByRole("radio", { name: "有變更 233" })).toBeChecked();
@@ -189,7 +188,6 @@ test.describe("音訊標籤審閱", () => {
     await openApp(page, { selectedFiles: "/tmp/song.mp3" });
     await openPage(page, "#tour-audio", "音訊標籤");
     await page.getByRole("button", { name: "選取音訊檔案" }).click();
-    await page.getByRole("button", { name: "建立標籤預覽" }).click();
     await expect(page.getByRole("button", { name: "確認寫入 233 個檔案" })).toBeEnabled();
 
     await scrollAudioRow(page, "song.mp3");
@@ -243,7 +241,6 @@ test.describe("音訊標籤審閱", () => {
     await openApp(page, { selectedFiles: "/tmp/song.mp3" });
     await openPage(page, "#tour-audio", "音訊標籤");
     await page.getByRole("button", { name: "選取音訊檔案" }).click();
-    await page.getByRole("button", { name: "建立標籤預覽" }).click();
     await segment(page, "全部 250").click();
     await page.locator(".audio-sort").click();
     await page.getByRole("option", { name: "變更數" }).click();
@@ -259,16 +256,16 @@ test.describe("音訊標籤審閱", () => {
     await expect(page.locator(".audio-name", { hasText: "live-00.mp3" })).toBeVisible();
     await expect.poll(async () => page.locator(".audio-name").count()).toBeGreaterThan(5);
     await expect(page.locator(".job-progress")).toBeVisible();
-    await expect(page.getByRole("button", { name: "建立標籤預覽" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "建立標籤預覽" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "選取音訊檔案" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "確認寫入" })).toHaveCount(0);
     await page.screenshot({ path: join(shots, "live-streaming.png") });
     await page.evaluate(() => window.__convertzzE2e?.releaseAudioScan?.());
-    await expect(page.getByRole("button", { name: "建立標籤預覽" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "重新載入" })).toBeEnabled();
 
     await openApp(page, { selectedFiles: "/tmp/song.mp3" });
     await openPage(page, "#tour-audio", "音訊標籤");
     await page.getByRole("button", { name: "選取音訊檔案" }).click();
-    await page.getByRole("button", { name: "建立標籤預覽" }).click();
     await scrollAudioRow(page, "song.mp3");
     await page.locator(".audio-name", { hasText: "song.mp3" }).click();
     await expect(page.getByRole("button", { name: "隱藏不變欄位" })).toHaveAttribute(

@@ -738,6 +738,27 @@ fn scan_mp3(
                 continue;
             }
             if id.starts_with('T') && id.len() >= 3 && id.len() <= 4 {
+                // TXXX 可以有多框，彼此靠 description 區分。合成同一個 frame:TXXX
+                // 再 set_text 會只留下一框。
+                if let Some(extended) = frame.content().extended_text() {
+                    let mut field = make_field(
+                        AudioContainer::Id3v2,
+                        &format!("frame:{id}:{}", extended.description),
+                        vec![repair_id3v2_value(
+                            &extended.value,
+                            id3v2_encoding,
+                            repair_id3v2,
+                        )?],
+                    );
+                    field.label = if extended.description.is_empty() {
+                        id.to_string()
+                    } else {
+                        format!("{id} ({})", extended.description)
+                    };
+                    field.selected = false;
+                    fields.push(field);
+                    continue;
+                }
                 if let Some(text) = frame.content().text() {
                     let mut field = make_field(
                         AudioContainer::Id3v2,
@@ -806,7 +827,8 @@ fn frame_carries_text(frame: &id3::frame::Frame) -> bool {
     id.starts_with('T') || matches!(id, "COMM" | "USLT" | "SYLT" | "USER" | "WXXX")
 }
 
-fn id3_frame_selected(frame_id: &str, keys: &HashSet<String>) -> bool {
+fn id3_frame_selected(frame: &id3::frame::Frame, keys: &HashSet<String>) -> bool {
+    let frame_id = frame.id();
     keys.iter().any(|key| match key.as_str() {
         "title" => frame_id == "TIT2",
         "artist" => frame_id == "TPE1",
@@ -818,9 +840,20 @@ fn id3_frame_selected(frame_id: &str, keys: &HashSet<String>) -> bool {
         "albumArtist" => frame_id == "TPE2",
         "composer" => frame_id == "TCOM",
         "lyrics" => frame_id == "USLT",
-        other => other
-            .strip_prefix("frame:")
-            .is_some_and(|id| id == frame_id),
+        other => match other.strip_prefix("frame:") {
+            // frame:TXXX:<description> 只對到同一個描述，避免改一框時連帶改其餘 TXXX。
+            Some(rest) => match rest.split_once(':') {
+                Some((id, description)) if id == "TXXX" => {
+                    frame_id == "TXXX"
+                        && frame
+                            .content()
+                            .extended_text()
+                            .is_some_and(|extended| extended.description == description)
+                }
+                _ => rest == frame_id,
+            },
+            None => false,
+        },
     })
 }
 
@@ -847,7 +880,7 @@ fn apply_id3v2_encoding(tag: &mut id3::Tag, encoding: &str, keys: &HashSet<Strin
         .frames()
         .cloned()
         .map(|frame| {
-            if frame_carries_text(&frame) && id3_frame_selected(frame.id(), keys) {
+            if frame_carries_text(&frame) && id3_frame_selected(&frame, keys) {
                 frame.set_encoding(Some(encoding))
             } else {
                 frame
@@ -1286,8 +1319,31 @@ fn set_id3v2_value(tag: &mut id3::Tag, key: &str, value: String) {
             }
         }
         other if other.starts_with("frame:") => {
-            let id = other.trim_start_matches("frame:");
-            tag.set_text(id, value);
+            let rest = other.trim_start_matches("frame:");
+            if let Some((id, description)) = rest.split_once(':') {
+                if id == "TXXX" {
+                    // 只換這個 description，其餘 TXXX 照原順序寫回。
+                    // set_text("TXXX") 會加成沒有描述的文字框，和其他 TXXX 分不開。
+                    let mut texts: Vec<_> = tag.extended_texts().cloned().collect();
+                    tag.remove_extended_text(None, None);
+                    if let Some(item) = texts
+                        .iter_mut()
+                        .find(|item| item.description == description)
+                    {
+                        item.value = value;
+                    } else {
+                        texts.push(id3::frame::ExtendedText {
+                            description: description.to_string(),
+                            value,
+                        });
+                    }
+                    for text in texts {
+                        tag.add_frame(text);
+                    }
+                    return;
+                }
+            }
+            tag.set_text(rest, value);
         }
         _ => {}
     }

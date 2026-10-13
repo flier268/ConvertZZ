@@ -2296,6 +2296,92 @@ fn quiet_plan(paths: &[PathBuf]) -> AudioTagPlanRequest {
     request
 }
 
+/// 掃描只露出第一則 COMM，以及有文字的 T*。多出來的 COMM、USLT、
+/// 沒有文字內容的 T*（例如 TIPL）都該算進隱藏欄位。
+#[tokio::test]
+async fn id3v2_hidden_count_includes_frames_the_scan_does_not_show() {
+    let directory = temp_dir();
+    let path = directory.join("hidden-frames.mp3");
+    std::fs::write(&path, mpeg_frame()).unwrap();
+    let mut tag = id3::Tag::new();
+    tag.set_title("可見標題");
+    tag.add_frame(id3::frame::Comment {
+        lang: "eng".into(),
+        description: String::new(),
+        text: "第一則註解".into(),
+    });
+    tag.add_frame(id3::frame::Comment {
+        lang: "eng".into(),
+        description: "extra".into(),
+        text: "第二則註解".into(),
+    });
+    tag.add_frame(id3::frame::Lyrics {
+        lang: "eng".into(),
+        description: String::new(),
+        text: "未列出的歌詞".into(),
+    });
+    tag.add_frame(id3::frame::Frame::with_content(
+        "TIPL",
+        id3::frame::Content::InvolvedPeopleList(id3::frame::InvolvedPeopleList {
+            items: vec![id3::frame::InvolvedPeopleListItem {
+                involvement: "producer".into(),
+                involvee: "某人".into(),
+            }],
+        }),
+    ));
+    tag.set_text("TPUB", "可見出版社");
+    tag.write_to_path(&path, Version::Id3v24).unwrap();
+    let mut output = std::fs::read(&path).unwrap();
+    output = append_id3v1(
+        &strip_id3v1(&output),
+        &HashMap::from([("title", "v1".to_string())]),
+        17,
+        TextEncoding::Utf8,
+    )
+    .unwrap();
+    std::fs::write(&path, output).unwrap();
+
+    let service = AudioService::new();
+    let scanned = service
+        .scan(
+            shared_conversion(),
+            quiet_plan(&[path.clone()]).scan_request(),
+            noop(),
+        )
+        .await
+        .unwrap();
+    let shown: Vec<&str> = scanned[0]
+        .fields
+        .iter()
+        .filter(|field| field.container == AudioContainer::Id3v2)
+        .map(|field| field.key.as_str())
+        .collect();
+    assert!(shown.contains(&"title"));
+    assert!(shown.contains(&"comment"));
+    assert!(shown.contains(&"frame:TPUB"));
+    assert_eq!(shown.iter().filter(|key| **key == "comment").count(), 1);
+    assert!(!shown
+        .iter()
+        .any(|key| key.contains("第二則") || *key == "lyrics"));
+    let comment = field(&scanned[0], AudioContainer::Id3v2, "comment").unwrap();
+    assert_eq!(comment.values, vec!["第一則註解".to_string()]);
+
+    let mut request = quiet_plan(&[path.clone()]);
+    request.tag_operations = vec![remove_operation(AudioContainer::Id3v2)];
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let removal = plan.files[0]
+        .removals
+        .iter()
+        .find(|item| item.container == AudioContainer::Id3v2)
+        .expect("id3v2 removal");
+    assert!(removal.refused.is_none(), "{removal:?}");
+    // 第二則 COMM、USLT、沒有文字的 TIPL。標題、第一則註解、TPUB 算可見。
+    assert_eq!(removal.hidden_field_count, 3, "{removal:?}");
+}
+
 fn remove_operation(container: AudioContainer) -> TagOperation {
     TagOperation {
         action: TagAction::Remove,

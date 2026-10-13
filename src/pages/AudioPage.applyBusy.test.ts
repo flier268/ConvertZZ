@@ -4,7 +4,7 @@ import ElementPlus from "element-plus";
 import { describe, expect, it, vi } from "vitest";
 
 const openDialog = vi.fn();
-const confirmDialog = vi.fn(async () => true);
+const confirmDialog = vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => true);
 const coreRequest = vi.fn();
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({

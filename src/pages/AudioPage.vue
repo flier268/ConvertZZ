@@ -790,7 +790,7 @@ async function applyPlan() {
     }))
   )
     return;
-  if (plan.value?.planId !== planId) return;
+  if (busy.value || plan.value?.planId !== planId) return;
   if (
     backup.value &&
     conflictPolicy.value === "overwrite" &&
@@ -800,7 +800,7 @@ async function applyPlan() {
     }))
   )
     return;
-  if (plan.value?.planId !== planId) return;
+  if (busy.value || plan.value?.planId !== planId) return;
   previewController.invalidate();
   previewController.setApplying(true);
   busy.value = true;

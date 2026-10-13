@@ -3049,3 +3049,39 @@ async fn unreadable_id3v2_is_not_replaced_with_an_empty_tag() {
     assert_eq!(std::fs::read(&path).unwrap(), original);
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+/// ID3v2 讀不到、只改 ID3v1 時，picture_count 的 `?` 會中斷寫入。
+/// 暫存檔必須清掉，不能留在原檔旁邊。
+#[test]
+fn apply_mp3_error_removes_temporary_file() {
+    let directory = temp_dir();
+    let path = directory.join("opaque.mp3");
+    let original = unreadable_id3v2_with_v1("SourceTitle");
+    std::fs::write(&path, &original).unwrap();
+    let mut request = base_plan(&[path.clone()]);
+    request.id3v2_enabled = false;
+    let file = PreparedAudio {
+        path: path.clone(),
+        format: AudioFormat::Mp3,
+        updates: HashMap::from([("id3v1:title".into(), vec!["裡面".into()])]),
+        selected_containers: HashSet::from([AudioContainer::Id3v1]),
+        rewrite_containers: HashSet::new(),
+        remove_containers: HashSet::new(),
+        request,
+        original_picture_count: 0,
+    };
+    let error = apply_mp3(&file).expect_err("壞掉的 ID3v2 不該完成寫入");
+    assert_eq!(std::fs::read(&path).unwrap(), original, "{error}");
+    let leftovers: Vec<String> = std::fs::read_dir(&directory)
+        .unwrap()
+        .filter_map(|entry| {
+            let name = entry.ok()?.file_name().into_string().ok()?;
+            name.starts_with(".convertzz-audio-").then_some(name)
+        })
+        .collect();
+    assert!(
+        leftovers.is_empty(),
+        "寫入失敗後仍留下暫存檔 {leftovers:?}：{error}"
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}

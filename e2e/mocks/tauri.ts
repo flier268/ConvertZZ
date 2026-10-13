@@ -408,6 +408,69 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
   }
   if (operation === "audio.plan") {
     if (e2e().failAudioPlan) throw new Error("無法建立標籤預覽");
+    const tagOperations = Array.isArray(payload.tagOperations) ? payload.tagOperations : [];
+    if (tagOperations.length > 0) {
+      const song = {
+        path: "/music/專輯甲/song.mp3",
+        format: "mp3" as const,
+        selected: true,
+        previewed: true,
+        fields: [
+          {
+            key: "title",
+            label: "標題",
+            container: "id3v1" as const,
+            values: ["裡面的很長標題不會完整寫進固定欄位🙂"],
+            convertedValues: ["裡面的很長標題?"],
+            selected: true,
+            truncated: true,
+            origin: "rule 1",
+            truncation: "截斷 40→30 B",
+            warnings: [
+              { code: "truncated", message: "截斷 40→30 B", fromBytes: 40, toBytes: 30 },
+              { code: "unrepresentable", message: "1 字 Big5 無法表示", count: 1 },
+            ],
+          },
+        ],
+        removals: [
+          {
+            container: "apev2" as const,
+            hiddenFieldCount: 2,
+            origin: "rule 2",
+            selected: true,
+          },
+        ],
+      };
+      const apeOnly = {
+        path: "/music/專輯甲/ape-only.mp3",
+        format: "mp3" as const,
+        selected: true,
+        previewed: true,
+        fields: [
+          {
+            key: "title",
+            label: "標題",
+            container: "apev2" as const,
+            values: ["舊標題"],
+            selected: false,
+          },
+        ],
+        removals: [
+          {
+            container: "apev2" as const,
+            hiddenFieldCount: 3,
+            origin: "rule 2",
+            selected: true,
+          },
+        ],
+      };
+      return {
+        planId: "audio-plan-ops",
+        createdAt: "2026-08-15T00:00:00.000Z",
+        summary: { total: 2, changed: 2, unchanged: 0, errors: 0, selectedFields: 2 },
+        files: [song, apeOnly],
+      };
+    }
     const song = {
       path: "/music/專輯甲/song.mp3",
       format: "mp3" as const,

@@ -164,6 +164,16 @@ describe("audioReview", () => {
     expect(added.map((item) => item.path)).toContain("/tmp/new.mp3");
   });
 
+  it("replaceAudioFile 用路徑鍵換掉同一筆，不因斜線或磁碟機大小寫多加一筆", () => {
+    const next = replaceAudioFile(
+      [file({ path: "C:\\Music\\A.mp3", selected: false })],
+      file({ path: "c:/music/a.mp3/", selected: true }),
+    );
+    expect(next).toHaveLength(1);
+    expect(next[0]?.path).toBe("c:/music/a.mp3/");
+    expect(next[0]?.selected).toBe(true);
+  });
+
   it("路徑鍵忽略尾端斜線、反斜線，磁碟機路徑不分大小寫", () => {
     expect(audioPathKey("C:\\Music\\A.mp3")).toBe(audioPathKey("c:/music/a.mp3/"));
     expect(audioPathKey("/tmp/Music/")).toBe(audioPathKey("/tmp/Music"));

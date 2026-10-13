@@ -67,6 +67,36 @@ describe("音訊預覽自動重建", () => {
     expect(plans).toEqual([]);
   });
 
+  it("作廢的預覽結束時，若已有更新的工作世代，不得 onSettled", async () => {
+    let release: (value: { planId: string }) => void = () => undefined;
+    let markStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const settled: number[] = [];
+    const controller = createAudioPreviewController({
+      plan: () => {
+        markStarted();
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      },
+      cancelInFlight: async () => undefined,
+      apply: () => undefined,
+      onSettled: () => {
+        settled.push(settled.length + 1);
+      },
+    });
+
+    const running = controller.run();
+    await started;
+    controller.invalidate();
+    controller.claimJob();
+    release({ planId: "stale" });
+    await running;
+    expect(settled).toEqual([]);
+  });
+
   it("進行中的預覽被 invalidate 且沒有新一輪接手時，仍會 onSettled", async () => {
     let release: (value: { planId: string }) => void = () => undefined;
     let markStarted: () => void = () => undefined;

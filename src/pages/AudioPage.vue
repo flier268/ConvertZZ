@@ -702,7 +702,12 @@ function settleAudioWork() {
 
 let scanEpoch = 0;
 let scanInFlight = false;
-let pendingFullSnapshot: ReturnType<typeof selectionSnapshot> | undefined;
+let pendingFullSnapshot:
+  | {
+      epoch: number;
+      snapshot: ReturnType<typeof selectionSnapshot>;
+    }
+  | undefined;
 
 async function scan(onlyPaths?: readonly string[]) {
   if (applying.value) return;
@@ -711,6 +716,7 @@ async function scan(onlyPaths?: readonly string[]) {
   const epoch = ++scanEpoch;
   scanInFlight = true;
   previewController.invalidate();
+  previewController.claimJob();
   const token = beginStream();
   await cancelInFlight();
   if (epoch !== scanEpoch || applying.value) {
@@ -719,7 +725,12 @@ async function scan(onlyPaths?: readonly string[]) {
   }
   beginAudioWork();
   if (!merging) {
-    if (!pendingFullSnapshot) pendingFullSnapshot = selectionSnapshot(files.value);
+    // 重疊的完整掃描沿用尚未被作廢的那份勾選。世代對不上就重拍，避免還原更早的選擇。
+    if (pendingFullSnapshot?.epoch === epoch - 1 || pendingFullSnapshot?.epoch === epoch) {
+      pendingFullSnapshot = { epoch, snapshot: pendingFullSnapshot.snapshot };
+    } else {
+      pendingFullSnapshot = { epoch, snapshot: selectionSnapshot(files.value) };
+    }
     resetReviewView();
     plan.value = undefined;
     files.value = [];
@@ -746,16 +757,20 @@ async function scan(onlyPaths?: readonly string[]) {
       },
     );
     if (token !== streamToken) return;
+    const ownedSnapshot =
+      !merging && pendingFullSnapshot?.epoch === epoch ? pendingFullSnapshot.snapshot : undefined;
     const snapshot = merging
       ? selectionSnapshot(files.value)
-      : (pendingFullSnapshot ?? selectionSnapshot(files.value));
+      : (ownedSnapshot ?? selectionSnapshot(files.value));
     files.value = mergeAudioFiles(files.value, scanned);
     restoreSelection(files.value, snapshot);
     clearWarningSelection(files.value);
     completed = true;
   } catch (error) {
     if (token !== streamToken) return;
-    if (!merging && pendingFullSnapshot) restoreSelection(files.value, pendingFullSnapshot);
+    if (!merging && pendingFullSnapshot?.epoch === epoch) {
+      restoreSelection(files.value, pendingFullSnapshot.snapshot);
+    }
     if (isCancellationError(error)) ElMessage.info("已取消掃描。");
     else {
       operationError.value = error instanceof Error ? error.message : String(error);
@@ -763,6 +778,9 @@ async function scan(onlyPaths?: readonly string[]) {
     }
     return;
   } finally {
+    if (!merging && pendingFullSnapshot?.epoch === epoch && token !== streamToken) {
+      pendingFullSnapshot = undefined;
+    }
     if (token === streamToken) {
       if (!merging) pendingFullSnapshot = undefined;
       settleAudioWork();

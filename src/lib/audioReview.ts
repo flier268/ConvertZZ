@@ -76,6 +76,11 @@ export interface AudioPreviewController {
   run(): Promise<void>;
   /** 讓進行中的預覽回應失效，例如使用者改去掃描。 */
   invalidate(): void;
+  /**
+   * 掃描等外部工作接手忙碌狀態。進行中的預覽結束時不得再 onSettled。
+   * 沒有新工作時，invalidate 仍會讓該輪自己結束並 onSettled。
+   */
+  claimJob(): void;
   /** 寫入進行中時，預覽不得再排程或取消這次寫入。 */
   setApplying(applying: boolean): void;
 }
@@ -98,12 +103,15 @@ export function createAudioPreviewController(deps: {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let applying = false;
   let running = 0;
+  // 只有目前這一代工作可以放下 busy。掃描等外部工作用 claimJob 推進世代。
+  let jobGeneration = 0;
   // 已開始的 run 串成一條。flush 要等它們全部結束，不能在沒有計時器時直接 return。
   let tail: Promise<void> = Promise.resolve();
 
   async function run(): Promise<void> {
     if (applying) return;
     const token = race.start();
+    const job = ++jobGeneration;
     let settle!: () => void;
     const done = new Promise<void>((resolve) => {
       settle = resolve;
@@ -126,8 +134,10 @@ export function createAudioPreviewController(deps: {
     } finally {
       running -= 1;
       // 停止作業只 invalidate、沒有新的 run 接手時，這輪仍要 onSettled，否則 busy 不會下來。
-      // 已有下一輪在跑，或正在套用，則留給那一輪自己結束。
-      if (race.isCurrent(token) || (running === 0 && !applying)) deps.onSettled?.();
+      // 已有下一輪在跑、外部工作已 claimJob，或正在套用，則留給那一輪自己結束。
+      if (job === jobGeneration && (race.isCurrent(token) || (running === 0 && !applying))) {
+        deps.onSettled?.();
+      }
       settle();
     }
   }
@@ -154,6 +164,9 @@ export function createAudioPreviewController(deps: {
       if (timer) clearTimeout(timer);
       timer = undefined;
       race.start();
+    },
+    claimJob() {
+      jobGeneration += 1;
     },
     setApplying(next: boolean) {
       applying = next;
@@ -352,7 +365,7 @@ export function replaceAudioFile(
   files: readonly AudioTagFile[],
   updated: AudioTagFile,
 ): AudioTagFile[] {
-  const index = files.findIndex((file) => file.path === updated.path);
+  const index = files.findIndex((file) => audioPathKey(file.path) === audioPathKey(updated.path));
   if (index < 0) return [...files, updated];
   return files.map((file, itemIndex) => (itemIndex === index ? updated : file));
 }

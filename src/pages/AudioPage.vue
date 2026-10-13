@@ -76,6 +76,7 @@ import {
   LEGACY_PLAYER_NOTE,
   CLEANUP_APE_NOTE,
   containerName,
+  containerRewriteNotes,
   type AudioListFilter,
   type AudioListRow,
   type AudioSortKey,
@@ -182,6 +183,14 @@ const visibleFields = computed(() => {
   if (!file) return [];
   if (!hideUnchanged.value || !plan.value) return file.fields;
   return file.fields.filter((field) => fieldVisibleWhenHidingUnchanged(field));
+});
+const rewriteNotes = computed(() => {
+  const file = selectedFile.value;
+  if (!file || !plan.value || file.warning) return [];
+  return containerRewriteNotes(file, {
+    id3v2Version: options.id3v2Version,
+    id3v2Encoding: options.id3v2Encoding,
+  });
 });
 const detailRows = computed(() => {
   const file = selectedFile.value;
@@ -1246,6 +1255,15 @@ watch(
                 :key="note"
                 class="audio-id3v1-truncation"
                 type="warning"
+                :title="note"
+                show-icon
+                :closable="false"
+              />
+              <el-alert
+                v-for="note in rewriteNotes"
+                :key="note"
+                class="audio-container-rewrite"
+                type="info"
                 :title="note"
                 show-icon
                 :closable="false"

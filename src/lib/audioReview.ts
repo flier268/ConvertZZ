@@ -190,6 +190,27 @@ export function fieldVisibleWhenHidingUnchanged(field: AudioTagField): boolean {
   );
 }
 
+/**
+ * 容器會整段重寫（ID3 版本或文字編碼）。隱藏不變欄位時文字列會消失，預覽仍要標出這件事。
+ */
+export function containerRewriteNotes(
+  file: AudioTagFile,
+  write: { id3v2Version: 3 | 4; id3v2Encoding: string },
+): string[] {
+  const notes: string[] = [];
+  for (const container of file.rewriteContainers ?? []) {
+    if (container === "id3v2") {
+      const encoding = ID3V2_ENCODING_LABEL[write.id3v2Encoding] ?? write.id3v2Encoding;
+      notes.push(
+        `ID3v2 會整段重寫為 2.${write.id3v2Version}・${encoding}。文字沒變的欄位也會跟著寫入。`,
+      );
+    } else if (container === "id3v1") {
+      notes.push("ID3v1 會整段重寫（輸出編碼與讀取編碼不同）。文字沒變的欄位也會跟著寫入。");
+    }
+  }
+  return notes;
+}
+
 /** ID3v1 固定寬度截斷說明，給詳細面板顯示。 */
 export function id3v1TruncationNotes(file: AudioTagFile): string[] {
   return file.fields.flatMap((field) => (field.truncation ? [field.truncation] : []));

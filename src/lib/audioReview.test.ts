@@ -43,6 +43,8 @@ import {
   manualCopyOperation,
   detailContainerNotices,
   fieldVisibleWhenHidingUnchanged,
+  mergeAudioFiles,
+  audioPathKey,
 } from "./audioReview";
 
 function file(partial: Partial<AudioTagFile> & Pick<AudioTagFile, "path">): AudioTagFile {
@@ -160,6 +162,19 @@ describe("audioReview", () => {
     });
     const added = replaceAudioFile(next, file({ path: "/tmp/new.mp3" }));
     expect(added.map((item) => item.path)).toContain("/tmp/new.mp3");
+  });
+
+  it("路徑鍵忽略尾端斜線、反斜線，磁碟機路徑不分大小寫", () => {
+    expect(audioPathKey("C:\\Music\\A.mp3")).toBe(audioPathKey("c:/music/a.mp3/"));
+    expect(audioPathKey("/tmp/Music/")).toBe(audioPathKey("/tmp/Music"));
+    expect(audioPathKey("/tmp/Music")).not.toBe(audioPathKey("/tmp/music"));
+    expect(audioPathKey("C:/")).toBe(audioPathKey("c:\\"));
+    const merged = mergeAudioFiles(
+      [file({ path: "C:\\Music\\A.mp3", selected: false })],
+      [file({ path: "c:/music/a.mp3/", selected: true })],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.selected).toBe(true);
   });
 
   it("尚未建立預覽時，只看有變更仍列出可審檔案", () => {

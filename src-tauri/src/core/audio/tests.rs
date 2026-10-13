@@ -2667,6 +2667,129 @@ async fn ape_file_removes_apev2_or_id3v1_without_changing_audio() {
     let _ = std::fs::remove_dir_all(&directory);
 }
 
+/// 音訊段的 FNV-1a。刻意不用 `mp3_audio_payload`／`ape_audio_payload`，
+/// 那兩條路跟 `strip_ape_tail` 共用邊界，無標頭時會一起少 32 bytes。
+fn audio_segment_hash(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+fn ape_tag_bytes(has_header: bool) -> Vec<u8> {
+    let key = b"Title";
+    let value = b"tail";
+    let mut item = Vec::new();
+    item.extend_from_slice(&(value.len() as u32).to_le_bytes());
+    item.extend_from_slice(&0u32.to_le_bytes());
+    item.extend_from_slice(key);
+    item.push(0);
+    item.extend_from_slice(value);
+    let mut footer = Vec::new();
+    footer.extend_from_slice(b"APETAGEX");
+    footer.extend_from_slice(&2000u32.to_le_bytes());
+    footer.extend_from_slice(&((item.len() + 32) as u32).to_le_bytes());
+    footer.extend_from_slice(&1u32.to_le_bytes());
+    // bit 31：含標頭。bit 30：這段是 footer 且標籤含 footer。
+    let mut flags = 1u32 << 30;
+    if has_header {
+        flags |= 1 << 31;
+    }
+    footer.extend_from_slice(&flags.to_le_bytes());
+    footer.extend_from_slice(&[0; 8]);
+    let mut tag = Vec::new();
+    if has_header {
+        let mut header = footer.clone();
+        let header_flags = flags | (1 << 29);
+        header[20..24].copy_from_slice(&header_flags.to_le_bytes());
+        tag.extend_from_slice(&header);
+    }
+    tag.extend_from_slice(&item);
+    tag.extend_from_slice(&footer);
+    tag
+}
+
+#[tokio::test]
+async fn apev2_header_flag_roundtrip_hashes_audio_segment() {
+    let directory = temp_dir();
+    let seed = directory.join("seed.mp3");
+    generate_audio(&seed, "libmp3lame");
+    let encoded = std::fs::read(&seed).unwrap();
+    let audio = strip_id3v1(&strip_id3v2(&encoded)).to_vec();
+    assert!(audio.len() > 32, "{}", audio.len());
+    let expected = audio_segment_hash(&audio);
+    let service = AudioService::new();
+
+    for has_header in [true, false] {
+        for with_v1 in [true, false] {
+            let path = directory.join(format!("ape-h{has_header}-v1{with_v1}.mp3"));
+            std::fs::write(&path, &audio).unwrap();
+            let mut tag = id3::Tag::new();
+            tag.set_title("keep-v2");
+            tag.write_to_path(&path, Version::Id3v24).unwrap();
+            let mut bytes = std::fs::read(&path).unwrap();
+            let audio_at = id3v2_tag_length(&bytes);
+            assert_eq!(&bytes[audio_at..], audio.as_slice());
+            bytes.extend_from_slice(&ape_tag_bytes(has_header));
+            if with_v1 {
+                bytes = append_id3v1(
+                    &bytes,
+                    &HashMap::from([("title", "keep-v1".to_string())]),
+                    255,
+                    TextEncoding::Utf8,
+                )
+                .unwrap();
+            }
+            std::fs::write(&path, &bytes).unwrap();
+
+            let mut request = quiet_plan(&[path.clone()]);
+            request.tag_operations = vec![remove_operation(AudioContainer::Apev2)];
+            let plan = service
+                .plan(shared_conversion(), request, noop())
+                .await
+                .unwrap();
+            let removal = plan.files[0]
+                .removals
+                .iter()
+                .find(|item| item.container == AudioContainer::Apev2)
+                .unwrap_or_else(|| panic!("header={has_header} v1={with_v1} 沒有 APEv2"));
+            assert!(
+                removal.refused.is_none(),
+                "header={has_header} v1={with_v1} {:?}",
+                removal.refused
+            );
+            let result = service
+                .apply(&plan.plan_id, noop(), never_cancel())
+                .await
+                .unwrap();
+            assert!(
+                result.failed.is_empty(),
+                "header={has_header} v1={with_v1} {result:?}"
+            );
+
+            let stored = std::fs::read(&path).unwrap();
+            assert!(
+                !stored.windows(8).any(|window| window == b"APETAGEX"),
+                "header={has_header} v1={with_v1} 仍留著 APEv2"
+            );
+            let start = id3v2_tag_length(&stored);
+            let end = stored.len() - if with_v1 { 128 } else { 0 };
+            let segment = &stored[start..end];
+            assert_eq!(
+                audio_segment_hash(segment),
+                expected,
+                "header={has_header} v1={with_v1} 音訊段 hash 不符（len {}，預期 {}）",
+                segment.len(),
+                audio.len()
+            );
+        }
+    }
+
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
 #[test]
 fn big5_reports_unrepresentable_character() {
     let fit = fit_encoded_text("A🙂", 30, TextEncoding::Big5).unwrap();

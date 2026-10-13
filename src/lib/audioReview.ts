@@ -105,6 +105,8 @@ export function createAudioPreviewController(deps: {
     running += 1;
     deps.onStart?.();
     try {
+      // 開頭檢查之後、取消之前，套用可能才開始。此時取消會打斷進行中的寫入。
+      if (applying) return;
       await deps.cancelInFlight();
       if (!race.isCurrent(token)) return;
       const value = await deps.plan();

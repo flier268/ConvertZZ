@@ -19,6 +19,9 @@ test.describe("音訊標籤審閱", () => {
     await expect(page.getByRole("button", { name: "確認寫入 233 個檔案" })).toBeEnabled();
     await expect(page.getByText("已勾選 233 個檔案・467 個欄位")).toBeVisible();
     await expect(page.getByRole("radio", { name: "有變更 233" })).toBeChecked();
+    await expect(segment(page, "有變更 233")).toHaveAttribute("aria-pressed", "true");
+    await expect(segment(page, "不變 16")).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".page-header")).toContainText("/music/專輯甲 · 1 個檔案");
     await expect(page.getByRole("radio", { name: "不變 16" })).toBeVisible();
     await expect(page.getByRole("radio", { name: "錯誤 1" })).toBeVisible();
     await expect(page.getByRole("radio", { name: "全部 250" })).toBeVisible();
@@ -37,7 +40,8 @@ test.describe("音訊標籤審閱", () => {
 
     await segment(page, "有變更 233").click();
     await page.getByPlaceholder("搜尋檔名、專輯、標題").fill("same");
-    await expect(page.locator(".audio-detail")).toContainText("這個篩選沒有檔案");
+    await expect(page.locator(".audio-file-pane")).toContainText("沒有符合的檔案");
+    await expect(page.locator(".audio-detail")).toContainText("沒有符合的檔案");
     await segment(page, "全部 250").click();
     await expect(page.locator(".audio-name", { hasText: "same.ogg" })).toBeVisible();
     await page.getByPlaceholder("搜尋檔名、專輯、標題").fill("");
@@ -56,7 +60,7 @@ test.describe("音訊標籤審閱", () => {
     await expect(errorBox).toBeDisabled();
     await expect(errorBox).not.toBeChecked();
     await page.getByRole("button", { name: "全選" }).click();
-    await page.getByRole("button", { name: "反選" }).click();
+    await page.getByRole("button", { name: "反選目前篩選" }).click();
     await expect(errorBox).toBeDisabled();
     await expect(errorBox).not.toBeChecked();
     await page.locator(".audio-name", { hasText: "broken.mp3" }).click();
@@ -83,6 +87,7 @@ test.describe("音訊標籤審閱", () => {
 
     await segment(page, "有變更 233").click();
     await page.locator(".audio-name", { hasText: "song.mp3" }).click();
+    await expect(page.locator(".audio-detail")).toContainText("3 個變更");
     await expect(page.locator(".audio-detail .diff-ins").first()).toBeVisible();
     await page.screenshot({ path: join(shots, "audio-list-detail.png") });
     await page.getByRole("button", { name: "快捷鍵說明" }).hover();
@@ -194,5 +199,34 @@ test.describe("音訊標籤審閱", () => {
     await expect
       .poll(() => page.evaluate(() => window.__convertzzE2e?.confirms?.[0] ?? ""))
       .toContain("232");
+  });
+
+  test("尚未掃描、篩選是空的，以及掃描失敗", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openApp(page);
+    await openPage(page, "#tour-audio", "音訊標籤");
+    await expect(page.getByText("尚未掃描音訊檔案。請選取 MP3、APE、OGG 或 Opus。")).toBeVisible();
+    await page.screenshot({ path: join(shots, "audio-empty.png") });
+
+    await openApp(page, { failAudioScan: true, selectedFiles: "/tmp/song.mp3" });
+    await openPage(page, "#tour-audio", "音訊標籤");
+    await page.getByRole("button", { name: "選取音訊檔案" }).click();
+    const failure = page.locator(".el-result");
+    await expect(failure).toContainText("掃描失敗");
+    await expect(failure).toContainText("讀不到音訊標籤");
+    await page.screenshot({ path: join(shots, "audio-error-state.png") });
+  });
+
+  test("可以依變更數排序資料夾裡的檔案", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openApp(page, { selectedFiles: "/tmp/song.mp3" });
+    await openPage(page, "#tour-audio", "音訊標籤");
+    await page.getByRole("button", { name: "選取音訊檔案" }).click();
+    await page.getByRole("button", { name: "建立標籤預覽" }).click();
+    await segment(page, "全部 250").click();
+    await page.locator(".audio-sort").click();
+    await page.getByRole("option", { name: "變更數" }).click();
+    await expect(page.locator(".audio-folder").first()).toContainText("/music/專輯甲");
+    await page.screenshot({ path: join(shots, "audio-sorted.png") });
   });
 });

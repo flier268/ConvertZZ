@@ -1,16 +1,17 @@
 use super::backup::{create_user_backups, resolve_backup_roots, resolve_path, BackupRoot};
 use super::conversion::ConversionService;
-use super::encoding::{decode_text, encode_text};
+mod operations;
+use super::encoding::{decode_text, encode_text, encode_text_detailed};
 use super::error::CoreError;
 use super::types::{
-    ApplyFailure, ApplyResult, AudioContainer, AudioFormat, AudioScanRequest, AudioTagField,
-    AudioTagFile, AudioTagPlan, AudioTagPlanRequest, AudioTagPlanSummary, CancelCheck,
-    ConflictPolicy, ConversionOptions, ProgressReporter, TextEncoding,
+    ApplyFailure, ApplyResult, AudioContainer, AudioFieldWarning, AudioFieldWarningCode,
+    AudioFormat, AudioScanRequest, AudioTagField, AudioTagFile, AudioTagPlan, AudioTagPlanRequest,
+    AudioTagPlanSummary, CancelCheck, ConflictPolicy, ConversionOptions, ProgressReporter,
+    TextEncoding,
 };
 use chrono::Utc;
 use lofty::config::WriteOptions;
 use lofty::file::{AudioFile, FileType, TaggedFile, TaggedFileExt};
-use lofty::picture::PictureType;
 use lofty::probe::Probe;
 use lofty::tag::items::Timestamp;
 use lofty::tag::{Accessor, ItemKey, ItemValue, Tag, TagItem};
@@ -65,6 +66,8 @@ struct PreparedAudio {
     selected_containers: HashSet<AudioContainer>,
     /// 即使欄位文字沒變，這些容器仍要重寫編碼或 ID3 版本。
     rewrite_containers: HashSet<AudioContainer>,
+    /// 寫入時整段拿掉的標籤。音訊位元組仍用 `mp3_audio_payload` 核對。
+    remove_containers: HashSet<AudioContainer>,
     request: AudioTagPlanRequest,
     original_picture_count: usize,
 }
@@ -287,9 +290,10 @@ impl AudioService {
                     }
                     format!("已略過未選檔案：{}", file_name(Path::new(&file.path)))
                 } else {
-                    if let Some(item) =
-                        convert_selected_fields(conversion, &request, file, &mut warnings).await?
-                    {
+                    let mut item =
+                        convert_selected_fields(conversion, &request, file, &mut warnings).await?;
+                    operations::expand_tag_operations(&request, file, &mut item, &mut warnings)?;
+                    if let Some(item) = item {
                         prepared.push(item);
                     }
                     format!("正在建立標籤預覽：{}", file_name(Path::new(&file.path)))
@@ -380,8 +384,9 @@ impl AudioService {
             .selected_fields
             .insert(file.path.clone(), field_ids);
         let mut warnings = Vec::new();
-        let prepared =
+        let mut prepared =
             convert_selected_fields(conversion, &request.plan, &mut file, &mut warnings).await?;
+        operations::expand_tag_operations(&request.plan, &mut file, &mut prepared, &mut warnings)?;
         self.upsert_prepared(&plan_id, &file.path, prepared)?;
         file.previewed = true;
         Ok(file)
@@ -485,6 +490,7 @@ impl AudioService {
             if !included(&file.path) {
                 file.updates.clear();
                 file.selected_containers.clear();
+                file.remove_containers.clear();
                 continue;
             }
             if let Some(selection) = selected_fields {
@@ -640,6 +646,7 @@ async fn read_audio_files(
                 warning: Some(error.message),
                 previewed: false,
                 rewrite_containers: Vec::new(),
+                removals: Vec::new(),
             },
         };
         done += 1;
@@ -678,46 +685,27 @@ fn scan_file(path: &Path, request: &AudioScanRequest) -> Result<AudioTagFile, Co
         );
     }
     let tagged = read_tagged(path)?;
-    let container = if format == AudioFormat::Ape {
-        AudioContainer::Apev2
-    } else {
-        AudioContainer::VorbisComment
-    };
     let mut fields = Vec::new();
-    if let Some(tag) = tagged.primary_tag() {
-        push_standard_fields(&mut fields, container, tag);
-        let mut custom_order = Vec::new();
-        let mut custom: HashMap<&'static str, Vec<String>> = HashMap::new();
-        for item in tag.items() {
-            if let Some(key) = custom_item_key(item.key()) {
-                if let ItemValue::Text(text) = item.value() {
-                    if !custom.contains_key(key) {
-                        custom_order.push(key);
-                    }
-                    custom.entry(key).or_default().push(text.clone());
-                }
-            }
-        }
-        for key in custom_order {
-            if let Some(values) = custom.remove(key) {
-                fields.push(make_field(container, key, values));
-            }
-        }
+    for tag in tagged.tags() {
+        let Some(container) = operations::container_of_lofty(tag.tag_type()) else {
+            continue;
+        };
+        // MP3 的 ID3 由 scan_mp3 讀。這裡的 APE／OGG／OPUS 要讀全部標籤，
+        // 不能只留 primary_tag，否則 APE 檔裡的 ID3v1 會消失。
+        push_tag_fields(&mut fields, container, tag);
     }
+    let has_cover_art = tagged.tags().iter().any(|tag| !tag.pictures().is_empty());
     Ok(AudioTagFile {
         path: path.to_string_lossy().into_owned(),
         format,
         selected: true,
         fields,
-        has_cover_art: tagged.primary_tag().is_some_and(|tag| {
-            tag.pictures()
-                .iter()
-                .any(|picture| picture.pic_type() != PictureType::Other || true)
-        }),
+        has_cover_art,
         duration_seconds: Some(tagged.properties().duration().as_secs_f64()),
         warning: None,
         previewed: false,
         rewrite_containers: Vec::new(),
+        removals: Vec::new(),
     })
 }
 
@@ -766,6 +754,14 @@ fn scan_mp3(
     let has_cover_art = id3::Tag::read_from_path(path)
         .ok()
         .is_some_and(|tag| tag.pictures().next().is_some());
+    // MP3 上的 APEv2 不在 id3 crate 裡。讀不到就保持 ID3 結果，不讓整檔失敗。
+    if let Ok(tagged) = read_tagged(path) {
+        for tag in tagged.tags() {
+            if tag.tag_type() == lofty::tag::TagType::Ape {
+                push_tag_fields(&mut fields, AudioContainer::Apev2, tag);
+            }
+        }
+    }
     Ok(AudioTagFile {
         path: path.to_string_lossy().into_owned(),
         format: AudioFormat::Mp3,
@@ -776,7 +772,33 @@ fn scan_mp3(
         warning: None,
         previewed: false,
         rewrite_containers: Vec::new(),
+        removals: Vec::new(),
     })
+}
+
+fn push_tag_fields(
+    fields: &mut Vec<AudioTagField>,
+    container: AudioContainer,
+    tag: &lofty::tag::Tag,
+) {
+    push_standard_fields(fields, container, tag);
+    let mut custom_order = Vec::new();
+    let mut custom: HashMap<&'static str, Vec<String>> = HashMap::new();
+    for item in tag.items() {
+        if let Some(key) = custom_item_key(item.key()) {
+            if let ItemValue::Text(text) = item.value() {
+                if !custom.contains_key(key) {
+                    custom_order.push(key);
+                }
+                custom.entry(key).or_default().push(text.clone());
+            }
+        }
+    }
+    for key in custom_order {
+        if let Some(values) = custom.remove(key) {
+            fields.push(make_field(container, key, values));
+        }
+    }
 }
 
 fn frame_carries_text(frame: &id3::frame::Frame) -> bool {
@@ -850,8 +872,11 @@ fn apply_file(file: &PreparedAudio) -> Result<(), CoreError> {
 fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
     let source = fs::read(&file.path)?;
     let temporary = temporary_path(&file.path);
-    let writes_v2 = file.selected_containers.contains(&AudioContainer::Id3v2);
-    let writes_v1 = file.selected_containers.contains(&AudioContainer::Id3v1);
+    let remove_v2 = file.remove_containers.contains(&AudioContainer::Id3v2);
+    let remove_v1 = file.remove_containers.contains(&AudioContainer::Id3v1);
+    let remove_ape = file.remove_containers.contains(&AudioContainer::Apev2);
+    let writes_v2 = !remove_v2 && file.selected_containers.contains(&AudioContainer::Id3v2);
+    let writes_v1 = !remove_v1 && file.selected_containers.contains(&AudioContainer::Id3v1);
     fs::copy(&file.path, &temporary)?;
     let mut output = if writes_v2 {
         let mut tag = id3::Tag::read_from_path(&temporary).unwrap_or_else(|_| id3::Tag::new());
@@ -882,6 +907,8 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
         tag.write_to_path(&temporary, version)
             .map_err(|error| CoreError::new("ID3_WRITE", error.to_string()))?;
         fs::read(&temporary)?
+    } else if remove_v2 {
+        strip_id3v1(&strip_id3v2(&source)).to_vec()
     } else {
         strip_id3v1(&source).to_vec()
     };
@@ -928,10 +955,17 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
             file.request.id3v1_output_encoding,
         )?;
         fs::write(&temporary, &output)?;
+    } else if remove_v1 {
+        output = strip_id3v1(&output).to_vec();
+        fs::write(&temporary, &output)?;
     } else if existing_v1.is_some() {
         output = [strip_id3v1(&output), &source[source.len() - 128..]].concat();
         fs::write(&temporary, &output)?;
     } else if !writes_v2 {
+        fs::write(&temporary, &output)?;
+    }
+    if remove_ape {
+        output = strip_trailing_ape(&fs::read(&temporary).unwrap_or(output));
         fs::write(&temporary, &output)?;
     }
 
@@ -1091,6 +1125,16 @@ fn set_id3v2_value(tag: &mut id3::Tag, key: &str, value: String) {
             }
         }
         "genre" => tag.set_genre(value),
+        "albumArtist" => tag.set_album_artist(value),
+        "composer" => tag.set_text("TCOM", value),
+        "lyrics" => {
+            tag.remove_all_lyrics();
+            tag.add_frame(id3::frame::Lyrics {
+                lang: "eng".into(),
+                description: String::new(),
+                text: value,
+            });
+        }
         "comment" => {
             // 改第一則註解的文字，其餘保留。重複套用不會再追加一框。
             let mut comments: Vec<_> = tag.comments().cloned().collect();
@@ -1153,10 +1197,12 @@ async fn convert_selected_fields(
         }
         if converted_values != field.values {
             field.converted_values = Some(converted_values.clone());
+            field.origin = Some("convert".into());
             updates.insert(identifier, converted_values);
             containers.insert(field.container);
         } else {
             field.converted_values = None;
+            field.origin = None;
         }
     }
     let rewrite = rewrite_containers(request, file);
@@ -1176,6 +1222,7 @@ async fn convert_selected_fields(
         updates,
         selected_containers: containers,
         rewrite_containers: rewrite.into_iter().collect(),
+        remove_containers: HashSet::new(),
         request: request.clone(),
         original_picture_count: if file.has_cover_art {
             picture_count(&file.path)?
@@ -1241,7 +1288,7 @@ fn repair_id3v2_value(
 }
 
 fn mp3_audio_payload(buffer: &[u8]) -> Vec<u8> {
-    let without_v1 = strip_id3v1(buffer);
+    let without_v1 = strip_ape_tail(strip_id3v1(buffer));
     let mut start = id3v2_tag_length(without_v1);
     while start + 1 < without_v1.len()
         && !(without_v1[start] == 0xff && without_v1[start + 1] >= 0xf0)
@@ -1284,7 +1331,11 @@ pub(crate) fn summarize_audio_files(files: &[AudioTagFile]) -> AudioTagPlanSumma
             errors += 1;
             continue;
         }
-        let mut file_changed = !file.rewrite_containers.is_empty();
+        let mut file_changed = !file.rewrite_containers.is_empty()
+            || file
+                .removals
+                .iter()
+                .any(|removal| removal.selected && removal.refused.is_none());
         for field in &file.fields {
             if field
                 .converted_values
@@ -1321,6 +1372,8 @@ fn make_field(container: AudioContainer, key: &str, values: Vec<String>) -> Audi
         selected: STANDARD_FIELDS.contains(&key),
         truncated: false,
         truncation: None,
+        origin: None,
+        warnings: Vec::new(),
     }
 }
 
@@ -1351,6 +1404,50 @@ fn id3v1_text_limit(key: &str, comment_limit: usize) -> Option<usize> {
         "comment" => Some(comment_limit),
         _ => None,
     }
+}
+
+#[derive(Debug)]
+pub(super) struct EncodedFit {
+    pub text: String,
+    pub truncated: bool,
+    pub from_bytes: usize,
+    pub to_bytes: usize,
+    pub unrepresentable: usize,
+}
+
+fn char_representable(character: char, encoding: TextEncoding) -> bool {
+    let text = character.to_string();
+    encode_text_detailed(&text, encoding, false)
+        .map(|encoded| !encoded.had_errors)
+        .unwrap_or(false)
+}
+
+/// 先把目標編碼沒有的字改成 `?`，再依位元組上限停在完整字元。
+pub(super) fn fit_encoded_text(
+    value: &str,
+    limit: usize,
+    encoding: TextEncoding,
+) -> Result<EncodedFit, CoreError> {
+    let mut unrepresentable = 0usize;
+    let mut substituted = String::new();
+    for character in value.chars() {
+        if char_representable(character, encoding) {
+            substituted.push(character);
+        } else {
+            unrepresentable += 1;
+            substituted.push('?');
+        }
+    }
+    let from_bytes = encode_text(&substituted, encoding, false)?.len();
+    let (text, truncated) = truncate_to_encoding(&substituted, limit, encoding)?;
+    let to_bytes = encode_text(&text, encoding, false)?.len();
+    Ok(EncodedFit {
+        text,
+        truncated,
+        from_bytes,
+        to_bytes,
+        unrepresentable,
+    })
 }
 
 /// 依輸出編碼逐字放入，停在最後一個完整字元。
@@ -1395,23 +1492,43 @@ fn note_id3v1_truncation(
             .unwrap_or_else(|| field.values.clone());
         let mut fitted = Vec::with_capacity(source.len());
         let mut notice = None;
+        let mut field_warnings = Vec::new();
         for value in &source {
-            let (text, truncated) = truncate_to_encoding(value, limit, encoding)?;
-            if truncated && notice.is_none() {
+            let fit = fit_encoded_text(value, limit, encoding)?;
+            if fit.truncated && notice.is_none() {
                 notice = Some(format!(
-                    "「ID3v1 {}超過 {limit} 位元組，已截斷為 {text}」",
-                    field.label
+                    "「ID3v1 {}超過 {limit} 位元組，已截斷為 {}」",
+                    field.label, fit.text
                 ));
+                field_warnings.push(AudioFieldWarning {
+                    code: AudioFieldWarningCode::Truncated,
+                    message: format!("截斷 {}→{} B", fit.from_bytes, fit.to_bytes),
+                    from_bytes: Some(fit.from_bytes),
+                    to_bytes: Some(fit.to_bytes),
+                    count: None,
+                });
             }
-            fitted.push(text);
+            if fit.unrepresentable > 0 {
+                field_warnings.push(AudioFieldWarning {
+                    code: AudioFieldWarningCode::Unrepresentable,
+                    message: format!("{} 字無法表示", fit.unrepresentable),
+                    from_bytes: None,
+                    to_bytes: None,
+                    count: Some(fit.unrepresentable),
+                });
+            }
+            fitted.push(fit.text);
         }
-        let Some(message) = notice else {
+        if field_warnings.is_empty() {
             continue;
-        };
-        field.truncated = true;
-        field.truncation = Some(message.clone());
+        }
+        field.warnings = field_warnings;
+        field.truncated = notice.is_some();
+        field.truncation = notice.clone();
         field.converted_values = Some(fitted.clone());
-        warnings.push(format!("{}：{message}", file.path));
+        if let Some(message) = notice {
+            warnings.push(format!("{}：{message}", file.path));
+        }
         if field.selected {
             updates.insert(field_id(field.container, &field.key), fitted);
         }
@@ -1436,7 +1553,9 @@ fn label_for(key: &str) -> &str {
 }
 
 fn file_should_write(file: &PreparedAudio) -> bool {
-    !file.updates.is_empty() || !file.selected_containers.is_empty()
+    !file.updates.is_empty()
+        || !file.selected_containers.is_empty()
+        || !file.remove_containers.is_empty()
 }
 
 fn fields_for_path(selection: &HashMap<String, Vec<String>>, path: &Path) -> HashSet<String> {
@@ -1454,10 +1573,15 @@ fn fields_for_path(selection: &HashMap<String, Vec<String>>, path: &Path) -> Has
 
 /// 只留下這次勾選的欄位。沒被勾的文字變更不會寫入。
 fn restrict_to_fields(file: &mut PreparedAudio, allowed: &HashSet<String>) {
+    file.remove_containers
+        .retain(|container| allowed.contains(&operations::removal_field_id(*container)));
     file.updates
         .retain(|identifier, _| allowed.contains(identifier));
     let mut containers = HashSet::new();
     for identifier in allowed {
+        if identifier.starts_with("remove:") {
+            continue;
+        }
         let (container, _) = split_field_id(identifier);
         let has_text = file
             .updates
@@ -1945,11 +2069,46 @@ fn write_encoded_field(
     value: &str,
     encoding: TextEncoding,
 ) -> Result<(), CoreError> {
-    let (fitted, _) = truncate_to_encoding(value, length, encoding)?;
+    let fitted = fit_encoded_text(value, length, encoding)?.text;
     let encoded = encode_text(&fitted, encoding, false)?;
     let copy = encoded.len().min(length);
     target[offset..offset + copy].copy_from_slice(&encoded[..copy]);
     Ok(())
+}
+
+fn strip_id3v2(buffer: &[u8]) -> Vec<u8> {
+    let length = id3v2_tag_length(buffer).min(buffer.len());
+    buffer[length..].to_vec()
+}
+
+/// 去掉結尾的 APEv2（ID3v1 若還在，先視為已剝除）。
+/// lofty 對版本 2000 會把標頭的 32 位元組算進標籤長度。
+fn strip_ape_tail(body: &[u8]) -> &[u8] {
+    if body.len() < 32 || &body[body.len() - 32..body.len() - 24] != b"APETAGEX" {
+        return body;
+    }
+    let footer = &body[body.len() - 32..];
+    let version = u32::from_le_bytes(footer[8..12].try_into().unwrap_or([0; 4]));
+    let size = u32::from_le_bytes(footer[12..16].try_into().unwrap_or([0; 4])) as usize;
+    let total = if version == 2000 {
+        size.saturating_add(32)
+    } else {
+        size
+    };
+    if total < 32 || total > body.len() {
+        return body;
+    }
+    &body[..body.len() - total]
+}
+
+fn strip_trailing_ape(buffer: &[u8]) -> Vec<u8> {
+    let has_v1 = buffer.len() >= 128 && &buffer[buffer.len() - 128..buffer.len() - 125] == b"TAG";
+    if has_v1 {
+        let (body, v1) = buffer.split_at(buffer.len() - 128);
+        [strip_ape_tail(body), v1].concat()
+    } else {
+        strip_ape_tail(buffer).to_vec()
+    }
 }
 
 fn strip_id3v1(buffer: &[u8]) -> &[u8] {

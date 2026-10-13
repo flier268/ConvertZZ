@@ -367,6 +367,7 @@ async fn prepare_audio(
         id3v2_zhconvert: Some(zh),
         id3v2_version: 4,
         id3v2_encoding: "utf8".into(),
+        tag_operations: Vec::new(),
     };
 
     eprintln!("正在建立音訊標籤計劃…");

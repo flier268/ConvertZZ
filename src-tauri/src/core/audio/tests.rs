@@ -1,11 +1,13 @@
 use super::super::conversion::shared_conversion;
 use super::super::encoding::encode_text;
 use super::super::types::{
-    AudioContainer, AudioFormat, AudioRescanFileRequest, AudioTagField, AudioTagFile,
-    ConflictPolicy, ConversionOptions, Direction, EngineKind,
+    AudioContainer, AudioFieldWarningCode, AudioFormat, AudioRescanFileRequest, AudioTagField,
+    AudioTagFile, ConflictPolicy, ConversionOptions, Direction, EngineKind, TagAction,
+    TagOnConflict, TagOperation,
 };
 use super::*;
 use id3::{TagLike, Version};
+use lofty::picture::PictureType;
 use std::collections::HashSet;
 use std::process::Command;
 use std::sync::Arc;
@@ -119,6 +121,7 @@ fn base_plan(paths: &[PathBuf]) -> AudioTagPlanRequest {
         id3v2_zhconvert: None,
         id3v2_version: 4,
         id3v2_encoding: "utf8".into(),
+        tag_operations: Vec::new(),
     }
 }
 
@@ -1276,12 +1279,15 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
             selected: true,
             truncated: false,
             truncation: None,
+            origin: None,
+            warnings: Vec::new(),
         }],
         has_cover_art: false,
         duration_seconds: None,
         warning: None,
         previewed: true,
         rewrite_containers: Vec::new(),
+        removals: Vec::new(),
     };
     let same = AudioTagFile {
         path: "b.ogg".into(),
@@ -1296,12 +1302,15 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
             selected: true,
             truncated: false,
             truncation: None,
+            origin: None,
+            warnings: Vec::new(),
         }],
         has_cover_art: false,
         duration_seconds: None,
         warning: None,
         previewed: true,
         rewrite_containers: Vec::new(),
+        removals: Vec::new(),
     };
     let broken = AudioTagFile {
         path: "c.mp3".into(),
@@ -1313,6 +1322,7 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
         warning: Some("無法讀取".into()),
         previewed: false,
         rewrite_containers: Vec::new(),
+        removals: Vec::new(),
     };
     let summary = summarize_audio_files(&[changed, same, broken]);
     assert_eq!(summary.total, 3);
@@ -2143,4 +2153,306 @@ fn priority_queue_runs_the_requested_path_first_and_batches_hold_32() {
     let rest = drain_stream_batch(&mut buffer, true).expect("remainder");
     assert_eq!(rest.len(), 8);
     assert!(drain_stream_batch(&mut buffer, true).is_none());
+}
+
+fn quiet_plan(paths: &[PathBuf]) -> AudioTagPlanRequest {
+    let mut request = base_plan(paths);
+    request.conversion.direction = Direction::None;
+    request.id3v1_direction = Direction::None;
+    request.id3v2_direction = Direction::None;
+    request.id3v1_enabled = false;
+    request.id3v2_enabled = false;
+    request
+}
+
+fn remove_operation(container: AudioContainer) -> TagOperation {
+    TagOperation {
+        action: TagAction::Remove,
+        source: Some(container),
+        target: None,
+        fields: Vec::new(),
+        on_conflict: None,
+        enabled: true,
+    }
+}
+
+fn attach_ape(path: &Path, title: &str) {
+    use lofty::tag::{Accessor, ItemKey, Tag};
+    let mut tagged = read_tagged(path).unwrap();
+    let mut ape = Tag::new(lofty::tag::TagType::Ape);
+    ape.set_title(title.to_string());
+    ape.insert_text(ItemKey::ReplayGainTrackGain, String::from("-1.5 dB"));
+    tagged.insert_tag(ape);
+    tagged
+        .save_to_path(path, lofty::config::WriteOptions::default())
+        .unwrap();
+}
+
+fn write_triple_mp3(path: &Path) {
+    generate_audio(path, "libmp3lame");
+    let mut tag = id3::Tag::new();
+    tag.set_title("v2-title");
+    tag.set_text("TPUB", "hidden-publisher");
+    tag.write_to_path(path, Version::Id3v24).unwrap();
+    attach_ape(path, "ape-title");
+    let mut output = std::fs::read(path).unwrap();
+    output = append_id3v1(
+        &strip_id3v1(&output),
+        &HashMap::from([("title", "v1-title".to_string())]),
+        17,
+        TextEncoding::Utf8,
+    )
+    .unwrap();
+    std::fs::write(path, output).unwrap();
+}
+
+#[tokio::test]
+async fn tag_operations_remove_containers_keep_audio_bytes() {
+    let directory = temp_dir();
+    let original = directory.join("triple.mp3");
+    write_triple_mp3(&original);
+    let before = std::fs::read(&original).unwrap();
+    let payload = mp3_audio_payload(&before);
+    let service = AudioService::new();
+    let scanned = service
+        .scan(
+            shared_conversion(),
+            quiet_plan(&[original.clone()]).scan_request(),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert!(field(&scanned[0], AudioContainer::Apev2, "title").is_some());
+    assert!(field(&scanned[0], AudioContainer::Id3v1, "title").is_some());
+    assert!(field(&scanned[0], AudioContainer::Id3v2, "title").is_some());
+
+    for container in [
+        AudioContainer::Id3v1,
+        AudioContainer::Id3v2,
+        AudioContainer::Apev2,
+    ] {
+        let path = directory.join(format!("remove-{container:?}.mp3"));
+        std::fs::copy(&original, &path).unwrap();
+        let mut request = quiet_plan(&[path.clone()]);
+        request.tag_operations = vec![remove_operation(container)];
+        let plan = service
+            .plan(shared_conversion(), request, noop())
+            .await
+            .unwrap();
+        let removal = plan.files[0]
+            .removals
+            .iter()
+            .find(|item| item.container == container)
+            .unwrap_or_else(|| panic!("missing removal {container:?}"));
+        assert!(
+            removal.refused.is_none(),
+            "{container:?} {:?}",
+            removal.refused
+        );
+        assert!(removal.selected);
+        assert_eq!(removal.origin, "rule 1");
+        if container == AudioContainer::Apev2 {
+            assert!(
+                removal.hidden_field_count >= 1,
+                "{}",
+                removal.hidden_field_count
+            );
+        }
+        let result = service
+            .apply(&plan.plan_id, noop(), never_cancel())
+            .await
+            .unwrap();
+        assert!(result.failed.is_empty(), "{container:?} {result:?}");
+        let stored = std::fs::read(&path).unwrap();
+        assert_eq!(mp3_audio_payload(&stored), payload, "{container:?}");
+        match container {
+            AudioContainer::Id3v1 => {
+                assert!(read_id3v1(&stored, TextEncoding::Utf8).unwrap().is_none())
+            }
+            AudioContainer::Id3v2 => assert!(id3v2_header_version(&stored).is_none()),
+            AudioContainer::Apev2 => {
+                use lofty::file::TaggedFileExt;
+                let tagged = read_tagged(&path).unwrap();
+                assert!(tagged.tag(lofty::tag::TagType::Ape).is_none());
+            }
+            AudioContainer::VorbisComment => {}
+        }
+    }
+
+    let ape_only = directory.join("ape-only.mp3");
+    generate_audio(&ape_only, "libmp3lame");
+    attach_ape(&ape_only, "only-ape");
+    let stripped = strip_id3v1(&strip_id3v2(&std::fs::read(&ape_only).unwrap())).to_vec();
+    std::fs::write(&ape_only, &stripped).unwrap();
+    let ape_before = stripped;
+    let mut request = quiet_plan(&[ape_only.clone()]);
+    request.tag_operations = vec![remove_operation(AudioContainer::Apev2)];
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let removal = &plan.files[0].removals[0];
+    assert!(removal.refused.is_some(), "{removal:?}");
+    assert!(!removal.selected);
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert_eq!(std::fs::read(&ape_only).unwrap(), ape_before);
+
+    let v22 = directory.join("v22.mp3");
+    std::fs::write(&v22, mpeg_frame()).unwrap();
+    let mut tag = id3::Tag::new();
+    tag.set_title("v22");
+    tag.write_to_path(&v22, Version::Id3v22).unwrap();
+    let mut output = std::fs::read(&v22).unwrap();
+    output = append_id3v1(
+        &strip_id3v1(&output),
+        &HashMap::from([("title", "keep".to_string())]),
+        255,
+        TextEncoding::Utf8,
+    )
+    .unwrap();
+    std::fs::write(&v22, &output).unwrap();
+    assert_eq!(id3v2_header_version(&output), Some(2));
+    let payload_v22 = mp3_audio_payload(&output);
+    let mut request = quiet_plan(&[v22.clone()]);
+    request.tag_operations = vec![remove_operation(AudioContainer::Id3v2)];
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    let stored = std::fs::read(&v22).unwrap();
+    assert_eq!(mp3_audio_payload(&stored), payload_v22);
+    assert!(id3v2_header_version(&stored).is_none());
+
+    let unsync = directory.join("unsync.mp3");
+    std::fs::write(&unsync, mpeg_frame()).unwrap();
+    let mut tag = id3::Tag::new();
+    tag.set_title("unsync");
+    tag.write_to_path(&unsync, Version::Id3v23).unwrap();
+    let mut raw = std::fs::read(&unsync).unwrap();
+    raw[5] |= 0x80;
+    raw = append_id3v1(
+        &strip_id3v1(&raw),
+        &HashMap::from([("title", "keep".to_string())]),
+        255,
+        TextEncoding::Utf8,
+    )
+    .unwrap();
+    std::fs::write(&unsync, &raw).unwrap();
+    assert_ne!(raw[5] & 0x80, 0);
+    let payload_unsync = mp3_audio_payload(&raw);
+    let mut request = quiet_plan(&[unsync.clone()]);
+    request.tag_operations = vec![remove_operation(AudioContainer::Id3v2)];
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    let stored = std::fs::read(&unsync).unwrap();
+    assert_eq!(mp3_audio_payload(&stored), payload_unsync);
+    assert!(id3v2_header_version(&stored).is_none());
+
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[test]
+fn big5_reports_unrepresentable_character() {
+    let fit = fit_encoded_text("A🙂", 30, TextEncoding::Big5).unwrap();
+    assert!(fit.unrepresentable >= 1, "{fit:?}");
+    assert!(fit.text.contains('?'));
+}
+
+#[tokio::test]
+async fn copy_id3v2_to_id3v1_reports_big5_truncation_and_unrepresentable() {
+    let directory = temp_dir();
+    let path = directory.join("copy.mp3");
+    std::fs::write(&path, mpeg_frame()).unwrap();
+    let title = format!("🙂{}", "測".repeat(16));
+    let mut tag = id3::Tag::new();
+    tag.set_title(&title);
+    tag.set_genre("Rock");
+    tag.write_to_path(&path, Version::Id3v24).unwrap();
+    let service = AudioService::new();
+    let mut request = quiet_plan(&[path.clone()]);
+    request.id3v1_output_encoding = TextEncoding::Big5;
+    request.tag_operations = vec![TagOperation {
+        action: TagAction::Copy,
+        source: Some(AudioContainer::Id3v2),
+        target: Some(AudioContainer::Id3v1),
+        fields: vec!["title".into(), "genre".into()],
+        on_conflict: Some(TagOnConflict::Overwrite),
+        enabled: true,
+    }];
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let title_field = field(&plan.files[0], AudioContainer::Id3v1, "title").unwrap();
+    assert_eq!(title_field.origin.as_deref(), Some("rule 1"));
+    assert!(title_field.truncated, "{title_field:?}");
+    assert!(title_field.warnings.iter().any(|warning| {
+        warning.code == AudioFieldWarningCode::Truncated
+            && warning.from_bytes.unwrap_or(0) > warning.to_bytes.unwrap_or(0)
+    }));
+    let missing = title_field
+        .warnings
+        .iter()
+        .find(|warning| warning.code == AudioFieldWarningCode::Unrepresentable)
+        .unwrap_or_else(|| panic!("{title_field:?}"));
+    assert!(missing.count.unwrap_or(0) >= 1);
+    let written = title_field.converted_values.as_ref().unwrap()[0].clone();
+    assert!(!written.contains('🙂'));
+    assert!(written.contains('?'));
+    let genre = field(&plan.files[0], AudioContainer::Id3v1, "genre").unwrap();
+    assert_eq!(genre.converted_values.as_ref().unwrap()[0], "17");
+    let before_payload = mp3_audio_payload(&std::fs::read(&path).unwrap());
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    let stored = std::fs::read(&path).unwrap();
+    assert_eq!(mp3_audio_payload(&stored), before_payload);
+    let tag = read_id3v1(&stored, TextEncoding::Big5).unwrap().unwrap();
+    assert_eq!(tag.values["title"], written);
+    assert_eq!(tag.values["genre"], "17");
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn removing_the_only_id3v2_tag_is_refused() {
+    let directory = temp_dir();
+    let path = directory.join("only-v2.mp3");
+    std::fs::write(&path, mpeg_frame()).unwrap();
+    let mut tag = id3::Tag::new();
+    tag.set_title("only");
+    tag.write_to_path(&path, Version::Id3v24).unwrap();
+    let before = std::fs::read(&path).unwrap();
+    let service = AudioService::new();
+    let mut request = quiet_plan(&[path.clone()]);
+    request.tag_operations = vec![remove_operation(AudioContainer::Id3v2)];
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert!(plan.files[0].removals[0].refused.is_some());
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    let _ = std::fs::remove_dir_all(&directory);
 }

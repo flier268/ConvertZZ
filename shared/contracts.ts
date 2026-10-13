@@ -142,6 +142,32 @@ export interface FilePreviewRequest {
   sourcePath: string;
 }
 
+export type TagAction = "copy" | "remove" | "merge";
+export type TagOnConflict = "overwrite" | "fillEmpty";
+
+/** 一條標籤操作。來源在後端展開時一律讀原始標籤。 */
+export interface TagOperation {
+  action: TagAction;
+  source?: AudioContainer;
+  target?: AudioContainer;
+  /** 省略或空陣列表示七個共通欄位。 */
+  fields?: string[];
+  /** 省略時：來源是 ID3v1，或動作是合併，則為 fillEmpty，其餘為 overwrite。 */
+  onConflict?: TagOnConflict;
+  /** 省略視為啟用。停用的規則仍佔編號。 */
+  enabled?: boolean;
+}
+
+export type AudioFieldWarningCode = "truncated" | "unrepresentable" | "hidden" | "unmappable";
+
+export interface AudioFieldWarning {
+  code: AudioFieldWarningCode;
+  message: string;
+  fromBytes?: number;
+  toBytes?: number;
+  count?: number;
+}
+
 export interface AudioTagField {
   key: string;
   label: string;
@@ -154,6 +180,18 @@ export interface AudioTagField {
   truncated?: boolean;
   /** 例如「ID3v1 標題超過 30 位元組，已截斷為 …」。 */
   truncation?: string;
+  /** `rule n`、`manual` 或 `convert`。 */
+  origin?: "manual" | "convert" | `rule ${number}` | string;
+  warnings?: AudioFieldWarning[];
+}
+
+export interface AudioContainerRemoval {
+  container: AudioContainer;
+  hiddenFieldCount: number;
+  origin: string;
+  selected: boolean;
+  /** 有值表示沒有排進寫入，例如這是檔案唯一的標籤。 */
+  refused?: string;
 }
 
 export interface AudioTagFile {
@@ -169,6 +207,8 @@ export interface AudioTagFile {
   previewed?: boolean;
   /** 這些容器的編碼或 ID3 版本與寫入設定不同，欄位文字相同也算變更。 */
   rewriteContainers?: AudioContainer[];
+  /** 整個容器的移除。省略表示沒有。 */
+  removals?: AudioContainerRemoval[];
 }
 
 export interface AudioScanRequest {
@@ -201,6 +241,8 @@ export interface AudioTagPlanRequest extends AudioScanRequest {
   id3v2Zhconvert?: ZhConvertOptions;
   id3v2Version: 3 | 4;
   id3v2Encoding: "utf8" | "utf16" | "utf16be" | "latin1";
+  /** 省略或空陣列時，預覽與寫入維持原本的逐欄轉換。 */
+  tagOperations?: TagOperation[];
 }
 
 export interface AudioTagPlanSummary {

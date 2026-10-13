@@ -332,6 +332,29 @@ pub struct FileConversionPlan {
     pub ignored_inputs: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AudioFieldWarningCode {
+    Truncated,
+    Unrepresentable,
+    Hidden,
+    Unmappable,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioFieldWarning {
+    pub code: AudioFieldWarningCode,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from_bytes: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to_bytes: Option<usize>,
+    /// 無法表示的字數，或隱藏欄位數。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub count: Option<usize>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioTagField {
@@ -349,6 +372,24 @@ pub struct AudioTagField {
     /// 例如「ID3v1 標題超過 30 位元組，已截斷為 …」。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub truncation: Option<String>,
+    /// `rule n`、`manual` 或 `convert`。省略表示這次沒有標成某種來源。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<AudioFieldWarning>,
+}
+
+/// 整個容器的移除。`refused` 有值時沒有真的排進寫入（例如這是檔案唯一的標籤）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioContainerRemoval {
+    pub container: AudioContainer,
+    pub hidden_field_count: usize,
+    /// `rule n`。
+    pub origin: String,
+    pub selected: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refused: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -370,6 +411,47 @@ pub struct AudioTagFile {
     /// 這些容器的文字編碼或 ID3 版本與寫入設定不同，欄位文字相同也要寫。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rewrite_containers: Vec<AudioContainer>,
+    /// 這次計畫要移除的整個標籤。空陣列不輸出。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub removals: Vec<AudioContainerRemoval>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TagAction {
+    Copy,
+    Remove,
+    Merge,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TagOnConflict {
+    Overwrite,
+    FillEmpty,
+}
+
+/// 標籤之間的一條規則。來源在展開時一律讀掃描到的原始標籤。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagOperation {
+    pub action: TagAction,
+    #[serde(default)]
+    pub source: Option<AudioContainer>,
+    #[serde(default)]
+    pub target: Option<AudioContainer>,
+    /// 空陣列表示標題、演出者、專輯、年份、音軌、註解、類型。
+    #[serde(default)]
+    pub fields: Vec<String>,
+    #[serde(default)]
+    pub on_conflict: Option<TagOnConflict>,
+    /// 略過時後端仍保留規則編號，但不會套用。省略視為啟用。
+    #[serde(default = "default_tag_operation_enabled")]
+    pub enabled: bool,
+}
+
+fn default_tag_operation_enabled() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -424,6 +506,9 @@ pub struct AudioTagPlanRequest {
     pub id3v2_zhconvert: Option<ZhConvertOptions>,
     pub id3v2_version: u8,
     pub id3v2_encoding: String,
+    /// 空陣列時行為與沒有標籤操作相同。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tag_operations: Vec<TagOperation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

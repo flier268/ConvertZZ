@@ -169,6 +169,12 @@ describe("audioReview", () => {
     expect(audioPathKey("/tmp/Music/")).toBe(audioPathKey("/tmp/Music"));
     expect(audioPathKey("/tmp/Music")).not.toBe(audioPathKey("/tmp/music"));
     expect(audioPathKey("C:/")).toBe(audioPathKey("c:\\"));
+    expect(audioPathKey("\\\\Server\\Share\\A.mp3")).toBe(audioPathKey("//server/share/a.mp3"));
+    expect(audioPathKey("\\\\?\\C:\\Music\\A.mp3")).toBe(audioPathKey("\\\\?\\c:\\music\\a.mp3"));
+    expect(audioPathKey("\\\\?\\UNC\\Server\\Share\\A.mp3")).toBe(
+      audioPathKey("//?/unc/server/share/a.mp3"),
+    );
+    expect(audioPathKey("/tmp/Music")).not.toBe(audioPathKey("\\\\server\\share"));
     const merged = mergeAudioFiles(
       [file({ path: "C:\\Music\\A.mp3", selected: false })],
       [file({ path: "c:/music/a.mp3/", selected: true })],

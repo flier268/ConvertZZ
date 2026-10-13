@@ -175,10 +175,11 @@ const pageSubtitle = computed(() => {
   if (!files.value.length) return "ID3、APEv2 與 Vorbis Comment 都會保留未選欄位與封面。";
   if (focusKind.value === "folder" && focusFolder.value) {
     const folder = focusFolder.value.replaceAll("\\", "/");
-    const prefix = folder.endsWith("/") ? folder : `${folder}/`;
+    const folderKey = audioPathKey(focusFolder.value);
+    const prefix = `${folderKey}/`;
     const count = files.value.filter((file) => {
-      const path = file.path.replaceAll("\\", "/");
-      return path === folder || path.startsWith(prefix);
+      const path = audioPathKey(file.path);
+      return path === folderKey || path.startsWith(prefix);
     }).length;
     return `${folder} · ${count} 個檔案`;
   }
@@ -610,16 +611,27 @@ async function chooseFolder() {
 
 function selectionSnapshot(list: readonly AudioTagFile[]) {
   return new Map(
-    list.map((file) => [
-      audioPathKey(file.path),
-      {
-        selected: file.selected,
-        fields: new Map(file.fields.map((field) => [fieldDiffKey(field), field.selected] as const)),
-        byLabel: new Map(
-          file.fields.map((field) => [`${field.container}:${field.label}`, field.selected]),
-        ),
-      },
-    ]),
+    list.map((file) => {
+      const labels = file.fields.map((field) => `${field.container}:${field.label}`);
+      const uniqueLabels = new Set(
+        labels.filter((label) => labels.indexOf(label) === labels.lastIndexOf(label)),
+      );
+      return [
+        audioPathKey(file.path),
+        {
+          selected: file.selected,
+          fields: new Map(
+            file.fields.map((field) => [fieldDiffKey(field), field.selected] as const),
+          ),
+          byLabel: new Map(
+            file.fields.flatMap((field) => {
+              const label = `${field.container}:${field.label}`;
+              return uniqueLabels.has(label) ? [[label, field.selected] as const] : [];
+            }),
+          ),
+        },
+      ] as const;
+    }),
   );
 }
 
@@ -690,6 +702,7 @@ function settleAudioWork() {
 
 let scanEpoch = 0;
 let scanInFlight = false;
+let pendingFullSnapshot: ReturnType<typeof selectionSnapshot> | undefined;
 
 async function scan(onlyPaths?: readonly string[]) {
   if (applying.value) return;
@@ -698,6 +711,7 @@ async function scan(onlyPaths?: readonly string[]) {
   const epoch = ++scanEpoch;
   scanInFlight = true;
   previewController.invalidate();
+  const token = beginStream();
   await cancelInFlight();
   if (epoch !== scanEpoch || applying.value) {
     if (epoch === scanEpoch) scanInFlight = false;
@@ -705,11 +719,11 @@ async function scan(onlyPaths?: readonly string[]) {
   }
   beginAudioWork();
   if (!merging) {
+    if (!pendingFullSnapshot) pendingFullSnapshot = selectionSnapshot(files.value);
     resetReviewView();
     plan.value = undefined;
     files.value = [];
   }
-  const token = beginStream();
   const requestPaths = subset ?? paths.value;
   let completed = false;
   try {
@@ -732,13 +746,16 @@ async function scan(onlyPaths?: readonly string[]) {
       },
     );
     if (token !== streamToken) return;
-    const snapshot = selectionSnapshot(files.value);
+    const snapshot = merging
+      ? selectionSnapshot(files.value)
+      : (pendingFullSnapshot ?? selectionSnapshot(files.value));
     files.value = mergeAudioFiles(files.value, scanned);
     restoreSelection(files.value, snapshot);
     clearWarningSelection(files.value);
     completed = true;
   } catch (error) {
     if (token !== streamToken) return;
+    if (!merging && pendingFullSnapshot) restoreSelection(files.value, pendingFullSnapshot);
     if (isCancellationError(error)) ElMessage.info("已取消掃描。");
     else {
       operationError.value = error instanceof Error ? error.message : String(error);
@@ -746,7 +763,10 @@ async function scan(onlyPaths?: readonly string[]) {
     }
     return;
   } finally {
-    if (token === streamToken) settleAudioWork();
+    if (token === streamToken) {
+      if (!merging) pendingFullSnapshot = undefined;
+      settleAudioWork();
+    }
     if (epoch === scanEpoch) scanInFlight = false;
   }
   if (completed && token === streamToken && files.value.length && !applying.value) {
@@ -796,10 +816,10 @@ async function buildPlanRequest(): Promise<AudioTagPlanRequest> {
 
 function adoptPlan(value: unknown) {
   const next = value as AudioTagPlan;
-  const keep = new Set(next.files.map((file) => file.path));
+  const keep = new Set(next.files.map((file) => audioPathKey(file.path)));
   const snapshot = selectionSnapshot(files.value);
   files.value = mergeAudioFiles(
-    files.value.filter((file) => keep.has(file.path)),
+    files.value.filter((file) => keep.has(audioPathKey(file.path))),
     next.files,
   );
   restoreSelection(files.value, snapshot);

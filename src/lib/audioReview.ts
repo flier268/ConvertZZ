@@ -313,12 +313,13 @@ export function audioSegmentCounts(
 
 /**
  * 比對路徑用的鍵。尾端斜線與反斜線視為相同；
- * 磁碟機代號路徑（`C:`）不分大小寫，其餘路徑維持大小寫。
+ * 磁碟機代號（`C:`）、UNC（`\\server\share`）與 `\\?\` 路徑不分大小寫，其餘維持大小寫。
  */
 export function audioPathKey(path: string): string {
   let normalized = path.replaceAll("\\", "/");
   const drive = /^[A-Za-z]:/.test(normalized);
-  if (drive) normalized = normalized.toLowerCase();
+  const unc = normalized.startsWith("//");
+  if (drive || unc) normalized = normalized.toLowerCase();
   const minimum = drive ? 3 : normalized.startsWith("/") ? 1 : 0;
   while (normalized.length > minimum && normalized.endsWith("/")) {
     normalized = normalized.slice(0, -1);

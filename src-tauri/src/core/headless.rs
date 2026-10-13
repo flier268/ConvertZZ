@@ -391,13 +391,14 @@ async fn prepare_audio(
         .iter()
         .filter(|file| file.selected && file.warning.is_none())
         .filter(|file| {
-            file.fields.iter().any(|field| {
-                field.selected
-                    && field
-                        .converted_values
-                        .as_ref()
-                        .is_some_and(|values| values != &field.values)
-            })
+            !file.rewrite_containers.is_empty()
+                || file.fields.iter().any(|field| {
+                    field.selected
+                        && field
+                            .converted_values
+                            .as_ref()
+                            .is_some_and(|values| values != &field.values)
+                })
         })
         .count();
     Ok(Some(PreparedAudioWrite { plan, writable }))

@@ -34,7 +34,7 @@ import {
   toggleFolderCollapsed,
   audioApplySelection,
   settingsSummaryChips,
-  fieldValuesChanged,
+  fieldAffectsAudio,
   type AudioListFilter,
   type AudioListRow,
   type DiffPiece,
@@ -122,7 +122,7 @@ const visibleFields = computed(() => {
   const file = selectedFile.value;
   if (!file) return [];
   if (!hideUnchanged.value || !plan.value) return file.fields;
-  return file.fields.filter((field) => fieldValuesChanged(field));
+  return file.fields.filter((field) => fieldAffectsAudio(file, field));
 });
 const summaryChips = computed(() =>
   settingsSummaryChips({

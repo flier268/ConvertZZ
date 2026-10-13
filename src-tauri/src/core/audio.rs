@@ -29,6 +29,8 @@ struct PreparedAudio {
     format: AudioFormat,
     updates: HashMap<String, Vec<String>>,
     selected_containers: HashSet<AudioContainer>,
+    /// 即使欄位文字沒變，這些容器仍要重寫編碼或 ID3 版本。
+    rewrite_containers: HashSet<AudioContainer>,
     request: AudioTagPlanRequest,
     original_picture_count: usize,
 }
@@ -86,6 +88,7 @@ impl AudioService {
                     has_cover_art: false,
                     duration_seconds: None,
                     warning: Some(error.message),
+                    rewrite_containers: Vec::new(),
                 },
             });
             progress(super::types::ProgressEvent {
@@ -422,6 +425,7 @@ fn scan_file(path: &Path, request: &AudioScanRequest) -> Result<AudioTagFile, Co
         }),
         duration_seconds: Some(tagged.properties().duration().as_secs_f64()),
         warning: None,
+        rewrite_containers: Vec::new(),
     })
 }
 
@@ -478,6 +482,7 @@ fn scan_mp3(
         has_cover_art,
         duration_seconds: None,
         warning: None,
+        rewrite_containers: Vec::new(),
     })
 }
 
@@ -798,7 +803,12 @@ async fn convert_selected_fields(
             containers.insert(field.container);
         }
     }
-    if updates.is_empty() {
+    let rewrite = rewrite_containers(request, file);
+    for container in &rewrite {
+        containers.insert(*container);
+    }
+    file.rewrite_containers = rewrite.clone();
+    if updates.is_empty() && rewrite.is_empty() {
         return Ok(None);
     }
     Ok(Some(PreparedAudio {
@@ -806,6 +816,7 @@ async fn convert_selected_fields(
         format: file.format,
         updates,
         selected_containers: containers,
+        rewrite_containers: rewrite.into_iter().collect(),
         request: request.clone(),
         original_picture_count: if file.has_cover_art {
             picture_count(&file.path)?
@@ -914,7 +925,7 @@ pub(crate) fn summarize_audio_files(files: &[AudioTagFile]) -> AudioTagPlanSumma
             errors += 1;
             continue;
         }
-        let mut file_changed = false;
+        let mut file_changed = !file.rewrite_containers.is_empty();
         for field in &file.fields {
             if field
                 .converted_values
@@ -989,11 +1000,102 @@ fn fields_for_path(selection: &HashMap<String, Vec<String>>, path: &Path) -> Has
 fn restrict_to_fields(file: &mut PreparedAudio, allowed: &HashSet<String>) {
     file.updates
         .retain(|identifier, _| allowed.contains(identifier));
-    file.selected_containers = file
-        .updates
-        .keys()
-        .map(|identifier| split_field_id(identifier).0)
-        .collect();
+    let mut containers = HashSet::new();
+    for identifier in allowed {
+        let (container, _) = split_field_id(identifier);
+        let has_text = file
+            .updates
+            .keys()
+            .any(|key| split_field_id(key).0 == container);
+        if has_text || file.rewrite_containers.contains(&container) {
+            containers.insert(container);
+        }
+    }
+    file.selected_containers = containers;
+}
+
+fn rewrite_containers(request: &AudioTagPlanRequest, file: &AudioTagFile) -> Vec<AudioContainer> {
+    let mut containers = Vec::new();
+    let selected = |container: AudioContainer| {
+        file.fields
+            .iter()
+            .any(|field| field.selected && field.container == container)
+    };
+    if selected(AudioContainer::Id3v2) && id3v2_needs_rewrite(Path::new(&file.path), request) {
+        containers.push(AudioContainer::Id3v2);
+    }
+    if selected(AudioContainer::Id3v1) && id3v1_needs_rewrite(request) {
+        containers.push(AudioContainer::Id3v1);
+    }
+    containers
+}
+
+fn id3v1_needs_rewrite(request: &AudioTagPlanRequest) -> bool {
+    let source = request.id3v1_source_encoding.unwrap_or(TextEncoding::Gbk);
+    request.id3v1_output_encoding != source
+}
+
+fn id3_encoding_byte(encoding: &str) -> u8 {
+    match encoding {
+        "latin1" => 0,
+        "utf16" | "utf-16" => 1,
+        "utf16be" | "utf-16be" => 2,
+        _ => 3,
+    }
+}
+
+/// 已選的 ID3v2 標頭版本或文字框編碼與要求不同。
+fn id3v2_needs_rewrite(path: &Path, request: &AudioTagPlanRequest) -> bool {
+    let Ok(buffer) = fs::read(path) else {
+        return false;
+    };
+    if id3v2_header_version(&buffer) != Some(request.id3v2_version) {
+        return true;
+    }
+    let wanted = id3_encoding_byte(&request.id3v2_encoding);
+    id3v2_text_encodings(&buffer)
+        .into_iter()
+        .any(|encoding| encoding != wanted)
+}
+
+fn id3v2_text_encodings(buffer: &[u8]) -> Vec<u8> {
+    let Some(version) = id3v2_header_version(buffer) else {
+        return Vec::new();
+    };
+    if buffer.len() < 10 || (version != 3 && version != 4) {
+        return Vec::new();
+    }
+    let size = ((buffer[6] as usize & 0x7f) << 21)
+        | ((buffer[7] as usize & 0x7f) << 14)
+        | ((buffer[8] as usize & 0x7f) << 7)
+        | (buffer[9] as usize & 0x7f);
+    let mut offset = 10;
+    let end = (10 + size).min(buffer.len());
+    let mut encodings = Vec::new();
+    while offset + 11 <= end {
+        let id = std::str::from_utf8(&buffer[offset..offset + 4]).unwrap_or_default();
+        if id.as_bytes().iter().all(|byte| *byte == 0) {
+            break;
+        }
+        let frame_size = if version == 4 {
+            ((buffer[offset + 4] as usize & 0x7f) << 21)
+                | ((buffer[offset + 5] as usize & 0x7f) << 14)
+                | ((buffer[offset + 6] as usize & 0x7f) << 7)
+                | (buffer[offset + 7] as usize & 0x7f)
+        } else {
+            u32::from_be_bytes([
+                buffer[offset + 4],
+                buffer[offset + 5],
+                buffer[offset + 6],
+                buffer[offset + 7],
+            ]) as usize
+        };
+        if id.starts_with('T') && frame_size > 0 && offset + 10 < buffer.len() {
+            encodings.push(buffer[offset + 10]);
+        }
+        offset = offset.saturating_add(10 + frame_size);
+    }
+    encodings
 }
 
 fn field_id(container: AudioContainer, key: &str) -> String {

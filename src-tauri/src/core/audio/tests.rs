@@ -1196,6 +1196,7 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
         has_cover_art: false,
         duration_seconds: None,
         warning: None,
+        rewrite_containers: Vec::new(),
     };
     let same = AudioTagFile {
         path: "b.ogg".into(),
@@ -1212,6 +1213,7 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
         has_cover_art: false,
         duration_seconds: None,
         warning: None,
+        rewrite_containers: Vec::new(),
     };
     let broken = AudioTagFile {
         path: "c.mp3".into(),
@@ -1221,6 +1223,7 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
         has_cover_art: false,
         duration_seconds: None,
         warning: Some("無法讀取".into()),
+        rewrite_containers: Vec::new(),
     };
     let summary = summarize_audio_files(&[changed, same, broken]);
     assert_eq!(summary.total, 3);
@@ -1459,6 +1462,132 @@ async fn apply_honours_current_file_and_field_selection() {
     assert_eq!(
         field(&written[0], AudioContainer::Id3v2, "artist").map(|field| field.values.clone()),
         Some(vec!["头发".into()])
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+fn write_id3v2(path: &Path, title: &str, version: Version, encoding: &str) {
+    std::fs::write(path, mpeg_frame()).unwrap();
+    let mut tag = id3::Tag::new();
+    tag.set_title(title);
+    apply_id3v2_encoding(&mut tag, encoding);
+    tag.write_to_path(path, version).unwrap();
+}
+
+#[tokio::test]
+async fn encoding_or_version_only_changes_are_written() {
+    let directory = temp_dir();
+    let version_path = directory.join("version.mp3");
+    write_id3v2(&version_path, "Hello", Version::Id3v23, "utf8");
+    let service = AudioService::new();
+    let mut request = base_plan(&[version_path.clone()]);
+    request.id3v1_enabled = false;
+    request.id3v2_direction = Direction::None;
+    request.id3v2_version = 4;
+    request.id3v2_encoding = "utf8".into();
+    request.selected_fields = HashMap::from([(
+        version_path.to_string_lossy().into_owned(),
+        vec!["id3v2:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert_eq!(plan.summary.changed, 1);
+    assert_eq!(plan.summary.unchanged, 0);
+    assert_eq!(
+        plan.files[0].rewrite_containers,
+        vec![AudioContainer::Id3v2]
+    );
+    assert_eq!(
+        field(&plan.files[0], AudioContainer::Id3v2, "title")
+            .and_then(|field| field.converted_values.clone()),
+        Some(vec!["Hello".into()])
+    );
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert_eq!(result.succeeded.len(), 1, "{result:?}");
+    let written = std::fs::read(&version_path).unwrap();
+    assert_eq!(id3v2_header_version(&written), Some(4));
+    assert_eq!(frame_encoding(&written, "TIT2"), 3);
+
+    let encoding_path = directory.join("encoding.mp3");
+    write_id3v2(&encoding_path, "Hello", Version::Id3v24, "utf16");
+    let before = std::fs::read(&encoding_path).unwrap();
+    assert_eq!(frame_encoding(&before, "TIT2"), 1);
+    let mut request = base_plan(&[encoding_path.clone()]);
+    request.id3v1_enabled = false;
+    request.id3v2_direction = Direction::None;
+    request.id3v2_version = 4;
+    request.id3v2_encoding = "utf8".into();
+    let encoding_key = encoding_path.to_string_lossy().into_owned();
+    request.selected_fields = HashMap::from([(encoding_key.clone(), vec!["id3v2:title".into()])]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert_eq!(plan.summary.changed, 1);
+    let skipped = service
+        .apply_filtered(
+            &plan.plan_id,
+            Some(&[encoding_key.clone()]),
+            Some(&HashMap::from([(encoding_key, Vec::new())])),
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(skipped.succeeded.is_empty(), "{skipped:?}");
+    assert_eq!(std::fs::read(&encoding_path).unwrap(), before);
+
+    let v1 = directory.join("v1.mp3");
+    std::fs::write(&v1, id3v1_only_mp3("裡面", TextEncoding::Gbk)).unwrap();
+    let v1_before = std::fs::read(&v1).unwrap();
+    let mut request = base_plan(&[v1.clone()]);
+    request.id3v2_enabled = false;
+    request.id3v1_direction = Direction::None;
+    request.id3v1_source_encoding = Some(TextEncoding::Gbk);
+    request.id3v1_output_encoding = TextEncoding::Utf8;
+    request.selected_fields = HashMap::from([(
+        v1.to_string_lossy().into_owned(),
+        vec!["id3v1:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert_eq!(plan.summary.changed, 1);
+    assert_eq!(
+        plan.files[0].rewrite_containers,
+        vec![AudioContainer::Id3v1]
+    );
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    let after = std::fs::read(&v1).unwrap();
+    assert_ne!(after, v1_before);
+    let reread = service
+        .scan(
+            shared_conversion(),
+            AudioScanRequest {
+                paths: vec![v1.to_string_lossy().into_owned()],
+                recursive: None,
+                id3v1_source_encoding: Some(TextEncoding::Utf8),
+                id3v2_source_encoding: None,
+                id3v2_repair_source_encoding: None,
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        field(&reread[0], AudioContainer::Id3v1, "title").map(|field| field.values.clone()),
+        Some(vec!["裡面".into()])
     );
     let _ = std::fs::remove_dir_all(&directory);
 }

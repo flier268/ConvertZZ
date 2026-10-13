@@ -159,6 +159,8 @@ export interface AudioTagFile {
   hasCoverArt: boolean;
   durationSeconds?: number;
   warning?: string;
+  /** 這些容器的編碼或 ID3 版本與寫入設定不同，欄位文字相同也算變更。 */
+  rewriteContainers?: AudioContainer[];
 }
 
 export interface AudioScanRequest {

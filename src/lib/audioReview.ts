@@ -74,8 +74,20 @@ export function fieldValuesChanged(field: AudioTagField): boolean {
   return field.convertedValues.join("\u0000") !== field.values.join("\u0000");
 }
 
+export function containerRewrites(
+  file: AudioTagFile,
+  container: AudioTagField["container"],
+): boolean {
+  return (file.rewriteContainers ?? []).includes(container);
+}
+
+/** 欄位文字有變，或所屬容器要重寫編碼／ID3 版本。 */
+export function fieldAffectsAudio(file: AudioTagFile, field: AudioTagField): boolean {
+  return fieldValuesChanged(field) || containerRewrites(file, field.container);
+}
+
 export function changedFieldCount(file: AudioTagFile): number {
-  return file.fields.filter(fieldValuesChanged).length;
+  return file.fields.filter((field) => fieldAffectsAudio(file, field)).length;
 }
 
 export function audioPreviewReady(files: readonly AudioTagFile[]): boolean {
@@ -117,16 +129,14 @@ export function replaceAudioFile(
 }
 
 export function audioReviewStats(files: readonly AudioTagFile[]): AudioReviewStats {
-  let changed = 0;
-  let errors = 0;
-  for (const file of files) {
-    if (file.warning) errors += 1;
-    else if (changedFieldCount(file) > 0) changed += 1;
-  }
-  const unchanged = files.length - changed - errors;
-  const ready = audioPreviewReady(files);
-  const listedChanged = files.filter((file) => audioFileBucket(file, ready) === "changed").length;
-  return { total: files.length, changed, unchanged, errors, listedChanged };
+  const counts = audioSegmentCounts(files);
+  return {
+    total: counts.all,
+    changed: counts.changed,
+    unchanged: counts.unchanged,
+    errors: counts.errors,
+    listedChanged: counts.changed,
+  };
 }
 
 function fieldBlob(file: AudioTagFile, keys: Set<string>, label: string): string {
@@ -203,11 +213,13 @@ export function buildAudioListRows(
   const rows: AudioListRow[] = [];
   for (const [path, group] of groups) {
     const isCollapsed = collapsed.has(path);
+    const ready = audioPreviewReady(files);
     let changed = 0;
     let errors = 0;
     for (const file of group) {
-      if (file.warning) errors += 1;
-      else if (changedFieldCount(file) > 0) changed += 1;
+      const bucket = audioFileBucket(file, ready);
+      if (bucket === "errors") errors += 1;
+      else if (bucket === "changed") changed += 1;
     }
     rows.push({
       type: "folder",
@@ -255,6 +267,7 @@ function containerEnabled(field: AudioTagField, containers: AudioContainerFlags)
 }
 
 function countsTowardWrite(
+  file: AudioTagFile,
   field: AudioTagField,
   containers: AudioContainerFlags,
   ready: boolean,
@@ -262,7 +275,7 @@ function countsTowardWrite(
   if (!field.selected || !containerEnabled(field, containers)) return false;
   // 預覽完成前還不知道結果，已勾欄位先算進「建立預覽」。預覽後只算真的會變的欄位。
   if (!ready) return true;
-  return fieldValuesChanged(field);
+  return fieldAffectsAudio(file, field);
 }
 
 /** 至少有一個已勾、且（預覽後）數值會變的欄位。不變檔不計入、也不寫入。 */
@@ -272,7 +285,7 @@ export function fileHasWritableSelection(
   previewReady: boolean,
 ): boolean {
   if (!file.selected || file.warning) return false;
-  return file.fields.some((field) => countsTowardWrite(field, containers, previewReady));
+  return file.fields.some((field) => countsTowardWrite(file, field, containers, previewReady));
 }
 
 export function selectionTotals(
@@ -286,7 +299,7 @@ export function selectionTotals(
     if (!file.selected || file.warning) continue;
     let selected = 0;
     for (const field of file.fields) {
-      if (!countsTowardWrite(field, containers, ready)) continue;
+      if (!countsTowardWrite(file, field, containers, ready)) continue;
       selected += 1;
     }
     if (selected > 0) {
@@ -315,7 +328,7 @@ export function audioApplySelection(
   for (const file of files) {
     if (!fileHasWritableSelection(file, containers, ready)) continue;
     const ids = file.fields
-      .filter((field) => countsTowardWrite(field, containers, ready))
+      .filter((field) => countsTowardWrite(file, field, containers, ready))
       .map((field) => `${field.container}:${field.key}`);
     if (!ids.length) continue;
     paths.push(file.path);

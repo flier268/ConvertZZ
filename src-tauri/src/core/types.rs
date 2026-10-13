@@ -327,6 +327,9 @@ pub struct AudioTagFile {
     pub duration_seconds: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
+    /// 這些容器的文字編碼或 ID3 版本與寫入設定不同，欄位文字相同也要寫。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rewrite_containers: Vec<AudioContainer>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]

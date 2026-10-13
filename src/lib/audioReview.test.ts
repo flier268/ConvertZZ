@@ -223,6 +223,58 @@ describe("audioReview", () => {
     expect(selectionTotals(pending, { id3v1: true, id3v2: true })).toEqual({ files: 1, fields: 1 });
   });
 
+  it("只有編碼或 ID3 版本會變的檔案算進同一個分桶與確認筆數", () => {
+    const encodingOnly = file({
+      path: "/tmp/enc.mp3",
+      rewriteContainers: ["id3v2"],
+      fields: [
+        {
+          key: "title",
+          label: "標題",
+          container: "id3v2",
+          values: ["Hello"],
+          convertedValues: ["Hello"],
+          selected: true,
+        },
+      ],
+    });
+    const id3v1 = file({
+      path: "/tmp/v1.mp3",
+      rewriteContainers: ["id3v1"],
+      fields: [
+        {
+          key: "title",
+          label: "標題",
+          container: "id3v1",
+          values: ["裡面"],
+          convertedValues: ["裡面"],
+          selected: true,
+        },
+      ],
+    });
+    const files = [encodingOnly, id3v1];
+    expect(audioSegmentCounts(files)).toEqual({ changed: 2, unchanged: 0, errors: 0, all: 2 });
+    expect(audioReviewStats(files)).toMatchObject({
+      changed: 2,
+      unchanged: 0,
+      listedChanged: 2,
+    });
+    expect(filterAudioFiles(files, "changed", "")).toHaveLength(2);
+    expect(selectionTotals(files, { id3v1: true, id3v2: true })).toEqual({ files: 2, fields: 2 });
+    expect(audioApplySelection(files, { id3v1: true, id3v2: true }).paths).toEqual([
+      "/tmp/enc.mp3",
+      "/tmp/v1.mp3",
+    ]);
+    const rows = buildAudioListRows(files, new Set());
+    expect(rows[0]).toMatchObject({ type: "folder", counts: { changed: 2 } });
+    encodingOnly.fields[0].selected = false;
+    expect(selectionTotals([encodingOnly], { id3v1: true, id3v2: true })).toEqual({
+      files: 0,
+      fields: 0,
+    });
+    expect(audioSegmentCounts([encodingOnly]).changed).toBe(1);
+  });
+
   it("字元差異把舊字與新字分開", () => {
     const diff = charDiff("后来的我们", "後來的我們");
     expect(

@@ -1684,6 +1684,76 @@ async fn id3v2_rewrite_sets_container_notice_on_the_plan() {
     let _ = std::fs::remove_dir_all(&directory);
 }
 
+fn append_gbk_id3v1(path: &Path, title: &str) {
+    let mut output = std::fs::read(path).unwrap();
+    output = append_id3v1(
+        &strip_id3v1(&output),
+        &HashMap::from([("title", title.to_string())]),
+        255,
+        TextEncoding::Gbk,
+    )
+    .unwrap();
+    std::fs::write(path, output).unwrap();
+}
+
+#[tokio::test]
+async fn container_notices_cover_id3v1_and_encoding() {
+    let directory = temp_dir();
+    let service = AudioService::new();
+
+    let both_path = directory.join("both-notice.mp3");
+    write_id3v2(&both_path, "Hello", Version::Id3v23, "utf16");
+    append_gbk_id3v1(&both_path, "Hello");
+    let mut request = base_plan(&[both_path.clone()]);
+    request.id3v1_direction = Direction::None;
+    request.id3v2_direction = Direction::None;
+    request.id3v2_version = 4;
+    request.id3v2_encoding = "utf16".into();
+    request.selected_fields = HashMap::from([(
+        both_path.to_string_lossy().into_owned(),
+        vec!["id3v2:title".into(), "id3v1:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert_eq!(
+        plan.files[0].notices,
+        vec![
+            "ID3v2 標籤會整個重寫為 v2.4・UTF-16".to_string(),
+            "ID3v1 會重寫".to_string(),
+        ],
+        "同時重寫 ID3v1 與 ID3v2 時兩條說明都要在"
+    );
+
+    let encoding_path = directory.join("encoding-notice.mp3");
+    write_id3v2(&encoding_path, "Hello", Version::Id3v24, "utf16");
+    let mut request = base_plan(&[encoding_path.clone()]);
+    request.id3v1_enabled = false;
+    request.id3v2_direction = Direction::None;
+    request.id3v2_version = 4;
+    request.id3v2_encoding = "utf8".into();
+    request.selected_fields = HashMap::from([(
+        encoding_path.to_string_lossy().into_owned(),
+        vec!["id3v2:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert_eq!(
+        plan.files[0].rewrite_containers,
+        vec![AudioContainer::Id3v2]
+    );
+    assert_eq!(
+        plan.files[0].notices,
+        vec!["ID3v2 標籤會整個重寫為 v2.4・UTF-8".to_string()],
+        "只改編碼時說明要帶上目標編碼"
+    );
+
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
 #[tokio::test]
 async fn encoding_or_version_only_changes_are_written() {
     let directory = temp_dir();

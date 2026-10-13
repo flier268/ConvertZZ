@@ -291,6 +291,11 @@ pub(super) fn expand_tag_operations(
     if rule_fields.is_empty() && remove_containers.is_empty() {
         return Ok(());
     }
+    let original_picture_count = if file.has_cover_art {
+        super::picture_count(Path::new(&file.path))?
+    } else {
+        0
+    };
     let prepared = prepared.get_or_insert_with(|| PreparedAudio {
         path: Path::new(&file.path).to_path_buf(),
         format: file.format,
@@ -299,7 +304,7 @@ pub(super) fn expand_tag_operations(
         rewrite_containers: HashSet::new(),
         remove_containers: HashSet::new(),
         request: request.clone(),
-        original_picture_count: 0,
+        original_picture_count,
     });
     for container in &remove_containers {
         prepared

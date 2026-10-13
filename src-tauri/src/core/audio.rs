@@ -976,6 +976,14 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
             "MP3 標籤寫入改變了音訊資料。",
         ));
     }
+    // 拿掉整個 ID3v2 時封面跟著消失，不比對。其餘寫入（含移除 ID3v1／APEv2）要留下原本的 APIC。
+    if !remove_v2 && picture_count(&temporary)? != file.original_picture_count {
+        let _ = fs::remove_file(&temporary);
+        return Err(CoreError::new(
+            "AUDIO_PICTURE",
+            "標籤寫入造成封面圖片數量改變。",
+        ));
+    }
     commit_temporary(&file.path, &temporary)
 }
 
@@ -1305,7 +1313,7 @@ async fn convert_selected_fields(
         remove_containers: HashSet::new(),
         request: request.clone(),
         original_picture_count: if file.has_cover_art {
-            picture_count(&file.path)?
+            picture_count(Path::new(&file.path))?
         } else {
             0
         },
@@ -2232,11 +2240,15 @@ fn strip_id3v1(buffer: &[u8]) -> &[u8] {
     }
 }
 
-fn picture_count(path: &str) -> Result<usize, CoreError> {
-    if format_from_path(Path::new(path))? == AudioFormat::Mp3 {
-        return Ok(0);
+fn picture_count(path: &Path) -> Result<usize, CoreError> {
+    if format_from_path(path)? == AudioFormat::Mp3 {
+        let tag = id3::no_tag_ok(id3::Tag::read_from_path(path))
+            .map_err(|error| CoreError::new("AUDIO_PICTURE", error.to_string()))?;
+        return Ok(tag
+            .map(|tag| tag.frames().filter(|frame| frame.id() == "APIC").count())
+            .unwrap_or(0));
     }
-    let tagged = read_tagged(Path::new(path))?;
+    let tagged = read_tagged(path)?;
     Ok(tagged
         .primary_tag()
         .map(|tag| tag.pictures().len())

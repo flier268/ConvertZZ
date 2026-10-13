@@ -2365,6 +2365,171 @@ async fn tag_operations_remove_containers_keep_audio_bytes() {
     assert_eq!(mp3_audio_payload(&stored), payload_unsync);
     assert!(id3v2_header_version(&stored).is_none());
 
+    // ID3v2.2 與未同步化標籤只拿掉旁邊的容器，本體與音訊都不能被重寫。
+    let v22_side = directory.join("v22-side.mp3");
+    generate_audio(&v22_side, "libmp3lame");
+    let audio = mp3_audio_payload(&std::fs::read(&v22_side).unwrap());
+    let ape_host = directory.join("ape-host.mp3");
+    std::fs::write(&ape_host, &audio).unwrap();
+    attach_ape(&ape_host, "ape-title");
+    let host = strip_id3v2(&std::fs::read(&ape_host).unwrap());
+    let host_audio = mp3_audio_payload(&host);
+    assert_eq!(host_audio, audio);
+    let ape = &host[host_audio.len()..];
+    assert!(ape.windows(8).any(|window| window == b"APETAGEX"));
+    std::fs::write(&v22_side, &audio).unwrap();
+    let mut tag = id3::Tag::new();
+    tag.set_title("v22");
+    tag.write_to_path(&v22_side, Version::Id3v22).unwrap();
+    let with_v22 = std::fs::read(&v22_side).unwrap();
+    assert_eq!(id3v2_header_version(&with_v22), Some(2));
+    assert_eq!(mp3_audio_payload(&with_v22), audio);
+    let mut combined = with_v22;
+    combined.extend_from_slice(ape);
+    combined = append_id3v1(
+        &strip_id3v1(&combined),
+        &HashMap::from([("title", "v1-title".to_string())]),
+        17,
+        TextEncoding::Utf8,
+    )
+    .unwrap();
+    std::fs::write(&v22_side, &combined).unwrap();
+    let payload_v22_side = mp3_audio_payload(&combined);
+    for container in [AudioContainer::Id3v1, AudioContainer::Apev2] {
+        let path = directory.join(format!("v22-remove-{container:?}.mp3"));
+        std::fs::copy(&v22_side, &path).unwrap();
+        let mut request = quiet_plan(&[path.clone()]);
+        request.tag_operations = vec![remove_operation(container)];
+        let plan = service
+            .plan(shared_conversion(), request, noop())
+            .await
+            .unwrap();
+        assert!(plan.files[0].removals[0].refused.is_none());
+        let result = service
+            .apply(&plan.plan_id, noop(), never_cancel())
+            .await
+            .unwrap();
+        assert!(result.failed.is_empty(), "{container:?} {result:?}");
+        let stored = std::fs::read(&path).unwrap();
+        assert_eq!(
+            mp3_audio_payload(&stored),
+            payload_v22_side,
+            "{container:?}"
+        );
+        assert_eq!(id3v2_header_version(&stored), Some(2), "{container:?}");
+        match container {
+            AudioContainer::Id3v1 => {
+                assert!(read_id3v1(&stored, TextEncoding::Utf8).unwrap().is_none());
+            }
+            AudioContainer::Apev2 => {
+                use lofty::file::TaggedFileExt;
+                assert!(read_tagged(&path)
+                    .unwrap()
+                    .tag(lofty::tag::TagType::Ape)
+                    .is_none());
+                assert!(read_id3v1(&stored, TextEncoding::Utf8).unwrap().is_some());
+            }
+            _ => {}
+        }
+    }
+
+    let unsync_v1 = directory.join("unsync-v1.mp3");
+    std::fs::write(&unsync_v1, mpeg_frame()).unwrap();
+    let mut tag = id3::Tag::new();
+    tag.set_title("unsync");
+    tag.write_to_path(&unsync_v1, Version::Id3v23).unwrap();
+    let mut raw = std::fs::read(&unsync_v1).unwrap();
+    raw[5] |= 0x80;
+    raw = append_id3v1(
+        &strip_id3v1(&raw),
+        &HashMap::from([("title", "keep".to_string())]),
+        255,
+        TextEncoding::Utf8,
+    )
+    .unwrap();
+    std::fs::write(&unsync_v1, &raw).unwrap();
+    let payload_unsync_v1 = mp3_audio_payload(&raw);
+    let mut request = quiet_plan(&[unsync_v1.clone()]);
+    request.tag_operations = vec![remove_operation(AudioContainer::Id3v1)];
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert!(plan.files[0].removals[0].refused.is_none());
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    let stored = std::fs::read(&unsync_v1).unwrap();
+    assert_eq!(mp3_audio_payload(&stored), payload_unsync_v1);
+    assert_eq!(id3v2_header_version(&stored), Some(3));
+    assert_ne!(stored[5] & 0x80, 0);
+    assert!(read_id3v1(&stored, TextEncoding::Utf8).unwrap().is_none());
+
+    let covered = directory.join("covered.mp3");
+    std::fs::write(&covered, mpeg_frame()).unwrap();
+    let mut tag = id3::Tag::new();
+    tag.set_title("with-cover");
+    tag.add_frame(id3::frame::Picture {
+        mime_type: "image/png".into(),
+        picture_type: id3::frame::PictureType::CoverFront,
+        description: String::new(),
+        data: vec![1, 2, 3, 4],
+    });
+    tag.write_to_path(&covered, Version::Id3v24).unwrap();
+    let mut covered_bytes = std::fs::read(&covered).unwrap();
+    covered_bytes = append_id3v1(
+        &strip_id3v1(&covered_bytes),
+        &HashMap::from([("title", "v1".to_string())]),
+        255,
+        TextEncoding::Utf8,
+    )
+    .unwrap();
+    std::fs::write(&covered, &covered_bytes).unwrap();
+    assert_eq!(picture_count(&covered).unwrap(), 1);
+    let payload_covered = mp3_audio_payload(&covered_bytes);
+    let mut request = quiet_plan(&[covered.clone()]);
+    request.tag_operations = vec![remove_operation(AudioContainer::Id3v1)];
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    let stored = std::fs::read(&covered).unwrap();
+    assert_eq!(mp3_audio_payload(&stored), payload_covered);
+    assert_eq!(picture_count(&covered).unwrap(), 1);
+
+    let drop_v2 = directory.join("drop-v2-cover.mp3");
+    std::fs::copy(&covered, &drop_v2).unwrap();
+    // 上面已拿掉 ID3v1，這裡要同時留 v1，移除 ID3v2 才不是唯一標籤。
+    let mut both = std::fs::read(&covered).unwrap();
+    both = append_id3v1(
+        &strip_id3v1(&both),
+        &HashMap::from([("title", "v1".to_string())]),
+        255,
+        TextEncoding::Utf8,
+    )
+    .unwrap();
+    std::fs::write(&drop_v2, &both).unwrap();
+    let mut request = quiet_plan(&[drop_v2.clone()]);
+    request.tag_operations = vec![remove_operation(AudioContainer::Id3v2)];
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert!(plan.files[0].removals[0].refused.is_none());
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert_eq!(picture_count(&drop_v2).unwrap(), 0);
+
     let _ = std::fs::remove_dir_all(&directory);
 }
 

@@ -129,25 +129,38 @@ fn mpeg_frame() -> Vec<u8> {
     vec![0xff, 0xfb, 0x90, 0x64, 0, 0, 0, 0, 0, 0]
 }
 
-/// MPEG1 Layer III、256 kbps、44100 Hz、無 padding，幀長 720。
-/// 幀尾 128 bytes 剛好以 TAG 開頭時，那是音訊，不是 ID3v1。
+/// MPEG1 Layer III、128 kbps、44100 Hz、無 padding，幀長 417。
+/// 幀前有無法從檔頭同步的位元組；這一幀延伸到 EOF，結尾 128 bytes 碰巧以 TAG 開頭。
 #[test]
 fn id3v1_marker_inside_mpeg_frame_is_not_cut() {
-    let mut frame = vec![0_u8; 720];
-    frame[..4].copy_from_slice(&[0xff, 0xfb, 0x90, 0x64]);
-    let tag_at = frame.len() - 128;
-    frame[tag_at..tag_at + 3].copy_from_slice(b"TAG");
-    eprintln!(
-        "frame_len={:?} overlap path starts {:02x?}",
-        super::super::files::mpeg_frame_length(&frame),
-        &frame[..4]
+    let header = [0xff, 0xfb, 0x90, 0x64];
+    let frame_len = super::super::files::mpeg_frame_length(&header).unwrap();
+    let lead = 32usize;
+    let mut frame = vec![0_u8; lead + frame_len];
+    frame[lead..lead + 4].copy_from_slice(&header);
+    assert_eq!(
+        super::super::files::mpeg_frame_length(&frame[lead..]),
+        Some(frame_len)
     );
+    let tag_at = frame.len() - 128;
+    assert!(lead < tag_at && tag_at < lead + frame_len);
+    frame[tag_at..tag_at + 3].copy_from_slice(b"TAG");
+    // 年份不是數字，避免只靠欄位格式才判成音訊。
+    frame[tag_at + 93..tag_at + 97].copy_from_slice(b"\xffXYZ");
     assert_eq!(
         strip_id3v1(&frame).len(),
         frame.len(),
-        "MPEG 幀內的 TAG 不該被當成 ID3v1 切掉"
+        "延伸到 EOF 的 MPEG 幀裡的 TAG 不該被當成 ID3v1 切掉"
     );
     assert!(read_id3v1(&frame, TextEncoding::Utf8).unwrap().is_none());
+
+    let mut tagged = vec![0_u8; frame_len];
+    tagged[..4].copy_from_slice(&[0xff, 0xfb, 0x90, 0x64]);
+    tagged.extend_from_slice(&[0; 128]);
+    let tag_at = tagged.len() - 128;
+    tagged[tag_at..tag_at + 3].copy_from_slice(b"TAG");
+    assert_eq!(strip_id3v1(&tagged).len(), frame_len);
+    assert!(read_id3v1(&tagged, TextEncoding::Utf8).unwrap().is_some());
 }
 
 fn write_tagged_mp3(path: &Path, id3v1_title: &str, id3v2_title: &str, with_picture: bool) {

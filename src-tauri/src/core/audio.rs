@@ -2461,32 +2461,33 @@ fn strip_id3v1(buffer: &[u8]) -> &[u8] {
     }
 }
 
-/// 檔尾 128 bytes 以 TAG 開頭。MPEG 幀長能算出來、且有一幀蓋過這段時，那是音訊不是標籤。
+/// 檔尾 128 bytes 以 TAG 開頭。能算出 MPEG 幀長、且有一幀蓋過這段時，那是音訊不是標籤。
 fn has_id3v1(buffer: &[u8]) -> bool {
     buffer.len() >= 128
         && &buffer[buffer.len() - 128..buffer.len() - 125] == b"TAG"
         && !id3v1_overlaps_mpeg_frame(buffer)
 }
 
+/// 從 TAG 起點往前找幀頭。幀長必須落在檔案裡：蓋過 TAG 起點代表這 128 bytes 在幀內。
+/// 幀剛好結束在 TAG 起點則標籤留在幀外，仍是 ID3v1。理論幀長超出檔尾（例如只有幀頭的測試音訊）不算。
 fn id3v1_overlaps_mpeg_frame(buffer: &[u8]) -> bool {
     let tag_at = buffer.len() - 128;
-    let audio = &buffer[..tag_at];
-    let mut pos = id3v2_tag_length(audio);
-    if super::files::mpeg_frame_length(&audio[pos..]).is_none() {
-        return false;
-    }
-    while pos + 4 <= audio.len() {
-        let Some(len) = super::files::mpeg_frame_length(&audio[pos..]) else {
-            return false;
+    // MPEG2/2.5 Layer II、160 kbps、8000 Hz、有 padding，是位元率表裡最長的一幀。
+    const MAX_FRAME: usize = 2881;
+    let start = tag_at.saturating_sub(MAX_FRAME);
+    for pos in start..tag_at {
+        if buffer[pos] != 0xFF {
+            continue;
+        }
+        let Some(len) = super::files::mpeg_frame_length(&buffer[pos..]) else {
+            continue;
         };
-        let next = pos + len;
-        if next > audio.len() {
+        let Some(end) = pos.checked_add(len) else {
+            continue;
+        };
+        if end > tag_at && end <= buffer.len() {
             return true;
         }
-        if next == audio.len() {
-            return false;
-        }
-        pos = next;
     }
     false
 }

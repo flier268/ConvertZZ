@@ -96,6 +96,29 @@ describe("音訊預覽自動重建", () => {
     expect(settled).toEqual([1]);
   });
 
+  it("run 通過開頭檢查後、呼叫 cancelInFlight 前才進入套用時，不得取消", async () => {
+    const cancels: number[] = [];
+    const plans: number[] = [];
+    const controller = createAudioPreviewController({
+      plan: async () => {
+        plans.push(plans.length + 1);
+        return { planId: "preview" };
+      },
+      cancelInFlight: async () => {
+        cancels.push(cancels.length + 1);
+      },
+      apply: () => undefined,
+      // onStart 在開頭的 applying 檢查之後、cancelInFlight 之前。
+      onStart: () => {
+        controller.setApplying(true);
+      },
+    });
+
+    await controller.run();
+    expect(cancels).toEqual([]);
+    expect(plans).toEqual([]);
+  });
+
   it("套用進行中呼叫 schedule 不得取消 apply", async () => {
     vi.useFakeTimers();
     const cancels: number[] = [];

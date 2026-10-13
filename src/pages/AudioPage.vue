@@ -254,8 +254,8 @@ watch(
       listFilter.value,
       query.value,
     ] as const,
-  async () => {
-    await nextTick();
+  () => {
+    // post flush 時清單已掛上。再等一個 nextTick 會落在測試的下一個動作之後，把手動捲動蓋掉。
     const index = focusIndex();
     if (index >= 0) listRef.value?.scrollToIndex(index);
   },

@@ -1,7 +1,13 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
-import { openApp, openPage, scrollAudioRow } from "../helpers";
+import {
+  openApp,
+  openPage,
+  scrollAudioFolder,
+  scrollAudioListToEnd,
+  scrollAudioRow,
+} from "../helpers";
 
 const shots = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "e2e-screenshots");
 
@@ -110,20 +116,9 @@ test.describe("音訊標籤審閱", () => {
     await segment(page, "全部 250").click();
     const list = page.locator(".audio-file-pane .virtual-list");
     await expect(page.locator(".audio-folder", { hasText: "/music/合輯" })).toBeVisible();
-    await list.evaluate((element) => {
-      element.scrollTop = element.scrollHeight;
-    });
+    await scrollAudioListToEnd(page);
     await expect(page.locator(".audio-folder", { hasText: "/music/現場" })).toBeVisible();
-    async function scrollToFolder(name: string) {
-      const row = page.locator(".virtual-list-row .audio-folder", { hasText: name });
-      for (let top = 0; top < 20000; top += 320) {
-        if (await row.count()) return;
-        await list.evaluate((element, value) => {
-          element.scrollTop = value;
-        }, top);
-      }
-    }
-    await scrollToFolder("/music/專輯甲");
+    await scrollAudioFolder(page, "/music/專輯甲");
     const album = page.locator(".virtual-list-row .audio-folder", { hasText: "/music/專輯甲" });
     await expect(album).toContainText("1 檔");
     await album.dispatchEvent("click");
@@ -166,7 +161,7 @@ test.describe("音訊標籤審閱", () => {
     await segment(page, "全部 250").click();
 
     await page.getByRole("button", { name: "全不選" }).click();
-    await scrollToFolder("/music/專輯甲");
+    await scrollAudioFolder(page, "/music/專輯甲");
     const folderCheck = page.locator(".virtual-list-row [aria-label='選取資料夾 /music/專輯甲']");
     await folderCheck.evaluate((element) => {
       const input = element as HTMLInputElement;

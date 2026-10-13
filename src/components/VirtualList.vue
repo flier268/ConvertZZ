@@ -70,18 +70,45 @@ watch(
 );
 
 function measure() {
-  measured.value = root.value?.clientHeight ?? 0;
+  const frame = root.value?.parentElement;
+  const sticky = frame?.querySelector(".virtual-list-sticky");
+  const stickyHeight = sticky instanceof HTMLElement ? sticky.offsetHeight : 0;
+  // 量外框而不是捲動區。捲動區會因內容與捲軸改變高度，在 callback 裡再改列數就會觸發
+  // “ResizeObserver loop completed with undelivered notifications”。
+  const next = frame
+    ? Math.max(0, frame.clientHeight - stickyHeight)
+    : (root.value?.clientHeight ?? 0);
+  if (next !== measured.value) measured.value = next;
 }
 
 let observer: ResizeObserver | undefined;
+let measureFrame = 0;
+
+function scheduleMeasure() {
+  if (typeof requestAnimationFrame !== "function") {
+    measure();
+    return;
+  }
+  if (measureFrame) cancelAnimationFrame(measureFrame);
+  measureFrame = requestAnimationFrame(() => {
+    measureFrame = 0;
+    measure();
+  });
+}
+
 onMounted(() => {
   measure();
-  if (typeof ResizeObserver !== "undefined" && root.value) {
-    observer = new ResizeObserver(measure);
-    observer.observe(root.value);
+  const frame = root.value?.parentElement;
+  if (typeof ResizeObserver !== "undefined" && frame) {
+    observer = new ResizeObserver(() => scheduleMeasure());
+    observer.observe(frame);
   }
 });
-onBeforeUnmount(() => observer?.disconnect());
+onBeforeUnmount(() => {
+  observer?.disconnect();
+  if (measureFrame && typeof cancelAnimationFrame === "function")
+    cancelAnimationFrame(measureFrame);
+});
 
 function scrollToIndex(index: number) {
   const host = root.value;

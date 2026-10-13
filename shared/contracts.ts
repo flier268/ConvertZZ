@@ -147,6 +147,7 @@ export interface AudioTagField {
   label: string;
   container: AudioContainer;
   values: string[];
+  /** 與 `values` 相同時後端省略，表示預覽後沒有文字變化。 */
   convertedValues?: string[];
   selected: boolean;
 }
@@ -156,9 +157,12 @@ export interface AudioTagFile {
   format: "mp3" | "ape" | "ogg" | "opus";
   selected: boolean;
   fields: AudioTagField[];
-  hasCoverArt: boolean;
+  /** 省略或 false 表示沒有封面。 */
+  hasCoverArt?: boolean;
   durationSeconds?: number;
   warning?: string;
+  /** 已套用轉換預覽。沒有文字變化的欄位不會再帶一份相同的 `convertedValues`。 */
+  previewed?: boolean;
   /** 這些容器的編碼或 ID3 版本與寫入設定不同，欄位文字相同也算變更。 */
   rewriteContainers?: AudioContainer[];
 }
@@ -207,7 +211,8 @@ export interface AudioTagPlan {
   planId: string;
   createdAt: string;
   files: AudioTagFile[];
-  warnings: string[];
+  /** 空陣列時後端省略。 */
+  warnings?: string[];
   /** 後端附帶的統計。前端審閱仍以目前勾選即時重算。 */
   summary?: AudioTagPlanSummary;
 }

@@ -1196,6 +1196,7 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
         has_cover_art: false,
         duration_seconds: None,
         warning: None,
+        previewed: true,
         rewrite_containers: Vec::new(),
     };
     let same = AudioTagFile {
@@ -1213,6 +1214,7 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
         has_cover_art: false,
         duration_seconds: None,
         warning: None,
+        previewed: true,
         rewrite_containers: Vec::new(),
     };
     let broken = AudioTagFile {
@@ -1223,6 +1225,7 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
         has_cover_art: false,
         duration_seconds: None,
         warning: Some("無法讀取".into()),
+        previewed: false,
         rewrite_containers: Vec::new(),
     };
     let summary = summarize_audio_files(&[changed, same, broken]);
@@ -1502,7 +1505,7 @@ async fn encoding_or_version_only_changes_are_written() {
     assert_eq!(
         field(&plan.files[0], AudioContainer::Id3v2, "title")
             .and_then(|field| field.converted_values.clone()),
-        Some(vec!["Hello".into()])
+        None
     );
     let result = service
         .apply(&plan.plan_id, noop(), never_cancel())
@@ -1696,6 +1699,148 @@ async fn bak_conflict_overwrite_replaces_existing_backup() {
         .unwrap();
     assert!(result.failed.is_empty(), "{result:?}");
     assert_eq!(std::fs::read(&bak).unwrap(), before);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn apply_reports_progress_against_the_whole_plan() {
+    let directory = temp_dir();
+    let changed = directory.join("changed.mp3");
+    let same = directory.join("same.mp3");
+    write_tagged_mp3(&changed, "里面", "里面", false);
+    write_tagged_mp3(&same, "中国", "中国", false);
+    let service = AudioService::new();
+    let mut request = base_plan(&[changed.clone(), same.clone()]);
+    request.id3v1_enabled = false;
+    request.selected_fields = HashMap::from([
+        (
+            changed.to_string_lossy().into_owned(),
+            vec!["id3v2:title".into()],
+        ),
+        (
+            same.to_string_lossy().into_owned(),
+            vec!["id3v2:title".into()],
+        ),
+    ]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let events = Arc::new(std::sync::Mutex::new(Vec::<(u64, u64)>::new()));
+    let progress = {
+        let events = events.clone();
+        Arc::new(move |event: super::super::types::ProgressEvent| {
+            events
+                .lock()
+                .expect("progress")
+                .push((event.current, event.total));
+        })
+    };
+    let result = service
+        .apply(&plan.plan_id, progress, never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    let events = events.lock().expect("progress").clone();
+    assert!(
+        events
+            .iter()
+            .any(|(current, total)| *total == 2 && current < total),
+        "{events:?}"
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn repeated_comment_apply_does_not_append_frames() {
+    let directory = temp_dir();
+    let path = directory.join("note.mp3");
+    std::fs::write(&path, mpeg_frame()).unwrap();
+    let mut tag = id3::Tag::new();
+    tag.set_title("歌");
+    tag.add_frame(id3::frame::Comment {
+        lang: "eng".into(),
+        description: String::new(),
+        text: "里面".into(),
+    });
+    tag.write_to_path(&path, Version::Id3v24).unwrap();
+    let service = AudioService::new();
+    let mut request = base_plan(&[path.clone()]);
+    request.id3v1_enabled = false;
+    request.selected_fields = HashMap::from([(
+        path.to_string_lossy().into_owned(),
+        vec!["id3v2:comment".into()],
+    )]);
+    for _ in 0..2 {
+        let plan = service
+            .plan(shared_conversion(), request.clone(), noop())
+            .await
+            .unwrap();
+        let result = service
+            .apply(&plan.plan_id, noop(), never_cancel())
+            .await
+            .unwrap();
+        assert!(result.failed.is_empty(), "{result:?}");
+    }
+    let written = id3::Tag::read_from_path(&path).unwrap();
+    let comments: Vec<String> = written
+        .comments()
+        .map(|comment| comment.text.clone())
+        .collect();
+    assert_eq!(comments, vec!["裡面".to_string()]);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn plan_reuses_scan_cache_and_omits_duplicate_text() {
+    let directory = temp_dir();
+    let path = directory.join("cached.mp3");
+    write_tagged_mp3(&path, "里面", "Hello", false);
+    let service = AudioService::new();
+    let path_text = path.to_string_lossy().into_owned();
+    service
+        .scan(
+            shared_conversion(),
+            AudioScanRequest {
+                paths: vec![path_text.clone()],
+                recursive: Some(false),
+                id3v1_source_encoding: Some(TextEncoding::Gbk),
+                id3v2_source_encoding: None,
+                id3v2_repair_source_encoding: None,
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    std::fs::remove_file(&path).unwrap();
+    let mut request = base_plan(&[path.clone()]);
+    request.recursive = Some(false);
+    request.id3v1_enabled = false;
+    request.id3v2_direction = Direction::None;
+    request.selected_fields = HashMap::from([(path_text, vec!["id3v2:title".into()])]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert!(
+        plan.files[0].warning.is_none(),
+        "{:?}",
+        plan.files[0].warning
+    );
+    assert!(plan.files[0].previewed);
+    assert!(field(&plan.files[0], AudioContainer::Id3v2, "title")
+        .unwrap()
+        .converted_values
+        .is_none());
+    let json = serde_json::to_value(&plan).unwrap();
+    assert!(json.get("warnings").is_none());
+    assert!(json["files"][0].get("hasCoverArt").is_none());
+    assert_eq!(json["files"][0]["previewed"], true);
+    assert!(json["files"][0]["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|field| field.get("convertedValues").is_none()));
     let _ = std::fs::remove_dir_all(&directory);
 }
 

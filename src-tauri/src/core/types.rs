@@ -310,7 +310,8 @@ pub struct AudioTagField {
     pub label: String,
     pub container: AudioContainer,
     pub values: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// 與 `values` 相同時留空，避免同一段文字傳兩次。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub converted_values: Option<Vec<String>>,
     pub selected: bool,
 }
@@ -322,11 +323,15 @@ pub struct AudioTagFile {
     pub format: AudioFormat,
     pub selected: bool,
     pub fields: Vec<AudioTagField>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub has_cover_art: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_seconds: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
+    /// 這個檔案已經跑過轉換預覽。沒有文字差異的欄位不會再帶 `converted_values`。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub previewed: bool,
     /// 這些容器的文字編碼或 ID3 版本與寫入設定不同，欄位文字相同也要寫。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rewrite_containers: Vec<AudioContainer>,
@@ -424,6 +429,7 @@ pub struct AudioTagPlan {
     pub plan_id: String,
     pub created_at: String,
     pub files: Vec<AudioTagFile>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
     /// 計畫檔案的統計。舊客戶端可忽略；缺少時視為全零。
     #[serde(default)]

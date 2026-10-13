@@ -42,9 +42,20 @@ struct StoredAudioPlan {
     conflict_policy: ConflictPolicy,
 }
 
+#[derive(Clone, PartialEq, Eq)]
+struct ScanCacheKey {
+    paths: Vec<String>,
+    recursive: bool,
+    id3v1_source_encoding: Option<TextEncoding>,
+    id3v2_source_encoding: Option<TextEncoding>,
+    id3v2_repair_source_encoding: Option<bool>,
+}
+
 pub struct AudioService {
     plans: Mutex<HashMap<String, StoredAudioPlan>>,
     cancelled: Arc<Mutex<HashSet<String>>>,
+    /// 最近一次掃描。`audio.plan` 在路徑與讀取選項相同時直接重用，不再讀碟。
+    scan_cache: Mutex<Option<(ScanCacheKey, Vec<AudioTagFile>)>>,
 }
 
 impl AudioService {
@@ -52,6 +63,61 @@ impl AudioService {
         Self {
             plans: Mutex::new(HashMap::new()),
             cancelled: Arc::new(Mutex::new(HashSet::new())),
+            scan_cache: Mutex::new(None),
+        }
+    }
+
+    fn scan_key(request: &AudioScanRequest) -> ScanCacheKey {
+        ScanCacheKey {
+            paths: request.paths.clone(),
+            recursive: request.recursive.unwrap_or(false),
+            id3v1_source_encoding: request.id3v1_source_encoding,
+            id3v2_source_encoding: request.id3v2_source_encoding,
+            id3v2_repair_source_encoding: request.id3v2_repair_source_encoding,
+        }
+    }
+
+    fn store_scan(&self, request: &AudioScanRequest, files: &[AudioTagFile]) {
+        if let Ok(mut cache) = self.scan_cache.lock() {
+            *cache = Some((Self::scan_key(request), files.to_vec()));
+        }
+    }
+
+    fn load_scan(&self, request: &AudioScanRequest) -> Option<Vec<AudioTagFile>> {
+        self.scan_cache.lock().ok().and_then(|cache| {
+            cache
+                .as_ref()
+                .and_then(|(key, files)| (key == &Self::scan_key(request)).then(|| files.clone()))
+        })
+    }
+
+    fn clear_scan_cache(&self) {
+        if let Ok(mut cache) = self.scan_cache.lock() {
+            *cache = None;
+        }
+    }
+
+    /// 單檔重掃只換掉快取裡的同一路徑，且讀取選項必須相同。
+    fn patch_scan_file(&self, request: &AudioTagPlanRequest, file: &AudioTagFile) {
+        let Ok(mut cache) = self.scan_cache.lock() else {
+            return;
+        };
+        let Some((key, files)) = cache.as_mut() else {
+            return;
+        };
+        let options_match = key.recursive == request.recursive.unwrap_or(false)
+            && key.id3v1_source_encoding == request.id3v1_source_encoding
+            && key.id3v2_source_encoding == request.id3v2_source_encoding
+            && key.id3v2_repair_source_encoding == request.id3v2_repair_source_encoding;
+        if !options_match {
+            return;
+        }
+        let resolved = resolve_path(&file.path);
+        if let Some(slot) = files
+            .iter_mut()
+            .find(|item| resolve_path(&item.path) == resolved)
+        {
+            *slot = file.clone();
         }
     }
 
@@ -75,28 +141,8 @@ impl AudioService {
         request: AudioScanRequest,
         progress: ProgressReporter,
     ) -> Result<Vec<AudioTagFile>, CoreError> {
-        let paths = expand_audio_paths(&request.paths, request.recursive.unwrap_or(false))?;
-        let mut files = Vec::new();
-        for (index, path) in paths.iter().enumerate() {
-            files.push(match scan_file(path, &request) {
-                Ok(file) => file,
-                Err(error) => AudioTagFile {
-                    path: path.to_string_lossy().into_owned(),
-                    format: format_from_path(path).unwrap_or(AudioFormat::Mp3),
-                    selected: false,
-                    fields: Vec::new(),
-                    has_cover_art: false,
-                    duration_seconds: None,
-                    warning: Some(error.message),
-                    rewrite_containers: Vec::new(),
-                },
-            });
-            progress(super::types::ProgressEvent {
-                current: (index + 1) as u64,
-                total: paths.len() as u64,
-                message: format!("正在掃描：{}", file_name(path)),
-            });
-        }
+        let files = read_audio_files(&request, progress).await?;
+        self.store_scan(&request, &files);
         Ok(files)
     }
 
@@ -106,9 +152,20 @@ impl AudioService {
         request: AudioTagPlanRequest,
         progress: ProgressReporter,
     ) -> Result<AudioTagPlan, CoreError> {
-        let mut scanned = self
-            .scan(conversion, request.scan_request(), progress.clone())
-            .await?;
+        let scan_request = request.scan_request();
+        let mut scanned = if let Some(files) = self.load_scan(&scan_request) {
+            let total = files.len().max(1) as u64;
+            progress(super::types::ProgressEvent {
+                current: total,
+                total,
+                message: "使用已掃描的音訊標籤。".into(),
+            });
+            files
+        } else {
+            let files = read_audio_files(&scan_request, progress.clone()).await?;
+            self.store_scan(&scan_request, &files);
+            files
+        };
         let mut prepared = Vec::new();
         let mut warnings = Vec::new();
         let selected_paths = request
@@ -124,6 +181,7 @@ impl AudioService {
             if file.warning.is_some() {
                 continue;
             }
+            file.previewed = true;
             if !file.selected {
                 for field in &mut file.fields {
                     field.selected = false;
@@ -180,12 +238,11 @@ impl AudioService {
         request.plan.paths = vec![target.clone()];
         request.plan.recursive = Some(false);
         request.plan.selected_paths = vec![target.clone()];
-        let mut scanned = self
-            .scan(conversion, request.plan.scan_request(), progress)
-            .await?;
+        let mut scanned = read_audio_files(&request.plan.scan_request(), progress).await?;
         let Some(mut file) = scanned.pop() else {
             return Err(CoreError::new("AUDIO_NOT_FOUND", "找不到這個音訊檔案。"));
         };
+        self.patch_scan_file(&request.plan, &file);
         let Some(plan_id) = request.plan_id.clone() else {
             return Ok(file);
         };
@@ -208,6 +265,7 @@ impl AudioService {
         let prepared =
             convert_selected_fields(conversion, &request.plan, &mut file, &mut warnings).await?;
         self.upsert_prepared(&plan_id, &file.path, prepared)?;
+        file.previewed = true;
         Ok(file)
     }
 
@@ -254,6 +312,7 @@ impl AudioService {
         progress: ProgressReporter,
         request_cancelled: CancelCheck,
     ) -> Result<ApplyResult, CoreError> {
+        self.clear_scan_cache();
         let plan = self
             .plans
             .lock()
@@ -289,7 +348,21 @@ impl AudioService {
                 .as_ref()
                 .is_none_or(|set| set.contains(&resolve_path(&path.to_string_lossy())))
         };
+        let total = {
+            // 進度分母是整份計畫，不能用「目前索引 + 1」，否則每一筆都是 100%。
+            let included = |path: &Path| {
+                allowed
+                    .as_ref()
+                    .is_none_or(|set| set.contains(&resolve_path(&path.to_string_lossy())))
+            };
+            plan.files
+                .iter()
+                .filter(|file| included(&file.path))
+                .count()
+                .max(1) as u64
+        };
         let mut files = plan.files;
+        let mut seen = 0u64;
         for file in &mut files {
             if !included(&file.path) {
                 file.updates.clear();
@@ -325,7 +398,7 @@ impl AudioService {
             }
         }
 
-        for (index, file) in files.into_iter().enumerate() {
+        for file in files.into_iter() {
             self.throw_if_cancelled(plan_id)?;
             if request_cancelled() {
                 return Err(CoreError::new(
@@ -333,10 +406,22 @@ impl AudioService {
                     "音訊標籤作業已由使用者取消。",
                 ));
             }
+            if !included(&file.path) {
+                result
+                    .skipped
+                    .push(file.path.to_string_lossy().into_owned());
+                continue;
+            }
+            seen += 1;
             if !file_should_write(&file) {
                 result
                     .skipped
                     .push(file.path.to_string_lossy().into_owned());
+                progress(super::types::ProgressEvent {
+                    current: seen,
+                    total,
+                    message: format!("已略過：{}", file_name(&file.path)),
+                });
                 continue;
             }
             match apply_file(&file) {
@@ -349,8 +434,8 @@ impl AudioService {
                 }),
             }
             progress(super::types::ProgressEvent {
-                current: (index + 1) as u64,
-                total: 1.max(index + 1) as u64,
+                current: seen,
+                total,
                 message: format!("正在寫入標籤：{}", file_name(&file.path)),
             });
         }
@@ -374,6 +459,36 @@ impl AudioService {
         }
         Ok(())
     }
+}
+
+async fn read_audio_files(
+    request: &AudioScanRequest,
+    progress: ProgressReporter,
+) -> Result<Vec<AudioTagFile>, CoreError> {
+    let paths = expand_audio_paths(&request.paths, request.recursive.unwrap_or(false))?;
+    let mut files = Vec::new();
+    for (index, path) in paths.iter().enumerate() {
+        files.push(match scan_file(path, request) {
+            Ok(file) => file,
+            Err(error) => AudioTagFile {
+                path: path.to_string_lossy().into_owned(),
+                format: format_from_path(path).unwrap_or(AudioFormat::Mp3),
+                selected: false,
+                fields: Vec::new(),
+                has_cover_art: false,
+                duration_seconds: None,
+                warning: Some(error.message),
+                previewed: false,
+                rewrite_containers: Vec::new(),
+            },
+        });
+        progress(super::types::ProgressEvent {
+            current: (index + 1) as u64,
+            total: paths.len().max(1) as u64,
+            message: format!("正在掃描：{}", file_name(path)),
+        });
+    }
+    Ok(files)
 }
 
 fn scan_file(path: &Path, request: &AudioScanRequest) -> Result<AudioTagFile, CoreError> {
@@ -425,6 +540,7 @@ fn scan_file(path: &Path, request: &AudioScanRequest) -> Result<AudioTagFile, Co
         }),
         duration_seconds: Some(tagged.properties().duration().as_secs_f64()),
         warning: None,
+        previewed: false,
         rewrite_containers: Vec::new(),
     })
 }
@@ -482,10 +598,17 @@ fn scan_mp3(
         has_cover_art,
         duration_seconds: None,
         warning: None,
+        previewed: false,
         rewrite_containers: Vec::new(),
     })
 }
 
+fn frame_carries_text(frame: &id3::frame::Frame) -> bool {
+    let id = frame.id();
+    id.starts_with('T') || matches!(id, "COMM" | "USLT" | "SYLT" | "USER" | "WXXX")
+}
+
+/// 只改文字框的編碼。封面與其他框保持原樣，避免整份標籤重編碼。
 fn apply_id3v2_encoding(tag: &mut id3::Tag, encoding: &str) {
     use id3::{frame::Frame, Encoding, TagLike};
     let encoding = match encoding {
@@ -497,7 +620,13 @@ fn apply_id3v2_encoding(tag: &mut id3::Tag, encoding: &str) {
     let frames: Vec<Frame> = tag
         .frames()
         .cloned()
-        .map(|frame| frame.set_encoding(Some(encoding)))
+        .map(|frame| {
+            if frame_carries_text(&frame) {
+                frame.set_encoding(Some(encoding))
+            } else {
+                frame
+            }
+        })
         .collect();
     let mut replacement = id3::Tag::new();
     for frame in frames {
@@ -534,7 +663,14 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
         } else {
             id3::Version::Id3v23
         };
-        apply_id3v2_encoding(&mut tag, &file.request.id3v2_encoding);
+        // 版本不同時 write_to_path 會換標頭。文字編碼已經符合時不要再重寫每一框。
+        if file.rewrite_containers.contains(&AudioContainer::Id3v2)
+            && id3v2_text_encodings(&source)
+                .into_iter()
+                .any(|encoding| encoding != id3_encoding_byte(&file.request.id3v2_encoding))
+        {
+            apply_id3v2_encoding(&mut tag, &file.request.id3v2_encoding);
+        }
         tag.write_to_path(&temporary, version)
             .map_err(|error| CoreError::new("ID3_WRITE", error.to_string()))?;
         fs::read(&temporary)?
@@ -748,11 +884,21 @@ fn set_id3v2_value(tag: &mut id3::Tag, key: &str, value: String) {
         }
         "genre" => tag.set_genre(value),
         "comment" => {
-            tag.add_frame(id3::frame::Comment {
-                lang: "eng".into(),
-                description: String::new(),
-                text: value,
-            });
+            // 改第一則註解的文字，其餘保留。重複套用不會再追加一框。
+            let mut comments: Vec<_> = tag.comments().cloned().collect();
+            tag.remove_comment(None, None);
+            if comments.is_empty() {
+                tag.add_frame(id3::frame::Comment {
+                    lang: "eng".into(),
+                    description: String::new(),
+                    text: value,
+                });
+            } else {
+                comments[0].text = value;
+                for comment in comments {
+                    tag.add_frame(comment);
+                }
+            }
         }
         other if other.starts_with("frame:") => {
             let id = other.trim_start_matches("frame:");
@@ -797,10 +943,12 @@ async fn convert_selected_fields(
             converted_values.push(result.text);
             warnings.extend(result.warnings);
         }
-        field.converted_values = Some(converted_values.clone());
         if converted_values != field.values {
+            field.converted_values = Some(converted_values.clone());
             updates.insert(identifier, converted_values);
             containers.insert(field.container);
+        } else {
+            field.converted_values = None;
         }
     }
     let rewrite = rewrite_containers(request, file);

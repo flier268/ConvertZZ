@@ -111,6 +111,8 @@ export interface ConvertzzE2eConfig {
   lastOpenedUrl?: string;
   holdFileApply?: boolean;
   releaseFileApply?: () => void;
+  failAudioScan?: boolean;
+  failAudioPlan?: boolean;
   holdAudioRescan?: boolean;
   releaseAudioRescan?: () => void;
   lastAudioApplyPaths?: string[];
@@ -339,6 +341,7 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
     return { cancelled: true };
   }
   if (operation === "audio.scan") {
+    if (e2e().failAudioScan) throw new Error("讀不到音訊標籤");
     return [
       {
         path: "/tmp/song.mp3",
@@ -372,6 +375,7 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
     ];
   }
   if (operation === "audio.plan") {
+    if (e2e().failAudioPlan) throw new Error("無法建立標籤預覽");
     const song = {
       path: "/music/專輯甲/song.mp3",
       format: "mp3" as const,
@@ -472,10 +476,24 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
             field.convertedValues && field.convertedValues.join("\0") !== field.values.join("\0"),
         ),
     ).length;
+    const slimFiles = files.map((file) => ({
+      ...file,
+      previewed: !("warning" in file && file.warning),
+      hasCoverArt: file.hasCoverArt || undefined,
+      fields: file.fields.map((field) => {
+        if (
+          !field.convertedValues ||
+          field.convertedValues.join("\0") === field.values.join("\0")
+        ) {
+          const { convertedValues: _unused, ...rest } = field;
+          return rest;
+        }
+        return field;
+      }),
+    }));
     return {
       planId: "audio-plan-1",
       createdAt: "2026-08-15T00:00:00.000Z",
-      warnings: [],
       summary: {
         total: files.length,
         changed,
@@ -487,7 +505,7 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
           0,
         ),
       },
-      files,
+      files: slimFiles,
     };
   }
   if (operation === "audio.rescanFile") {
@@ -501,7 +519,7 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
       path,
       format: "mp3",
       selected: true,
-      hasCoverArt: false,
+      previewed: true,
       fields: [
         {
           key: "title",
@@ -516,7 +534,6 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
           label: "專輯",
           container: "id3v2",
           values: ["北窗"],
-          convertedValues: ["北窗"],
           selected: true,
         },
       ],

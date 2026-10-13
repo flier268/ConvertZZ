@@ -96,4 +96,45 @@ describe("隱藏不變欄位", () => {
     expect(wrapper.get(".audio-detail").text()).toContain("備註");
     expect(wrapper.get(".audio-detail").text()).toContain("不變");
   });
+
+  it("文字都沒變時仍標出 ID3v2 容器會整段重寫", async () => {
+    const sameText = {
+      ...scanned,
+      fields: scanned.fields.map((field) => ({ ...field, values: ["Hello"] })),
+    };
+    openDialog.mockResolvedValueOnce("/tmp/enc.mp3");
+    coreRequest.mockResolvedValueOnce([sameText]);
+    coreRequest.mockResolvedValueOnce({
+      planId: "p-rewrite",
+      createdAt: "2026-08-15T00:00:00.000Z",
+      files: [
+        {
+          ...sameText,
+          previewed: true,
+          rewriteContainers: ["id3v2"],
+          fields: sameText.fields.map((field) => ({ ...field, convertedValues: ["Hello"] })),
+        },
+      ],
+    });
+    const wrapper = mount(AudioPage, {
+      global: { plugins: [ElementPlus], stubs: { transition: false } },
+    });
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("選取音訊檔案"))!
+      .trigger("click");
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("建立標籤預覽"))!
+      .trigger("click");
+    await flushPromises();
+
+    expect(wrapper.get(".audio-hide-unchanged").attributes("aria-pressed")).toBe("true");
+    const detail = wrapper.get(".audio-detail").text();
+    expect(detail).not.toContain("標題");
+    expect(detail).toContain("ID3v2");
+    expect(detail).toContain("整段重寫");
+  });
 });

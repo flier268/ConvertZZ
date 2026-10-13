@@ -5,9 +5,9 @@ use super::settings::{
 };
 use super::types::{
     ApplyResult, AudioTagField, AudioTagFile, AudioTagPlan, AudioTagPlanRequest, CliMode,
-    ConflictPolicy, ConversionOptions, Direction, EngineKind, ExtensionFilter, FileConversionPlan,
-    FileMode, FilePlanRequest, ParsedCli, PlanStatus, ProgressEvent, TextEncoding,
-    VocabularyCorrection, ZhConvertModules, ZhConvertOptions,
+    ConflictPolicy, ConversionOptions, Direction, EngineKind, ExtensionFilter, ExtensionFilterMode,
+    FileConversionPlan, FileMode, FilePlanRequest, ParsedCli, PlanStatus, ProgressEvent,
+    TextEncoding, VocabularyCorrection, ZhConvertModules, ZhConvertOptions,
 };
 use super::{dispatch, zhconvert_client, CoreError, CoreState};
 use serde_json::{json, Value};
@@ -731,44 +731,57 @@ fn fix_charset_extensions(settings: Option<&Value>) -> Vec<String> {
         .collect()
 }
 
-/// 設定檔 `defaultFilterProfileId` 指向的篩選 profile。找不到（或沒有 profile）時退回由舊
-/// `typeFilter` 遷移出的 profile。沒有設定檔時回 `None`，由 `allowed_extensions` 的預設處理。
+/// 設定檔的預設篩選 profile。`defaultFilterProfileId` 缺失或對不上時，保留既有 profile，
+/// 改用第一個有效項目。完全沒有有效 profile 時才由舊 `typeFilter` 遷移。沒有設定檔時回 `None`。
 fn settings_extension_filter(settings: Option<&Value>) -> Option<ExtensionFilter> {
     let settings = settings?;
-    let profile = default_profile(settings).or_else(|| {
-        let mut migrated = settings.clone();
-        let files = migrated.get_mut("files")?.as_object_mut()?;
-        files.remove("filterProfiles");
-        files.remove("defaultFilterProfileId");
-        ensure_filter_profiles(&mut migrated);
-        default_profile(&migrated)
-    })?;
+    let profile = default_profile(settings).or_else(|| migrated_default_profile(settings))?;
     serde_json::from_value(profile).ok()
+}
+
+/// 已有有效 profile 時不遷移，避免把使用者的清單換成 `typeFilter` 的結果。
+fn migrated_default_profile(settings: &Value) -> Option<Value> {
+    let files = settings.get("files")?;
+    let has_profiles = files
+        .get("filterProfiles")
+        .and_then(Value::as_array)
+        .is_some_and(|items| !sanitize_filter_profiles(items).is_empty());
+    if has_profiles {
+        return None;
+    }
+    let mut migrated = settings.clone();
+    ensure_filter_profiles(&mut migrated);
+    default_profile(&migrated)
 }
 
 fn default_profile(settings: &Value) -> Option<Value> {
     let files = settings.get("files")?;
-    let id = files.get("defaultFilterProfileId")?.as_str()?;
     let profiles = sanitize_filter_profiles(files.get("filterProfiles")?.as_array()?);
+    if profiles.is_empty() {
+        return None;
+    }
+    let id = files.get("defaultFilterProfileId").and_then(Value::as_str);
     profiles
-        .into_iter()
-        .find(|item| item.get("id").and_then(Value::as_str) == Some(id))
+        .iter()
+        .find(|item| item.get("id").and_then(Value::as_str) == id)
+        .cloned()
+        .or_else(|| profiles.into_iter().next())
 }
 
-/// `None` 表示所有檔案。設定裡沒有篩選字串時用預設副檔名，不把缺欄位當成所有檔案。
+/// `None` 表示所有檔案。沒有設定檔、或設定檔沒有可用的 profile 時用預設副檔名。
+/// 有 profile 時只看預設篩選 profile（與 `extension_filter` 同一來源），不讀 `typeFilter`。
+/// 黑名單無法用白名單表達，回 `None`，實際排除仍由 `extension_filter` 負責。
 fn allowed_extensions(settings: Option<&Value>) -> Option<Vec<String>> {
     let Some(settings) = settings else {
         return Some(default_allowed_extensions());
     };
-    let Some(filter) = settings
-        .pointer("/files/typeFilter")
-        .and_then(Value::as_str)
-    else {
+    let Some(filter) = settings_extension_filter(Some(settings)) else {
         return Some(default_allowed_extensions());
     };
-    match extensions_from_type_filter(filter) {
-        ParsedTypeExtensions::All => None,
-        ParsedTypeExtensions::List(extensions) => Some(extensions),
+    match filter.mode {
+        ExtensionFilterMode::All => None,
+        ExtensionFilterMode::Allow => Some(filter.extensions),
+        ExtensionFilterMode::Deny => None,
     }
 }
 

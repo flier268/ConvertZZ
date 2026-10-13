@@ -387,6 +387,7 @@ fn star_dot_star_means_all_files_and_unparsed_filter_is_empty() {
         ParsedTypeExtensions::List(vec![".txt".into(), ".log".into()])
     );
 
+    // 沒有 profile 時由 typeFilter 遷移出的預設 profile 決定，不再把字串裡的每個群組併成白名單。
     assert_eq!(
         allowed_extensions(Some(
             &json!({ "files": { "typeFilter": "<所有檔案|*.*>" } })
@@ -399,11 +400,11 @@ fn star_dot_star_means_all_files_and_unparsed_filter_is_empty() {
     );
     assert_eq!(
         allowed_extensions(Some(&json!({ "files": { "typeFilter": "無法解析" } }))),
-        Some(vec![])
+        Some(builtin_text_extensions())
     );
     assert_eq!(
         allowed_extensions(Some(&json!({ "files": { "typeFilter": "" } }))),
-        Some(vec![])
+        Some(builtin_text_extensions())
     );
     assert_eq!(
         allowed_extensions(Some(
@@ -412,10 +413,41 @@ fn star_dot_star_means_all_files_and_unparsed_filter_is_empty() {
         Some(vec![".txt".into(), ".log".into()])
     );
     assert_eq!(allowed_extensions(None), Some(default_extension_list()));
+    // 缺 typeFilter 時遷移用內建預設字串，其第一個群組是常用文字檔案。
     assert_eq!(
         allowed_extensions(Some(&json!({ "files": {} }))),
-        Some(default_extension_list())
+        Some(builtin_text_extensions())
     );
+    // 已有預設 profile 時忽略 typeFilter，黑名單不轉成白名單。
+    assert_eq!(
+        allowed_extensions(Some(&json!({ "files": {
+            "typeFilter": "<全部|*.*>",
+            "defaultFilterProfileId": "only-md",
+            "filterProfiles": [
+                { "id": "only-md", "name": "只收 md", "mode": "allow", "extensions": [".MD"] }
+            ]
+        }}))),
+        Some(vec![".md".into()])
+    );
+    assert_eq!(
+        allowed_extensions(Some(&json!({ "files": {
+            "typeFilter": "<文字|*.txt>",
+            "defaultFilterProfileId": "deny-log",
+            "filterProfiles": [
+                { "id": "deny-log", "name": "排除", "mode": "deny", "extensions": [".log"] }
+            ]
+        }}))),
+        None
+    );
+}
+
+fn builtin_text_extensions() -> Vec<String> {
+    [
+        ".txt", ".log", ".ini", ".inf", ".bat", ".cmd", ".srt", ".ass", ".lang",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
 }
 
 #[test]
@@ -541,4 +573,34 @@ fn settings_extension_filter_falls_back_to_migrated_type_filter() {
     let filter = settings_extension_filter(Some(&all)).expect("filter");
     assert_eq!(filter.mode, ExtensionFilterMode::All);
     assert!(settings_extension_filter(None).is_none());
+}
+
+#[test]
+fn settings_extension_filter_keeps_profiles_when_default_id_is_invalid() {
+    use crate::core::types::ExtensionFilterMode;
+    let settings = json!({ "files": {
+        "typeFilter": "<自訂|*.md;*.rst>",
+        "defaultFilterProfileId": "missing",
+        "filterProfiles": [
+            { "id": "keep-me", "name": "保留", "builtin": false, "mode": "deny",
+              "extensions": [".LOG"], "includeNoExtension": false },
+            { "id": "second", "name": "第二", "builtin": false, "mode": "allow",
+              "extensions": [".md"], "includeNoExtension": false }
+        ]
+    }});
+    let filter = settings_extension_filter(Some(&settings)).expect("filter");
+    assert_eq!(filter.mode, ExtensionFilterMode::Deny);
+    assert_eq!(filter.extensions, vec![".log".to_string()]);
+
+    let no_id = json!({ "files": {
+        "typeFilter": "<自訂|*.md>",
+        "filterProfiles": [
+            { "id": "only", "name": "只有這個", "mode": "allow",
+              "extensions": [".csv"], "includeNoExtension": true }
+        ]
+    }});
+    let filter = settings_extension_filter(Some(&no_id)).expect("filter");
+    assert_eq!(filter.mode, ExtensionFilterMode::Allow);
+    assert_eq!(filter.extensions, vec![".csv".to_string()]);
+    assert!(filter.include_no_extension);
 }

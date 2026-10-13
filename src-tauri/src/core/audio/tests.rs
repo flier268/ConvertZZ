@@ -1915,6 +1915,34 @@ fn writing_lyrics_keeps_other_uslt_frames() {
     );
 }
 
+fn id3_text(tag: &id3::Tag, id: &str) -> Option<String> {
+    tag.get(id)
+        .and_then(|frame| frame.content().text())
+        .map(str::to_string)
+}
+
+/// 年份／音軌不是純數字時，預覽仍會顯示轉換後的文字。寫入不可默默留下舊數字。
+#[test]
+fn non_numeric_id3v2_year_and_track_are_stored_as_text_frames() {
+    let mut tag = id3::Tag::new();
+    tag.set_year(1998);
+    tag.set_track(3);
+    set_id3v2_value(&mut tag, "year", "录制年".into());
+    set_id3v2_value(&mut tag, "track", "第一辑".into());
+    assert_eq!(id3_text(&tag, "TYER").as_deref(), Some("录制年"));
+    assert_eq!(id3_text(&tag, "TRCK").as_deref(), Some("第一辑"));
+    assert_eq!(id3v2_standard(&tag, "year").as_deref(), Some("录制年"));
+    assert_eq!(id3v2_standard(&tag, "track").as_deref(), Some("第一辑"));
+
+    let mut numeric = id3::Tag::new();
+    numeric.set_text("TRCK", "4/12");
+    set_id3v2_value(&mut numeric, "year", "1998".into());
+    set_id3v2_value(&mut numeric, "track", "7".into());
+    assert_eq!(numeric.year(), Some(1998));
+    assert_eq!(numeric.track(), Some(7));
+    assert_eq!(id3_text(&numeric, "TRCK").as_deref(), Some("7/12"));
+}
+
 #[tokio::test]
 async fn plan_reuses_scan_cache_and_omits_duplicate_text() {
     let directory = temp_dir();

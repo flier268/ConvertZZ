@@ -1208,8 +1208,19 @@ fn id3v2_standard(tag: &id3::Tag, key: &str) -> Option<String> {
         "title" => tag.title().map(ToOwned::to_owned),
         "artist" => tag.artist().map(ToOwned::to_owned),
         "album" => tag.album().map(ToOwned::to_owned),
-        "year" => tag.year().map(|value| value.to_string()),
-        "track" => tag.track().map(|value| value.to_string()),
+        // 純數字走 year()/track()。TYER／TRCK 也可以是「录制年」「第一辑」，
+        // 解析失敗時仍要讀原文字，否則寫入後下次掃描會把欄位弄丟。
+        "year" => tag.year().map(|value| value.to_string()).or_else(|| {
+            tag.get("TYER")
+                .or_else(|| tag.get("TDRC"))
+                .and_then(|frame| frame.content().text())
+                .map(ToOwned::to_owned)
+        }),
+        "track" => tag.track().map(|value| value.to_string()).or_else(|| {
+            tag.get("TRCK")
+                .and_then(|frame| frame.content().text())
+                .map(ToOwned::to_owned)
+        }),
         "genre" => tag.genre().map(ToOwned::to_owned),
         "comment" => tag.comments().next().map(|comment| comment.text.clone()),
         _ => None,
@@ -1225,11 +1236,16 @@ fn set_id3v2_value(tag: &mut id3::Tag, key: &str, value: String) {
         "year" => {
             if let Ok(year) = value.parse() {
                 tag.set_year(year);
+            } else {
+                // 預覽已顯示這段文字。解析失敗時寫原 TYER，不要留下舊年份。
+                tag.set_text("TYER", value);
             }
         }
         "track" => {
             if let Ok(track) = value.parse() {
                 tag.set_track(track);
+            } else {
+                tag.set_text("TRCK", value);
             }
         }
         "genre" => tag.set_genre(value),

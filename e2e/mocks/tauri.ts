@@ -439,6 +439,16 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
           selected: true,
         },
         {
+          key: "title",
+          label: "標題",
+          container: "id3v1" as const,
+          values: ["裡面的很長標題不會完整寫進固定欄位"],
+          convertedValues: ["裡面的很長標題"],
+          selected: false,
+          truncated: true,
+          truncation: "「ID3v1 標題超過 30 位元組，已截斷為 裡面的很長標題」",
+        },
+        {
           key: "frame:TIT3",
           label: "TIT3",
           container: "id3v2" as const,

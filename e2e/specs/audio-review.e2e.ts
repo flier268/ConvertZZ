@@ -95,7 +95,10 @@ test.describe("音訊標籤審閱", () => {
       "aria-pressed",
       "true",
     );
-    await expect(page.locator(".audio-detail")).toContainText("3 個變更");
+    await expect(page.locator(".audio-detail")).toContainText("4 個變更");
+    await expect(page.locator(".audio-id3v1-truncation")).toContainText(
+      "ID3v1 標題超過 30 位元組，已截斷為 裡面的很長標題",
+    );
     await expect(page.locator(".audio-detail .diff-ins").first()).toBeVisible();
     await page.screenshot({ path: join(shots, "audio-list-detail.png") });
     await page.getByRole("button", { name: "快捷鍵說明" }).hover();

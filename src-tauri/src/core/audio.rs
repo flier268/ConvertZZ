@@ -1164,6 +1164,9 @@ async fn convert_selected_fields(
         containers.insert(*container);
     }
     file.rewrite_containers = rewrite.clone();
+    if containers.contains(&AudioContainer::Id3v1) || rewrite.contains(&AudioContainer::Id3v1) {
+        note_id3v1_truncation(request, file, &mut updates, warnings)?;
+    }
     if updates.is_empty() && rewrite.is_empty() {
         return Ok(None);
     }
@@ -1316,7 +1319,104 @@ fn make_field(container: AudioContainer, key: &str, values: Vec<String>) -> Audi
         values,
         converted_values: None,
         selected: STANDARD_FIELDS.contains(&key),
+        truncated: false,
+        truncation: None,
     }
+}
+
+fn id3v1_comment_limit(file: &AudioTagFile) -> usize {
+    let track = file
+        .fields
+        .iter()
+        .find(|field| field.container == AudioContainer::Id3v1 && field.key == "track");
+    let text = track.and_then(|field| {
+        field
+            .converted_values
+            .as_ref()
+            .and_then(|values| values.first())
+            .or_else(|| field.values.first())
+    });
+    let number = text.and_then(|value| value.parse::<u8>().ok()).unwrap_or(0);
+    if number > 0 {
+        28
+    } else {
+        30
+    }
+}
+
+fn id3v1_text_limit(key: &str, comment_limit: usize) -> Option<usize> {
+    match key {
+        "title" | "artist" | "album" => Some(30),
+        "year" => Some(4),
+        "comment" => Some(comment_limit),
+        _ => None,
+    }
+}
+
+/// 依輸出編碼逐字放入，停在最後一個完整字元。
+fn truncate_to_encoding(
+    value: &str,
+    limit: usize,
+    encoding: TextEncoding,
+) -> Result<(String, bool), CoreError> {
+    if encode_text(value, encoding, false)?.len() <= limit {
+        return Ok((value.to_string(), false));
+    }
+    let mut kept = String::new();
+    for character in value.chars() {
+        let mut next = kept.clone();
+        next.push(character);
+        if encode_text(&next, encoding, false)?.len() > limit {
+            break;
+        }
+        kept = next;
+    }
+    Ok((kept, true))
+}
+
+fn note_id3v1_truncation(
+    request: &AudioTagPlanRequest,
+    file: &mut AudioTagFile,
+    updates: &mut HashMap<String, Vec<String>>,
+    warnings: &mut Vec<String>,
+) -> Result<(), CoreError> {
+    let comment_limit = id3v1_comment_limit(file);
+    let encoding = request.id3v1_output_encoding;
+    for field in &mut file.fields {
+        if field.container != AudioContainer::Id3v1 {
+            continue;
+        }
+        let Some(limit) = id3v1_text_limit(&field.key, comment_limit) else {
+            continue;
+        };
+        let source = field
+            .converted_values
+            .clone()
+            .unwrap_or_else(|| field.values.clone());
+        let mut fitted = Vec::with_capacity(source.len());
+        let mut notice = None;
+        for value in &source {
+            let (text, truncated) = truncate_to_encoding(value, limit, encoding)?;
+            if truncated && notice.is_none() {
+                notice = Some(format!(
+                    "「ID3v1 {}超過 {limit} 位元組，已截斷為 {text}」",
+                    field.label
+                ));
+            }
+            fitted.push(text);
+        }
+        let Some(message) = notice else {
+            continue;
+        };
+        field.truncated = true;
+        field.truncation = Some(message.clone());
+        field.converted_values = Some(fitted.clone());
+        warnings.push(format!("{}：{message}", file.path));
+        if field.selected {
+            updates.insert(field_id(field.container, &field.key), fitted);
+        }
+    }
+    Ok(())
 }
 
 fn label_for(key: &str) -> &str {
@@ -1845,7 +1945,8 @@ fn write_encoded_field(
     value: &str,
     encoding: TextEncoding,
 ) -> Result<(), CoreError> {
-    let encoded = encode_text(value, encoding, false)?;
+    let (fitted, _) = truncate_to_encoding(value, length, encoding)?;
+    let encoded = encode_text(&fitted, encoding, false)?;
     let copy = encoded.len().min(length);
     target[offset..offset + copy].copy_from_slice(&encoded[..copy]);
     Ok(())

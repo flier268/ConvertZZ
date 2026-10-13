@@ -23,6 +23,7 @@ import {
   audioParentDir,
   AUDIO_TAG_READ_ERROR,
   audioWarningDetail,
+  id3v1TruncationNotes,
   clearWarningSelection,
   audioRowSection,
   audioSegmentCounts,
@@ -963,6 +964,15 @@ watch(
               >
             </template>
             <div v-else class="audio-detail-tools">
+              <el-alert
+                v-for="note in id3v1TruncationNotes(selectedFile)"
+                :key="note"
+                class="audio-id3v1-truncation"
+                type="warning"
+                :title="note"
+                show-icon
+                :closable="false"
+              />
               <el-tag type="success" effect="plain"
                 >{{ changedFieldCount(selectedFile) }} 個變更</el-tag
               >

@@ -343,6 +343,12 @@ pub struct AudioTagField {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub converted_values: Option<Vec<String>>,
     pub selected: bool,
+    /// ID3v1 固定寬度寫入時，這個欄位被切到完整字元邊界。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub truncated: bool,
+    /// 例如「ID3v1 標題超過 30 位元組，已截斷為 …」。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub truncation: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -160,6 +160,87 @@ fn id3v1_only_mp3(title: &str, encoding: TextEncoding) -> Vec<u8> {
     .unwrap()
 }
 
+/// 16 個字、Big5 超過 30 位元組。其中一個雙位元組字跨在第 30 位元組上，
+/// 直接切片會留下 lead byte。
+#[test]
+fn id3v1_big5_title_truncates_on_character_boundary() {
+    use super::super::encoding::decode_text_detailed;
+
+    let title = format!("A{}", "測".repeat(15));
+    let encoded = encode_text(&title, TextEncoding::Big5, false).unwrap();
+    assert_eq!(title.chars().count(), 16);
+    assert!(encoded.len() > 30, "encoded {} bytes", encoded.len());
+
+    let mp3 = id3v1_only_mp3(&title, TextEncoding::Big5);
+    let raw = &mp3[mp3.len() - 125..mp3.len() - 95];
+    let end = raw.iter().position(|byte| *byte == 0).unwrap_or(raw.len());
+    let decoded = decode_text_detailed(&raw[..end], TextEncoding::Big5).unwrap();
+    assert!(
+        !decoded.had_errors,
+        "dangling lead byte in {:?}",
+        &raw[..end]
+    );
+    assert!(
+        title.starts_with(&decoded.text),
+        "truncated {:?} is not a prefix of {title}",
+        decoded.text
+    );
+    assert!(decoded.text.chars().count() < 16);
+    assert!(
+        encode_text(&decoded.text, TextEncoding::Big5, false)
+            .unwrap()
+            .len()
+            <= 30
+    );
+}
+
+#[tokio::test]
+async fn id3v1_plan_warns_when_output_encoding_truncates_title() {
+    let directory = temp_dir();
+    let path = directory.join("long.mp3");
+    let title = "測".repeat(15);
+    std::fs::write(&path, id3v1_only_mp3(&title, TextEncoding::Gbk)).unwrap();
+    let service = AudioService::new();
+    let mut request = base_plan(&[path.clone()]);
+    request.id3v1_source_encoding = Some(TextEncoding::Gbk);
+    request.id3v1_output_encoding = TextEncoding::Utf8;
+    request.id3v1_direction = Direction::None;
+    request.conversion.direction = Direction::None;
+    request.selected_fields = HashMap::from([(
+        path.to_string_lossy().into_owned(),
+        vec!["id3v1:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let field = field(&plan.files[0], AudioContainer::Id3v1, "title").unwrap();
+    assert!(field.truncated);
+    let message = field.truncation.clone().unwrap();
+    assert!(message.contains("ID3v1 標題超過 30 位元組"), "{message}");
+    assert!(plan
+        .warnings
+        .iter()
+        .any(|warning| warning.contains(&message)));
+    let written = field.converted_values.as_ref().unwrap()[0].clone();
+    assert!(title.starts_with(&written));
+    assert!(
+        encode_text(&written, TextEncoding::Utf8, false)
+            .unwrap()
+            .len()
+            <= 30
+    );
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    let stored = std::fs::read(&path).unwrap();
+    let tag = read_id3v1(&stored, TextEncoding::Utf8).unwrap().unwrap();
+    assert_eq!(tag.values["title"], written);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
 fn field<'a>(
     file: &'a AudioTagFile,
     container: AudioContainer,
@@ -1193,6 +1274,8 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
             values: vec!["风".into()],
             converted_values: Some(vec!["風".into()]),
             selected: true,
+            truncated: false,
+            truncation: None,
         }],
         has_cover_art: false,
         duration_seconds: None,
@@ -1211,6 +1294,8 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
             values: vec!["同".into()],
             converted_values: Some(vec!["同".into()]),
             selected: true,
+            truncated: false,
+            truncation: None,
         }],
         has_cover_art: false,
         duration_seconds: None,

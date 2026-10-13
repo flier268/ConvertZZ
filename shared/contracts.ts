@@ -150,6 +150,10 @@ export interface AudioTagField {
   /** 與 `values` 相同時後端省略，表示預覽後沒有文字變化。 */
   convertedValues?: string[];
   selected: boolean;
+  /** ID3v1 固定寬度寫入時，這個欄位被切到完整字元。 */
+  truncated?: boolean;
+  /** 例如「ID3v1 標題超過 30 位元組，已截斷為 …」。 */
+  truncation?: string;
 }
 
 export interface AudioTagFile {

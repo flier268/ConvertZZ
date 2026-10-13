@@ -174,6 +174,11 @@ export function fieldVisibleWhenHidingUnchanged(field: AudioTagField): boolean {
   return fieldValuesChanged(field);
 }
 
+/** ID3v1 固定寬度截斷說明，給詳細面板顯示。 */
+export function id3v1TruncationNotes(file: AudioTagFile): string[] {
+  return file.fields.flatMap((field) => (field.truncation ? [field.truncation] : []));
+}
+
 export function changedFieldCount(file: AudioTagFile): number {
   return file.fields.filter((field) => fieldAffectsAudio(file, field)).length;
 }

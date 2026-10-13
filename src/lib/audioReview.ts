@@ -98,10 +98,18 @@ export function createAudioPreviewController(deps: {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let applying = false;
   let running = 0;
+  // 已開始的 run 串成一條。flush 要等它們全部結束，不能在沒有計時器時直接 return。
+  let tail: Promise<void> = Promise.resolve();
 
   async function run(): Promise<void> {
     if (applying) return;
     const token = race.start();
+    let settle!: () => void;
+    const done = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
+    const previous = tail;
+    tail = previous.then(() => done);
     running += 1;
     deps.onStart?.();
     try {
@@ -120,6 +128,7 @@ export function createAudioPreviewController(deps: {
       // 停止作業只 invalidate、沒有新的 run 接手時，這輪仍要 onSettled，否則 busy 不會下來。
       // 已有下一輪在跑，或正在套用，則留給那一輪自己結束。
       if (race.isCurrent(token) || (running === 0 && !applying)) deps.onSettled?.();
+      settle();
     }
   }
 
@@ -133,10 +142,12 @@ export function createAudioPreviewController(deps: {
       }, debounceMs);
     },
     async flush() {
-      if (!timer) return;
-      clearTimeout(timer);
-      timer = undefined;
-      await run();
+      if (timer) {
+        clearTimeout(timer);
+        timer = undefined;
+        void run();
+      }
+      await tail;
     },
     run,
     invalidate() {

@@ -1,6 +1,9 @@
 use super::super::conversion::shared_conversion;
 use super::super::encoding::encode_text;
-use super::super::types::{ConflictPolicy, ConversionOptions, Direction, EngineKind};
+use super::super::types::{
+    AudioContainer, AudioFormat, AudioTagField, AudioTagFile, ConflictPolicy, ConversionOptions,
+    Direction, EngineKind,
+};
 use super::*;
 use id3::{TagLike, Version};
 use std::process::Command;
@@ -1175,6 +1178,57 @@ async fn keeps_unlisted_ogg_fields_unchanged() {
     let _ = std::fs::remove_dir_all(&directory);
 }
 
+#[test]
+fn summarize_audio_files_counts_changed_unchanged_and_errors() {
+    let changed = AudioTagFile {
+        path: "a.mp3".into(),
+        format: AudioFormat::Mp3,
+        selected: true,
+        fields: vec![AudioTagField {
+            key: "title".into(),
+            label: "標題".into(),
+            container: AudioContainer::Id3v2,
+            values: vec!["风".into()],
+            converted_values: Some(vec!["風".into()]),
+            selected: true,
+        }],
+        has_cover_art: false,
+        duration_seconds: None,
+        warning: None,
+    };
+    let same = AudioTagFile {
+        path: "b.ogg".into(),
+        format: AudioFormat::Ogg,
+        selected: true,
+        fields: vec![AudioTagField {
+            key: "title".into(),
+            label: "標題".into(),
+            container: AudioContainer::VorbisComment,
+            values: vec!["同".into()],
+            converted_values: Some(vec!["同".into()]),
+            selected: true,
+        }],
+        has_cover_art: false,
+        duration_seconds: None,
+        warning: None,
+    };
+    let broken = AudioTagFile {
+        path: "c.mp3".into(),
+        format: AudioFormat::Mp3,
+        selected: false,
+        fields: vec![],
+        has_cover_art: false,
+        duration_seconds: None,
+        warning: Some("無法讀取".into()),
+    };
+    let summary = summarize_audio_files(&[changed, same, broken]);
+    assert_eq!(summary.total, 3);
+    assert_eq!(summary.changed, 1);
+    assert_eq!(summary.unchanged, 1);
+    assert_eq!(summary.errors, 1);
+    assert_eq!(summary.selected_fields, 2);
+}
+
 #[tokio::test]
 async fn cancel_rejects_old_audio_plan() {
     let directory = temp_dir();
@@ -1191,6 +1245,8 @@ async fn cancel_rejects_old_audio_plan() {
         .plan(shared_conversion(), request, noop())
         .await
         .unwrap();
+    assert!(plan.summary.total >= 1);
+    assert_eq!(plan.summary.errors, 0);
     assert_eq!(service.cancel(&plan.plan_id)["cancelled"], true);
     let error = service
         .apply(&plan.plan_id, noop(), never_cancel())

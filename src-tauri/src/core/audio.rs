@@ -4,8 +4,8 @@ use super::encoding::{decode_text, encode_text};
 use super::error::CoreError;
 use super::types::{
     ApplyFailure, ApplyResult, AudioContainer, AudioFormat, AudioScanRequest, AudioTagField,
-    AudioTagFile, AudioTagPlan, AudioTagPlanRequest, CancelCheck, ConflictPolicy,
-    ConversionOptions, ProgressReporter, TextEncoding,
+    AudioTagFile, AudioTagPlan, AudioTagPlanRequest, AudioTagPlanSummary, CancelCheck,
+    ConflictPolicy, ConversionOptions, ProgressReporter, TextEncoding,
 };
 use chrono::Utc;
 use lofty::config::WriteOptions;
@@ -184,6 +184,7 @@ impl AudioService {
         let public = AudioTagPlan {
             plan_id: plan_id.clone(),
             created_at: Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            summary: summarize_audio_files(&scanned),
             files: scanned,
             warnings: unique(warnings),
         };
@@ -784,6 +785,42 @@ fn id3v2_header_version(buffer: &[u8]) -> Option<u8> {
         Some(buffer[3])
     } else {
         None
+    }
+}
+
+pub(crate) fn summarize_audio_files(files: &[AudioTagFile]) -> AudioTagPlanSummary {
+    let mut changed = 0usize;
+    let mut errors = 0usize;
+    let mut selected_fields = 0usize;
+    for file in files {
+        if file.warning.is_some() {
+            errors += 1;
+            continue;
+        }
+        let mut file_changed = false;
+        for field in &file.fields {
+            if field
+                .converted_values
+                .as_ref()
+                .is_some_and(|values| values != &field.values)
+            {
+                file_changed = true;
+            }
+            if file.selected && field.selected {
+                selected_fields += 1;
+            }
+        }
+        if file_changed {
+            changed += 1;
+        }
+    }
+    let total = files.len();
+    AudioTagPlanSummary {
+        total,
+        changed,
+        unchanged: total - changed - errors,
+        errors,
+        selected_fields,
     }
 }
 

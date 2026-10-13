@@ -395,6 +395,16 @@ impl AudioTagPlanRequest {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioTagPlanSummary {
+    pub total: usize,
+    pub changed: usize,
+    pub unchanged: usize,
+    pub errors: usize,
+    pub selected_fields: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioTagPlan {
@@ -402,6 +412,9 @@ pub struct AudioTagPlan {
     pub created_at: String,
     pub files: Vec<AudioTagFile>,
     pub warnings: Vec<String>,
+    /// 計畫檔案的統計。舊客戶端可忽略；缺少時視為全零。
+    #[serde(default)]
+    pub summary: AudioTagPlanSummary,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

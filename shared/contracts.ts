@@ -187,11 +187,21 @@ export interface AudioTagPlanRequest extends AudioScanRequest {
   id3v2Encoding: "utf8" | "utf16" | "utf16be" | "latin1";
 }
 
+export interface AudioTagPlanSummary {
+  total: number;
+  changed: number;
+  unchanged: number;
+  errors: number;
+  selectedFields: number;
+}
+
 export interface AudioTagPlan {
   planId: string;
   createdAt: string;
   files: AudioTagFile[];
   warnings: string[];
+  /** 後端附帶的統計。前端審閱仍以目前勾選即時重算。 */
+  summary?: AudioTagPlanSummary;
 }
 
 export interface ApplyResult {

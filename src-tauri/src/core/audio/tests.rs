@@ -129,6 +129,22 @@ fn mpeg_frame() -> Vec<u8> {
     vec![0xff, 0xfb, 0x90, 0x64, 0, 0, 0, 0, 0, 0]
 }
 
+/// MPEG1 Layer III、256 kbps、44100 Hz、無 padding，幀長 720。
+/// 幀尾 128 bytes 剛好以 TAG 開頭時，那是音訊，不是 ID3v1。
+#[test]
+fn id3v1_marker_inside_mpeg_frame_is_not_cut() {
+    let mut frame = vec![0_u8; 720];
+    frame[..4].copy_from_slice(&[0xff, 0xfb, 0x90, 0x64]);
+    let tag_at = frame.len() - 128;
+    frame[tag_at..tag_at + 3].copy_from_slice(b"TAG");
+    assert_eq!(
+        strip_id3v1(&frame).len(),
+        frame.len(),
+        "MPEG 幀內的 TAG 不該被當成 ID3v1 切掉"
+    );
+    assert!(read_id3v1(&frame, TextEncoding::Utf8).unwrap().is_none());
+}
+
 fn write_tagged_mp3(path: &Path, id3v1_title: &str, id3v2_title: &str, with_picture: bool) {
     std::fs::write(path, mpeg_frame()).unwrap();
     let mut tag = id3::Tag::new();
@@ -2281,6 +2297,26 @@ fn priority_queue_runs_the_requested_path_first_and_batches_hold_32() {
     }
     assert_eq!(emitted, vec![AUDIO_STREAM_BATCH]);
     assert_eq!(AUDIO_STREAM_BATCH, 32);
+
+    // 掃描與預覽共用同一條優先佇列。較新的預覽路徑排在前面，但掃描的待處理
+    // 清單裡沒有它。兩邊都必須各自拿到自己的優先檔，不能互相清掉。
+    let service = AudioService::new();
+    service.prioritize("scan-hit");
+    service.prioritize("preview-hit");
+    let mut scan_pending = VecDeque::from(["scan-other", "scan-hit", "scan-tail"]);
+    let mut preview_pending = VecDeque::from(["preview-other", "preview-hit"]);
+    let scan_next = service.take_next(&mut scan_pending, |item| (*item).to_string());
+    let preview_next = service.take_next(&mut preview_pending, |item| (*item).to_string());
+    assert_eq!(scan_next, Some("scan-hit"));
+    assert_eq!(preview_next, Some("preview-hit"));
+    assert_eq!(
+        scan_pending.into_iter().collect::<Vec<_>>(),
+        vec!["scan-other", "scan-tail"]
+    );
+    assert_eq!(
+        preview_pending.into_iter().collect::<Vec<_>>(),
+        vec!["preview-other"]
+    );
     let rest = drain_stream_batch(&mut buffer, true).expect("remainder");
     assert_eq!(rest.len(), 8);
     assert!(drain_stream_batch(&mut buffer, true).is_none());

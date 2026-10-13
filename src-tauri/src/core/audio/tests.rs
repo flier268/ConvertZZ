@@ -3274,3 +3274,74 @@ fn apply_mp3_error_removes_temporary_file() {
     );
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+fn id3v2_blob(title: &str) -> Vec<u8> {
+    let mut tag = id3::Tag::new();
+    tag.set_title(title);
+    let mut cursor = std::io::Cursor::new(Vec::new());
+    tag.write_to(&mut cursor, Version::Id3v24).unwrap();
+    cursor.into_inner()
+}
+
+/// 開頭已有一個 ID3v2，後面還留著第二個 v2、檔尾 v2 或 Lyrics3v2。
+/// 移除只剝第一個標頭，卻仍回報成功。
+#[tokio::test]
+async fn removing_id3v2_reports_failure_when_another_container_remains() {
+    let directory = temp_dir();
+    let audio = mpeg_frame();
+    let leading = id3v2_blob("第一個");
+    let extra = id3v2_blob("第二個");
+    let lyrics = b"LYRICSBEGININD000021LYRICS200000021".to_vec();
+    let with_v1 = |body: Vec<u8>| {
+        append_id3v1(
+            &body,
+            &HashMap::from([("title", "v1".to_string())]),
+            255,
+            TextEncoding::Utf8,
+        )
+        .unwrap()
+    };
+    // 同時留 ID3v1，移除 ID3v2 才不會被當成「唯一標籤」而拒絕。
+    let cases = [
+        (
+            "double-leading",
+            with_v1([leading.clone(), extra.clone(), audio.clone()].concat()),
+        ),
+        (
+            "trailing",
+            with_v1([leading.clone(), audio.clone(), extra].concat()),
+        ),
+        ("lyrics3", with_v1([leading, audio, lyrics].concat())),
+    ];
+    let service = AudioService::new();
+    for (name, original) in cases {
+        let path = directory.join(format!("{name}.mp3"));
+        std::fs::write(&path, &original).unwrap();
+        let mut request = quiet_plan(&[path.clone()]);
+        request.tag_operations = vec![remove_operation(AudioContainer::Id3v2)];
+        let plan = service
+            .plan(shared_conversion(), request, noop())
+            .await
+            .unwrap();
+        let removal = plan.files[0]
+            .removals
+            .iter()
+            .find(|item| item.container == AudioContainer::Id3v2)
+            .unwrap_or_else(|| panic!("{name} 應列出 ID3v2 移除"));
+        assert!(removal.refused.is_none(), "{name} {:?}", removal.refused);
+        let result = service
+            .apply(&plan.plan_id, noop(), never_cancel())
+            .await
+            .unwrap();
+        assert_eq!(result.failed.len(), 1, "{name} {result:?}");
+        assert!(result.succeeded.is_empty(), "{name} {result:?}");
+        assert!(
+            result.failed[0].message.contains("ID3v2")
+                || result.failed[0].message.contains("Lyrics3"),
+            "{name} {}",
+            result.failed[0].message
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), original, "{name}");
+    }
+    let _ = std::fs::remove_dir_all(&directory);
+}

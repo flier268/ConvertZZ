@@ -97,10 +97,12 @@ export function createAudioPreviewController(deps: {
   const debounceMs = deps.debounceMs ?? AUDIO_PREVIEW_DEBOUNCE_MS;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let applying = false;
+  let running = 0;
 
   async function run(): Promise<void> {
     if (applying) return;
     const token = race.start();
+    running += 1;
     deps.onStart?.();
     try {
       await deps.cancelInFlight();
@@ -112,7 +114,10 @@ export function createAudioPreviewController(deps: {
       if (!race.isCurrent(token) || deps.isCancellation?.(error)) return;
       deps.onError?.(error);
     } finally {
-      if (race.isCurrent(token)) deps.onSettled?.();
+      running -= 1;
+      // 停止作業只 invalidate、沒有新的 run 接手時，這輪仍要 onSettled，否則 busy 不會下來。
+      // 已有下一輪在跑，或正在套用，則留給那一輪自己結束。
+      if (race.isCurrent(token) || (running === 0 && !applying)) deps.onSettled?.();
     }
   }
 

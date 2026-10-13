@@ -77,6 +77,7 @@ import {
   CLEANUP_APE_NOTE,
   containerName,
   containerRewriteNotes,
+  detailContainerNotices,
   type AudioListFilter,
   type AudioListRow,
   type AudioSortKey,
@@ -187,6 +188,8 @@ const visibleFields = computed(() => {
 const rewriteNotes = computed(() => {
   const file = selectedFile.value;
   if (!file || !plan.value || file.warning) return [];
+  const fromPlan = detailContainerNotices(file, hideUnchanged.value);
+  if (fromPlan.length) return fromPlan;
   return containerRewriteNotes(file, {
     id3v2Version: options.id3v2Version,
     id3v2Encoding: options.id3v2Encoding,

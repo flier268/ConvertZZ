@@ -1322,6 +1322,7 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
         previewed: true,
         rewrite_containers: Vec::new(),
         removals: Vec::new(),
+        notices: Vec::new(),
     };
     let same = AudioTagFile {
         path: "b.ogg".into(),
@@ -1345,6 +1346,7 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
         previewed: true,
         rewrite_containers: Vec::new(),
         removals: Vec::new(),
+        notices: Vec::new(),
     };
     let broken = AudioTagFile {
         path: "c.mp3".into(),
@@ -1357,6 +1359,7 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
         previewed: false,
         rewrite_containers: Vec::new(),
         removals: Vec::new(),
+        notices: Vec::new(),
     };
     let summary = summarize_audio_files(&[changed, same, broken]);
     assert_eq!(summary.total, 3);
@@ -1605,6 +1608,80 @@ fn write_id3v2(path: &Path, title: &str, version: Version, encoding: &str) {
     tag.set_title(title);
     apply_id3v2_encoding(&mut tag, encoding, &HashSet::from(["title".to_string()]));
     tag.write_to_path(path, version).unwrap();
+}
+
+#[tokio::test]
+async fn id3v2_rewrite_sets_container_notice_on_the_plan() {
+    let directory = temp_dir();
+    let service = AudioService::new();
+
+    let version_path = directory.join("version-notice.mp3");
+    write_id3v2(&version_path, "Hello", Version::Id3v23, "utf8");
+    let mut request = base_plan(&[version_path.clone()]);
+    request.id3v1_enabled = false;
+    request.id3v2_direction = Direction::None;
+    request.id3v2_version = 4;
+    request.id3v2_encoding = "utf8".into();
+    request.selected_fields = HashMap::from([(
+        version_path.to_string_lossy().into_owned(),
+        vec!["id3v2:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert_eq!(
+        plan.files[0].notices,
+        vec!["ID3v2 標籤會整個重寫為 v2.4".to_string()]
+    );
+    assert!(
+        field(&plan.files[0], AudioContainer::Id3v2, "title")
+            .and_then(|field| field.converted_values.clone())
+            .is_none(),
+        "版本重寫時文字可以不變，說明仍要在檔案計畫上"
+    );
+
+    let text_path = directory.join("text-notice.mp3");
+    write_id3v2(&text_path, "里面", Version::Id3v24, "utf8");
+    let mut request = base_plan(&[text_path.clone()]);
+    request.id3v1_enabled = false;
+    request.id3v2_version = 4;
+    request.id3v2_encoding = "utf8".into();
+    request.selected_fields = HashMap::from([(
+        text_path.to_string_lossy().into_owned(),
+        vec!["id3v2:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert_eq!(
+        plan.files[0].notices,
+        vec!["ID3v2 標籤會整個重寫為 v2.4".to_string()],
+        "來源已是 v2.4，文字修改仍會整段重寫標籤"
+    );
+
+    let quiet_path = directory.join("quiet-notice.mp3");
+    write_id3v2(&quiet_path, "Hello", Version::Id3v24, "utf8");
+    let mut request = base_plan(&[quiet_path.clone()]);
+    request.id3v1_enabled = false;
+    request.id3v2_direction = Direction::None;
+    request.id3v2_version = 4;
+    request.id3v2_encoding = "utf8".into();
+    request.selected_fields = HashMap::from([(
+        quiet_path.to_string_lossy().into_owned(),
+        vec!["id3v2:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert!(
+        plan.files[0].notices.is_empty(),
+        "版本與文字都沒變時不該提示整段重寫"
+    );
+
+    let _ = std::fs::remove_dir_all(&directory);
 }
 
 #[tokio::test]

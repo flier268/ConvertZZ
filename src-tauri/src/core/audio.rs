@@ -297,6 +297,7 @@ impl AudioService {
                     let mut item =
                         convert_selected_fields(conversion, &request, file, &mut warnings).await?;
                     operations::expand_tag_operations(&request, file, &mut item, &mut warnings)?;
+                    note_id3v2_container_rewrite(file, &item);
                     if let Some(item) = item {
                         prepared.push(item);
                     }
@@ -391,6 +392,7 @@ impl AudioService {
         let mut prepared =
             convert_selected_fields(conversion, &request.plan, &mut file, &mut warnings).await?;
         operations::expand_tag_operations(&request.plan, &mut file, &mut prepared, &mut warnings)?;
+        note_id3v2_container_rewrite(&mut file, &prepared);
         self.upsert_prepared(&plan_id, &file.path, prepared)?;
         file.previewed = true;
         Ok(file)
@@ -651,6 +653,7 @@ async fn read_audio_files(
                 previewed: false,
                 rewrite_containers: Vec::new(),
                 removals: Vec::new(),
+                notices: Vec::new(),
             },
         };
         done += 1;
@@ -710,6 +713,7 @@ fn scan_file(path: &Path, request: &AudioScanRequest) -> Result<AudioTagFile, Co
         previewed: false,
         rewrite_containers: Vec::new(),
         removals: Vec::new(),
+        notices: Vec::new(),
     })
 }
 
@@ -798,6 +802,7 @@ fn scan_mp3(
         previewed: false,
         rewrite_containers: Vec::new(),
         removals: Vec::new(),
+        notices: Vec::new(),
     })
 }
 
@@ -1828,6 +1833,22 @@ fn restrict_to_fields(file: &mut PreparedAudio, allowed: &HashSet<String>) {
         }
     }
     file.selected_containers = containers;
+}
+
+/// 只要這次會寫 ID3v2，`write_to_path` 就會把整個標籤重寫成要求的 v2.3 或 v2.4。
+fn note_id3v2_container_rewrite(file: &mut AudioTagFile, prepared: &Option<PreparedAudio>) {
+    let Some(item) = prepared else {
+        return;
+    };
+    let writes = item.selected_containers.contains(&AudioContainer::Id3v2)
+        && !item.remove_containers.contains(&AudioContainer::Id3v2);
+    if !writes {
+        return;
+    }
+    let notice = format!("ID3v2 標籤會整個重寫為 v2.{}", item.request.id3v2_version);
+    if !file.notices.iter().any(|existing| existing == &notice) {
+        file.notices.push(notice);
+    }
 }
 
 fn rewrite_containers(request: &AudioTagPlanRequest, file: &AudioTagFile) -> Vec<AudioContainer> {

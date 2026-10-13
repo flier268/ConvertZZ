@@ -190,6 +190,11 @@ export function fieldVisibleWhenHidingUnchanged(field: AudioTagField): boolean {
   );
 }
 
+/** 計畫上的容器重寫說明。隱藏不變欄位時仍然顯示。 */
+export function detailContainerNotices(file: AudioTagFile, _hideUnchanged: boolean): string[] {
+  return file.notices ?? [];
+}
+
 /**
  * 容器會整段重寫（ID3 版本或文字編碼）。隱藏不變欄位時文字列會消失，預覽仍要標出這件事。
  */

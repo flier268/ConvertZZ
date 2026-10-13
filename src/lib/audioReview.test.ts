@@ -41,6 +41,8 @@ import {
   manualRemoveOperation,
   hiddenColumnCount,
   manualCopyOperation,
+  detailContainerNotices,
+  fieldVisibleWhenHidingUnchanged,
 } from "./audioReview";
 
 function file(partial: Partial<AudioTagFile> & Pick<AudioTagFile, "path">): AudioTagFile {
@@ -261,6 +263,33 @@ describe("audioReview", () => {
       }),
     ];
     expect(selectionTotals(pending, { id3v1: true, id3v2: true })).toEqual({ files: 1, fields: 1 });
+  });
+
+  it("隱藏不變欄位時仍顯示 ID3v2 整段重寫說明", () => {
+    const planned = file({
+      path: "/tmp/notice.mp3",
+      notices: ["ID3v2 標籤會整個重寫為 v2.4"],
+      fields: [
+        {
+          key: "title",
+          label: "標題",
+          container: "id3v2",
+          values: ["Hello"],
+          convertedValues: ["Hello"],
+          selected: true,
+        },
+        {
+          key: "comment",
+          label: "備註",
+          container: "id3v2",
+          values: ["Hi"],
+          selected: true,
+        },
+      ],
+    });
+    expect(planned.fields.every((field) => !fieldVisibleWhenHidingUnchanged(field))).toBe(true);
+    expect(detailContainerNotices(planned, true)).toEqual(["ID3v2 標籤會整個重寫為 v2.4"]);
+    expect(detailContainerNotices(file({ path: "/tmp/quiet.mp3" }), true)).toEqual([]);
   });
 
   it("只有編碼或 ID3 版本會變的檔案算進同一個分桶與確認筆數", () => {

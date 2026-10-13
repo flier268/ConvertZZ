@@ -190,8 +190,8 @@ describe("驗收項目的自動化契約", () => {
   it("F-08 預覽列出所有可轉換字串欄位", () => {
     const page = readProjectFile("src/pages/AudioPage.vue");
     expect(page).toContain("filteredFiles");
-    expect(page).toContain(':data="visibleFields"');
-    expect(page).toContain("scope.row.values.join");
+    expect(page).toContain(':data="detailRows"');
+    expect(page).toContain("scope.row.field.values.join");
     expect(page).toContain("buildFieldDiffs");
     expect(page).toContain("fieldDiffs");
   });

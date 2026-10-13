@@ -1,6 +1,14 @@
-import type { AudioTagField, AudioTagFile, Direction } from "@shared/contracts";
+import type {
+  AudioContainer,
+  AudioTagField,
+  AudioTagFile,
+  Direction,
+  TagAction,
+  TagOnConflict,
+  TagOperation,
+} from "@shared/contracts";
 
-export type AudioListFilter = "changed" | "unchanged" | "errors" | "all";
+export type AudioListFilter = "changed" | "unchanged" | "errors" | "warnings" | "all";
 
 export interface AudioReviewStats {
   total: number;
@@ -40,6 +48,8 @@ export interface AudioSettingsSnapshot {
   id3v2SourceEncoding: string;
   id3v2Version: 3 | 4;
   id3v2Encoding: string;
+  /** 啟用中的標籤操作條數。省略或 0 不顯示 chip。 */
+  tagOperationCount?: number;
 }
 
 export const AUDIO_PREVIEW_DEBOUNCE_MS = 350;
@@ -171,7 +181,11 @@ export function fieldAffectsAudio(file: AudioTagFile, field: AudioTagField): boo
  * 「隱藏不變欄位」只看文字。編碼或 ID3 版本要重寫時，文字相同的欄位在預覽欄仍是「不變」。
  */
 export function fieldVisibleWhenHidingUnchanged(field: AudioTagField): boolean {
-  return fieldValuesChanged(field);
+  return (
+    fieldValuesChanged(field) ||
+    (field.warnings?.length ?? 0) > 0 ||
+    Boolean(field.origin?.startsWith("rule "))
+  );
 }
 
 /** ID3v1 固定寬度截斷說明，給詳細面板顯示。 */
@@ -179,8 +193,55 @@ export function id3v1TruncationNotes(file: AudioTagFile): string[] {
   return file.fields.flatMap((field) => (field.truncation ? [field.truncation] : []));
 }
 
+export function removalFieldId(container: AudioContainer): string {
+  return `remove:${container}`;
+}
+
+export function activeRemovals(file: AudioTagFile) {
+  return (file.removals ?? []).filter((removal) => removal.selected && !removal.refused);
+}
+
 export function changedFieldCount(file: AudioTagFile): number {
-  return file.fields.filter((field) => fieldAffectsAudio(file, field)).length;
+  return (
+    file.fields.filter((field) => fieldAffectsAudio(file, field)).length +
+    activeRemovals(file).length
+  );
+}
+
+/** 截斷、缺字，或移除時帶有隱藏欄位。 */
+export function fileHasTagWarning(file: AudioTagFile): boolean {
+  const fieldWarning = file.fields.some(
+    (field) =>
+      field.truncated ||
+      (field.warnings ?? []).some(
+        (warning) =>
+          warning.code === "truncated" ||
+          warning.code === "unrepresentable" ||
+          warning.code === "hidden",
+      ),
+  );
+  if (fieldWarning) return true;
+  return (file.removals ?? []).some((removal) => removal.hiddenFieldCount > 0);
+}
+
+/** 底部「n 個檔案有截斷或缺字」只算文字損失，不含隱藏欄位。 */
+export function fileHasTextLoss(file: AudioTagFile): boolean {
+  return file.fields.some(
+    (field) =>
+      field.truncated ||
+      (field.warnings ?? []).some(
+        (warning) => warning.code === "truncated" || warning.code === "unrepresentable",
+      ),
+  );
+}
+
+export function fieldOriginLabel(origin: string | undefined): string {
+  if (!origin) return "";
+  if (origin === "manual") return "手動";
+  if (origin === "convert") return "轉換";
+  const rule = /^rule (\d+)$/.exec(origin);
+  if (rule) return `規則 ${rule[1]}`;
+  return origin;
 }
 
 export function audioPreviewReady(files: readonly AudioTagFile[]): boolean {
@@ -207,6 +268,7 @@ export function audioSegmentCounts(
     changed: 0,
     unchanged: 0,
     errors: 0,
+    warnings: files.filter((file) => fileHasTagWarning(file)).length,
     all: files.length,
   };
   for (const file of files) counts[audioFileBucket(file, ready)] += 1;
@@ -283,6 +345,7 @@ export function filterAudioFiles(
   return files.filter((file) => {
     if (!matchesAudioQuery(file, query)) return false;
     if (filter === "all") return true;
+    if (filter === "warnings") return fileHasTagWarning(file);
     return audioFileBucket(file, ready) === filter;
   });
 }
@@ -436,6 +499,7 @@ export function audioRowSection(rows: readonly { type: string }[], index: number
 }
 
 function containerEnabled(field: AudioTagField, containers: AudioContainerFlags): boolean {
+  if (field.origin?.startsWith("rule ")) return true;
   if (field.container === "id3v1") return containers.id3v1;
   if (field.container === "id3v2") return containers.id3v2;
   return true;
@@ -460,6 +524,7 @@ export function fileHasWritableSelection(
   previewReady: boolean,
 ): boolean {
   if (!file.selected || file.warning) return false;
+  if (activeRemovals(file).length > 0) return true;
   return file.fields.some((field) => countsTowardWrite(file, field, containers, previewReady));
 }
 
@@ -472,7 +537,7 @@ export function selectionTotals(
   let fieldCount = 0;
   for (const file of files) {
     if (!file.selected || file.warning) continue;
-    let selected = 0;
+    let selected = activeRemovals(file).length;
     for (const field of file.fields) {
       if (!countsTowardWrite(file, field, containers, ready)) continue;
       selected += 1;
@@ -505,6 +570,7 @@ export function audioApplySelection(
     const ids = file.fields
       .filter((field) => countsTowardWrite(file, field, containers, ready))
       .map((field) => `${field.container}:${field.key}`);
+    for (const removal of activeRemovals(file)) ids.push(removalFieldId(removal.container));
     if (!ids.length) continue;
     paths.push(file.path);
     selectedFields[file.path] = ids;
@@ -683,5 +749,99 @@ export function settingsSummaryChips(settings: AudioSettingsSnapshot): string[] 
       `ID3v2.${settings.id3v2Version}・${ID3V2_ENCODING_LABEL[settings.id3v2Encoding] ?? settings.id3v2Encoding}`,
     );
   }
+  if ((settings.tagOperationCount ?? 0) > 0) {
+    chips.push(`標籤操作 ${settings.tagOperationCount} 條`);
+  }
   return chips;
+}
+
+export const TAG_RULE_FIELDS: ReadonlyArray<readonly [string, string]> = [
+  ["title", "標題"],
+  ["artist", "演出者"],
+  ["album", "專輯"],
+  ["year", "年份"],
+  ["track", "音軌"],
+  ["comment", "註解"],
+  ["genre", "類型"],
+];
+
+export interface TagRule {
+  id: string;
+  enabled: boolean;
+  action: TagAction;
+  source: AudioContainer;
+  target: AudioContainer;
+  fields: string[];
+  onConflict: TagOnConflict;
+}
+
+let tagRuleSerial = 0;
+
+export function createTagRule(partial: Partial<TagRule> & Pick<TagRule, "action">): TagRule {
+  tagRuleSerial += 1;
+  return {
+    id: partial.id ?? `tag-rule-${tagRuleSerial}`,
+    enabled: partial.enabled ?? true,
+    action: partial.action,
+    source: partial.source ?? "id3v2",
+    target: partial.target ?? "id3v1",
+    fields: partial.fields ?? TAG_RULE_FIELDS.map(([key]) => key),
+    onConflict:
+      partial.onConflict ??
+      (partial.action === "merge" || partial.source === "id3v1" ? "fillEmpty" : "overwrite"),
+  };
+}
+
+/** 舊播放器或車機只讀 ID3v1。輸出編碼由呼叫端改成 Big5。 */
+export const LEGACY_PLAYER_NOTE =
+  "把 ID3v2 複製到 ID3v1，輸出 Big5。超過 30 位元組會截斷，目標編碼沒有的字會變成 ?。給只讀 ID3v1 的舊播放器或車機。";
+
+/** 有的播放器偏好 APEv2，移除後畫面上的標題可能改變。 */
+export const CLEANUP_APE_NOTE =
+  "移除 MP3 上多餘的 APEv2。有的播放器偏好 APEv2，移除後顯示的標題可能會改變。檔案只剩這一個標籤時不會刪。";
+
+export function legacyPlayerRule(): TagRule {
+  return createTagRule({
+    action: "copy",
+    source: "id3v2",
+    target: "id3v1",
+    onConflict: "overwrite",
+  });
+}
+
+export function cleanupApeRule(): TagRule {
+  return createTagRule({ action: "remove", source: "apev2", target: "apev2" });
+}
+
+export function tagRuleSummary(rule: TagRule, id3v1OutputEncoding = "big5"): string {
+  const source = containerName(rule.source);
+  const target = containerName(rule.target);
+  if (rule.action === "remove") return `移除 ${source}（MP3 才執行）`;
+  if (rule.action === "merge") {
+    const how = rule.onConflict === "fillEmpty" ? "只補空白欄位" : "覆蓋目標";
+    return `以 ${source} 為主合併到 ${target}（${how}）`;
+  }
+  const encoding =
+    rule.target === "id3v1"
+      ? `${encodingLabel(id3v1OutputEncoding)}，超過 30 位元組會截斷`
+      : "覆蓋目標";
+  return `從 ${source} 複製到 ${target}（${encoding}）`;
+}
+
+export function toTagOperations(rules: readonly TagRule[]): TagOperation[] {
+  return rules.map((rule) => ({
+    action: rule.action,
+    source: rule.source,
+    target: rule.action === "remove" ? undefined : rule.target,
+    fields: rule.action === "remove" ? [] : [...rule.fields],
+    onConflict: rule.action === "remove" ? undefined : rule.onConflict,
+    enabled: rule.enabled,
+  }));
+}
+
+export function containerName(container: AudioContainer): string {
+  if (container === "id3v1") return "ID3v1";
+  if (container === "id3v2") return "ID3v2";
+  if (container === "apev2") return "APEv2";
+  return "Vorbis";
 }

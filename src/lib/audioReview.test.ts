@@ -23,6 +23,14 @@ import {
   audioApplySelection,
   writableAudioPaths,
   settingsSummaryChips,
+  fieldOriginLabel,
+  fileHasTextLoss,
+  fileHasTagWarning,
+  toTagOperations,
+  legacyPlayerRule,
+  cleanupApeRule,
+  tagRuleSummary,
+  activeRemovals,
 } from "./audioReview";
 
 function file(partial: Partial<AudioTagFile> & Pick<AudioTagFile, "path">): AudioTagFile {
@@ -100,7 +108,7 @@ describe("audioReview", () => {
 
   it("同一個篩選值決定區段筆數，搜尋再和它取交集", () => {
     const counts = audioSegmentCounts(sample);
-    expect(counts).toEqual({ changed: 1, unchanged: 1, errors: 1, all: 3 });
+    expect(counts).toEqual({ changed: 1, unchanged: 1, errors: 1, warnings: 0, all: 3 });
     for (const filter of ["changed", "unchanged", "errors", "all"] as const) {
       expect(filterAudioFiles(sample, filter, "")).toHaveLength(counts[filter]);
     }
@@ -131,7 +139,13 @@ describe("audioReview", () => {
     expect(next).toHaveLength(3);
     expect(next[2].warning).toBeUndefined();
     expect(next[0].path).toBe("/tmp/晨雾/风.mp3");
-    expect(audioSegmentCounts(next)).toEqual({ changed: 1, unchanged: 2, errors: 0, all: 3 });
+    expect(audioSegmentCounts(next)).toEqual({
+      changed: 1,
+      unchanged: 2,
+      errors: 0,
+      warnings: 0,
+      all: 3,
+    });
     const added = replaceAudioFile(next, file({ path: "/tmp/new.mp3" }));
     expect(added.map((item) => item.path)).toContain("/tmp/new.mp3");
   });
@@ -152,7 +166,7 @@ describe("audioReview", () => {
     ]);
     expect(filterAudioFiles(pending, "errors", "")).toHaveLength(1);
     const counts = audioSegmentCounts(pending);
-    expect(counts).toEqual({ changed: 1, unchanged: 0, errors: 1, all: 2 });
+    expect(counts).toEqual({ changed: 1, unchanged: 0, errors: 1, warnings: 0, all: 2 });
     for (const filter of ["changed", "unchanged", "errors", "all"] as const) {
       expect(filterAudioFiles(pending, filter, "")).toHaveLength(counts[filter]);
     }
@@ -269,7 +283,13 @@ describe("audioReview", () => {
       ],
     });
     const files = [encodingOnly, id3v1];
-    expect(audioSegmentCounts(files)).toEqual({ changed: 2, unchanged: 0, errors: 0, all: 2 });
+    expect(audioSegmentCounts(files)).toEqual({
+      changed: 2,
+      unchanged: 0,
+      errors: 0,
+      warnings: 0,
+      all: 2,
+    });
     expect(audioReviewStats(files)).toMatchObject({
       changed: 2,
       unchanged: 0,
@@ -476,5 +496,66 @@ describe("audioReview", () => {
       "備份 .bak",
       "ID3v2.4・UTF-8",
     ]);
+    expect(
+      settingsSummaryChips({
+        direction: "none",
+        vocabularyCorrection: false,
+        backup: true,
+        hasMp3: true,
+        id3v1Enabled: false,
+        id3v1SourceEncoding: "gbk",
+        id3v1OutputEncoding: "big5",
+        id3v2Enabled: false,
+        id3v2Direction: "none",
+        id3v2RepairSourceEncoding: false,
+        id3v2SourceEncoding: "gbk",
+        id3v2Version: 4,
+        id3v2Encoding: "utf8",
+        tagOperationCount: 2,
+      }),
+    ).toContain("標籤操作 2 條");
+  });
+
+  it("標籤操作的來源、警告篩選與移除勾選", () => {
+    const legacy = legacyPlayerRule();
+    const cleanup = cleanupApeRule();
+    expect(tagRuleSummary(legacy, "big5")).toContain("從 ID3v2 複製到 ID3v1");
+    expect(tagRuleSummary(legacy, "big5")).toContain("Big5");
+    expect(tagRuleSummary(cleanup)).toContain("移除 APEv2");
+    expect(toTagOperations([legacy, { ...cleanup, enabled: false }])[1].enabled).toBe(false);
+    expect(fieldOriginLabel("rule 2")).toBe("規則 2");
+    expect(fieldOriginLabel("manual")).toBe("手動");
+    expect(fieldOriginLabel("convert")).toBe("轉換");
+    const warned = file({
+      path: "/tmp/warn.mp3",
+      previewed: true,
+      fields: [
+        {
+          key: "title",
+          label: "標題",
+          container: "id3v1",
+          values: ["很長"],
+          convertedValues: ["很"],
+          selected: true,
+          truncated: true,
+          origin: "rule 1",
+          warnings: [{ code: "truncated", message: "截斷 40→30 B", fromBytes: 40, toBytes: 30 }],
+        },
+      ],
+      removals: [{ container: "apev2", hiddenFieldCount: 2, origin: "rule 2", selected: true }],
+    });
+    expect(fileHasTextLoss(warned)).toBe(true);
+    expect(fileHasTagWarning(warned)).toBe(true);
+    expect(audioSegmentCounts([warned]).warnings).toBe(1);
+    expect(filterAudioFiles([warned], "warnings", "")).toHaveLength(1);
+    expect(activeRemovals(warned)).toHaveLength(1);
+    const apply = audioApplySelection([warned], { id3v1: false, id3v2: true });
+    expect(apply.paths).toEqual(["/tmp/warn.mp3"]);
+    expect(apply.selectedFields["/tmp/warn.mp3"]).toContain("remove:apev2");
+    expect(apply.selectedFields["/tmp/warn.mp3"]).toContain("id3v1:title");
+    warned.removals![0].selected = false;
+    expect(
+      audioApplySelection([warned], { id3v1: false, id3v2: true }).selectedFields["/tmp/warn.mp3"],
+    ).not.toContain("remove:apev2");
   });
 });

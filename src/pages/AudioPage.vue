@@ -46,11 +46,23 @@ import {
   audioPreviewReady,
   settingsSummaryChips,
   fieldVisibleWhenHidingUnchanged,
+  fieldOriginLabel,
+  fileHasTextLoss,
   createAudioPreviewController,
+  createTagRule,
+  legacyPlayerRule,
+  cleanupApeRule,
+  tagRuleSummary,
+  toTagOperations,
+  TAG_RULE_FIELDS,
+  LEGACY_PLAYER_NOTE,
+  CLEANUP_APE_NOTE,
+  containerName,
   type AudioListFilter,
   type AudioListRow,
   type AudioSortKey,
   type DiffPiece,
+  type TagRule,
 } from "../lib/audioReview";
 import VirtualList from "../components/VirtualList.vue";
 
@@ -94,6 +106,7 @@ const options = reactive({
   id3v2Version: 4 as 3 | 4,
   id3v2Encoding: "utf8" as AudioTagPlanRequest["id3v2Encoding"],
   vocabularyCorrection: true,
+  tagOperations: [] as TagRule[],
 });
 const draft = reactive({
   direction: options.direction,
@@ -112,6 +125,7 @@ const draft = reactive({
   id3v2RepairSourceEncoding: options.id3v2RepairSourceEncoding,
   id3v2Version: options.id3v2Version,
   id3v2Encoding: options.id3v2Encoding,
+  tagOperations: [] as TagRule[],
 });
 
 loadSettings().then((settings) => {
@@ -151,6 +165,12 @@ const visibleFields = computed(() => {
   if (!hideUnchanged.value || !plan.value) return file.fields;
   return file.fields.filter((field) => fieldVisibleWhenHidingUnchanged(field));
 });
+const detailRows = computed(() => {
+  const file = selectedFile.value;
+  if (!file || file.warning) return [];
+  const removals = (file.removals ?? []).map((removal) => ({ kind: "removal" as const, removal }));
+  return [...removals, ...visibleFields.value.map((field) => ({ kind: "field" as const, field }))];
+});
 const summaryChips = computed(() =>
   settingsSummaryChips({
     direction: options.direction,
@@ -166,7 +186,13 @@ const summaryChips = computed(() =>
     id3v2SourceEncoding: options.id3v2SourceEncoding,
     id3v2Version: options.id3v2Version,
     id3v2Encoding: options.id3v2Encoding,
+    tagOperationCount: options.tagOperations.filter((rule) => rule.enabled).length,
   }),
+);
+const lossyFileCount = computed(() => files.value.filter((file) => fileHasTextLoss(file)).length);
+const editingRuleId = ref("");
+const editingRule = computed(() =>
+  draft.tagOperations.find((rule) => rule.id === editingRuleId.value),
 );
 
 watch(filteredFiles, (list) => {
@@ -253,10 +279,11 @@ function pieceClass(piece: DiffPiece): string {
 }
 
 function containerLabel(container: AudioTagField["container"]): string {
-  if (container === "id3v1") return "ID3v1";
-  if (container === "id3v2") return "ID3v2";
-  if (container === "apev2") return "APEv2";
-  return "Vorbis";
+  return containerName(container);
+}
+
+function cloneRules(rules: TagRule[]): TagRule[] {
+  return rules.map((rule) => ({ ...rule, fields: [...rule.fields] }));
 }
 
 function openSettings() {
@@ -277,6 +304,8 @@ function openSettings() {
   draft.id3v2RepairSourceEncoding = options.id3v2RepairSourceEncoding;
   draft.id3v2Version = options.id3v2Version;
   draft.id3v2Encoding = options.id3v2Encoding;
+  draft.tagOperations = cloneRules(options.tagOperations);
+  editingRuleId.value = draft.tagOperations[0]?.id ?? "";
   settingsOpen.value = true;
   void nextTick(() => {
     draftMute -= 1;
@@ -300,6 +329,49 @@ function applyDraftToOptions() {
   options.id3v2RepairSourceEncoding = draft.id3v2RepairSourceEncoding;
   options.id3v2Version = draft.id3v2Version;
   options.id3v2Encoding = draft.id3v2Encoding;
+  options.tagOperations = cloneRules(draft.tagOperations);
+}
+
+function addTagRule() {
+  const rule = createTagRule({ action: "copy" });
+  draft.tagOperations.push(rule);
+  editingRuleId.value = rule.id;
+}
+
+function addLegacyPlayerRule() {
+  draft.id3v1OutputEncoding = "big5";
+  draft.id3v1Enabled = true;
+  const rule = legacyPlayerRule();
+  draft.tagOperations.push(rule);
+  editingRuleId.value = rule.id;
+}
+
+function addCleanupRule() {
+  const rule = cleanupApeRule();
+  draft.tagOperations.push(rule);
+  editingRuleId.value = rule.id;
+}
+
+function moveTagRule(index: number, delta: number) {
+  const next = index + delta;
+  if (next < 0 || next >= draft.tagOperations.length) return;
+  const [rule] = draft.tagOperations.splice(index, 1);
+  draft.tagOperations.splice(next, 0, rule);
+}
+
+function deleteTagRule(index: number) {
+  const [removed] = draft.tagOperations.splice(index, 1);
+  if (editingRuleId.value === removed?.id) {
+    editingRuleId.value = draft.tagOperations[0]?.id ?? "";
+  }
+}
+
+function toggleRuleField(rule: TagRule, key: string, checked: boolean) {
+  if (checked) {
+    if (!rule.fields.includes(key)) rule.fields.push(key);
+  } else {
+    rule.fields = rule.fields.filter((item) => item !== key);
+  }
 }
 
 async function choose() {
@@ -447,6 +519,7 @@ async function buildPlanRequest(): Promise<AudioTagPlanRequest> {
     id3v2RepairSourceEncoding: options.id3v2RepairSourceEncoding,
     id3v2Version: options.id3v2Version,
     id3v2Encoding: options.id3v2Encoding,
+    tagOperations: toTagOperations(options.tagOperations),
   };
 }
 
@@ -776,6 +849,15 @@ watch(
           >不變 {{ segments.unchanged }}</el-radio-button
         >
         <el-radio-button
+          value="warnings"
+          :aria-pressed="listFilter === 'warnings'"
+          :class="{
+            'is-warn': segments.warnings > 0,
+            'is-filled': listFilter === 'warnings' && segments.warnings > 0,
+          }"
+          >警告 {{ segments.warnings }}</el-radio-button
+        >
+        <el-radio-button
           value="errors"
           :aria-pressed="listFilter === 'errors'"
           :class="{
@@ -988,42 +1070,80 @@ watch(
             <el-table
               v-if="!selectedFile.warning"
               :key="hideUnchanged ? 'hide-unchanged' : 'show-all'"
-              :data="visibleFields"
+              :data="detailRows"
               empty-text="沒有可顯示的欄位"
             >
               <el-table-column label="轉換" width="70">
                 <template #default="scope">
-                  <el-checkbox v-model="scope.row.selected" :disabled="busy" />
+                  <el-checkbox
+                    v-if="scope.row.kind === 'removal'"
+                    v-model="scope.row.removal.selected"
+                    :disabled="busy || Boolean(scope.row.removal.refused)"
+                  />
+                  <el-checkbox v-else v-model="scope.row.field.selected" :disabled="busy" />
                 </template>
               </el-table-column>
               <el-table-column label="標籤" width="110">
-                <template #default="scope">{{ containerLabel(scope.row.container) }}</template>
+                <template #default="scope">{{
+                  containerLabel(
+                    scope.row.kind === "removal"
+                      ? scope.row.removal.container
+                      : scope.row.field.container,
+                  )
+                }}</template>
               </el-table-column>
-              <el-table-column prop="label" label="欄位" width="120" />
+              <el-table-column label="欄位" width="120">
+                <template #default="scope">{{
+                  scope.row.kind === "removal" ? "整個標籤" : scope.row.field.label
+                }}</template>
+              </el-table-column>
               <el-table-column label="目前內容" min-width="160">
                 <template #default="scope">
-                  <template v-if="plan && fieldDiffs.get(fieldDiffKey(scope.row))">
+                  <template v-if="scope.row.kind === 'removal'">
+                    含 {{ scope.row.removal.hiddenFieldCount }} 個隱藏欄位
+                    <span v-if="scope.row.removal.refused">・{{ scope.row.removal.refused }}</span>
+                  </template>
+                  <template v-else-if="plan && fieldDiffs.get(fieldDiffKey(scope.row.field))">
                     <span
-                      v-for="(piece, pieceIndex) in fieldDiffs.get(fieldDiffKey(scope.row))!.before"
-                      :key="`old-${scope.row.container}-${scope.row.key}-${pieceIndex}`"
+                      v-for="(piece, pieceIndex) in fieldDiffs.get(fieldDiffKey(scope.row.field))!
+                        .before"
+                      :key="`old-${scope.row.field.container}-${scope.row.field.key}-${pieceIndex}`"
                       :class="pieceClass(piece)"
                       >{{ piece.text }}</span
                     >
                   </template>
-                  <template v-else>{{ scope.row.values.join(" / ") }}</template>
+                  <template v-else>{{ scope.row.field.values.join(" / ") }}</template>
                 </template>
               </el-table-column>
               <el-table-column v-if="plan" label="轉換預覽" min-width="160">
                 <template #default="scope">
-                  <template v-if="fieldDiffs.get(fieldDiffKey(scope.row))">
+                  <template v-if="scope.row.kind === 'removal'">
+                    <span class="audio-remove">移除標籤</span>
+                  </template>
+                  <template v-else-if="fieldDiffs.get(fieldDiffKey(scope.row.field))">
                     <span
-                      v-for="(piece, pieceIndex) in fieldDiffs.get(fieldDiffKey(scope.row))!.after"
-                      :key="`new-${scope.row.container}-${scope.row.key}-${pieceIndex}`"
+                      v-for="(piece, pieceIndex) in fieldDiffs.get(fieldDiffKey(scope.row.field))!
+                        .after"
+                      :key="`new-${scope.row.field.container}-${scope.row.field.key}-${pieceIndex}`"
                       :class="pieceClass(piece)"
                       >{{ piece.text }}</span
                     >
+                    <span
+                      v-for="warning in scope.row.field.warnings ?? []"
+                      :key="warning.message"
+                      class="audio-field-warning"
+                      >{{ warning.message }}</span
+                    >
                   </template>
                   <span v-else class="audio-same">不變</span>
+                </template>
+              </el-table-column>
+              <el-table-column v-if="plan" label="來源" width="90">
+                <template #default="scope">
+                  <span v-if="scope.row.kind === 'removal'" class="audio-remove">{{
+                    fieldOriginLabel(scope.row.removal.origin)
+                  }}</span>
+                  <span v-else>{{ fieldOriginLabel(scope.row.field.origin) }}</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -1041,6 +1161,7 @@ watch(
         :format="() => formatProgressLabel(progress, progressStartedAt)"
       />
       <span>已勾選 {{ totals.files }} 個檔案・{{ totals.fields }} 個欄位</span>
+      <span v-if="lossyFileCount" class="audio-lossy">{{ lossyFileCount }} 個檔案有截斷或缺字</span>
       <el-button
         link
         :disabled="!filteredFiles.length || busy"
@@ -1083,7 +1204,7 @@ watch(
       >
     </footer>
 
-    <el-drawer v-model="settingsOpen" title="轉換設定" size="440px" append-to-body>
+    <el-drawer v-model="settingsOpen" title="轉換設定" size="480px" append-to-body>
       <el-form label-position="top" class="option-grid audio-options" :disabled="busy">
         <h3 class="audio-drawer-section">一般</h3>
         <el-form-item label="APEv2／Vorbis 方向">
@@ -1188,6 +1309,102 @@ watch(
             </el-select>
           </el-form-item>
         </template>
+        <h3 class="audio-drawer-section">
+          標籤操作
+          <span v-if="draft.tagOperations.length" class="audio-rule-count">{{
+            draft.tagOperations.filter((rule) => rule.enabled).length
+          }}</span>
+        </h3>
+        <p class="audio-rule-lead">
+          規則由上到下執行，套用到所有已勾選的檔案。來源一律用讀到的原始標籤，所以先移除再從該標籤複製，仍然複製得到移除前的內容。結果一樣先進預覽。
+        </p>
+        <div
+          v-for="(rule, index) in draft.tagOperations"
+          :key="rule.id"
+          class="audio-rule"
+          :class="{ 'is-on': rule.id === editingRuleId, 'is-remove': rule.action === 'remove' }"
+        >
+          <span class="audio-rule-index">{{ index + 1 }}</span>
+          <button type="button" class="audio-rule-name" @click="editingRuleId = rule.id">
+            <span v-if="rule.action === 'remove'" class="audio-remove">移除</span>
+            {{ tagRuleSummary(rule, draft.id3v1OutputEncoding) }}
+          </button>
+          <el-switch v-model="rule.enabled" :aria-label="`啟用規則 ${index + 1}`" />
+          <el-button link :disabled="index === 0" @click="moveTagRule(index, -1)">上移</el-button>
+          <el-button
+            link
+            :disabled="index === draft.tagOperations.length - 1"
+            @click="moveTagRule(index, 1)"
+            >下移</el-button
+          >
+          <el-button link type="danger" @click="deleteTagRule(index)">刪除</el-button>
+        </div>
+        <el-button @click="addTagRule">＋ 新增規則</el-button>
+        <div v-if="editingRule" class="audio-rule-editor">
+          <strong
+            >編輯規則
+            {{ draft.tagOperations.findIndex((rule) => rule.id === editingRule?.id) + 1 }}</strong
+          >
+          <div class="audio-rule-grid">
+            <label
+              >動作
+              <el-select v-model="editingRule.action">
+                <el-option label="複製" value="copy" />
+                <el-option label="合併" value="merge" />
+                <el-option label="移除" value="remove" />
+              </el-select>
+            </label>
+            <label
+              >衝突時
+              <el-select
+                v-model="editingRule.onConflict"
+                :disabled="editingRule.action === 'remove'"
+              >
+                <el-option label="覆蓋目標" value="overwrite" />
+                <el-option label="只補空白" value="fillEmpty" />
+              </el-select>
+            </label>
+            <label
+              >來源
+              <el-select v-model="editingRule.source">
+                <el-option label="ID3v2" value="id3v2" />
+                <el-option label="ID3v1" value="id3v1" />
+                <el-option label="APEv2" value="apev2" />
+              </el-select>
+            </label>
+            <label
+              >目標
+              <el-select v-model="editingRule.target" :disabled="editingRule.action === 'remove'">
+                <el-option label="ID3v1" value="id3v1" />
+                <el-option label="ID3v2" value="id3v2" />
+                <el-option label="APEv2" value="apev2" />
+              </el-select>
+            </label>
+          </div>
+          <p v-if="editingRule.action !== 'remove'">欄位</p>
+          <div v-if="editingRule.action !== 'remove'" class="audio-rule-fields">
+            <el-checkbox
+              v-for="[key, label] in TAG_RULE_FIELDS"
+              :key="key"
+              :model-value="editingRule.fields.includes(key)"
+              @change="
+                (checked: boolean) => editingRule && toggleRuleField(editingRule, key, checked)
+              "
+              >{{ label }}</el-checkbox
+            >
+          </div>
+          <p
+            v-if="editingRule.target === 'id3v1' && editingRule.action !== 'remove'"
+            class="audio-rule-lead"
+          >
+            ID3v1 輸出編碼沿用「ID3v1」區塊：{{ draft.id3v1OutputEncoding }}
+          </p>
+        </div>
+        <p class="audio-rule-lead">預設範本</p>
+        <el-button link @click="addLegacyPlayerRule">舊播放器相容</el-button>
+        <el-button link @click="addCleanupRule">清理多餘標籤</el-button>
+        <p class="audio-rule-lead">{{ LEGACY_PLAYER_NOTE }}</p>
+        <p class="audio-rule-lead">{{ CLEANUP_APE_NOTE }}</p>
       </el-form>
       <template #footer>
         <el-button type="primary" :disabled="busy" @click="closeSettings">完成</el-button>

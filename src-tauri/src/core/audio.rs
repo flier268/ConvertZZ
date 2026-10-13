@@ -879,7 +879,20 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
     let writes_v1 = !remove_v1 && file.selected_containers.contains(&AudioContainer::Id3v1);
     fs::copy(&file.path, &temporary)?;
     let mut output = if writes_v2 {
-        let mut tag = id3::Tag::read_from_path(&temporary).unwrap_or_else(|_| id3::Tag::new());
+        // 原檔已有 ID3v2 卻解析失敗時，空標籤會整段換掉讀不到的影格。
+        // 檔頭沒有 ID3v2（含只有 ID3v1）才允許從空標籤建立。
+        let has_id3v2 = id3v2_tag_length(&source) > 0;
+        let mut tag = match id3::Tag::read_from_path(&temporary) {
+            Ok(tag) => tag,
+            Err(error) if has_id3v2 => {
+                let _ = fs::remove_file(&temporary);
+                return Err(CoreError::new(
+                    "ID3_READ",
+                    format!("原檔有 ID3v2，但無法讀取，已停止寫入：{error}"),
+                ));
+            }
+            Err(_) => id3::Tag::new(),
+        };
         for (identifier, values) in &file.updates {
             let (container, key) = split_field_id(identifier);
             if container != AudioContainer::Id3v2 {

@@ -365,43 +365,122 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
     ];
   }
   if (operation === "audio.plan") {
+    const song = {
+      path: "/tmp/song.mp3",
+      format: "mp3" as const,
+      selected: true,
+      hasCoverArt: true,
+      fields: [
+        {
+          key: "title",
+          label: "標題",
+          container: "id3v2" as const,
+          values: ["里面"],
+          convertedValues: ["裡面"],
+          selected: true,
+        },
+        {
+          key: "artist",
+          label: "演出者",
+          container: "id3v2" as const,
+          values: ["头发"],
+          convertedValues: ["頭髮"],
+          selected: true,
+        },
+        {
+          key: "album",
+          label: "專輯",
+          container: "id3v2" as const,
+          values: ["晨雾"],
+          convertedValues: ["晨霧"],
+          selected: true,
+        },
+        {
+          key: "frame:TIT3",
+          label: "TIT3",
+          container: "id3v2" as const,
+          values: ["未知字幕"],
+          selected: false,
+        },
+      ],
+    };
+    const unchanged = {
+      path: "/tmp/same.ogg",
+      format: "ogg" as const,
+      selected: true,
+      hasCoverArt: false,
+      fields: [
+        {
+          key: "title",
+          label: "標題",
+          container: "vorbis-comment" as const,
+          values: ["同名"],
+          convertedValues: ["同名"],
+          selected: true,
+        },
+      ],
+    };
+    const warning = {
+      path: "/tmp/broken.mp3",
+      format: "mp3" as const,
+      selected: false,
+      hasCoverArt: false,
+      warning: "無法讀取標籤",
+      fields: [],
+    };
+    const batch = Array.from({ length: 247 }, (_, index) => {
+      const same = index % 17 === 0;
+      return {
+        path: `/tmp/batch/track-${String(index).padStart(3, "0")}.mp3`,
+        format: "mp3" as const,
+        selected: true,
+        hasCoverArt: false,
+        fields: [
+          {
+            key: "title",
+            label: "標題",
+            container: "id3v2" as const,
+            values: [`歌${index}`],
+            convertedValues: [same ? `歌${index}` : `歌${index}繁`],
+            selected: true,
+          },
+          {
+            key: "album",
+            label: "專輯",
+            container: "id3v2" as const,
+            values: ["晨雾"],
+            convertedValues: [same ? "晨雾" : "晨霧"],
+            selected: true,
+          },
+        ],
+      };
+    });
+    const files = [song, unchanged, warning, ...batch];
+    const errors = files.filter((file) => "warning" in file && file.warning).length;
+    const changed = files.filter(
+      (file) =>
+        !("warning" in file && file.warning) &&
+        file.fields.some(
+          (field) =>
+            field.convertedValues && field.convertedValues.join("\0") !== field.values.join("\0"),
+        ),
+    ).length;
     return {
       planId: "audio-plan-1",
       createdAt: "2026-08-15T00:00:00.000Z",
       warnings: [],
-      files: [
-        {
-          path: "/tmp/song.mp3",
-          format: "mp3",
-          selected: true,
-          hasCoverArt: true,
-          fields: [
-            {
-              key: "title",
-              label: "標題",
-              container: "id3v2",
-              values: ["里面"],
-              convertedValues: ["裡面"],
-              selected: true,
-            },
-            {
-              key: "artist",
-              label: "演出者",
-              container: "id3v2",
-              values: ["头发"],
-              convertedValues: ["頭髮"],
-              selected: true,
-            },
-            {
-              key: "frame:TIT3",
-              label: "TIT3",
-              container: "id3v2",
-              values: ["未知字幕"],
-              selected: false,
-            },
-          ],
-        },
-      ],
+      summary: {
+        total: files.length,
+        changed,
+        unchanged: files.length - changed - errors,
+        errors,
+        selectedFields: files.reduce(
+          (count, file) =>
+            count + (file.selected ? file.fields.filter((field) => field.selected).length : 0),
+          0,
+        ),
+      },
+      files,
     };
   }
   if (operation === "audio.apply") {

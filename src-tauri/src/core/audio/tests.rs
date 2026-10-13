@@ -1915,6 +1915,81 @@ fn writing_lyrics_keeps_other_uslt_frames() {
     );
 }
 
+/// 多個 TXXX 以描述區分。轉換其中一則時，另一則的描述與文字都要留下。
+#[tokio::test]
+async fn converting_one_txxx_keeps_the_other_description() {
+    let directory = temp_dir();
+    let path = directory.join("txxx.mp3");
+    std::fs::write(&path, mpeg_frame()).unwrap();
+    let mut tag = id3::Tag::new();
+    tag.set_title("歌");
+    tag.add_frame(id3::frame::ExtendedText {
+        description: "来源".into(),
+        value: "里面".into(),
+    });
+    tag.add_frame(id3::frame::ExtendedText {
+        description: "备注".into(),
+        value: "简体".into(),
+    });
+    tag.write_to_path(&path, Version::Id3v24).unwrap();
+
+    let service = AudioService::new();
+    let scanned = service
+        .scan(
+            shared_conversion(),
+            AudioScanRequest {
+                paths: vec![path.to_string_lossy().into_owned()],
+                recursive: None,
+                id3v1_source_encoding: Some(TextEncoding::Gbk),
+                id3v2_source_encoding: None,
+                id3v2_repair_source_encoding: None,
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    let source = field(&scanned[0], AudioContainer::Id3v2, "frame:TXXX:来源").expect("TXXX 来源");
+    let note = field(&scanned[0], AudioContainer::Id3v2, "frame:TXXX:备注").expect("TXXX 备注");
+    assert_eq!(source.values, vec!["里面".to_string()]);
+    assert_eq!(note.values, vec!["简体".to_string()]);
+
+    let mut request = base_plan(&[path.clone()]);
+    request.id3v1_enabled = false;
+    request.selected_fields = HashMap::from([(
+        path.to_string_lossy().into_owned(),
+        vec!["id3v2:frame:TXXX:来源".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    let written = id3::Tag::read_from_path(&path).unwrap();
+    let texts: Vec<(String, String)> = written
+        .extended_texts()
+        .map(|item| (item.description.clone(), item.value.clone()))
+        .collect();
+    assert_eq!(
+        texts,
+        vec![
+            ("来源".to_string(), "裡面".to_string()),
+            ("备注".to_string(), "简体".to_string()),
+        ]
+    );
+    assert_eq!(
+        written
+            .frames()
+            .filter(|frame| frame.id() == "TXXX")
+            .count(),
+        2
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
 fn id3_text(tag: &id3::Tag, id: &str) -> Option<String> {
     tag.get(id)
         .and_then(|frame| frame.content().text())

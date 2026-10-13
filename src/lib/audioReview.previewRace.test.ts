@@ -119,6 +119,37 @@ describe("音訊預覽自動重建", () => {
     expect(plans).toEqual([]);
   });
 
+  it("flush 會等已經在跑的 run 結束才 resolve", async () => {
+    let release: (value: { planId: string }) => void = () => undefined;
+    let markStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const controller = createAudioPreviewController({
+      plan: () => {
+        markStarted();
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      },
+      cancelInFlight: async () => undefined,
+      apply: () => undefined,
+    });
+
+    const running = controller.run();
+    await started;
+    let flushed = false;
+    const flushing = controller.flush().then(() => {
+      flushed = true;
+    });
+    await Promise.resolve();
+    expect(flushed).toBe(false);
+    release({ planId: "done" });
+    await flushing;
+    await running;
+    expect(flushed).toBe(true);
+  });
+
   it("套用進行中呼叫 schedule 不得取消 apply", async () => {
     vi.useFakeTimers();
     const cancels: number[] = [];

@@ -577,6 +577,9 @@ html.floating-window * {
   justify-content: flex-end;
   margin-top: 12px;
 }
+.audio-file-card {
+  flex: 0 0 auto;
+}
 .audio-file-card .el-card__header {
   padding: 14px 18px;
 }

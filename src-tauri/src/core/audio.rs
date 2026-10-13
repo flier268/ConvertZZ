@@ -2402,7 +2402,7 @@ fn strip_id3v2(buffer: &[u8]) -> Vec<u8> {
     buffer[length..].to_vec()
 }
 
-/// 只剝檔頭第一個 ID3v2。第二個檔頭標籤、檔尾 ID3v2 或 Lyrics3v2 還在時不能回報成功。
+/// 只剝檔頭第一個 ID3v2。第二個檔頭標籤、檔尾或緊貼 APEv2 的 ID3v2、Lyrics3v2 還在時不能回報成功。
 fn reject_leftover_id3_family(buffer: &[u8]) -> Result<(), CoreError> {
     if let Some(reason) = leftover_id3_family(buffer) {
         return Err(CoreError::new(
@@ -2447,16 +2447,47 @@ fn lyrics3v2_footer(body: &[u8]) -> bool {
 }
 
 fn has_trailing_id3v2(body: &[u8]) -> bool {
+    // 只接受結束點剛好在檔尾，或剛好在檔尾 APEv2 起點。
+    // 音訊中間任意偏移的 ID3 字樣不算，避免把幀資料誤判成標籤。
+    let mut ends = [body.len(), 0];
+    let mut end_count = 1usize;
+    if let Some(ape_at) = trailing_ape_start(body) {
+        if ape_at != body.len() {
+            ends[1] = ape_at;
+            end_count = 2;
+        }
+    }
     let mut offset = body.len().saturating_sub(8 * 1024 * 1024).max(1);
     while offset + 10 <= body.len() {
         if let Some(length) = declared_id3v2_len(&body[offset..]) {
-            if offset + length == body.len() {
+            let at = offset + length;
+            if ends[..end_count].contains(&at) {
                 return true;
             }
         }
         offset += 1;
     }
     false
+}
+
+/// 檔尾 APEv2 的起點。size 與標頭旗標的算法跟 `strip_ape_tail` 相同，但是分開寫，
+/// 避免剝除邊界算錯時，殘留檢查用同一段結果一起放行。
+fn trailing_ape_start(body: &[u8]) -> Option<usize> {
+    if body.len() < 32 || &body[body.len() - 32..body.len() - 24] != b"APETAGEX" {
+        return None;
+    }
+    let footer = &body[body.len() - 32..];
+    let size = u32::from_le_bytes(footer[12..16].try_into().ok()?) as usize;
+    let flags = u32::from_le_bytes(footer[20..24].try_into().ok()?);
+    let total = if flags & 0x8000_0000 != 0 {
+        size.saturating_add(32)
+    } else {
+        size
+    };
+    if total < 32 || total > body.len() {
+        return None;
+    }
+    Some(body.len() - total)
 }
 
 /// 去掉結尾的 APEv2（ID3v1 若還在，先視為已剝除）。

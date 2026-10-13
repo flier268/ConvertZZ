@@ -2368,6 +2368,140 @@ async fn tag_operations_remove_containers_keep_audio_bytes() {
     let _ = std::fs::remove_dir_all(&directory);
 }
 
+#[tokio::test]
+async fn ape_file_removes_apev2_or_id3v1_without_changing_audio() {
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/mac-399.ape");
+    assert!(fixture.is_file(), "缺少 tests/fixtures/mac-399.ape");
+    let directory = temp_dir();
+    let original = directory.join("both.ape");
+    std::fs::copy(&fixture, &original).unwrap();
+    {
+        let mut tagged = read_tagged(&original).unwrap();
+        let mut ape = lofty::tag::Tag::new(lofty::tag::TagType::Ape);
+        ape.set_title("ape-title".to_string());
+        ape.insert_text(
+            lofty::tag::ItemKey::ReplayGainTrackGain,
+            String::from("-1.5 dB"),
+        );
+        tagged.insert_tag(ape);
+        tagged
+            .save_to_path(&original, lofty::config::WriteOptions::default())
+            .unwrap();
+    }
+    let mut output = std::fs::read(&original).unwrap();
+    output = append_id3v1(
+        &strip_id3v1(&output),
+        &HashMap::from([("title", "v1-title".to_string())]),
+        17,
+        TextEncoding::Utf8,
+    )
+    .unwrap();
+    std::fs::write(&original, &output).unwrap();
+    let payload = ape_audio_payload(&output);
+    assert_eq!(payload, std::fs::read(&fixture).unwrap());
+
+    let service = AudioService::new();
+    let scanned = service
+        .scan(
+            shared_conversion(),
+            quiet_plan(&[original.clone()]).scan_request(),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        field(&scanned[0], AudioContainer::Apev2, "title")
+            .unwrap()
+            .values,
+        vec!["ape-title".to_string()]
+    );
+    assert_eq!(
+        field(&scanned[0], AudioContainer::Id3v1, "title")
+            .unwrap()
+            .values,
+        vec!["v1-title".to_string()]
+    );
+
+    for container in [AudioContainer::Apev2, AudioContainer::Id3v1] {
+        let path = directory.join(format!("remove-{container:?}.ape"));
+        std::fs::copy(&original, &path).unwrap();
+        let mut request = quiet_plan(&[path.clone()]);
+        request.tag_operations = vec![remove_operation(container)];
+        let plan = service
+            .plan(shared_conversion(), request, noop())
+            .await
+            .unwrap();
+        let removal = plan.files[0]
+            .removals
+            .iter()
+            .find(|item| item.container == container)
+            .unwrap_or_else(|| panic!("missing removal {container:?}"));
+        assert!(removal.refused.is_none(), "{container:?} {removal:?}");
+        assert!(removal.selected);
+        let result = service
+            .apply(&plan.plan_id, noop(), never_cancel())
+            .await
+            .unwrap();
+        assert!(result.failed.is_empty(), "{container:?} {result:?}");
+        let stored = std::fs::read(&path).unwrap();
+        assert_eq!(ape_audio_payload(&stored), payload, "{container:?}");
+        use lofty::file::TaggedFileExt;
+        let tagged = read_tagged(&path).unwrap();
+        match container {
+            AudioContainer::Apev2 => {
+                assert!(tagged.tag(lofty::tag::TagType::Ape).is_none());
+                assert!(tagged.tag(lofty::tag::TagType::Id3v1).is_some());
+                assert_eq!(
+                    read_id3v1(&stored, TextEncoding::Utf8)
+                        .unwrap()
+                        .unwrap()
+                        .values["title"],
+                    "v1-title"
+                );
+            }
+            AudioContainer::Id3v1 => {
+                assert!(read_id3v1(&stored, TextEncoding::Utf8).unwrap().is_none());
+                assert_eq!(
+                    tagged
+                        .tag(lofty::tag::TagType::Ape)
+                        .and_then(|tag| tag.title())
+                        .as_deref(),
+                    Some("ape-title")
+                );
+            }
+            _ => {}
+        }
+    }
+
+    let only = directory.join("ape-only.ape");
+    std::fs::copy(&fixture, &only).unwrap();
+    {
+        let mut tagged = read_tagged(&only).unwrap();
+        let mut ape = lofty::tag::Tag::new(lofty::tag::TagType::Ape);
+        ape.set_title("only-ape".to_string());
+        tagged.insert_tag(ape);
+        tagged
+            .save_to_path(&only, lofty::config::WriteOptions::default())
+            .unwrap();
+    }
+    let before = std::fs::read(&only).unwrap();
+    let mut request = quiet_plan(&[only.clone()]);
+    request.tag_operations = vec![remove_operation(AudioContainer::Apev2)];
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert!(plan.files[0].removals[0].refused.is_some());
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert_eq!(std::fs::read(&only).unwrap(), before);
+
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
 #[test]
 fn big5_reports_unrepresentable_character() {
     let fit = fit_encoded_text("A🙂", 30, TextEncoding::Big5).unwrap();

@@ -980,35 +980,115 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
 }
 
 fn apply_taglib(file: &PreparedAudio) -> Result<(), CoreError> {
+    let source = fs::read(&file.path)?;
     let temporary = temporary_path(&file.path);
     fs::copy(&file.path, &temporary)?;
     let result = (|| -> Result<(), CoreError> {
-        let mut tagged = read_tagged(&temporary)?;
-        let tag = tagged
-            .primary_tag_mut()
-            .ok_or_else(|| CoreError::new("AUDIO_INVALID", "音訊檔案沒有可寫入的標籤。"))?;
-        for (identifier, values) in &file.updates {
-            let (_, key) = split_field_id(identifier);
-            set_lofty_values(tag, &key, values);
+        if file
+            .remove_containers
+            .contains(&AudioContainer::VorbisComment)
+        {
+            return Err(CoreError::new(
+                "AUDIO_REMOVE",
+                "第一版不能移除 vorbis-comment。",
+            ));
         }
-        tagged
-            .save_to_path(&temporary, WriteOptions::default())
-            .map_err(|error| CoreError::new("AUDIO_WRITE", error.to_string()))?;
+        if file.remove_containers.is_empty() || !file.updates.is_empty() {
+            let mut tagged = read_tagged(&temporary)?;
+            let tag = tagged
+                .primary_tag_mut()
+                .ok_or_else(|| CoreError::new("AUDIO_INVALID", "音訊檔案沒有可寫入的標籤。"))?;
+            for (identifier, values) in &file.updates {
+                let (_, key) = split_field_id(identifier);
+                set_lofty_values(tag, &key, values);
+            }
+            tagged
+                .save_to_path(&temporary, WriteOptions::default())
+                .map_err(|error| CoreError::new("AUDIO_WRITE", error.to_string()))?;
+        }
+        if !file.remove_containers.is_empty() {
+            if file.format == AudioFormat::Ape {
+                // TagType::remove_from_path 經 Probe::open 以唯讀開啟，
+                // 寫回時 set_len 得到 EINVAL。檔尾有無 ID3v1 都一樣失敗。
+                // APE 允許的容器只在檔頭（ID3v2）或檔尾（APEv2、ID3v1），直接剝除。
+                let mut output = fs::read(&temporary)?;
+                if file.remove_containers.contains(&AudioContainer::Id3v2) {
+                    output = strip_id3v2(&output);
+                }
+                if file.remove_containers.contains(&AudioContainer::Apev2) {
+                    output = strip_trailing_ape(&output);
+                }
+                if file.remove_containers.contains(&AudioContainer::Id3v1) {
+                    output = strip_id3v1(&output).to_vec();
+                }
+                fs::write(&temporary, &output)?;
+            } else {
+                let mut tagged = read_tagged(&temporary)?;
+                for container in &file.remove_containers {
+                    let tag_type = lofty_tag_type(*container).ok_or_else(|| {
+                        CoreError::new("AUDIO_REMOVE", "第一版不能移除這個標籤。")
+                    })?;
+                    // 記憶體裡先拿掉，磁碟再交給 TagType::remove_from_path。
+                    // save_to 只會重寫還留著的標籤，不會清掉已刪的容器。
+                    let _ = tagged.remove(tag_type);
+                    tag_type
+                        .remove_from_path(&temporary, WriteOptions::default())
+                        .map_err(|error| {
+                            let mut detail = error.to_string();
+                            let mut source = std::error::Error::source(&error);
+                            while let Some(inner) = source {
+                                detail.push_str(": ");
+                                detail.push_str(&inner.to_string());
+                                source = inner.source();
+                            }
+                            CoreError::new("AUDIO_REMOVE", detail)
+                        })?;
+                }
+            }
+        }
+        if file.format == AudioFormat::Ape {
+            let written = fs::read(&temporary)?;
+            if ape_audio_payload(&source) != ape_audio_payload(&written) {
+                return Err(CoreError::new("AUDIO_VERIFY", "標籤寫入改變了音訊資料。"));
+            }
+        }
         let verification = read_tagged(&temporary).map_err(|error| {
             CoreError::new(
                 "AUDIO_VERIFY",
                 format!("標籤寫入後的音訊檔案無法驗證。{error}"),
             )
         })?;
-        let pictures = verification
-            .primary_tag()
-            .map(|tag| tag.pictures().len())
-            .unwrap_or(0);
-        if pictures != file.original_picture_count {
-            return Err(CoreError::new(
-                "AUDIO_PICTURE",
-                "標籤寫入造成封面圖片數量改變。",
-            ));
+        if file.remove_containers.is_empty() {
+            let pictures = verification
+                .primary_tag()
+                .map(|tag| tag.pictures().len())
+                .unwrap_or(0);
+            if pictures != file.original_picture_count {
+                return Err(CoreError::new(
+                    "AUDIO_PICTURE",
+                    "標籤寫入造成封面圖片數量改變。",
+                ));
+            }
+        } else if let Ok(before) = read_tagged(&file.path) {
+            for tag in before.tags() {
+                let removed = file
+                    .remove_containers
+                    .iter()
+                    .any(|container| lofty_tag_type(*container) == Some(tag.tag_type()));
+                if removed {
+                    continue;
+                }
+                let after_count = verification
+                    .tag(tag.tag_type())
+                    .map(|item| item.pictures().len())
+                    .unwrap_or(0);
+                if after_count != tag.pictures().len() {
+                    return Err(CoreError::new(
+                        "AUDIO_PICTURE",
+                        "標籤寫入造成封面圖片數量改變。",
+                    ));
+                }
+            }
         }
         Ok(())
     })();
@@ -1285,6 +1365,39 @@ fn repair_id3v2_value(
         .map(|character| character as u8)
         .collect::<Vec<_>>();
     Ok(decode_text(&bytes, encoding)?.0)
+}
+
+fn lofty_tag_type(container: AudioContainer) -> Option<lofty::tag::TagType> {
+    match container {
+        AudioContainer::Apev2 => Some(lofty::tag::TagType::Ape),
+        AudioContainer::Id3v1 => Some(lofty::tag::TagType::Id3v1),
+        AudioContainer::Id3v2 => Some(lofty::tag::TagType::Id3v2),
+        AudioContainer::VorbisComment => None,
+    }
+}
+
+/// 去掉 APE 檔頭尾的 APEv2、ID3v2、ID3v1，留下 Monkey's Audio 本體。
+fn ape_audio_payload(buffer: &[u8]) -> Vec<u8> {
+    let without_v1 = strip_id3v1(buffer);
+    let without_tail = strip_ape_tail(without_v1);
+    strip_leading_ape(&strip_id3v2(without_tail))
+}
+
+fn strip_leading_ape(buffer: &[u8]) -> Vec<u8> {
+    if buffer.len() < 32 || &buffer[..8] != b"APETAGEX" {
+        return buffer.to_vec();
+    }
+    let version = u32::from_le_bytes(buffer[8..12].try_into().unwrap_or([0; 4]));
+    let size = u32::from_le_bytes(buffer[12..16].try_into().unwrap_or([0; 4])) as usize;
+    let total = if version == 2000 {
+        size.saturating_add(32)
+    } else {
+        size
+    };
+    if total < 32 || total > buffer.len() {
+        return buffer.to_vec();
+    }
+    buffer[total..].to_vec()
 }
 
 fn mp3_audio_payload(buffer: &[u8]) -> Vec<u8> {

@@ -43,4 +43,27 @@ describe("音訊預覽自動重建", () => {
     await Promise.resolve();
     expect(applied).toEqual(["new"]);
   });
+
+  it("排程後開始套用時，不得再取消進行中的套用", async () => {
+    vi.useFakeTimers();
+    const cancels: number[] = [];
+    const plans: number[] = [];
+    const controller = createAudioPreviewController({
+      plan: async () => {
+        plans.push(plans.length + 1);
+        return { planId: "preview" };
+      },
+      cancelInFlight: async () => {
+        cancels.push(cancels.length + 1);
+      },
+      apply: () => undefined,
+    });
+
+    controller.schedule();
+    // 套用開始：進行中的 audio.apply 不可被稍後觸發的預覽取消。
+    controller.invalidate();
+    await vi.advanceTimersByTimeAsync(AUDIO_PREVIEW_DEBOUNCE_MS);
+    expect(cancels).toEqual([]);
+    expect(plans).toEqual([]);
+  });
 });

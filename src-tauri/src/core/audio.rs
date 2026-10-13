@@ -14,7 +14,7 @@ use lofty::picture::PictureType;
 use lofty::probe::Probe;
 use lofty::tag::items::Timestamp;
 use lofty::tag::{Accessor, ItemKey, ItemValue, Tag, TagItem};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -24,6 +24,39 @@ use uuid::Uuid;
 const STANDARD_FIELDS: &[&str] = &[
     "title", "artist", "album", "year", "track", "comment", "genre",
 ];
+
+pub(crate) const AUDIO_STREAM_BATCH: usize = 32;
+
+pub(crate) fn take_prioritized<T>(
+    pending: &mut VecDeque<T>,
+    priority: &mut VecDeque<String>,
+    key: impl Fn(&T) -> String,
+) -> Option<T> {
+    while let Some(wanted) = priority.pop_front() {
+        if let Some(pos) = pending
+            .iter()
+            .position(|item| paths_match(&key(item), &wanted))
+        {
+            return pending.remove(pos);
+        }
+    }
+    pending.pop_front()
+}
+
+pub(crate) fn drain_stream_batch<T>(buffer: &mut Vec<T>, force: bool) -> Option<Vec<T>> {
+    if buffer.is_empty() || (!force && buffer.len() < AUDIO_STREAM_BATCH) {
+        return None;
+    }
+    Some(std::mem::take(buffer))
+}
+
+fn paths_match(left: &str, right: &str) -> bool {
+    left == right || resolve_path(left) == resolve_path(right)
+}
+
+fn ignore_cancel() -> CancelCheck {
+    Arc::new(|| false)
+}
 
 struct PreparedAudio {
     path: PathBuf,
@@ -57,6 +90,8 @@ pub struct AudioService {
     cancelled: Arc<Mutex<HashSet<String>>>,
     /// 最近一次掃描。`audio.plan` 在路徑與讀取選項相同時直接重用，不再讀碟。
     scan_cache: Mutex<Option<(ScanCacheKey, Vec<AudioTagFile>)>>,
+    /// 使用者正在看的路徑，掃描與預覽會把它插到待處理佇列前面。
+    priority: Mutex<VecDeque<String>>,
 }
 
 impl AudioService {
@@ -65,7 +100,31 @@ impl AudioService {
             plans: Mutex::new(HashMap::new()),
             cancelled: Arc::new(Mutex::new(HashSet::new())),
             scan_cache: Mutex::new(None),
+            priority: Mutex::new(VecDeque::new()),
         }
+    }
+
+    pub fn prioritize(&self, path: &str) {
+        let Ok(mut queue) = self.priority.lock() else {
+            return;
+        };
+        let path = path.to_string();
+        queue.retain(|item| !paths_match(item, &path));
+        queue.push_front(path);
+    }
+
+    fn take_next<T>(&self, pending: &mut VecDeque<T>, key: impl Fn(&T) -> String) -> Option<T> {
+        let mut priority = match self.priority.lock() {
+            Ok(mut guard) => std::mem::take(&mut *guard),
+            Err(_) => VecDeque::new(),
+        };
+        let next = take_prioritized(pending, &mut priority, key);
+        if let Ok(mut guard) = self.priority.lock() {
+            let mut arrived = std::mem::take(&mut *guard);
+            arrived.append(&mut priority);
+            *guard = arrived;
+        }
+        next
     }
 
     fn scan_key(request: &AudioScanRequest) -> ScanCacheKey {
@@ -136,22 +195,48 @@ impl AudioService {
         serde_json::json!({ "cancelled": removed || marked })
     }
 
+    /// 測試與舊呼叫點用。正式 IPC 走 `scan_cancellable`，所以這裡在非測試建置沒有呼叫者。
+    #[allow(dead_code)]
     pub async fn scan(
         &self,
         _conversion: &ConversionService,
         request: AudioScanRequest,
         progress: ProgressReporter,
     ) -> Result<Vec<AudioTagFile>, CoreError> {
-        let files = read_audio_files(&request, progress).await?;
+        self.scan_cancellable(_conversion, request, progress, ignore_cancel())
+            .await
+    }
+
+    pub async fn scan_cancellable(
+        &self,
+        _conversion: &ConversionService,
+        request: AudioScanRequest,
+        progress: ProgressReporter,
+        is_cancelled: CancelCheck,
+    ) -> Result<Vec<AudioTagFile>, CoreError> {
+        let files = read_audio_files(self, &request, progress, &is_cancelled).await?;
         self.store_scan(&request, &files);
         Ok(files)
     }
 
+    /// 測試與舊呼叫點用。正式 IPC 走 `plan_cancellable`。
+    #[allow(dead_code)]
     pub async fn plan(
         &self,
         conversion: &ConversionService,
         request: AudioTagPlanRequest,
         progress: ProgressReporter,
+    ) -> Result<AudioTagPlan, CoreError> {
+        self.plan_cancellable(conversion, request, progress, ignore_cancel())
+            .await
+    }
+
+    pub async fn plan_cancellable(
+        &self,
+        conversion: &ConversionService,
+        request: AudioTagPlanRequest,
+        progress: ProgressReporter,
+        is_cancelled: CancelCheck,
     ) -> Result<AudioTagPlan, CoreError> {
         let scan_request = request.scan_request();
         let mut scanned = if let Some(files) = self.load_scan(&scan_request) {
@@ -160,10 +245,13 @@ impl AudioService {
                 current: total,
                 total,
                 message: "使用已掃描的音訊標籤。".into(),
+
+                batch: None,
             });
             files
         } else {
-            let files = read_audio_files(&scan_request, progress.clone()).await?;
+            let files =
+                read_audio_files(self, &scan_request, progress.clone(), &is_cancelled).await?;
             self.store_scan(&scan_request, &files);
             files
         };
@@ -176,35 +264,58 @@ impl AudioService {
             .collect::<HashSet<_>>();
 
         let total = scanned.len() as u64;
-        for (index, file) in scanned.iter_mut().enumerate() {
+        let mut pending: VecDeque<usize> = (0..scanned.len()).collect();
+        let mut preview_batch = Vec::new();
+        let mut done = 0u64;
+        while let Some(index) = self.take_next(&mut pending, |item| scanned[*item].path.clone()) {
+            if is_cancelled() {
+                return Err(CoreError::new(
+                    "PLAN_CANCELLED",
+                    "音訊標籤作業已由使用者取消。",
+                ));
+            }
+            let file = &mut scanned[index];
             file.selected =
                 file.warning.is_none() && selected_paths.contains(&resolve_path(&file.path));
-            if file.warning.is_some() {
-                continue;
-            }
-            file.previewed = true;
-            if !file.selected {
-                for field in &mut file.fields {
-                    field.selected = false;
+            let message = if file.warning.is_some() {
+                format!("無法讀取標籤：{}", file_name(Path::new(&file.path)))
+            } else {
+                file.previewed = true;
+                if !file.selected {
+                    for field in &mut file.fields {
+                        field.selected = false;
+                    }
+                    format!("已略過未選檔案：{}", file_name(Path::new(&file.path)))
+                } else {
+                    if let Some(item) =
+                        convert_selected_fields(conversion, &request, file, &mut warnings).await?
+                    {
+                        prepared.push(item);
+                    }
+                    format!("正在建立標籤預覽：{}", file_name(Path::new(&file.path)))
                 }
-                progress(super::types::ProgressEvent {
-                    current: (index + 1) as u64,
-                    total,
-                    message: format!("已略過未選檔案：{}", file_name(Path::new(&file.path))),
-                });
-                continue;
-            }
-            if let Some(item) =
-                convert_selected_fields(conversion, &request, file, &mut warnings).await?
-            {
-                prepared.push(item);
-            }
-            progress(super::types::ProgressEvent {
-                current: (index + 1) as u64,
-                total,
-                message: format!("正在建立標籤預覽：{}", file_name(Path::new(&file.path))),
-            });
+            };
+            done += 1;
+            preview_batch.push(scanned[index].clone());
+            emit_audio_progress(
+                &progress,
+                done,
+                total.max(1),
+                message,
+                "plan",
+                &mut preview_batch,
+                false,
+            );
         }
+        emit_audio_progress(
+            &progress,
+            done,
+            total.max(1),
+            "標籤預覽這一批已完成。".into(),
+            "plan",
+            &mut preview_batch,
+            true,
+        );
 
         let plan_id = Uuid::new_v4().to_string();
         let public = AudioTagPlan {
@@ -239,7 +350,13 @@ impl AudioService {
         request.plan.paths = vec![target.clone()];
         request.plan.recursive = Some(false);
         request.plan.selected_paths = vec![target.clone()];
-        let mut scanned = read_audio_files(&request.plan.scan_request(), progress).await?;
+        let mut scanned = read_audio_files(
+            self,
+            &request.plan.scan_request(),
+            progress,
+            &ignore_cancel(),
+        )
+        .await?;
         let Some(mut file) = scanned.pop() else {
             return Err(CoreError::new("AUDIO_NOT_FOUND", "找不到這個音訊檔案。"));
         };
@@ -384,6 +501,8 @@ impl AudioService {
                 current: 0,
                 total: files.len().max(1) as u64,
                 message: "正在建立備份…".into(),
+
+                batch: None,
             });
             if let Err(error) =
                 create_user_backups(&plan.backup_roots, &writable, plan.conflict_policy)
@@ -422,6 +541,8 @@ impl AudioService {
                     current: seen,
                     total,
                     message: format!("已略過：{}", file_name(&file.path)),
+
+                    batch: None,
                 });
                 continue;
             }
@@ -438,6 +559,8 @@ impl AudioService {
                 current: seen,
                 total,
                 message: format!("正在寫入標籤：{}", file_name(&file.path)),
+
+                batch: None,
             });
         }
         if let Ok(mut cancelled) = self.cancelled.lock() {
@@ -462,18 +585,54 @@ impl AudioService {
     }
 }
 
+fn emit_audio_progress(
+    progress: &ProgressReporter,
+    current: u64,
+    total: u64,
+    message: String,
+    phase: &str,
+    batch: &mut Vec<AudioTagFile>,
+    force: bool,
+) {
+    if let Some(files) = drain_stream_batch(batch, force) {
+        if files.is_empty() {
+            return;
+        }
+        progress(
+            super::types::ProgressEvent::tick(current, total, message)
+                .with_audio_batch(phase, files),
+        );
+    } else if !force {
+        progress(super::types::ProgressEvent::tick(current, total, message));
+    }
+}
+
 async fn read_audio_files(
+    service: &AudioService,
     request: &AudioScanRequest,
     progress: ProgressReporter,
+    is_cancelled: &CancelCheck,
 ) -> Result<Vec<AudioTagFile>, CoreError> {
     let paths = expand_audio_paths(&request.paths, request.recursive.unwrap_or(false))?;
+    let total = paths.len().max(1) as u64;
+    let mut pending: VecDeque<PathBuf> = paths.into();
     let mut files = Vec::new();
-    for (index, path) in paths.iter().enumerate() {
-        files.push(match scan_file(path, request) {
+    let mut batch = Vec::new();
+    let mut done = 0u64;
+    while let Some(path) =
+        service.take_next(&mut pending, |item| item.to_string_lossy().into_owned())
+    {
+        if is_cancelled() {
+            return Err(CoreError::new(
+                "PLAN_CANCELLED",
+                "音訊標籤作業已由使用者取消。",
+            ));
+        }
+        let file = match scan_file(&path, request) {
             Ok(file) => file,
             Err(error) => AudioTagFile {
                 path: path.to_string_lossy().into_owned(),
-                format: format_from_path(path).unwrap_or(AudioFormat::Mp3),
+                format: format_from_path(&path).unwrap_or(AudioFormat::Mp3),
                 selected: false,
                 fields: Vec::new(),
                 has_cover_art: false,
@@ -482,13 +641,29 @@ async fn read_audio_files(
                 previewed: false,
                 rewrite_containers: Vec::new(),
             },
-        });
-        progress(super::types::ProgressEvent {
-            current: (index + 1) as u64,
-            total: paths.len().max(1) as u64,
-            message: format!("正在掃描：{}", file_name(path)),
-        });
+        };
+        done += 1;
+        batch.push(file.clone());
+        files.push(file);
+        emit_audio_progress(
+            &progress,
+            done,
+            total,
+            format!("正在掃描：{}", file_name(&path)),
+            "scan",
+            &mut batch,
+            false,
+        );
     }
+    emit_audio_progress(
+        &progress,
+        done,
+        total,
+        "掃描這一批音訊標籤。".into(),
+        "scan",
+        &mut batch,
+        true,
+    );
     Ok(files)
 }
 

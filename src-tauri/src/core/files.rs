@@ -217,6 +217,8 @@ impl FileService {
                 current: (index + 1) as u64,
                 total: paths.len() as u64,
                 message: format!("正在掃描：{}", file_name(source_path)),
+
+                batch: None,
             });
         }
 
@@ -838,6 +840,8 @@ impl FileService {
                 current: 0,
                 total: (pending_files.len() + pending_directories.len()).max(1) as u64,
                 message: "正在建立備份…".into(),
+
+                batch: None,
             });
             if let Err(error) = create_user_backups(
                 &plan.backup_roots,
@@ -985,6 +989,8 @@ impl FileService {
                             "正在重新命名資料夾：{}",
                             file_name(Path::new(&entry.item.output_path))
                         ),
+
+                        batch: None,
                     });
                     directory_transaction.push(entry);
                 }
@@ -1092,6 +1098,8 @@ impl FileService {
                             current: (offset + 1) as u64,
                             total,
                             message: format!("已寫入：{file_label}"),
+
+                            batch: None,
                         });
                     }
                     Ok(FileCommitOutcome::Skipped { path, warnings }) => {
@@ -1125,6 +1133,8 @@ impl FileService {
             current: 0,
             total,
             message: format!("正在以最多 {jobs} 個並行任務轉換並寫入 {file_total} 個檔案…"),
+
+            batch: None,
         });
         let completed = Arc::new(AtomicU64::new(0));
         let outcomes = stream::iter(pending_files.into_iter())
@@ -1155,6 +1165,8 @@ impl FileService {
                         current: current.min(total),
                         total,
                         message: format!("正在轉換並寫入：{file_label}（{current}/{file_total}）"),
+
+                        batch: None,
                     });
                     (source_path, outcome)
                 }
@@ -1302,6 +1314,8 @@ impl FileService {
                     current: transaction.len() as u64,
                     total,
                     message: format!("正在準備：{}", file_name(&source)),
+
+                    batch: None,
                 });
             }
 
@@ -1341,6 +1355,8 @@ impl FileService {
                     current: total,
                     total,
                     message: format!("正在寫入：{}", file_name(&output)),
+
+                    batch: None,
                 });
             }
             Ok(())
@@ -1873,6 +1889,8 @@ fn map_progress(
             current: overall_current.min(overall_total),
             total: overall_total,
             message: message(event.current, local_total, &event.message),
+
+            batch: None,
         });
     })
 }
@@ -2326,6 +2344,8 @@ fn scan_extension_stats_blocking(
                         current: stats.total_files,
                         total: stats.total_files,
                         message: format!("已掃描 {} 個檔案", stats.total_files),
+
+                        batch: None,
                     });
                 }
             } else if request.recursive

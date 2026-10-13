@@ -77,7 +77,7 @@ test.describe("音訊標籤審閱", () => {
     await expect(drawer.getByRole("heading", { name: "備份" })).toBeVisible();
     await expect(drawer.getByRole("heading", { name: "ID3v1" })).toBeVisible();
     await expect(drawer.getByRole("heading", { name: "ID3v2" })).toBeVisible();
-    await expect(drawer.getByRole("button", { name: "關閉" })).toBeVisible();
+    await expect(drawer.getByRole("button", { name: "完成", exact: true })).toBeVisible();
     await expect(drawer.getByRole("button", { name: "套用並重新建立預覽" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "取消計畫" })).toHaveCount(0);
     await page.screenshot({ path: join(shots, "audio-settings-drawer.png") });
@@ -251,5 +251,50 @@ test.describe("音訊標籤審閱", () => {
     await page.getByRole("option", { name: "變更數" }).click();
     await expect(page.locator(".audio-folder").first()).toContainText("/music/合輯");
     await page.screenshot({ path: join(shots, "audio-sorted.png") });
+  });
+
+  test("即時預覽：隱藏不變欄位、串流、自動重建與設定抽屜", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openApp(page, { selectedFiles: "/tmp/song.mp3", holdAudioScan: true });
+    await openPage(page, "#tour-audio", "音訊標籤");
+    await page.getByRole("button", { name: "選取音訊檔案" }).click();
+    await expect(page.locator(".audio-name", { hasText: "live-00.mp3" })).toBeVisible();
+    await expect.poll(async () => page.locator(".audio-name").count()).toBeGreaterThan(5);
+    await expect(page.locator(".job-progress")).toBeVisible();
+    await expect(page.getByRole("button", { name: "建立標籤預覽" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "確認寫入" })).toHaveCount(0);
+    await page.screenshot({ path: join(shots, "live-streaming.png") });
+    await page.evaluate(() => window.__convertzzE2e?.releaseAudioScan?.());
+    await expect(page.getByRole("button", { name: "建立標籤預覽" })).toBeEnabled();
+
+    await openApp(page, { selectedFiles: "/tmp/song.mp3" });
+    await openPage(page, "#tour-audio", "音訊標籤");
+    await page.getByRole("button", { name: "選取音訊檔案" }).click();
+    await page.getByRole("button", { name: "建立標籤預覽" }).click();
+    await scrollAudioRow(page, "song.mp3");
+    await page.locator(".audio-name", { hasText: "song.mp3" }).click();
+    await expect(page.getByRole("button", { name: "隱藏不變欄位" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(page.locator(".audio-detail")).not.toContainText("未知字幕");
+    await page.screenshot({ path: join(shots, "live-hide-unchanged-on.png") });
+    await page.getByRole("button", { name: "隱藏不變欄位" }).click();
+    await expect(page.locator(".audio-detail")).toContainText("未知字幕");
+    await page.screenshot({ path: join(shots, "live-hide-unchanged-off.png") });
+
+    await page.getByRole("button", { name: "編輯設定" }).click();
+    const drawer = page.getByRole("dialog");
+    await expect(drawer.getByRole("button", { name: "完成", exact: true })).toBeVisible();
+    await page.screenshot({ path: join(shots, "live-drawer.png") });
+    await drawer
+      .locator(".el-form-item", { hasText: "APEv2／Vorbis 方向" })
+      .locator(".el-select")
+      .click();
+    await page.getByRole("option", { name: "繁轉簡" }).click();
+    await drawer.getByRole("button", { name: "完成", exact: true }).click();
+    await expect(page.getByText("APE/Vorbis 繁→簡")).toBeVisible();
+    await expect(page.getByRole("button", { name: "確認寫入" })).toBeEnabled();
+    await page.screenshot({ path: join(shots, "live-auto-rebuild.png") });
   });
 });

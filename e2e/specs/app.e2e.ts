@@ -503,7 +503,7 @@ test.describe("ConvertZZ 前端", () => {
     await page.getByRole("button", { name: "編輯設定" }).click();
     await page.locator(".el-form-item", { hasText: "備份衝突" }).locator(".el-select").click();
     await page.getByRole("option", { name: "覆寫" }).click();
-    await page.getByRole("button", { name: "關閉" }).click();
+    await page.getByRole("button", { name: "完成", exact: true }).click();
     await page.getByRole("button", { name: "選取音訊檔案" }).click();
     await page.getByRole("button", { name: "建立標籤預覽" }).click();
     await page.getByRole("button", { name: "確認寫入" }).click();

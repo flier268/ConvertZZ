@@ -208,6 +208,26 @@ export function audioSegmentCounts(
   return counts;
 }
 
+/** 依路徑併入一批掃描或預覽結果。已存在的路徑就地更新，新路徑加在最後。 */
+export function mergeAudioFiles(
+  current: readonly AudioTagFile[],
+  incoming: readonly AudioTagFile[],
+): AudioTagFile[] {
+  if (!incoming.length) return [...current];
+  const next = [...current];
+  const indexByPath = new Map(next.map((file, index) => [file.path, index]));
+  for (const file of incoming) {
+    const index = indexByPath.get(file.path);
+    if (index == null) {
+      indexByPath.set(file.path, next.length);
+      next.push(file);
+    } else {
+      next[index] = file;
+    }
+  }
+  return next;
+}
+
 /** 用同一個路徑換掉清單裡的一筆。找不到就加在最後。 */
 export function replaceAudioFile(
   files: readonly AudioTagFile[],

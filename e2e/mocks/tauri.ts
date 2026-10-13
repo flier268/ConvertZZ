@@ -115,6 +115,8 @@ export interface ConvertzzE2eConfig {
   failAudioPlan?: boolean;
   holdAudioRescan?: boolean;
   releaseAudioRescan?: () => void;
+  holdAudioScan?: boolean;
+  releaseAudioScan?: () => void;
   lastAudioApplyPaths?: string[];
   lastAudioApply?: {
     paths?: string[];
@@ -340,8 +342,38 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
   if (operation === "core.cancel") {
     return { cancelled: true };
   }
+  if (operation === "audio.prioritize") {
+    return { ok: true };
+  }
   if (operation === "audio.scan") {
     if (e2e().failAudioScan) throw new Error("讀不到音訊標籤");
+    if (e2e().holdAudioScan) {
+      const partial = Array.from({ length: 30 }, (_, index) => ({
+        path: `/music/合輯/live-${String(index).padStart(2, "0")}.mp3`,
+        format: "mp3",
+        selected: true,
+        fields: [
+          {
+            key: "title",
+            label: "標題",
+            container: "id3v2",
+            values: [`即時${index}`],
+            selected: true,
+          },
+        ],
+      }));
+      await emit("core://progress", {
+        id: lastCoreRequestId,
+        current: partial.length,
+        total: 250,
+        message: "正在掃描：live-29.mp3",
+        batch: { phase: "scan", files: partial },
+      });
+      await new Promise<void>((resolve) => {
+        e2e().releaseAudioScan = resolve;
+      });
+      return partial;
+    }
     return [
       {
         path: "/tmp/song.mp3",

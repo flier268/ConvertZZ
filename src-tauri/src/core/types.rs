@@ -7,10 +7,39 @@ pub type CancelCheck = Arc<dyn Fn() -> bool + Send + Sync>;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AudioProgressBatch {
+    pub phase: String,
+    pub files: Vec<AudioTagFile>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProgressEvent {
     pub current: u64,
     pub total: u64,
     pub message: String,
+    /// 音訊掃描或預覽的一批檔案。其他作業留空，不送出。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub batch: Option<AudioProgressBatch>,
+}
+
+impl ProgressEvent {
+    pub fn tick(current: u64, total: u64, message: impl Into<String>) -> Self {
+        Self {
+            current,
+            total,
+            message: message.into(),
+            batch: None,
+        }
+    }
+
+    pub fn with_audio_batch(mut self, phase: &str, files: Vec<AudioTagFile>) -> Self {
+        self.batch = Some(AudioProgressBatch {
+            phase: phase.to_string(),
+            files,
+        });
+        self
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

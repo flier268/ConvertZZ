@@ -158,7 +158,7 @@ pub async fn dispatch(
             to_value(
                 state
                     .audio
-                    .scan(&state.conversion, request, progress)
+                    .scan_cancellable(&state.conversion, request, progress, is_cancelled)
                     .await?,
             )
         }
@@ -167,9 +167,14 @@ pub async fn dispatch(
             to_value(
                 state
                     .audio
-                    .plan(&state.conversion, request, progress)
+                    .plan_cancellable(&state.conversion, request, progress, is_cancelled)
                     .await?,
             )
+        }
+        "audio.prioritize" => {
+            let path = required_string(&payload, "path")?;
+            state.audio.prioritize(&path);
+            Ok(serde_json::json!({ "ok": true }))
         }
         "audio.rescanFile" => {
             let request = serde_json::from_value(payload)?;

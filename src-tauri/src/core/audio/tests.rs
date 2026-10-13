@@ -2033,3 +2033,29 @@ async fn encoding_rewrite_leaves_unchecked_text_frames() {
     assert_eq!(mp3_audio_payload(&written), mpeg_frame());
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+#[test]
+fn priority_queue_runs_the_requested_path_first_and_batches_hold_32() {
+    use std::collections::VecDeque;
+    let mut pending: VecDeque<&str> = VecDeque::from(["a", "b", "c", "d"]);
+    let mut priority = VecDeque::from(["c".to_string(), "missing".to_string()]);
+    let first = take_prioritized(&mut pending, &mut priority, |item| (*item).to_string());
+    assert_eq!(first, Some("c"));
+    let second = take_prioritized(&mut pending, &mut priority, |item| (*item).to_string());
+    assert_eq!(second, Some("a"));
+    assert_eq!(pending.into_iter().collect::<Vec<_>>(), vec!["b", "d"]);
+
+    let mut buffer = Vec::new();
+    let mut emitted = Vec::new();
+    for index in 0..40 {
+        buffer.push(index);
+        if let Some(batch) = drain_stream_batch(&mut buffer, false) {
+            emitted.push(batch.len());
+        }
+    }
+    assert_eq!(emitted, vec![AUDIO_STREAM_BATCH]);
+    assert_eq!(AUDIO_STREAM_BATCH, 32);
+    let rest = drain_stream_batch(&mut buffer, true).expect("remainder");
+    assert_eq!(rest.len(), 8);
+    assert!(drain_stream_batch(&mut buffer, true).is_none());
+}

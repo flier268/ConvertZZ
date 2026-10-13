@@ -642,6 +642,8 @@ fn report_convert_progress(progress: &Option<ProgressReporter>, current: u64, to
             current: current.min(total),
             total: total.max(1),
             message: format!("正在轉換文字… {}/{}", current.min(total), total.max(1)),
+
+            batch: None,
         });
     }
 }

@@ -95,15 +95,16 @@ async fn core_request(
     let handle = app.clone();
     let request_id = id.clone();
     let progress = Arc::new(move |event: ProgressEvent| {
-        let _ = handle.emit(
-            "core://progress",
-            serde_json::json!({
-                "id": request_id,
-                "current": event.current,
-                "total": event.total,
-                "message": event.message,
-            }),
-        );
+        let Ok(mut body) = serde_json::to_value(&event) else {
+            return;
+        };
+        if let Some(object) = body.as_object_mut() {
+            object.insert(
+                "id".to_string(),
+                serde_json::Value::String(request_id.clone()),
+            );
+        }
+        let _ = handle.emit("core://progress", body);
     });
     state.begin_request(&id);
     let result = core::dispatch(Arc::clone(&state), &operation, payload, progress, &id).await;

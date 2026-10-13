@@ -383,6 +383,7 @@ export type CoreOperation =
   | "files.cancel"
   | "audio.scan"
   | "audio.plan"
+  | "audio.prioritize"
   | "audio.rescanFile"
   | "audio.apply"
   | "audio.cancel"

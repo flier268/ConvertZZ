@@ -16,6 +16,7 @@ import { core, isCancellationError } from "../lib/coreClient";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { cliInvocation } from "../lib/cli";
 import { formatProgressLabel, progressPercentage, type ProgressSnapshot } from "../lib/progressEta";
+import type { Progress } from "../lib/coreClient";
 import {
   applyBulkSelection,
   audioBaseName,
@@ -35,6 +36,7 @@ import {
   selectableFolderFiles,
   sortAudioFilesWithinFolders,
   replaceAudioFile,
+  mergeAudioFiles,
   selectionTotals,
   stepAudioRow,
   toggleFolderCollapsed,
@@ -74,6 +76,7 @@ const rescanningPath = ref("");
 const collapsedFolders = ref<Set<string>>(new Set());
 const focusKind = ref<"file" | "folder">("file");
 const focusFolder = ref("");
+let streamToken = 0;
 const listRef = ref<{ scrollToIndex: (index: number) => void; focusList: () => void } | null>(null);
 const options = reactive({
   direction: "s2t" as Direction,
@@ -317,6 +320,24 @@ async function chooseFolder() {
   await scan();
 }
 
+function beginStream(): number {
+  streamToken += 1;
+  return streamToken;
+}
+
+function applyStreamProgress(token: number, value: Progress) {
+  if (token !== streamToken) return;
+  progress.value = value;
+  if (!value.batch?.files.length) return;
+  files.value = mergeAudioFiles(files.value, value.batch.files);
+  clearWarningSelection(files.value);
+}
+
+watch(selectedPath, (path) => {
+  if (!path || !busy.value) return;
+  void core.request("audio.prioritize", { path }).catch(() => undefined);
+});
+
 async function cancelInFlight() {
   const requestId = activeRequestId.value;
   const planId = plan.value?.planId;
@@ -358,8 +379,9 @@ async function scan() {
   resetReviewView();
   plan.value = undefined;
   files.value = [];
+  const token = beginStream();
   try {
-    files.value = await core.request<AudioTagFile[]>(
+    const scanned = await core.request<AudioTagFile[]>(
       "audio.scan",
       {
         paths: paths.value,
@@ -370,22 +392,25 @@ async function scan() {
       },
       {
         onProgress: (value) => {
-          progress.value = value;
+          applyStreamProgress(token, value);
         },
         onRequestId: (id) => {
-          activeRequestId.value = id;
+          if (token === streamToken) activeRequestId.value = id;
         },
       },
     );
+    if (token !== streamToken) return;
+    files.value = mergeAudioFiles(files.value, scanned);
     clearWarningSelection(files.value);
   } catch (error) {
+    if (token !== streamToken) return;
     if (isCancellationError(error)) ElMessage.info("已取消掃描。");
     else {
       operationError.value = error instanceof Error ? error.message : String(error);
       ElMessage.error(operationError.value);
     }
   } finally {
-    settleAudioWork();
+    if (token === streamToken) settleAudioWork();
   }
 }
 
@@ -426,7 +451,11 @@ async function buildPlanRequest(): Promise<AudioTagPlanRequest> {
 
 function adoptPlan(value: unknown) {
   const next = value as AudioTagPlan;
-  files.value = next.files;
+  const paths = new Set(next.files.map((file) => file.path));
+  files.value = mergeAudioFiles(
+    files.value.filter((file) => paths.has(file.path)),
+    next.files,
+  );
   clearWarningSelection(files.value);
   plan.value = { ...next, files: files.value };
   listFilter.value = "changed";
@@ -443,14 +472,17 @@ const previewController = createAudioPreviewController({
     applyDraftToOptions();
     if (!files.value.length) return undefined;
     plan.value = undefined;
-    return core.request<AudioTagPlan>("audio.plan", await buildPlanRequest(), {
+    const token = beginStream();
+    const result = await core.request<AudioTagPlan>("audio.plan", await buildPlanRequest(), {
       onProgress: (value) => {
-        progress.value = value;
+        applyStreamProgress(token, value);
       },
       onRequestId: (id) => {
-        activeRequestId.value = id;
+        if (token === streamToken) activeRequestId.value = id;
       },
     });
+    if (token !== streamToken) return undefined;
+    return result;
   },
   cancelInFlight,
   apply: adoptPlan,
@@ -1148,7 +1180,7 @@ watch(
         </template>
       </el-form>
       <template #footer>
-        <el-button type="primary" :disabled="busy" @click="closeSettings">關閉</el-button>
+        <el-button type="primary" :disabled="busy" @click="closeSettings">完成</el-button>
       </template>
     </el-drawer>
   </section>

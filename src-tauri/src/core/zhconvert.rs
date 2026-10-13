@@ -116,6 +116,8 @@ impl ZhConvertClient {
                     current: done.min(total),
                     total,
                     message: format!("正在呼叫 ZhConvert… {}/{total}", done.min(total)),
+
+                    batch: None,
                 });
             }
         }

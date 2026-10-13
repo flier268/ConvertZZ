@@ -1,9 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { CoreOperation } from "@shared/contracts";
+import type { AudioTagFile, CoreOperation } from "@shared/contracts";
 import { formatUnknownError } from "./errors";
 
-export type Progress = { current: number; total: number; message: string };
+export type Progress = {
+  current: number;
+  total: number;
+  message: string;
+  /** 音訊掃描或預覽途中的一批檔案。 */
+  batch?: { phase: string; files: AudioTagFile[] };
+};
 
 export type CoreRequestOptions = {
   /** 0 或省略表示不設前端逾時。 */
@@ -91,10 +97,19 @@ class CoreClient {
       }>("core://progress", ({ payload }) => {
         const pending = payload.id ? this.pending.get(payload.id) : undefined;
         if (!pending?.onProgress || payload.current == null || payload.total == null) return;
+        const batch = (
+          payload as {
+            batch?: { phase?: string; files?: AudioTagFile[] };
+          }
+        ).batch;
         pending.onProgress({
           current: payload.current,
           total: payload.total,
           message: payload.message ?? "",
+          batch:
+            batch?.files && batch.files.length
+              ? { phase: batch.phase ?? "", files: batch.files }
+              : undefined,
         });
       }).then(() => undefined);
     }

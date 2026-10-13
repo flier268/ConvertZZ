@@ -66,4 +66,27 @@ describe("音訊預覽自動重建", () => {
     expect(cancels).toEqual([]);
     expect(plans).toEqual([]);
   });
+
+  it("套用進行中呼叫 schedule 不得取消 apply", async () => {
+    vi.useFakeTimers();
+    const cancels: number[] = [];
+    const plans: number[] = [];
+    const controller = createAudioPreviewController({
+      plan: async () => {
+        plans.push(plans.length + 1);
+        return { planId: "preview" };
+      },
+      cancelInFlight: async () => {
+        cancels.push(cancels.length + 1);
+      },
+      apply: () => undefined,
+    });
+
+    controller.setApplying(true);
+    controller.schedule();
+    await controller.run();
+    await vi.advanceTimersByTimeAsync(AUDIO_PREVIEW_DEBOUNCE_MS);
+    expect(cancels).toEqual([]);
+    expect(plans).toEqual([]);
+  });
 });

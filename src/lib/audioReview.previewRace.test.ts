@@ -69,11 +69,14 @@ describe("音訊預覽自動重建", () => {
 
   it("進行中的預覽被 invalidate 且沒有新一輪接手時，仍會 onSettled", async () => {
     let release: (value: { planId: string }) => void = () => undefined;
-    const started = Promise.withResolvers<void>();
+    let markStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
     const settled: number[] = [];
     const controller = createAudioPreviewController({
       plan: () => {
-        started.resolve();
+        markStarted();
         return new Promise((resolve) => {
           release = resolve;
         });
@@ -86,7 +89,7 @@ describe("音訊預覽自動重建", () => {
     });
 
     const running = controller.run();
-    await started.promise;
+    await started;
     controller.invalidate();
     release({ planId: "stale" });
     await running;

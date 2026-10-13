@@ -828,6 +828,194 @@ export function tagRuleSummary(rule: TagRule, id3v1OutputEncoding = "big5"): str
   return `從 ${source} 複製到 ${target}（${encoding}）`;
 }
 
+/** 並排欄的共通列。封面與自訂欄位不在這裡挑。 */
+export const TAG_COLUMN_KEYS = [
+  "title",
+  "artist",
+  "album",
+  "year",
+  "track",
+  "comment",
+  "genre",
+] as const;
+
+const COLUMN_KEY_LABEL: Record<(typeof TAG_COLUMN_KEYS)[number], string> = {
+  title: "標題",
+  artist: "演出者",
+  album: "專輯",
+  year: "年份",
+  track: "音軌",
+  comment: "註解",
+  genre: "類型",
+};
+
+const CONTAINER_ORDER: AudioContainer[] = ["id3v1", "id3v2", "apev2", "vorbis-comment"];
+
+/** 第一版能跨容器寫的方向。Vorbis 互轉不做。 */
+const COPY_TARGETS: Record<AudioContainer, AudioContainer[]> = {
+  id3v2: ["id3v1"],
+  id3v1: ["id3v2"],
+  apev2: ["id3v2"],
+  "vorbis-comment": [],
+};
+
+export function tagColumnLabel(key: string): string {
+  return COLUMN_KEY_LABEL[key as (typeof TAG_COLUMN_KEYS)[number]] ?? key;
+}
+
+/** 選中檔案要畫的欄。MP3 即使還沒讀到 APEv2 也留一欄。 */
+export function tagColumnsForFile(file: AudioTagFile): AudioContainer[] {
+  const present = new Set(file.fields.map((field) => field.container));
+  if (file.format === "mp3") present.add("apev2");
+  if (file.format === "ogg" || file.format === "opus") present.add("vorbis-comment");
+  return CONTAINER_ORDER.filter((container) => present.has(container));
+}
+
+export function columnFieldValue(
+  file: AudioTagFile,
+  container: AudioContainer,
+  key: string,
+): string {
+  const field = file.fields.find((item) => item.container === container && item.key === key);
+  return field?.values[0] ?? "";
+}
+
+/** 畫面上沒列在共通欄的欄位數，移除對話框用來寫「含 n 個隱藏欄位」。 */
+export function hiddenColumnCount(file: AudioTagFile, container: AudioContainer): number {
+  const shown = new Set<string>(TAG_COLUMN_KEYS);
+  return file.fields.filter((field) => field.container === container && !shown.has(field.key))
+    .length;
+}
+
+export function copyTargetsFor(source: AudioContainer): AudioContainer[] {
+  return COPY_TARGETS[source];
+}
+
+/**
+ * ID3v1 當來源時預設只補空白。呼叫端若改成覆蓋，要另外顯示警告。
+ */
+export function onConflictForSource(source: AudioContainer, overwrite: boolean): TagOnConflict {
+  if (source === "id3v1" && !overwrite) return "fillEmpty";
+  return "overwrite";
+}
+
+export function id3v1OverwriteWarning(
+  source: AudioContainer | undefined,
+  onConflict: TagOnConflict | undefined,
+): string | undefined {
+  if (source === "id3v1" && onConflict === "overwrite") {
+    return "ID3v1 只有約 30 位元組。選覆蓋會取代目標裡較完整的值。";
+  }
+  return undefined;
+}
+
+export interface ColumnPick {
+  key: string;
+  source: AudioContainer;
+}
+
+/** 預設留在合併目標已有的值；目標是空的才挑第一個有字的來源。 */
+export function defaultColumnPicks(
+  file: AudioTagFile,
+  target: AudioContainer,
+  columns: readonly AudioContainer[],
+): ColumnPick[] {
+  return TAG_COLUMN_KEYS.map((key) => {
+    const targetValue = columnFieldValue(file, target, key).trim();
+    if (targetValue) return { key, source: target };
+    const filled = columns.find((container) => columnFieldValue(file, container, key).trim());
+    return { key, source: filled ?? target };
+  });
+}
+
+/** 合併後那一格：ID3v1 預設 fillEmpty 時，目標已有字就留著。 */
+export function mergedColumnValue(
+  targetValue: string,
+  source: AudioContainer,
+  sourceValue: string,
+  onConflict: TagOnConflict,
+): string {
+  if (!sourceValue.trim()) return targetValue;
+  if (onConflict === "fillEmpty" && targetValue.trim()) return targetValue;
+  return sourceValue;
+}
+
+/**
+ * 同一個來源合成一條只作用於這個檔案的合併。
+ * 來源就是合併目標的列不產生操作。
+ * 逐欄挑選是使用者指定要留的值，所以用覆蓋；ID3v1 仍走預設只補空白。
+ */
+export function columnPicksToOperations(
+  path: string,
+  target: AudioContainer,
+  picks: readonly ColumnPick[],
+): TagOperation[] {
+  const grouped = new Map<AudioContainer, string[]>();
+  for (const pick of picks) {
+    if (pick.source === target) continue;
+    const keys = grouped.get(pick.source) ?? [];
+    keys.push(pick.key);
+    grouped.set(pick.source, keys);
+  }
+  return [...grouped.entries()].map(([source, fields]) => ({
+    action: "merge" as const,
+    source,
+    target,
+    fields,
+    onConflict: onConflictForSource(source, false),
+    enabled: true,
+    paths: [path],
+  }));
+}
+
+export function manualCopyOperation(
+  path: string,
+  source: AudioContainer,
+  target: AudioContainer,
+  overwrite: boolean,
+): TagOperation {
+  return {
+    action: "copy",
+    source,
+    target,
+    fields: [...TAG_COLUMN_KEYS],
+    onConflict: onConflictForSource(source, overwrite),
+    enabled: true,
+    paths: [path],
+  };
+}
+
+/** 以此標籤覆蓋其他標籤：每個第一版支援的目標一條覆蓋。 */
+export function overwriteOtherOperations(path: string, source: AudioContainer): TagOperation[] {
+  return copyTargetsFor(source).map((target) => manualCopyOperation(path, source, target, true));
+}
+
+export function manualRemoveOperation(
+  path: string,
+  container: AudioContainer,
+  salvageToId3v2: boolean,
+): TagOperation[] {
+  const remove: TagOperation = {
+    action: "remove",
+    source: container,
+    enabled: true,
+    paths: [path],
+  };
+  if (!salvageToId3v2 || container === "id3v2") return [remove];
+  return [
+    {
+      action: "merge",
+      source: container,
+      target: "id3v2",
+      fields: [...TAG_COLUMN_KEYS],
+      onConflict: "fillEmpty",
+      enabled: true,
+      paths: [path],
+    },
+    remove,
+  ];
+}
+
 export function toTagOperations(rules: readonly TagRule[]): TagOperation[] {
   return rules.map((rule) => ({
     action: rule.action,

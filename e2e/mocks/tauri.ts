@@ -122,6 +122,9 @@ export interface ConvertzzE2eConfig {
     paths?: string[];
     selectedFields?: Record<string, string[]>;
   };
+  lastAudioPlan?: {
+    tagOperations?: Array<{ action?: string; paths?: string[]; source?: string }>;
+  };
 }
 
 declare global {
@@ -409,7 +412,19 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
   if (operation === "audio.plan") {
     if (e2e().failAudioPlan) throw new Error("無法建立標籤預覽");
     const tagOperations = Array.isArray(payload.tagOperations) ? payload.tagOperations : [];
-    if (tagOperations.length > 0) {
+    e2e().lastAudioPlan = {
+      tagOperations: tagOperations as Array<{ action?: string; paths?: string[]; source?: string }>,
+    };
+    const manualOnly =
+      tagOperations.length > 0 &&
+      tagOperations.every(
+        (operation) =>
+          operation &&
+          typeof operation === "object" &&
+          Array.isArray((operation as { paths?: unknown }).paths) &&
+          ((operation as { paths?: unknown[] }).paths?.length ?? 0) > 0,
+      );
+    if (tagOperations.length > 0 && !manualOnly) {
       const song = {
         path: "/music/專輯甲/song.mp3",
         format: "mp3" as const,
@@ -512,6 +527,20 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
           truncation: "「ID3v1 標題超過 30 位元組，已截斷為 裡面的很長標題」",
         },
         {
+          key: "title",
+          label: "標題",
+          container: "apev2" as const,
+          values: ["後來的我們"],
+          selected: false,
+        },
+        {
+          key: "replaygain",
+          label: "ReplayGain",
+          container: "apev2" as const,
+          values: ["-1.5 dB"],
+          selected: false,
+        },
+        {
           key: "frame:TIT3",
           label: "TIT3",
           container: "id3v2" as const,
@@ -520,6 +549,15 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
         },
       ],
     };
+    if (manualOnly) {
+      const title = song.fields.find(
+        (field) => field.container === "id3v2" && field.key === "title",
+      );
+      if (title) {
+        title.convertedValues = ["後來的我們"];
+        (title as { origin?: string }).origin = "manual";
+      }
+    }
     const unchanged = {
       path: "/music/專輯乙/same.ogg",
       format: "ogg" as const,

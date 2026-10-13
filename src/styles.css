@@ -512,6 +512,73 @@ html.floating-window * {
 .audio-detail-tools {
   margin: 10px 0;
   justify-content: flex-start;
+  flex-wrap: wrap;
+}
+.audio-column-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.audio-column-table th,
+.audio-column-table td {
+  border-bottom: 1px solid #eef3f2;
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.audio-column-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+.audio-column-menu-button {
+  margin-left: auto;
+  border: 1px solid #c9d8d5;
+  border-radius: 4px;
+  background: #fff;
+  color: #0f8f82;
+  cursor: pointer;
+}
+.audio-column-menu {
+  position: absolute;
+  top: 24px;
+  right: 0;
+  z-index: 5;
+  width: 230px;
+  padding: 6px 0;
+  background: #fff;
+  border: 1px solid #d5e4e1;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px #0b262433;
+}
+.audio-column-menu button {
+  display: block;
+  width: 100%;
+  padding: 7px 14px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.audio-column-menu button:disabled {
+  color: #99aaa7;
+  cursor: not-allowed;
+}
+.audio-column-danger {
+  color: #c0392b;
+}
+.audio-column-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0;
+}
+.audio-remove-scope {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 }
 .audio-folder {
   display: flex;

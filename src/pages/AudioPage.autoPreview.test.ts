@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const openDialog = vi.fn();
 const confirmDialog = vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => true);
 const coreRequest = vi.fn();
-const coreCancel = vi.fn(async () => undefined);
+const coreCancel = vi.fn(async (..._args: unknown[]) => undefined);
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: (...args: unknown[]) => openDialog(...args),

@@ -33,14 +33,22 @@ pub(crate) fn take_prioritized<T>(
     priority: &mut VecDeque<String>,
     key: impl Fn(&T) -> String,
 ) -> Option<T> {
+    // 這次待處理清單沒有的路徑要留在佇列裡。掃描與預覽各有自己的清單，
+    // 清掉對方的路徑會讓另一邊失去優先順序。
+    let mut skipped = VecDeque::new();
     while let Some(wanted) = priority.pop_front() {
         if let Some(pos) = pending
             .iter()
             .position(|item| paths_match(&key(item), &wanted))
         {
+            while let Some(item) = skipped.pop_back() {
+                priority.push_front(item);
+            }
             return pending.remove(pos);
         }
+        skipped.push_back(wanted);
     }
+    *priority = skipped;
     pending.pop_front()
 }
 
@@ -117,17 +125,13 @@ impl AudioService {
     }
 
     fn take_next<T>(&self, pending: &mut VecDeque<T>, key: impl Fn(&T) -> String) -> Option<T> {
+        // 複製而不抽空。重疊的掃描與預覽各自挑自己清單裡的路徑，
+        // 不能把另一邊的優先項目拿走。
         let mut priority = match self.priority.lock() {
-            Ok(mut guard) => std::mem::take(&mut *guard),
+            Ok(guard) => guard.clone(),
             Err(_) => VecDeque::new(),
         };
-        let next = take_prioritized(pending, &mut priority, key);
-        if let Ok(mut guard) = self.priority.lock() {
-            let mut arrived = std::mem::take(&mut *guard);
-            arrived.append(&mut priority);
-            *guard = arrived;
-        }
-        next
+        take_prioritized(pending, &mut priority, key)
     }
 
     fn scan_key(request: &AudioScanRequest) -> ScanCacheKey {
@@ -2204,7 +2208,7 @@ fn empty_id3v1() -> HashMap<&'static str, String> {
 }
 
 fn read_id3v1(buffer: &[u8], encoding: TextEncoding) -> Result<Option<Id3v1Tag>, CoreError> {
-    if buffer.len() < 128 || &buffer[buffer.len() - 128..buffer.len() - 125] != b"TAG" {
+    if !has_id3v1(buffer) {
         return Ok(None);
     }
     let tag = &buffer[buffer.len() - 128..];
@@ -2393,7 +2397,7 @@ fn strip_ape_tail(body: &[u8]) -> &[u8] {
 /// 寫入後核對音訊用。刻意不呼叫 `strip_ape_tail`，避免同一套邊界算錯時前後比對一起通過。
 fn verified_tag_body(buffer: &[u8]) -> &[u8] {
     let mut end = buffer.len();
-    if end >= 128 && &buffer[end - 128..end - 125] == b"TAG" {
+    if has_id3v1(&buffer[..end]) {
         end -= 128;
     }
     if end >= 32 && &buffer[end - 32..end - 24] == b"APETAGEX" {
@@ -2440,7 +2444,7 @@ fn verified_ape_audio(buffer: &[u8]) -> Vec<u8> {
 }
 
 fn strip_trailing_ape(buffer: &[u8]) -> Vec<u8> {
-    let has_v1 = buffer.len() >= 128 && &buffer[buffer.len() - 128..buffer.len() - 125] == b"TAG";
+    let has_v1 = has_id3v1(buffer);
     if has_v1 {
         let (body, v1) = buffer.split_at(buffer.len() - 128);
         [strip_ape_tail(body), v1].concat()
@@ -2450,11 +2454,41 @@ fn strip_trailing_ape(buffer: &[u8]) -> Vec<u8> {
 }
 
 fn strip_id3v1(buffer: &[u8]) -> &[u8] {
-    if buffer.len() >= 128 && &buffer[buffer.len() - 128..buffer.len() - 125] == b"TAG" {
+    if has_id3v1(buffer) {
         &buffer[..buffer.len() - 128]
     } else {
         buffer
     }
+}
+
+/// 檔尾 128 bytes 以 TAG 開頭。MPEG 幀長能算出來、且有一幀蓋過這段時，那是音訊不是標籤。
+fn has_id3v1(buffer: &[u8]) -> bool {
+    buffer.len() >= 128
+        && &buffer[buffer.len() - 128..buffer.len() - 125] == b"TAG"
+        && !id3v1_overlaps_mpeg_frame(buffer)
+}
+
+fn id3v1_overlaps_mpeg_frame(buffer: &[u8]) -> bool {
+    let tag_at = buffer.len() - 128;
+    let audio = &buffer[..tag_at];
+    let mut pos = id3v2_tag_length(audio);
+    if super::files::mpeg_frame_length(&audio[pos..]).is_none() {
+        return false;
+    }
+    while pos + 4 <= audio.len() {
+        let Some(len) = super::files::mpeg_frame_length(&audio[pos..]) else {
+            return false;
+        };
+        let next = pos + len;
+        if next > audio.len() {
+            return true;
+        }
+        if next == audio.len() {
+            return false;
+        }
+        pos = next;
+    }
+    false
 }
 
 fn picture_count(path: &Path) -> Result<usize, CoreError> {

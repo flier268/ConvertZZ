@@ -3163,7 +3163,7 @@ fn is_mpeg_audio_sync(buffer: &[u8]) -> bool {
     mpeg_frame_length(&buffer[frame_len..]).is_some()
 }
 
-fn mpeg_frame_length(buffer: &[u8]) -> Option<usize> {
+pub(crate) fn mpeg_frame_length(buffer: &[u8]) -> Option<usize> {
     if buffer.len() < 4 || buffer[0] != 0xFF || buffer[1] & 0xE0 != 0xE0 {
         return None;
     }

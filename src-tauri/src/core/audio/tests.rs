@@ -137,6 +137,11 @@ fn id3v1_marker_inside_mpeg_frame_is_not_cut() {
     frame[..4].copy_from_slice(&[0xff, 0xfb, 0x90, 0x64]);
     let tag_at = frame.len() - 128;
     frame[tag_at..tag_at + 3].copy_from_slice(b"TAG");
+    eprintln!(
+        "frame_len={:?} overlap path starts {:02x?}",
+        super::super::files::mpeg_frame_length(&frame),
+        &frame[..4]
+    );
     assert_eq!(
         strip_id3v1(&frame).len(),
         frame.len(),

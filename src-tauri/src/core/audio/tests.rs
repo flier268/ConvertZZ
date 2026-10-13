@@ -2965,3 +2965,59 @@ async fn manual_path_operation_stays_on_that_file_and_marks_origin_manual() {
     assert_eq!(second_rule.origin.as_deref(), Some("rule 2"));
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+/// 合法的 ID3v2.3 標頭，但影格設了加密旗標。id3 crate 讀整份標籤會失敗，
+/// 寫入時卻只靠標頭長度整段換掉。
+fn unreadable_id3v2_with_v1(title: &str) -> Vec<u8> {
+    let payload = b"ORIGINAL-ID3-BODY";
+    let mut frame = b"TALB".to_vec();
+    frame.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+    frame.extend_from_slice(&0x0040u16.to_be_bytes());
+    frame.extend_from_slice(payload);
+    let mut tag = b"ID3".to_vec();
+    tag.extend_from_slice(&[3, 0, 0, 0, 0, 0, frame.len() as u8]);
+    tag.extend_from_slice(&frame);
+    tag.extend_from_slice(&mpeg_frame());
+    append_id3v1(
+        &tag,
+        &HashMap::from([("title", title.to_string())]),
+        255,
+        TextEncoding::Utf8,
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn unreadable_id3v2_is_not_replaced_with_an_empty_tag() {
+    let directory = temp_dir();
+    let path = directory.join("opaque.mp3");
+    let original = unreadable_id3v2_with_v1("SourceTitle");
+    std::fs::write(&path, &original).unwrap();
+    assert!(id3::Tag::read_from_path(&path).is_err());
+    assert!(original
+        .windows(17)
+        .any(|window| window == b"ORIGINAL-ID3-BODY"));
+    let service = AudioService::new();
+    let mut request = quiet_plan(&[path.clone()]);
+    request.tag_operations = vec![TagOperation {
+        action: TagAction::Copy,
+        source: Some(AudioContainer::Id3v1),
+        target: Some(AudioContainer::Id3v2),
+        fields: vec!["title".into()],
+        on_conflict: Some(TagOnConflict::Overwrite),
+        enabled: true,
+        paths: Vec::new(),
+    }];
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert_eq!(result.failed.len(), 1, "{result:?}");
+    assert!(result.succeeded.is_empty(), "{result:?}");
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+    let _ = std::fs::remove_dir_all(&directory);
+}

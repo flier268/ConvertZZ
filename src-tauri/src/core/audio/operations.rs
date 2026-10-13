@@ -207,8 +207,23 @@ pub(super) fn expand_tag_operations(
     let mut removals = Vec::new();
     file.removals.clear();
 
-    for (index, operation) in request.tag_operations.iter().enumerate() {
-        let origin = format!("rule {}", index + 1);
+    let mut rule_index = 0usize;
+    for operation in &request.tag_operations {
+        let manual = !operation.paths.is_empty();
+        if manual
+            && !operation
+                .paths
+                .iter()
+                .any(|path| super::paths_match(path, &file.path))
+        {
+            continue;
+        }
+        let origin = if manual {
+            "manual".to_string()
+        } else {
+            rule_index += 1;
+            format!("rule {rule_index}")
+        };
         if !operation.enabled {
             continue;
         }
@@ -262,7 +277,7 @@ pub(super) fn expand_tag_operations(
             field
                 .origin
                 .as_deref()
-                .is_some_and(|origin| origin.starts_with("rule "))
+                .is_some_and(|origin| origin.starts_with("rule ") || origin == "manual")
                 && field.selected
                 && !remove_containers.contains(&field.container)
         })

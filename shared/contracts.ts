@@ -156,6 +156,11 @@ export interface TagOperation {
   onConflict?: TagOnConflict;
   /** 省略視為啟用。停用的規則仍佔編號。 */
   enabled?: boolean;
+  /**
+   * 有路徑時只作用於這些檔案，預覽來源是 `manual`，不佔規則編號。
+   * 省略或空陣列是整批規則。
+   */
+  paths?: string[];
 }
 
 export type AudioFieldWarningCode = "truncated" | "unrepresentable" | "hidden" | "unmappable";

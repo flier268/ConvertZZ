@@ -448,6 +448,10 @@ pub struct TagOperation {
     /// 略過時後端仍保留規則編號，但不會套用。省略視為啟用。
     #[serde(default = "default_tag_operation_enabled")]
     pub enabled: bool,
+    /// 有路徑時只作用於這些檔案，來源欄記成 `manual`，不佔規則編號。
+    /// 空陣列是整批規則。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub paths: Vec<String>,
 }
 
 fn default_tag_operation_enabled() -> bool {

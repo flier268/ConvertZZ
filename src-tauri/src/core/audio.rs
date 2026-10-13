@@ -51,7 +51,7 @@ pub(crate) fn drain_stream_batch<T>(buffer: &mut Vec<T>, force: bool) -> Option<
     Some(std::mem::take(buffer))
 }
 
-fn paths_match(left: &str, right: &str) -> bool {
+pub(super) fn paths_match(left: &str, right: &str) -> bool {
     left == right || resolve_path(left) == resolve_path(right)
 }
 

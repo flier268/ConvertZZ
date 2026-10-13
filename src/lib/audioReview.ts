@@ -81,9 +81,16 @@ export function containerRewrites(
   return (file.rewriteContainers ?? []).includes(container);
 }
 
-/** 欄位文字有變，或所屬容器要重寫編碼／ID3 版本。 */
+/** 欄位文字有變，或所屬容器要重寫編碼／ID3 版本。分桶與寫入用這個。 */
 export function fieldAffectsAudio(file: AudioTagFile, field: AudioTagField): boolean {
   return fieldValuesChanged(field) || containerRewrites(file, field.container);
+}
+
+/**
+ * 「隱藏不變欄位」只看文字。編碼或 ID3 版本要重寫時，文字相同的欄位在預覽欄仍是「不變」。
+ */
+export function fieldVisibleWhenHidingUnchanged(field: AudioTagField): boolean {
+  return fieldValuesChanged(field);
 }
 
 export function changedFieldCount(file: AudioTagFile): number {

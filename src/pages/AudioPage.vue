@@ -42,7 +42,7 @@ import {
   audioFileBucket,
   audioPreviewReady,
   settingsSummaryChips,
-  fieldAffectsAudio,
+  fieldVisibleWhenHidingUnchanged,
   type AudioListFilter,
   type AudioListRow,
   type AudioSortKey,
@@ -144,7 +144,7 @@ const visibleFields = computed(() => {
   const file = selectedFile.value;
   if (!file) return [];
   if (!hideUnchanged.value || !plan.value) return file.fields;
-  return file.fields.filter((field) => fieldAffectsAudio(file, field));
+  return file.fields.filter((field) => fieldVisibleWhenHidingUnchanged(field));
 });
 const summaryChips = computed(() =>
   settingsSummaryChips({
@@ -905,6 +905,7 @@ watch(
             </div>
             <el-table
               v-if="!selectedFile.warning"
+              :key="hideUnchanged ? 'hide-unchanged' : 'show-all'"
               :data="visibleFields"
               empty-text="沒有可顯示的欄位"
             >

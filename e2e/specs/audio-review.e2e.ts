@@ -108,7 +108,7 @@ test.describe("音訊標籤審閱", () => {
     await album.click();
     await expect(page.locator(".audio-name", { hasText: "song.mp3" })).toHaveCount(0);
     await page.screenshot({ path: join(shots, "audio-folder-collapsed.png") });
-    await page.locator(".audio-file-pane").focus();
+    await list.focus();
     await page.keyboard.press("ArrowDown");
     await expect(page.locator(".audio-folder.active")).toContainText("/music/專輯乙");
     await page.keyboard.press("ArrowDown");
@@ -118,6 +118,17 @@ test.describe("音訊標籤審閱", () => {
     await page.keyboard.press("ArrowUp");
     await page.keyboard.press("Enter");
     await expect(page.locator(".audio-name", { hasText: "song.mp3" })).toBeVisible();
+    await page.keyboard.press("ArrowDown");
+    const songBox = page.locator(".audio-row", { hasText: "song.mp3" }).locator("input");
+    await expect(songBox).toBeChecked();
+    await page.keyboard.press("Space");
+    await expect(songBox).not.toBeChecked();
+    await page.keyboard.press("Space");
+    await expect(songBox).toBeChecked();
+    await page.getByRole("button", { name: "快捷鍵說明" }).focus();
+    await page.keyboard.press("Space");
+    await expect(songBox).toBeChecked();
+    await expect(page.getByRole("button", { name: "確認寫入 233 個檔案" })).toBeEnabled();
 
     await page.evaluate(() => {
       if (window.__convertzzE2e) window.__convertzzE2e.holdAudioRescan = true;
@@ -158,12 +169,12 @@ test.describe("音訊標籤審閱", () => {
     await expect(page.getByRole("button", { name: "確認寫入 233 個檔案" })).toBeEnabled();
 
     const song = page.locator(".audio-row", { hasText: "song.mp3" });
-    await song.locator("input").click();
+    await song.locator(".el-checkbox").click();
     await expect(page.getByRole("button", { name: "確認寫入 232 個檔案" })).toBeEnabled();
 
     await page.locator(".audio-name", { hasText: "track-001.mp3" }).click();
     const album = page.locator(".audio-detail .el-table__row", { hasText: "專輯" });
-    await album.locator("input").click();
+    await album.locator(".el-checkbox").click();
     await expect(page.getByRole("button", { name: "確認寫入 232 個檔案" })).toBeEnabled();
     await expect(page.getByText("已勾選 232 個檔案・463 個欄位")).toBeVisible();
 

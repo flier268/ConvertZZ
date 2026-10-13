@@ -519,10 +519,27 @@ function onFolderKey(key: string): boolean {
   return true;
 }
 
+function rowId(index: number): string {
+  return `audio-row-${index}`;
+}
+
+const activeRowId = computed(() => {
+  const index = focusIndex();
+  return index >= 0 ? rowId(index) : undefined;
+});
+
+function rowActive(index: number): boolean {
+  return activeRowId.value === rowId(index);
+}
+
+/** 焦點在按鈕、輸入框或其他控制項時，快捷鍵不改清單。 */
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest("button, input, textarea, select, a, [contenteditable='true']"));
+}
+
 function onReviewKeydown(event: KeyboardEvent) {
-  const target = event.target as HTMLElement | null;
-  const tag = target?.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
+  if (isInteractiveTarget(event.target)) return;
   if (event.key === "ArrowDown") {
     event.preventDefault();
     moveSelection(1);
@@ -560,7 +577,7 @@ watch(
 </script>
 
 <template>
-  <section class="page-stack" @keydown="onReviewKeydown">
+  <section class="page-stack">
     <header class="page-header">
       <div>
         <p class="eyebrow">AUDIO TAGS</p>
@@ -616,12 +633,17 @@ watch(
         <el-empty description="請選取 MP3、APE、OGG 或 Opus 檔案" />
       </div>
       <template v-else>
-        <div class="audio-file-pane" tabindex="-1">
+        <div class="audio-file-pane">
           <VirtualList
             ref="listRef"
+            role="listbox"
+            aria-label="音訊檔案"
+            tabindex="0"
+            :aria-activedescendant="activeRowId"
             :count="listRows.length"
             :item-height="40"
             :section-of="sectionOf"
+            @keydown="onReviewKeydown"
           >
             <template #sticky="{ index }">
               <div
@@ -641,10 +663,12 @@ watch(
             <template #default="{ index }">
               <div
                 v-if="listRows[index]?.type === 'folder'"
+                :id="rowId(index)"
                 class="audio-folder"
-                role="button"
+                role="option"
+                :aria-selected="rowActive(index)"
                 :aria-expanded="!listRows[index].collapsed"
-                :class="{ active: focusKind === 'folder' && focusFolder === listRows[index].path }"
+                :class="{ active: rowActive(index) }"
                 @click="toggleFolder(listRows[index].path)"
               >
                 <span class="audio-caret">{{ listRows[index].collapsed ? "▸" : "▾" }}</span>
@@ -657,9 +681,12 @@ watch(
               </div>
               <div
                 v-else-if="listRows[index]?.type === 'file'"
+                :id="rowId(index)"
                 class="audio-row"
+                role="option"
+                :aria-selected="rowActive(index)"
                 :class="{
-                  active: focusKind === 'file' && listRows[index].file.path === selectedPath,
+                  active: rowActive(index),
                   warn: Boolean(listRows[index].file.warning),
                 }"
                 @click="selectFile(listRows[index].file)"

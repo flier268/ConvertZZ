@@ -220,6 +220,7 @@ const canConfirm = computed(() => Boolean(filtered.value && filtered.value.inclu
     width="720px"
     class="folder-wizard"
     append-to-body
+    :close-on-click-modal="false"
     @update:model-value="(value: boolean) => (value ? undefined : close())"
   >
     <ol class="wizard-steps" aria-label="步驟">
@@ -396,14 +397,15 @@ const canConfirm = computed(() => Boolean(filtered.value && filtered.value.inclu
         }}</el-button>
       </div>
     </template>
-    <ProfileEditorDialog
-      v-model="editorOpen"
-      :profile="editorProfile"
-      :existing="profiles"
-      :scan-start-path="path"
-      @save="onEditorSave"
-    />
   </el-dialog>
+  <ProfileEditorDialog
+    v-model="editorOpen"
+    :profile="editorProfile"
+    :existing="profiles"
+    :scan-start-path="path"
+    :close-on-click-modal="false"
+    @save="onEditorSave"
+  />
 </template>
 
 <style scoped>

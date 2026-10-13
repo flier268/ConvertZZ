@@ -223,6 +223,7 @@ function save(): void {
     width="640px"
     class="profile-editor-dialog"
     append-to-body
+    :close-on-click-modal="false"
     @update:model-value="(value: boolean) => (value ? undefined : close())"
   >
     <el-form label-position="top" @submit.prevent>

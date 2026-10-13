@@ -26,7 +26,7 @@ test.describe("音訊標籤審閱", () => {
     await expect(page.getByRole("radio", { name: "有變更 233" })).toBeChecked();
     await expect(segment(page, "有變更 233")).toHaveAttribute("aria-pressed", "true");
     await expect(segment(page, "不變 16")).toHaveAttribute("aria-pressed", "false");
-    await expect(page.locator(".page-header")).toContainText("/music/專輯甲 · 1 個檔案");
+    await expect(page.locator(".page-header")).toContainText("1 個路徑 · 全部 250 個檔案");
     await expect(page.getByRole("radio", { name: "不變 16" })).toBeVisible();
     await expect(page.getByRole("radio", { name: "錯誤 1" })).toBeVisible();
     await expect(page.getByRole("radio", { name: "全部 250" })).toBeVisible();

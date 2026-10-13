@@ -23,7 +23,6 @@ import type { Progress } from "../lib/coreClient";
 import {
   applyBulkSelection,
   audioBaseName,
-  audioParentDir,
   AUDIO_TAG_READ_ERROR,
   audioWarningDetail,
   id3v1TruncationNotes,
@@ -41,6 +40,7 @@ import {
   sortAudioFilesWithinFolders,
   replaceAudioFile,
   mergeAudioFiles,
+  audioPathKey,
   selectionTotals,
   stepAudioRow,
   toggleFolderCollapsed,
@@ -173,12 +173,16 @@ const selectedFile = computed(() => files.value.find((file) => file.path === sel
 const fieldDiffs = computed(() => buildFieldDiffs(plan.value ? selectedFile.value : undefined));
 const pageSubtitle = computed(() => {
   if (!files.value.length) return "ID3、APEv2 與 Vorbis Comment 都會保留未選欄位與封面。";
-  const folder =
-    focusKind.value === "folder" && focusFolder.value
-      ? focusFolder.value
-      : audioParentDir((selectedFile.value ?? files.value[0]).path);
-  const count = files.value.filter((file) => audioParentDir(file.path) === folder).length;
-  return `${folder} · ${count} 個檔案`;
+  if (focusKind.value === "folder" && focusFolder.value) {
+    const folder = focusFolder.value.replaceAll("\\", "/");
+    const prefix = folder.endsWith("/") ? folder : `${folder}/`;
+    const count = files.value.filter((file) => {
+      const path = file.path.replaceAll("\\", "/");
+      return path === folder || path.startsWith(prefix);
+    }).length;
+    return `${folder} · ${count} 個檔案`;
+  }
+  return `${paths.value.length} 個路徑 · 全部 ${files.value.length} 個檔案`;
 });
 const visibleFields = computed(() => {
   const file = selectedFile.value;
@@ -567,11 +571,12 @@ function toggleRuleField(rule: TagRule, key: string, checked: boolean) {
 }
 
 function appendPaths(incoming: readonly string[]): string[] {
-  const seen = new Set(paths.value);
+  const seen = new Set(paths.value.map((path) => audioPathKey(path)));
   const added: string[] = [];
   for (const path of incoming) {
-    if (!path || seen.has(path)) continue;
-    seen.add(path);
+    const key = audioPathKey(path);
+    if (!path || seen.has(key)) continue;
+    seen.add(key);
     added.push(path);
   }
   if (added.length) paths.value = [...paths.value, ...added];
@@ -580,9 +585,10 @@ function appendPaths(incoming: readonly string[]): string[] {
 
 async function addPaths(incoming: readonly string[]) {
   if (applying.value) return;
+  const inFlight = scanInFlight;
   const added = appendPaths(incoming);
   if (!added.length) return;
-  await scan(added);
+  await scan(inFlight ? undefined : added);
 }
 
 async function choose() {
@@ -605,10 +611,13 @@ async function chooseFolder() {
 function selectionSnapshot(list: readonly AudioTagFile[]) {
   return new Map(
     list.map((file) => [
-      file.path,
+      audioPathKey(file.path),
       {
         selected: file.selected,
         fields: new Map(file.fields.map((field) => [fieldDiffKey(field), field.selected] as const)),
+        byLabel: new Map(
+          file.fields.map((field) => [`${field.container}:${field.label}`, field.selected]),
+        ),
       },
     ]),
   );
@@ -616,11 +625,12 @@ function selectionSnapshot(list: readonly AudioTagFile[]) {
 
 function restoreSelection(list: AudioTagFile[], snapshot: ReturnType<typeof selectionSnapshot>) {
   for (const file of list) {
-    const previous = snapshot.get(file.path);
+    const previous = snapshot.get(audioPathKey(file.path));
     if (!previous) continue;
     file.selected = previous.selected;
     for (const field of file.fields) {
-      const selected = previous.fields.get(fieldDiffKey(field));
+      const byKey = previous.fields.get(fieldDiffKey(field));
+      const selected = byKey ?? previous.byLabel.get(`${field.container}:${field.label}`);
       if (selected !== undefined) field.selected = selected;
     }
   }
@@ -678,12 +688,21 @@ function settleAudioWork() {
   progressStartedAt.value = undefined;
 }
 
+let scanEpoch = 0;
+let scanInFlight = false;
+
 async function scan(onlyPaths?: readonly string[]) {
   if (applying.value) return;
-  const merging = onlyPaths != null;
+  const subset = Array.isArray(onlyPaths) ? onlyPaths : undefined;
+  const merging = subset != null;
+  const epoch = ++scanEpoch;
+  scanInFlight = true;
   previewController.invalidate();
   await cancelInFlight();
-  if (applying.value) return;
+  if (epoch !== scanEpoch || applying.value) {
+    if (epoch === scanEpoch) scanInFlight = false;
+    return;
+  }
   beginAudioWork();
   if (!merging) {
     resetReviewView();
@@ -691,7 +710,8 @@ async function scan(onlyPaths?: readonly string[]) {
     files.value = [];
   }
   const token = beginStream();
-  const requestPaths = onlyPaths ?? paths.value;
+  const requestPaths = subset ?? paths.value;
+  let completed = false;
   try {
     const scanned = await core.request<AudioTagFile[]>(
       "audio.scan",
@@ -716,6 +736,7 @@ async function scan(onlyPaths?: readonly string[]) {
     files.value = mergeAudioFiles(files.value, scanned);
     restoreSelection(files.value, snapshot);
     clearWarningSelection(files.value);
+    completed = true;
   } catch (error) {
     if (token !== streamToken) return;
     if (isCancellationError(error)) ElMessage.info("已取消掃描。");
@@ -723,10 +744,12 @@ async function scan(onlyPaths?: readonly string[]) {
       operationError.value = error instanceof Error ? error.message : String(error);
       ElMessage.error(operationError.value);
     }
+    return;
   } finally {
     if (token === streamToken) settleAudioWork();
+    if (epoch === scanEpoch) scanInFlight = false;
   }
-  if (token === streamToken && files.value.length && !applying.value) {
+  if (completed && token === streamToken && files.value.length && !applying.value) {
     await previewController.run();
   }
 }
@@ -1133,7 +1156,7 @@ watch(
       <div v-if="operationError && !files.length" class="audio-empty">
         <el-result icon="error" title="掃描失敗" :sub-title="operationError">
           <template #extra>
-            <el-button type="primary" :disabled="!paths.length || busy" @click="scan"
+            <el-button type="primary" :disabled="!paths.length || busy" @click="scan()"
               >再試一次</el-button
             >
           </template>
@@ -1586,7 +1609,7 @@ watch(
       <el-button v-if="plan" :disabled="busy || !totals.files" @click="createPlan"
         >重新載入</el-button
       >
-      <el-button v-else :disabled="!paths.length || busy" :loading="busy" @click="scan"
+      <el-button v-else :disabled="!paths.length || busy" :loading="busy" @click="scan()"
         >重新掃描</el-button
       >
       <el-button

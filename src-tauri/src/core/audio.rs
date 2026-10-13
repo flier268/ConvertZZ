@@ -870,134 +870,141 @@ fn apply_file(file: &PreparedAudio) -> Result<(), CoreError> {
 }
 
 fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
-    let source = fs::read(&file.path)?;
     let temporary = temporary_path(&file.path);
-    let remove_v2 = file.remove_containers.contains(&AudioContainer::Id3v2);
-    let remove_v1 = file.remove_containers.contains(&AudioContainer::Id3v1);
-    let remove_ape = file.remove_containers.contains(&AudioContainer::Apev2);
-    let writes_v2 = !remove_v2 && file.selected_containers.contains(&AudioContainer::Id3v2);
-    let writes_v1 = !remove_v1 && file.selected_containers.contains(&AudioContainer::Id3v1);
-    fs::copy(&file.path, &temporary)?;
-    let mut output = if writes_v2 {
-        // 原檔已有 ID3v2 卻解析失敗時，空標籤會整段換掉讀不到的影格。
-        // 檔頭沒有 ID3v2（含只有 ID3v1）才允許從空標籤建立。
-        let has_id3v2 = id3v2_tag_length(&source) > 0;
-        let mut tag = match id3::Tag::read_from_path(&temporary) {
-            Ok(tag) => tag,
-            Err(error) if has_id3v2 => {
+    let result = (|| -> Result<(), CoreError> {
+        let source = fs::read(&file.path)?;
+        let remove_v2 = file.remove_containers.contains(&AudioContainer::Id3v2);
+        let remove_v1 = file.remove_containers.contains(&AudioContainer::Id3v1);
+        let remove_ape = file.remove_containers.contains(&AudioContainer::Apev2);
+        let writes_v2 = !remove_v2 && file.selected_containers.contains(&AudioContainer::Id3v2);
+        let writes_v1 = !remove_v1 && file.selected_containers.contains(&AudioContainer::Id3v1);
+        fs::copy(&file.path, &temporary)?;
+        let mut output = if writes_v2 {
+            // 原檔已有 ID3v2 卻解析失敗時，空標籤會整段換掉讀不到的影格。
+            // 檔頭沒有 ID3v2（含只有 ID3v1）才允許從空標籤建立。
+            let has_id3v2 = id3v2_tag_length(&source) > 0;
+            let mut tag = match id3::Tag::read_from_path(&temporary) {
+                Ok(tag) => tag,
+                Err(error) if has_id3v2 => {
+                    let _ = fs::remove_file(&temporary);
+                    return Err(CoreError::new(
+                        "ID3_READ",
+                        format!("原檔有 ID3v2，但無法讀取，已停止寫入：{error}"),
+                    ));
+                }
+                Err(_) => id3::Tag::new(),
+            };
+            for (identifier, values) in &file.updates {
+                let (container, key) = split_field_id(identifier);
+                if container != AudioContainer::Id3v2 {
+                    continue;
+                }
+                set_id3v2_value(&mut tag, &key, values.first().cloned().unwrap_or_default());
+            }
+            let version = if file.request.id3v2_version == 4 {
+                id3::Version::Id3v24
+            } else {
+                id3::Version::Id3v23
+            };
+            // 版本不同時 write_to_path 會換標頭。文字編碼已經符合時不要再重寫每一框。
+            if file.rewrite_containers.contains(&AudioContainer::Id3v2)
+                && id3v2_text_encodings(&source)
+                    .into_iter()
+                    .any(|encoding| encoding != id3_encoding_byte(&file.request.id3v2_encoding))
+            {
+                apply_id3v2_encoding(
+                    &mut tag,
+                    &file.request.id3v2_encoding,
+                    &selected_id3v2_keys(file),
+                );
+            }
+            tag.write_to_path(&temporary, version)
+                .map_err(|error| CoreError::new("ID3_WRITE", error.to_string()))?;
+            fs::read(&temporary)?
+        } else if remove_v2 {
+            strip_id3v1(&strip_id3v2(&source)).to_vec()
+        } else {
+            strip_id3v1(&source).to_vec()
+        };
+        if writes_v2 {
+            if id3v2_header_version(&output) != Some(file.request.id3v2_version) {
                 let _ = fs::remove_file(&temporary);
                 return Err(CoreError::new(
-                    "ID3_READ",
-                    format!("原檔有 ID3v2，但無法讀取，已停止寫入：{error}"),
+                    "ID3_WRITE",
+                    format!(
+                        "ID3v2 版本寫入為 {}，預期 {}。",
+                        id3v2_header_version(&output)
+                            .map_or_else(|| "未知".into(), |value| value.to_string()),
+                        file.request.id3v2_version
+                    ),
                 ));
             }
-            Err(_) => id3::Tag::new(),
-        };
-        for (identifier, values) in &file.updates {
-            let (container, key) = split_field_id(identifier);
-            if container != AudioContainer::Id3v2 {
-                continue;
-            }
-            set_id3v2_value(&mut tag, &key, values.first().cloned().unwrap_or_default());
         }
-        let version = if file.request.id3v2_version == 4 {
-            id3::Version::Id3v24
-        } else {
-            id3::Version::Id3v23
-        };
-        // 版本不同時 write_to_path 會換標頭。文字編碼已經符合時不要再重寫每一框。
-        if file.rewrite_containers.contains(&AudioContainer::Id3v2)
-            && id3v2_text_encodings(&source)
-                .into_iter()
-                .any(|encoding| encoding != id3_encoding_byte(&file.request.id3v2_encoding))
-        {
-            apply_id3v2_encoding(
-                &mut tag,
-                &file.request.id3v2_encoding,
-                &selected_id3v2_keys(file),
-            );
-        }
-        tag.write_to_path(&temporary, version)
-            .map_err(|error| CoreError::new("ID3_WRITE", error.to_string()))?;
-        fs::read(&temporary)?
-    } else if remove_v2 {
-        strip_id3v1(&strip_id3v2(&source)).to_vec()
-    } else {
-        strip_id3v1(&source).to_vec()
-    };
-    if writes_v2 {
-        if id3v2_header_version(&output) != Some(file.request.id3v2_version) {
-            let _ = fs::remove_file(&temporary);
-            return Err(CoreError::new(
-                "ID3_WRITE",
-                format!(
-                    "ID3v2 版本寫入為 {}，預期 {}。",
-                    id3v2_header_version(&output)
-                        .map_or_else(|| "未知".into(), |value| value.to_string()),
-                    file.request.id3v2_version
-                ),
-            ));
-        }
-    }
-    let existing_v1 = read_id3v1(
-        &source,
-        file.request
-            .id3v1_source_encoding
-            .unwrap_or(TextEncoding::Gbk),
-    )?;
-    if writes_v1 {
-        let mut values = existing_v1
-            .as_ref()
-            .map(|item| item.values.clone())
-            .unwrap_or_else(empty_id3v1);
-        for (identifier, converted) in &file.updates {
-            let (container, key) = split_field_id(identifier);
-            if container == AudioContainer::Id3v1 {
-                if let Some(slot) = values.get_mut(key.as_str()) {
-                    *slot = converted.first().cloned().unwrap_or_default();
+        let existing_v1 = read_id3v1(
+            &source,
+            file.request
+                .id3v1_source_encoding
+                .unwrap_or(TextEncoding::Gbk),
+        )?;
+        if writes_v1 {
+            let mut values = existing_v1
+                .as_ref()
+                .map(|item| item.values.clone())
+                .unwrap_or_else(empty_id3v1);
+            for (identifier, converted) in &file.updates {
+                let (container, key) = split_field_id(identifier);
+                if container == AudioContainer::Id3v1 {
+                    if let Some(slot) = values.get_mut(key.as_str()) {
+                        *slot = converted.first().cloned().unwrap_or_default();
+                    }
                 }
             }
+            output = append_id3v1(
+                &strip_id3v1(&output),
+                &values,
+                existing_v1
+                    .as_ref()
+                    .map(|item| item.genre_code)
+                    .unwrap_or(255),
+                file.request.id3v1_output_encoding,
+            )?;
+            fs::write(&temporary, &output)?;
+        } else if remove_v1 {
+            output = strip_id3v1(&output).to_vec();
+            fs::write(&temporary, &output)?;
+        } else if existing_v1.is_some() {
+            output = [strip_id3v1(&output), &source[source.len() - 128..]].concat();
+            fs::write(&temporary, &output)?;
+        } else if !writes_v2 {
+            fs::write(&temporary, &output)?;
         }
-        output = append_id3v1(
-            &strip_id3v1(&output),
-            &values,
-            existing_v1
-                .as_ref()
-                .map(|item| item.genre_code)
-                .unwrap_or(255),
-            file.request.id3v1_output_encoding,
-        )?;
-        fs::write(&temporary, &output)?;
-    } else if remove_v1 {
-        output = strip_id3v1(&output).to_vec();
-        fs::write(&temporary, &output)?;
-    } else if existing_v1.is_some() {
-        output = [strip_id3v1(&output), &source[source.len() - 128..]].concat();
-        fs::write(&temporary, &output)?;
-    } else if !writes_v2 {
-        fs::write(&temporary, &output)?;
-    }
-    if remove_ape {
-        output = strip_trailing_ape(&fs::read(&temporary).unwrap_or(output));
-        fs::write(&temporary, &output)?;
-    }
+        if remove_ape {
+            output = strip_trailing_ape(&fs::read(&temporary).unwrap_or(output));
+            fs::write(&temporary, &output)?;
+        }
 
-    if verified_mp3_audio(&source) != verified_mp3_audio(&fs::read(&temporary)?) {
+        if verified_mp3_audio(&source) != verified_mp3_audio(&fs::read(&temporary)?) {
+            let _ = fs::remove_file(&temporary);
+            return Err(CoreError::new(
+                "AUDIO_VERIFY",
+                "MP3 標籤寫入改變了音訊資料。",
+            ));
+        }
+        // 拿掉整個 ID3v2 時封面跟著消失，不比對。其餘寫入（含移除 ID3v1／APEv2）要留下原本的 APIC。
+        if !remove_v2 && picture_count(&temporary)? != file.original_picture_count {
+            let _ = fs::remove_file(&temporary);
+            return Err(CoreError::new(
+                "AUDIO_PICTURE",
+                "標籤寫入造成封面圖片數量改變。",
+            ));
+        }
+        Ok(())
+    })();
+    if let Err(error) = result {
         let _ = fs::remove_file(&temporary);
-        return Err(CoreError::new(
-            "AUDIO_VERIFY",
-            "MP3 標籤寫入改變了音訊資料。",
-        ));
+        return Err(error);
     }
-    // 拿掉整個 ID3v2 時封面跟著消失，不比對。其餘寫入（含移除 ID3v1／APEv2）要留下原本的 APIC。
-    if !remove_v2 && picture_count(&temporary)? != file.original_picture_count {
-        let _ = fs::remove_file(&temporary);
-        return Err(CoreError::new(
-            "AUDIO_PICTURE",
-            "標籤寫入造成封面圖片數量改變。",
-        ));
-    }
-    commit_temporary(&file.path, &temporary)
+    finish_temporary(&file.path, &temporary)
 }
 
 fn apply_taglib(file: &PreparedAudio) -> Result<(), CoreError> {
@@ -1117,7 +1124,7 @@ fn apply_taglib(file: &PreparedAudio) -> Result<(), CoreError> {
         let _ = fs::remove_file(&temporary);
         return Err(error);
     }
-    commit_temporary(&file.path, &temporary)
+    finish_temporary(&file.path, &temporary)
 }
 
 fn push_standard_fields(fields: &mut Vec<AudioTagField>, container: AudioContainer, tag: &Tag) {
@@ -2358,7 +2365,27 @@ fn read_tagged(path: &Path) -> Result<TaggedFile, CoreError> {
         .map_err(|error| CoreError::new("AUDIO_INVALID", format!("音訊檔案無法解析。{error}")))
 }
 
+fn finish_temporary(path: &Path, temporary: &Path) -> Result<(), CoreError> {
+    if let Err(error) = commit_temporary(path, temporary) {
+        let _ = fs::remove_file(temporary);
+        return Err(error);
+    }
+    Ok(())
+}
+
 fn commit_temporary(path: &Path, temporary: &Path) -> Result<(), CoreError> {
+    // 先把暫存內容與目錄項刷上磁碟，再改名，避免當機後只看到空檔或舊目錄項。
+    {
+        let file = fs::File::open(temporary)?;
+        file.sync_all()?;
+    }
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        let directory = fs::File::open(parent)?;
+        directory.sync_all()?;
+    }
     let backup = path.with_file_name(format!(
         ".convertzz-audio-backup-{}{}",
         Uuid::new_v4(),

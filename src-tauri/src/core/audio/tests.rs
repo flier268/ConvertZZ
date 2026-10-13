@@ -3659,3 +3659,36 @@ async fn removing_id3v2_reports_failure_when_another_container_remains() {
     }
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+/// 第二個 ID3v2 若剛好結束在 APEv2 起點，檔尾掃描只認「標籤結束於檔尾」會放行。
+/// 與 APEv2 之間有間隔時，音訊裡的 ID3 字樣不能算殘留。
+#[test]
+fn id3v2_flush_before_ape_is_leftover_after_removal_check() {
+    let audio = mpeg_frame();
+    let extra = id3v2_blob("夾在中間");
+    let with_v1 = |body: Vec<u8>| {
+        append_id3v1(
+            &body,
+            &HashMap::from([("title", "v1".to_string())]),
+            255,
+            TextEncoding::Utf8,
+        )
+        .unwrap()
+    };
+    for has_header in [true, false] {
+        let ape = ape_tag_bytes(has_header);
+        let flush = with_v1([audio.clone(), extra.clone(), ape.clone()].concat());
+        assert_eq!(
+            leftover_id3_family(&flush),
+            Some("檔尾仍有 ID3v2"),
+            "header={has_header} 緊貼 APEv2 的 ID3v2 仍通過核對"
+        );
+        let gapped = with_v1([audio.clone(), extra.clone(), b"GAP!".to_vec(), ape].concat());
+        assert_eq!(
+            leftover_id3_family(&gapped),
+            None,
+            "header={has_header} 與 APEv2 有間隔卻判成殘留：{:?}",
+            leftover_id3_family(&gapped)
+        );
+    }
+}

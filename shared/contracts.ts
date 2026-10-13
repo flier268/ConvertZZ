@@ -169,6 +169,12 @@ export interface AudioScanRequest {
   id3v2RepairSourceEncoding?: boolean;
 }
 
+/** 只重掃一個檔案。有 `planId` 時會換掉該計畫裡同一個路徑的寫入項目。 */
+export interface AudioRescanFileRequest extends AudioTagPlanRequest {
+  path: string;
+  planId?: string;
+}
+
 export interface AudioTagPlanRequest extends AudioScanRequest {
   selectedPaths: string[];
   selectedFields: Record<string, string[]>;
@@ -370,6 +376,7 @@ export type CoreOperation =
   | "files.cancel"
   | "audio.scan"
   | "audio.plan"
+  | "audio.rescanFile"
   | "audio.apply"
   | "audio.cancel"
   | "dictionary.read"

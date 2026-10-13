@@ -171,6 +171,15 @@ pub async fn dispatch(
                     .await?,
             )
         }
+        "audio.rescanFile" => {
+            let request = serde_json::from_value(payload)?;
+            to_value(
+                state
+                    .audio
+                    .rescan_file(&state.conversion, request, progress)
+                    .await?,
+            )
+        }
         "audio.apply" => {
             let plan_id = required_string(&payload, "planId")?;
             let only_paths = payload.get("paths").and_then(Value::as_array).map(|items| {

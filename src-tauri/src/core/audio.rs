@@ -131,50 +131,11 @@ impl AudioService {
                 });
                 continue;
             }
-            let selected = request
-                .selected_fields
-                .get(&file.path)
-                .cloned()
-                .unwrap_or_default()
-                .into_iter()
-                .collect::<HashSet<_>>();
-            let mut updates = HashMap::new();
-            let mut containers = HashSet::new();
-            for field in &mut file.fields {
-                let identifier = field_id(field.container, &field.key);
-                field.selected =
-                    selected.contains(&identifier) && container_enabled(&request, field.container);
-                if !field.selected {
-                    continue;
-                }
-                let mut converted_values = Vec::new();
-                for value in &field.values {
-                    let result = conversion
-                        .convert(
-                            conversion_for_container(&request, field.container).with_text(value),
-                        )
-                        .await?;
-                    converted_values.push(result.text);
-                    warnings.extend(result.warnings);
-                }
-                field.converted_values = Some(converted_values.clone());
-                if converted_values != field.values {
-                    updates.insert(identifier, converted_values);
-                    containers.insert(field.container);
-                }
+            if let Some(item) =
+                convert_selected_fields(conversion, &request, file, &mut warnings).await?
+            {
+                prepared.push(item);
             }
-            prepared.push(PreparedAudio {
-                path: PathBuf::from(&file.path),
-                format: file.format,
-                updates,
-                selected_containers: containers,
-                request: request.clone(),
-                original_picture_count: if file.has_cover_art {
-                    picture_count(&file.path)?
-                } else {
-                    0
-                },
-            });
             progress(super::types::ProgressEvent {
                 current: (index + 1) as u64,
                 total,
@@ -202,6 +163,71 @@ impl AudioService {
             );
         }
         Ok(public)
+    }
+
+    /// 只重掃一個路徑。有 `plan_id` 時用目前選項重算該檔，並換掉計畫裡同一個路徑的寫入項目。
+    pub async fn rescan_file(
+        &self,
+        conversion: &ConversionService,
+        mut request: super::types::AudioRescanFileRequest,
+        progress: ProgressReporter,
+    ) -> Result<AudioTagFile, CoreError> {
+        let target = request.path.clone();
+        request.plan.paths = vec![target.clone()];
+        request.plan.recursive = Some(false);
+        request.plan.selected_paths = vec![target.clone()];
+        let mut scanned = self
+            .scan(conversion, request.plan.scan_request(), progress)
+            .await?;
+        let Some(mut file) = scanned.pop() else {
+            return Err(CoreError::new("AUDIO_NOT_FOUND", "找不到這個音訊檔案。"));
+        };
+        let Some(plan_id) = request.plan_id.clone() else {
+            return Ok(file);
+        };
+        if file.warning.is_some() {
+            self.upsert_prepared(&plan_id, &file.path, None)?;
+            return Ok(file);
+        }
+        file.selected = true;
+        let field_ids = file
+            .fields
+            .iter()
+            .filter(|field| field.selected)
+            .map(|field| field_id(field.container, &field.key))
+            .collect::<Vec<_>>();
+        request
+            .plan
+            .selected_fields
+            .insert(file.path.clone(), field_ids);
+        let mut warnings = Vec::new();
+        let prepared =
+            convert_selected_fields(conversion, &request.plan, &mut file, &mut warnings).await?;
+        self.upsert_prepared(&plan_id, &file.path, prepared)?;
+        Ok(file)
+    }
+
+    fn upsert_prepared(
+        &self,
+        plan_id: &str,
+        path: &str,
+        prepared: Option<PreparedAudio>,
+    ) -> Result<(), CoreError> {
+        let mut plans = self
+            .plans
+            .lock()
+            .map_err(|_| CoreError::new("PLAN_LOCK", "無法更新音訊計畫。"))?;
+        let stored = plans
+            .get_mut(plan_id)
+            .ok_or_else(|| CoreError::new("PLAN_NOT_FOUND", "音訊標籤計畫已失效。請重新預覽。"))?;
+        let resolved = resolve_path(path);
+        stored
+            .files
+            .retain(|item| resolve_path(item.path.to_string_lossy().as_ref()) != resolved);
+        if let Some(item) = prepared {
+            stored.files.push(item);
+        }
+        Ok(())
     }
 
     pub async fn apply(
@@ -722,6 +748,59 @@ const COMMON_ID3V2_FRAMES: &[&str] = &[
     "TT2", "TIT2", "TP1", "TPE1", "TAL", "TALB", "TYE", "TYER", "TDRC", "TRK", "TRCK", "TCO",
     "TCON",
 ];
+
+async fn convert_selected_fields(
+    conversion: &ConversionService,
+    request: &AudioTagPlanRequest,
+    file: &mut AudioTagFile,
+    warnings: &mut Vec<String>,
+) -> Result<Option<PreparedAudio>, CoreError> {
+    let selected = request
+        .selected_fields
+        .get(&file.path)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .collect::<HashSet<_>>();
+    let mut updates = HashMap::new();
+    let mut containers = HashSet::new();
+    for field in &mut file.fields {
+        let identifier = field_id(field.container, &field.key);
+        field.selected =
+            selected.contains(&identifier) && container_enabled(request, field.container);
+        if !field.selected {
+            continue;
+        }
+        let mut converted_values = Vec::new();
+        for value in &field.values {
+            let result = conversion
+                .convert(conversion_for_container(request, field.container).with_text(value))
+                .await?;
+            converted_values.push(result.text);
+            warnings.extend(result.warnings);
+        }
+        field.converted_values = Some(converted_values.clone());
+        if converted_values != field.values {
+            updates.insert(identifier, converted_values);
+            containers.insert(field.container);
+        }
+    }
+    if updates.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(PreparedAudio {
+        path: PathBuf::from(&file.path),
+        format: file.format,
+        updates,
+        selected_containers: containers,
+        request: request.clone(),
+        original_picture_count: if file.has_cover_art {
+            picture_count(&file.path)?
+        } else {
+            0
+        },
+    }))
+}
 
 fn container_enabled(request: &AudioTagPlanRequest, container: AudioContainer) -> bool {
     match container {

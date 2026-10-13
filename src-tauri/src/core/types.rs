@@ -383,6 +383,16 @@ pub struct AudioTagPlanRequest {
     pub id3v2_encoding: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioRescanFileRequest {
+    pub path: String,
+    #[serde(default)]
+    pub plan_id: Option<String>,
+    #[serde(flatten)]
+    pub plan: AudioTagPlanRequest,
+}
+
 impl AudioTagPlanRequest {
     pub fn scan_request(&self) -> AudioScanRequest {
         AudioScanRequest {

@@ -1,8 +1,8 @@
 use super::super::conversion::shared_conversion;
 use super::super::encoding::encode_text;
 use super::super::types::{
-    AudioContainer, AudioFormat, AudioTagField, AudioTagFile, ConflictPolicy, ConversionOptions,
-    Direction, EngineKind,
+    AudioContainer, AudioFormat, AudioRescanFileRequest, AudioTagField, AudioTagFile,
+    ConflictPolicy, ConversionOptions, Direction, EngineKind,
 };
 use super::*;
 use id3::{TagLike, Version};
@@ -1227,6 +1227,108 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
     assert_eq!(summary.unchanged, 1);
     assert_eq!(summary.errors, 1);
     assert_eq!(summary.selected_fields, 2);
+}
+
+#[tokio::test]
+async fn rescan_file_replaces_one_plan_entry() {
+    let directory = temp_dir();
+    let good = directory.join("good.mp3");
+    let broken = directory.join("broken.mp3");
+    write_tagged_mp3(&good, "里面", "里面", false);
+    std::fs::write(&broken, b"not-an-audio-file").unwrap();
+    let mut blocked = std::fs::metadata(&broken).unwrap().permissions();
+    blocked.set_readonly(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        blocked.set_mode(0);
+    }
+    std::fs::set_permissions(&broken, blocked).unwrap();
+    let service = AudioService::new();
+    let mut request = base_plan(&[good.clone(), broken.clone()]);
+    request.selected_fields = HashMap::from([(
+        good.to_string_lossy().into_owned(),
+        vec!["id3v2:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request.clone(), noop())
+        .await
+        .unwrap();
+    assert_eq!(plan.summary.errors, 1);
+    let broken_path = broken.to_string_lossy().into_owned();
+    assert!(plan
+        .files
+        .iter()
+        .any(|file| file.path == broken_path && file.warning.is_some()));
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut readable = std::fs::metadata(&broken).unwrap().permissions();
+        readable.set_mode(0o644);
+        std::fs::set_permissions(&broken, readable).unwrap();
+    }
+    write_tagged_mp3(&broken, "后来", "后来", false);
+    let updated = service
+        .rescan_file(
+            shared_conversion(),
+            AudioRescanFileRequest {
+                path: broken_path.clone(),
+                plan_id: Some(plan.plan_id.clone()),
+                plan: request,
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert!(updated.warning.is_none(), "{updated:?}");
+    assert_eq!(updated.path, broken_path);
+    let title = updated
+        .fields
+        .iter()
+        .find(|field| field.container == AudioContainer::Id3v2 && field.key == "title")
+        .expect("title");
+    assert_eq!(
+        title.converted_values.as_deref(),
+        Some(["後來".to_string()].as_slice())
+    );
+
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert!(
+        result
+            .succeeded
+            .iter()
+            .any(|path| path == &broken_path || path.ends_with("broken.mp3")),
+        "{result:?}"
+    );
+    let reread = service
+        .scan(
+            shared_conversion(),
+            super::super::types::AudioScanRequest {
+                paths: vec![broken_path.clone()],
+                recursive: Some(false),
+                id3v1_source_encoding: Some(TextEncoding::Utf8),
+                id3v2_source_encoding: Some(TextEncoding::Utf8),
+                id3v2_repair_source_encoding: Some(false),
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    let written = reread
+        .iter()
+        .find_map(|file| {
+            file.fields
+                .iter()
+                .find(|field| field.container == AudioContainer::Id3v2 && field.key == "title")
+        })
+        .expect("written title");
+    assert_eq!(written.values, vec!["後來".to_string()]);
+    let _ = std::fs::remove_dir_all(&directory);
 }
 
 #[tokio::test]

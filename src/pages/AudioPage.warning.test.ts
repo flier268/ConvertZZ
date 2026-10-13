@@ -94,4 +94,88 @@ describe("音訊錯誤檔畫面", () => {
     expect(segment.classes()).toContain("is-alert");
     expect(segment.text()).toContain("錯誤 1");
   });
+
+  it("錯誤篩選裡重掃成功後改到新分桶並維持選取", async () => {
+    const wrapper = await openWarning("無法讀取標籤");
+    coreRequest.mockResolvedValueOnce([
+      {
+        path: "/tmp/broken.mp3",
+        format: "mp3",
+        selected: true,
+        previewed: true,
+        hasCoverArt: false,
+        fields: [
+          {
+            key: "title",
+            label: "標題",
+            container: "id3v2",
+            values: ["夜曲"],
+            convertedValues: ["夜曲繁"],
+            selected: true,
+          },
+        ],
+      },
+    ]);
+    await wrapper.get(".audio-rescan").trigger("click");
+    await flushPromises();
+    const changed = wrapper
+      .findAll(".el-radio-button")
+      .find((button) => button.text().includes("有變更"));
+    expect(changed!.classes()).toContain("is-active");
+    expect(wrapper.get(".audio-detail").text()).toContain("夜曲");
+    expect(wrapper.get(".audio-detail").text()).not.toContain("不能勾選");
+    expect(wrapper.get(".audio-detail").text()).toContain("/tmp/broken.mp3");
+  });
+
+  it("列核取方塊不是上下鍵的攔截目標", async () => {
+    openDialog.mockResolvedValueOnce(["/tmp/a.mp3", "/tmp/b.mp3"]);
+    coreRequest.mockResolvedValueOnce([
+      {
+        path: "/tmp/a.mp3",
+        format: "mp3",
+        selected: true,
+        hasCoverArt: false,
+        fields: [
+          {
+            key: "title",
+            label: "標題",
+            container: "id3v2",
+            values: ["甲"],
+            selected: true,
+          },
+        ],
+      },
+      {
+        path: "/tmp/b.mp3",
+        format: "mp3",
+        selected: true,
+        hasCoverArt: false,
+        fields: [
+          {
+            key: "title",
+            label: "標題",
+            container: "id3v2",
+            values: ["乙"],
+            selected: true,
+          },
+        ],
+      },
+    ]);
+    const wrapper = mount(AudioPage, {
+      global: { plugins: [ElementPlus], stubs: { transition: false } },
+    });
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("選取音訊檔案"))!
+      .trigger("click");
+    await flushPromises();
+    const box = wrapper.get(".audio-row input");
+    expect(box.attributes("tabindex")).toBe("-1");
+    await box.trigger("keydown", { key: "ArrowDown" });
+    expect(wrapper.get(".audio-row.active .audio-name").text()).toContain("b.mp3");
+    const hide = wrapper.get(".audio-hide-unchanged");
+    expect(hide.attributes("aria-pressed")).toBe("true");
+    expect(hide.element.tagName).toBe("BUTTON");
+  });
 });

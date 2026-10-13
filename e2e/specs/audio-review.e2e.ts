@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
-import { openApp, openPage } from "../helpers";
+import { openApp, openPage, scrollAudioRow } from "../helpers";
 
 const shots = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "e2e-screenshots");
 
@@ -82,11 +82,17 @@ test.describe("音訊標籤審閱", () => {
     await page.keyboard.press("Escape");
 
     await segment(page, "全部 250").click();
+    await scrollAudioRow(page, "same.ogg");
     await expect(page.locator(".audio-name", { hasText: "same.ogg" })).toBeVisible();
     await page.screenshot({ path: join(shots, "audio-all-filter.png") });
 
     await segment(page, "有變更 233").click();
+    await scrollAudioRow(page, "song.mp3");
     await page.locator(".audio-name", { hasText: "song.mp3" }).click();
+    await expect(page.getByRole("button", { name: "隱藏不變欄位" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     await expect(page.locator(".audio-detail")).toContainText("3 個變更");
     await expect(page.locator(".audio-detail .diff-ins").first()).toBeVisible();
     await page.screenshot({ path: join(shots, "audio-list-detail.png") });
@@ -97,27 +103,32 @@ test.describe("音訊標籤審閱", () => {
     await page.screenshot({ path: join(shots, "audio-shortcuts-tooltip.png") });
 
     await segment(page, "全部 250").click();
-    await expect(page.locator(".audio-folder", { hasText: "/music/專輯甲" })).toBeVisible();
-    await expect(page.locator(".audio-folder", { hasText: "/music/專輯乙" })).toBeVisible();
-    await expect(page.locator(".audio-folder", { hasText: "/music/現場" })).toBeVisible();
     const list = page.locator(".audio-file-pane .virtual-list");
+    await expect(page.locator(".audio-folder", { hasText: "/music/合輯" })).toBeVisible();
     await list.evaluate((element) => {
       element.scrollTop = element.scrollHeight;
     });
-    await expect(page.locator(".audio-folder", { hasText: "/music/合輯" })).toBeVisible();
-    await list.evaluate((element) => {
-      element.scrollTop = 0;
-    });
-    const album = page.locator(".audio-folder", { hasText: "/music/專輯甲" });
+    await expect(page.locator(".audio-folder", { hasText: "/music/現場" })).toBeVisible();
+    async function scrollToFolder(name: string) {
+      const row = page.locator(".virtual-list-row .audio-folder", { hasText: name });
+      for (let top = 0; top < 20000; top += 320) {
+        if (await row.count()) return;
+        await list.evaluate((element, value) => {
+          element.scrollTop = value;
+        }, top);
+      }
+    }
+    await scrollToFolder("/music/專輯甲");
+    const album = page.locator(".virtual-list-row .audio-folder", { hasText: "/music/專輯甲" });
     await expect(album).toContainText("1 檔");
-    await album.click();
+    await album.dispatchEvent("click");
     await expect(page.locator(".audio-name", { hasText: "song.mp3" })).toHaveCount(0);
     await page.screenshot({ path: join(shots, "audio-folder-collapsed.png") });
     await list.focus();
     await page.keyboard.press("ArrowDown");
-    await expect(page.locator(".audio-folder.active")).toContainText("/music/專輯乙");
+    await expect(page.locator(".audio-folder.active")).toContainText("/music/現場");
     await page.keyboard.press("ArrowDown");
-    await expect(page.locator(".audio-row.active .audio-name")).toHaveText("same.ogg");
+    await expect(page.locator(".audio-row.active .audio-name")).toHaveText("broken.mp3");
     await expect(page.locator(".audio-name", { hasText: "song.mp3" })).toHaveCount(0);
     await page.keyboard.press("ArrowUp");
     await page.keyboard.press("ArrowUp");
@@ -143,15 +154,23 @@ test.describe("音訊標籤審閱", () => {
     await expect(page.getByRole("button", { name: "重新掃描這個檔案" })).toHaveClass(/is-loading/);
     await page.evaluate(() => window.__convertzzE2e?.releaseAudioRescan?.());
     await expect(page.getByRole("radio", { name: "錯誤 0" })).toBeVisible();
-    await expect(page.getByRole("radio", { name: "有變更 234" })).toBeVisible();
-    await segment(page, "全部 250").click();
-    await page.locator(".audio-name", { hasText: "broken.mp3" }).click();
+    await expect(page.getByRole("radio", { name: "有變更 234" })).toBeChecked();
     await expect(page.locator(".audio-detail")).toContainText("夜曲繁");
     await expect(page.locator(".audio-detail")).not.toContainText("不能勾選");
     await page.screenshot({ path: join(shots, "audio-after-rescan.png") });
+    await segment(page, "全部 250").click();
 
     await page.getByRole("button", { name: "全不選" }).click();
-    await album.click();
+    await scrollToFolder("/music/專輯甲");
+    const folderCheck = page.locator(".virtual-list-row [aria-label='選取資料夾 /music/專輯甲']");
+    await folderCheck.evaluate((element) => {
+      const input = element as HTMLInputElement;
+      input.checked = true;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await expect(page.getByRole("button", { name: "確認寫入 1 個檔案" })).toBeEnabled();
+    await page.screenshot({ path: join(shots, "audio-folder-selectall.png") });
+    await album.dispatchEvent("click");
     await expect(page.locator(".audio-name", { hasText: "song.mp3" })).toHaveCount(0);
     await page.getByRole("button", { name: "全選" }).click();
     await expect(page.getByRole("button", { name: "確認寫入 234 個檔案" })).toBeEnabled();
@@ -173,10 +192,12 @@ test.describe("音訊標籤審閱", () => {
     await page.getByRole("button", { name: "建立標籤預覽" }).click();
     await expect(page.getByRole("button", { name: "確認寫入 233 個檔案" })).toBeEnabled();
 
+    await scrollAudioRow(page, "song.mp3");
     const song = page.locator(".audio-row", { hasText: "song.mp3" });
     await song.locator(".el-checkbox").click();
     await expect(page.getByRole("button", { name: "確認寫入 232 個檔案" })).toBeEnabled();
 
+    await scrollAudioRow(page, "track-001.mp3");
     await page.locator(".audio-name", { hasText: "track-001.mp3" }).click();
     const album = page.locator(".audio-detail .el-table__row", { hasText: "專輯" });
     await album.locator(".el-checkbox").click();
@@ -226,7 +247,7 @@ test.describe("音訊標籤審閱", () => {
     await segment(page, "全部 250").click();
     await page.locator(".audio-sort").click();
     await page.getByRole("option", { name: "變更數" }).click();
-    await expect(page.locator(".audio-folder").first()).toContainText("/music/專輯甲");
+    await expect(page.locator(".audio-folder").first()).toContainText("/music/合輯");
     await page.screenshot({ path: join(shots, "audio-sorted.png") });
   });
 });

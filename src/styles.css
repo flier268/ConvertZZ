@@ -536,8 +536,14 @@ html.floating-window * {
 .audio-same {
   color: #667b78;
 }
-.virtual-list {
+.virtual-list-frame {
   height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.virtual-list {
+  flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
 }
@@ -550,9 +556,26 @@ html.floating-window * {
   width: 100%;
 }
 .virtual-list-sticky {
-  position: sticky;
-  top: 0;
+  position: relative;
+  flex: 0 0 auto;
   z-index: 2;
+}
+.audio-folder-check {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.audio-hide-unchanged {
+  border: 1px solid #b7d4ce;
+  background: #fff;
+  color: #0f6f65;
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+.audio-hide-unchanged[aria-pressed="true"] {
+  background: #e7f6f3;
+  border-color: #0f8f82;
 }
 .virtual-list-row {
   position: absolute;

@@ -63,5 +63,9 @@ describe("VirtualList", () => {
     host.scrollTop = 80;
     await wrapper.get(".virtual-list").trigger("scroll");
     expect(wrapper.get(".virtual-list-sticky").text()).toBe("黏住0");
+    const sticky = wrapper.get(".virtual-list-sticky").element;
+    expect(sticky.parentElement?.classList.contains("virtual-list-frame")).toBe(true);
+    expect(wrapper.get(".virtual-list").element.contains(sticky)).toBe(false);
+    expect(sticky.getAttribute("style") ?? "").not.toContain("margin-bottom");
   });
 });

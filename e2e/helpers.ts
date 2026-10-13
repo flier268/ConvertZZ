@@ -24,6 +24,21 @@ const navLabels: Record<string, string> = {
   "#nav-about": "關於與差異",
 };
 
+/** 虛擬清單只掛載可視列。依 zh-Hant 排序後，目標可能在第一屏之外。 */
+export async function scrollAudioRow(page: Page, name: string): Promise<void> {
+  const list = page.locator(".audio-file-pane .virtual-list");
+  const row = page.locator(".audio-name", { hasText: name });
+  for (let top = 0; top <= 24000; top += 360) {
+    if (await row.count()) {
+      await row.first().scrollIntoViewIfNeeded();
+      return;
+    }
+    await list.evaluate((element, value) => {
+      element.scrollTop = value;
+    }, top);
+  }
+}
+
 export async function openPage(page: Page, id: string, heading: string): Promise<void> {
   const label = navLabels[id];
   if (label) await page.getByRole("menuitem", { name: label }).click();

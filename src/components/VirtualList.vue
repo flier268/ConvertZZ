@@ -86,38 +86,46 @@ onBeforeUnmount(() => observer?.disconnect());
 function scrollToIndex(index: number) {
   const host = root.value;
   if (!host) return;
-  const top = index * props.itemHeight;
+  const top = Math.max(0, index) * props.itemHeight;
   const view = host.clientHeight || props.viewportHeight || 0;
-  if (top < host.scrollTop) host.scrollTop = top;
+  if (view <= 0) {
+    if (host.scrollTop !== top) host.scrollTop = top;
+  } else if (top < host.scrollTop) host.scrollTop = top;
   else if (top + props.itemHeight > host.scrollTop + view) {
     host.scrollTop = top + props.itemHeight - view;
   }
   applyClampedScroll(host.scrollTop);
 }
 
-defineExpose({ scrollToIndex, start, end });
+function focusList() {
+  root.value?.focus();
+}
+
+defineExpose({ scrollToIndex, focusList, start, end });
 </script>
 
 <template>
-  <div ref="root" class="virtual-list" @scroll="onScroll">
+  <div class="virtual-list-frame">
     <div
       v-if="stickyIndex != null"
       class="virtual-list-sticky"
-      :style="{ height: `${itemHeight}px`, marginBottom: `-${itemHeight}px` }"
+      :style="{ height: `${itemHeight}px` }"
     >
       <slot name="sticky" :index="stickyIndex" />
     </div>
-    <div class="virtual-list-spacer" :style="{ height: `${count * itemHeight}px` }">
-      <div
-        v-for="index in indexes"
-        :key="index"
-        class="virtual-list-row"
-        :style="{
-          transform: `translateY(${index * itemHeight}px)`,
-          height: `${itemHeight}px`,
-        }"
-      >
-        <slot :index="index" />
+    <div ref="root" class="virtual-list" @scroll="onScroll">
+      <div class="virtual-list-spacer" :style="{ height: `${count * itemHeight}px` }">
+        <div
+          v-for="index in indexes"
+          :key="index"
+          class="virtual-list-row"
+          :style="{
+            transform: `translateY(${index * itemHeight}px)`,
+            height: `${itemHeight}px`,
+          }"
+        >
+          <slot :index="index" />
+        </div>
       </div>
     </div>
   </div>

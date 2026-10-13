@@ -12,7 +12,10 @@ import {
   buildAudioListRows,
   buildFieldDiffs,
   charDiff,
+  folderSelectionState,
+  planSelectedFields,
   sortAudioFilesWithinFolders,
+  toggleFolderSelection,
   filterAudioFiles,
   selectionTotals,
   stepAudioRow,
@@ -288,7 +291,18 @@ describe("audioReview", () => {
     expect(audioSegmentCounts([encodingOnly]).changed).toBe(1);
   });
 
-  it("資料夾內排序不打亂資料夾出現順序", () => {
+  it("資料夾依 zh-Hant 排序，檔案仍在原資料夾內", () => {
+    const folders = [
+      file({ path: "/music/張/a.mp3", format: "mp3" }),
+      file({ path: "/music/李/b.mp3", format: "mp3" }),
+    ];
+    expect(sortAudioFilesWithinFolders(folders, "name").map((item) => item.path)).toEqual([
+      "/music/李/b.mp3",
+      "/music/張/a.mp3",
+    ]);
+  });
+
+  it("資料夾內排序不打亂同資料夾的相對規則", () => {
     const files = [
       file({ path: "/music/乙/b.mp3", format: "mp3" }),
       file({ path: "/music/甲/z.ogg", format: "ogg" }),
@@ -411,6 +425,29 @@ describe("audioReview", () => {
     applyBulkSelection(files, filtered, "all");
     expect(files.find((item) => item.path === "/tmp/same.ogg")?.selected).toBe(true);
     expect(files.find((item) => item.path === "/tmp/broken.mp3")?.selected).toBe(false);
+  });
+
+  it("資料夾全選只改該資料夾在目前篩選中的非錯誤檔", () => {
+    const files = sample.map((item) => ({ ...item, selected: false }));
+    const visible = filterAudioFiles(files, "changed", "");
+    expect(folderSelectionState(visible, "/tmp/晨雾")).toBe("none");
+    toggleFolderSelection(files, visible, "/tmp/晨雾");
+    expect(files.find((item) => item.path === "/tmp/晨雾/风.mp3")?.selected).toBe(true);
+    expect(files.find((item) => item.path === "/tmp/same.ogg")?.selected).toBe(false);
+    expect(folderSelectionState(visible, "/tmp/晨雾")).toBe("all");
+    toggleFolderSelection(files, visible, "/tmp/晨雾");
+    expect(folderSelectionState(visible, "/tmp/晨雾")).toBe("none");
+  });
+
+  it("預覽請求只送有勾選欄位的檔案", () => {
+    const files = sample.map((item) => ({
+      ...item,
+      fields: item.fields.map((field) => ({ ...field, selected: false })),
+    }));
+    files[0].fields[0].selected = true;
+    expect(planSelectedFields(files)).toEqual({
+      [files[0].path]: [`${files[0].fields[0].container}:${files[0].fields[0].key}`],
+    });
   });
 
   it("設定摘要含 ID3、錯碼修復與備份", () => {

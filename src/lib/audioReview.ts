@@ -246,25 +246,27 @@ function compareAudioFiles(left: AudioTagFile, right: AudioTagFile, key: AudioSo
     const delta = left.format.localeCompare(right.format);
     if (delta !== 0) return delta;
   }
-  return audioBaseName(left.path).localeCompare(audioBaseName(right.path), "zh-Hant");
+  return folderCollator.compare(audioBaseName(left.path), audioBaseName(right.path));
 }
 
-/** 資料夾順序維持檔案首次出現。只排序資料夾裡的檔案。 */
+const folderCollator = new Intl.Collator("zh-Hant");
+
+/**
+ * 資料夾先依 zh-Hant 排序，再排資料夾裡的檔案。
+ * 掃描結果是路徑位元組順序，分組前要改成筆畫／拼音順序。
+ */
 export function sortAudioFilesWithinFolders(
   files: readonly AudioTagFile[],
   key: AudioSortKey,
 ): AudioTagFile[] {
   const groups = new Map<string, AudioTagFile[]>();
-  const order: string[] = [];
   for (const file of files) {
     const dir = audioParentDir(file.path);
     const list = groups.get(dir);
     if (list) list.push(file);
-    else {
-      order.push(dir);
-      groups.set(dir, [file]);
-    }
+    else groups.set(dir, [file]);
   }
+  const order = [...groups.keys()].sort((left, right) => folderCollator.compare(left, right));
   const sorted: AudioTagFile[] = [];
   for (const dir of order) {
     const group = groups.get(dir) ?? [];
@@ -419,6 +421,50 @@ export function audioWarningDetail(warning: string | undefined): string | undefi
  * 資料夾摺疊只影響畫面列，不影響這份清單：呼叫端要傳入全部篩選檔，
  * 摺疊資料夾裡的檔案才會一起被勾選或取消。
  */
+/** 目前篩選裡、這個資料夾可勾選的檔案。錯誤檔不算。 */
+export function selectableFolderFiles(
+  visible: readonly AudioTagFile[],
+  folder: string,
+): AudioTagFile[] {
+  return visible.filter((file) => !file.warning && audioParentDir(file.path) === folder);
+}
+
+export function folderSelectionState(
+  visible: readonly AudioTagFile[],
+  folder: string,
+): "all" | "none" | "mixed" | "empty" {
+  const group = selectableFolderFiles(visible, folder);
+  if (!group.length) return "empty";
+  const selected = group.filter((file) => file.selected).length;
+  if (selected === 0) return "none";
+  if (selected === group.length) return "all";
+  return "mixed";
+}
+
+/** 與全選相同規則，範圍只限這個資料夾在目前篩選下的非錯誤檔。 */
+export function toggleFolderSelection(
+  files: readonly AudioTagFile[],
+  visible: readonly AudioTagFile[],
+  folder: string,
+): void {
+  const group = selectableFolderFiles(visible, folder);
+  if (!group.length) return;
+  const mode = group.every((file) => file.selected) ? "none" : "all";
+  applyBulkSelection(files, group, mode);
+}
+
+/** `audio.plan` 只帶有勾選欄位的檔案。 */
+export function planSelectedFields(files: readonly AudioTagFile[]): Record<string, string[]> {
+  const selectedFields: Record<string, string[]> = {};
+  for (const file of files) {
+    const ids = file.fields
+      .filter((field) => field.selected)
+      .map((field) => `${field.container}:${field.key}`);
+    if (ids.length) selectedFields[file.path] = ids;
+  }
+  return selectedFields;
+}
+
 export function applyBulkSelection(
   files: readonly AudioTagFile[],
   visible: readonly AudioTagFile[],

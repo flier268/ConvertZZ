@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { emitAppEvent, e2eState, openApp, openPage } from "../helpers";
+import { emitAppEvent, e2eState, openApp, openPage, scrollAudioRow } from "../helpers";
 
 test.describe("ConvertZZ 前端", () => {
   test("啟動後顯示快速轉換並連上轉換核心", async ({ page }) => {
@@ -526,6 +526,7 @@ test.describe("ConvertZZ 前端", () => {
     await page.getByRole("button", { name: "取消計畫" }).click();
     await expect(page.getByRole("button", { name: "確認寫入" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "建立標籤預覽" })).toBeVisible();
+    await scrollAudioRow(page, "song.mp3");
     await expect(page.locator(".audio-name", { hasText: "song.mp3" })).toBeVisible();
   });
 });

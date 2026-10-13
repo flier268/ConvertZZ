@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, nextTick, reactive, ref, watch } from "vue";
 import { open, confirm } from "@tauri-apps/plugin-dialog";
 import { ElMessage } from "element-plus";
 import type {
@@ -30,12 +30,17 @@ import {
   changedFieldCount,
   fieldDiffKey,
   filterAudioFiles,
+  folderSelectionState,
+  planSelectedFields,
+  selectableFolderFiles,
   sortAudioFilesWithinFolders,
   replaceAudioFile,
   selectionTotals,
   stepAudioRow,
   toggleFolderCollapsed,
   audioApplySelection,
+  audioFileBucket,
+  audioPreviewReady,
   settingsSummaryChips,
   fieldAffectsAudio,
   type AudioListFilter,
@@ -68,7 +73,7 @@ const rescanningPath = ref("");
 const collapsedFolders = ref<Set<string>>(new Set());
 const focusKind = ref<"file" | "folder">("file");
 const focusFolder = ref("");
-const listRef = ref<{ scrollToIndex: (index: number) => void } | null>(null);
+const listRef = ref<{ scrollToIndex: (index: number) => void; focusList: () => void } | null>(null);
 const options = reactive({
   direction: "s2t" as Direction,
   engine: "segmented" as EngineKind,
@@ -175,6 +180,10 @@ function folderAt(index: number): Extract<AudioListRow, { type: "folder" }> | un
   return row?.type === "folder" ? row : undefined;
 }
 
+function folderPath(index: number): string {
+  return folderAt(index)?.path ?? "";
+}
+
 function focusIndex(): number {
   if (focusKind.value === "folder") {
     return listRows.value.findIndex(
@@ -185,6 +194,24 @@ function focusIndex(): number {
     (row) => row.type === "file" && row.file.path === selectedPath.value,
   );
 }
+
+watch(
+  () =>
+    [
+      focusKind.value,
+      focusFolder.value,
+      selectedPath.value,
+      sortKey.value,
+      listFilter.value,
+      query.value,
+    ] as const,
+  async () => {
+    await nextTick();
+    const index = focusIndex();
+    if (index >= 0) listRef.value?.scrollToIndex(index);
+  },
+  { flush: "post" },
+);
 
 function focusRow(index: number) {
   const row = listRows.value[index];
@@ -327,14 +354,7 @@ async function scan() {
 
 async function buildPlanRequest(): Promise<AudioTagPlanRequest> {
   const settings = await loadSettings();
-  const selectedFields = Object.fromEntries(
-    files.value.map((file) => [
-      file.path,
-      file.fields
-        .filter((field) => field.selected)
-        .map((field) => `${field.container}:${field.key}`),
-    ]),
-  );
+  const selectedFields = planSelectedFields(files.value);
   const selectedPaths = files.value
     .filter((file) => file.selected && !file.warning)
     .map((file) => file.path);
@@ -511,7 +531,12 @@ async function rescanFile(file: AudioTagFile) {
     if (!updated) return;
     updated = { ...updated, path: file.path, selected: updated.warning ? false : updated.selected };
     adoptRescannedFile(updated);
+    if (listFilter.value === "errors") {
+      const bucket = audioFileBucket(updated, audioPreviewReady(files.value));
+      if (bucket !== "errors") listFilter.value = bucket;
+    }
     selectedPath.value = file.path;
+    focusKind.value = "file";
     if (updated.warning) ElMessage.warning(updated.warning);
     else ElMessage.success(`已重新掃描 ${audioBaseName(file.path)}。`);
   } catch (error) {
@@ -526,9 +551,29 @@ function setFileSelected(file: AudioTagFile, selected: boolean) {
   file.selected = selected;
 }
 
+function returnListFocus() {
+  void nextTick(() => listRef.value?.focusList());
+}
+
 function onRowChecked(row: AudioListRow | undefined, selected: boolean) {
   if (row?.type !== "file") return;
   setFileSelected(row.file, selected);
+  returnListFocus();
+}
+
+function onFolderChecked(path: string, selected: boolean) {
+  const group = selectableFolderFiles(filteredFiles.value, path);
+  if (!group.length || busy.value) return;
+  const mode = selected ? "all" : "none";
+  applyBulkSelection(files.value, group, mode);
+  returnListFocus();
+}
+
+function bindFolderCheck(element: Element | null, path: string) {
+  if (!(element instanceof HTMLInputElement)) return;
+  const state = folderSelectionState(filteredFiles.value, path);
+  element.indeterminate = state === "mixed";
+  element.checked = state === "all";
 }
 
 function selectFile(file: AudioTagFile) {
@@ -566,6 +611,7 @@ function rowActive(index: number): boolean {
 /** 焦點在按鈕、輸入框或其他控制項時，快捷鍵不改清單。 */
 function isInteractiveTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
+  if (target.closest(".audio-file-pane input[type='checkbox']")) return false;
   return Boolean(target.closest("button, input, textarea, select, a, [contenteditable='true']"));
 }
 
@@ -711,7 +757,22 @@ watch(
                 v-if="folderAt(index)"
                 class="audio-folder"
                 :aria-expanded="folderAt(index) ? !folderAt(index)!.collapsed : undefined"
+                @click="toggleFolder(folderAt(index)!.path)"
               >
+                <input
+                  type="checkbox"
+                  class="audio-folder-check"
+                  tabindex="-1"
+                  :aria-label="`選取資料夾 ${folderPath(index)}`"
+                  :disabled="
+                    busy || folderSelectionState(filteredFiles, folderPath(index)) === 'empty'
+                  "
+                  :ref="(element) => bindFolderCheck(element as Element | null, folderPath(index))"
+                  @click.stop
+                  @change="
+                    onFolderChecked(folderPath(index), ($event.target as HTMLInputElement).checked)
+                  "
+                />
                 <span class="audio-caret">{{ folderAt(index)!.collapsed ? "▸" : "▾" }}</span>
                 <span class="audio-folder-path">{{ folderAt(index)!.path }}</span>
                 <span class="audio-folder-counts">
@@ -732,6 +793,20 @@ watch(
                 :class="{ active: rowActive(index) }"
                 @click="toggleFolder(listRows[index].path)"
               >
+                <input
+                  type="checkbox"
+                  class="audio-folder-check"
+                  tabindex="-1"
+                  :aria-label="`選取資料夾 ${folderPath(index)}`"
+                  :disabled="
+                    busy || folderSelectionState(filteredFiles, folderPath(index)) === 'empty'
+                  "
+                  :ref="(element) => bindFolderCheck(element as Element | null, folderPath(index))"
+                  @click.stop
+                  @change="
+                    onFolderChecked(folderPath(index), ($event.target as HTMLInputElement).checked)
+                  "
+                />
                 <span class="audio-caret">{{ listRows[index].collapsed ? "▸" : "▾" }}</span>
                 <span class="audio-folder-path">{{ listRows[index].path }}</span>
                 <span class="audio-folder-counts">
@@ -757,6 +832,7 @@ watch(
                     !listRows[index].file.warning && Boolean(listRows[index].file.selected)
                   "
                   :disabled="Boolean(listRows[index].file.warning) || busy"
+                  tabindex="-1"
                   @change="(checked: boolean) => onRowChecked(listRows[index], checked)"
                   @click.stop
                 />
@@ -818,9 +894,14 @@ watch(
               <el-tag type="success" effect="plain"
                 >{{ changedFieldCount(selectedFile) }} 個變更</el-tag
               >
-              <el-check-tag :checked="hideUnchanged" @change="hideUnchanged = !hideUnchanged"
-                >隱藏不變欄位</el-check-tag
+              <button
+                type="button"
+                class="audio-hide-unchanged"
+                :aria-pressed="hideUnchanged"
+                @click="hideUnchanged = !hideUnchanged"
               >
+                隱藏不變欄位
+              </button>
             </div>
             <el-table
               v-if="!selectedFile.warning"

@@ -348,7 +348,7 @@ fn expand_remove(
     if !present.contains(&container) {
         return;
     }
-    let hidden = count_hidden(Path::new(&file.path), container);
+    let hidden = count_hidden(Path::new(&file.path), container, &file.fields);
     let remaining = present
         .iter()
         .filter(|item| touches.get(item) != Some(&Touch::Remove))
@@ -699,45 +699,73 @@ pub(super) fn container_of_lofty(tag_type: lofty::tag::TagType) -> Option<AudioC
 }
 
 /// 給測試與掃描確認用。讀取失敗就當沒有隱藏欄位，不讓預覽整檔失敗。
-pub(super) fn count_hidden(path: &Path, container: AudioContainer) -> usize {
+/// ID3v2 以這次掃描放進 `fields` 的欄位為準：多出來的 COMM、歌詞，
+/// 以及掃描略過的無文字 T* 都算隱藏。
+pub(super) fn count_hidden(
+    path: &Path,
+    container: AudioContainer,
+    fields: &[AudioTagField],
+) -> usize {
     match container {
         AudioContainer::Id3v1 => 0,
-        AudioContainer::Id3v2 => count_hidden_id3v2(path),
+        AudioContainer::Id3v2 => count_hidden_id3v2(path, fields),
         AudioContainer::Apev2 => count_hidden_ape(path),
         AudioContainer::VorbisComment => 0,
     }
 }
 
-fn count_hidden_id3v2(path: &Path) -> usize {
+fn count_hidden_id3v2(path: &Path, fields: &[AudioTagField]) -> usize {
     let Ok(tag) = id3::Tag::read_from_path(path) else {
         return 0;
     };
+    let mut keys: Vec<&str> = fields
+        .iter()
+        .filter(|field| field.container == AudioContainer::Id3v2)
+        .map(|field| field.key.as_str())
+        .collect();
     tag.frames()
-        .filter(|frame| !id3_frame_shown(frame.id()))
+        .filter(|frame| !take_shown_id3_field(frame, &mut keys))
         .count()
 }
 
-fn id3_frame_shown(id: &str) -> bool {
-    matches!(
-        id,
-        "TIT2"
-            | "TPE1"
-            | "TALB"
-            | "TYER"
-            | "TDRC"
-            | "TRCK"
-            | "TCON"
-            | "COMM"
-            | "TPE2"
-            | "TCOM"
-            | "USLT"
-            | "TT2"
-            | "TP1"
-            | "TAL"
-            | "TYE"
-            | "TRK"
-            | "TCO"
-    ) || (id.starts_with('T') && (3..=4).contains(&id.len()))
+/// 這一框若對得上掃描產出的某個欄位，就把那個欄位用掉。
+/// 同名欄位只對一框，所以第二則 COMM 不會再被 `comment` 蓋掉。
+fn take_shown_id3_field(frame: &id3::frame::Frame, keys: &mut Vec<&str>) -> bool {
+    let Some(wanted) = shown_id3_field_key(frame) else {
+        return false;
+    };
+    let Some(index) = keys.iter().position(|key| *key == wanted) else {
+        return false;
+    };
+    keys.remove(index);
+    true
+}
+
+/// 與 `scan_mp3` 相同的對應：標準欄位各收一框；其餘只收有文字的 T*。
+fn shown_id3_field_key(frame: &id3::frame::Frame) -> Option<String> {
+    let standard = match frame.id() {
+        "TIT2" | "TT2" => Some("title"),
+        "TPE1" | "TP1" => Some("artist"),
+        "TALB" | "TAL" => Some("album"),
+        "TYER" | "TDRC" | "TYE" => Some("year"),
+        "TRCK" | "TRK" => Some("track"),
+        "TCON" | "TCO" => Some("genre"),
+        "COMM" => Some("comment"),
+        _ => None,
+    };
+    if let Some(key) = standard {
+        return Some(key.to_string());
+    }
+    let id = frame.id();
+    if id.starts_with('T') && (3..=4).contains(&id.len()) {
+        if let Some(extended) = frame.content().extended_text() {
+            return Some(format!("frame:{id}:{}", extended.description));
+        }
+        if frame.content().text().is_some() {
+            return Some(format!("frame:{id}"));
+        }
+    }
+    None
 }
 
 fn count_hidden_ape(path: &Path) -> usize {

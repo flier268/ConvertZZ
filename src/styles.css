@@ -328,28 +328,41 @@ html.floating-window * {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 .audio-search {
   width: 220px;
+  flex: 0 0 220px;
 }
-.audio-stats {
-  display: flex;
-  gap: 6px;
+.audio-segments {
   margin-left: auto;
+  flex: 0 0 auto;
 }
-.audio-stats button {
-  border: 1px solid #d5e4e1;
-  background: #f3faf8;
-  border-radius: 8px;
-  padding: 4px 8px;
-  color: #17302d;
-  cursor: pointer;
+.audio-segments .el-radio-button.is-alert .el-radio-button__inner {
+  color: #c0392b;
 }
-.audio-stats button.on {
-  border-color: #0f8f82;
-  color: #0f6f65;
-  font-weight: 600;
+.audio-segments .el-radio-button.is-alert.is-active .el-radio-button__inner {
+  background: #c0392b;
+  border-color: #c0392b;
+  color: #fff;
+  box-shadow: -1px 0 0 0 #c0392b;
+}
+.audio-shortcut-tip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.5;
+}
+.audio-error-reason,
+.audio-error-path {
+  margin: 0 0 4px;
+}
+.audio-error-path {
+  word-break: break-all;
+}
+.audio-rescan {
+  margin-top: 10px;
 }
 .audio-review {
   display: flex;

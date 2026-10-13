@@ -5,6 +5,7 @@ import { ElMessage } from "element-plus";
 import type {
   AudioTagField,
   AudioTagFile,
+  AudioRescanFileRequest,
   AudioTagPlan,
   AudioTagPlanRequest,
   Direction,
@@ -18,12 +19,13 @@ import { formatProgressLabel, progressPercentage, type ProgressSnapshot } from "
 import {
   applyBulkSelection,
   audioBaseName,
-  audioReviewStats,
   audioRowSection,
+  audioSegmentCounts,
   buildAudioListRows,
   changedFieldCount,
   charDiff,
   filterAudioFiles,
+  replaceAudioFile,
   selectionTotals,
   stepAudioRow,
   toggleFolderCollapsed,
@@ -53,6 +55,7 @@ const listFilter = ref<AudioListFilter>("changed");
 const query = ref("");
 const hideUnchanged = ref(true);
 const selectedPath = ref("");
+const rescanningPath = ref("");
 const collapsedFolders = ref<Set<string>>(new Set());
 const focusKind = ref<"file" | "folder">("file");
 const focusFolder = ref("");
@@ -108,7 +111,7 @@ const containers = computed(() => ({
   id3v2: options.id3v2Enabled,
 }));
 const totals = computed(() => selectionTotals(files.value, containers.value));
-const stats = computed(() => audioReviewStats(files.value));
+const segments = computed(() => audioSegmentCounts(files.value));
 const filteredFiles = computed(() => filterAudioFiles(files.value, listFilter.value, query.value));
 const listRows = computed(() => buildAudioListRows(filteredFiles.value, collapsedFolders.value));
 const selectedFile = computed(() => files.value.find((file) => file.path === selectedPath.value));
@@ -291,7 +294,8 @@ async function scan() {
   }
 }
 
-async function createPlan() {
+async function buildPlanRequest(): Promise<AudioTagPlanRequest> {
+  const settings = await loadSettings();
   const selectedFields = Object.fromEntries(
     files.value.map((file) => [
       file.path,
@@ -303,49 +307,48 @@ async function createPlan() {
   const selectedPaths = files.value
     .filter((file) => file.selected && !file.warning)
     .map((file) => file.path);
+  return {
+    paths: paths.value,
+    recursive: options.recursive,
+    selectedPaths,
+    selectedFields,
+    conversion: {
+      direction: options.direction,
+      engine: options.engine,
+      vocabularyCorrection: options.vocabularyCorrection,
+      zhconvert: zhConvertOptions(settings, options.direction),
+      dictionaryPath: settings.dictionaryPath,
+    },
+    conflictPolicy: conflictPolicy.value,
+    backup: backup.value,
+    id3v1Enabled: options.id3v1Enabled,
+    id3v1Direction: options.id3v1Direction,
+    id3v1Zhconvert: zhConvertOptions(settings, options.id3v1Direction),
+    id3v1SourceEncoding: options.id3v1SourceEncoding,
+    id3v1OutputEncoding: options.id3v1OutputEncoding,
+    id3v2Enabled: options.id3v2Enabled,
+    id3v2Direction: options.id3v2Direction,
+    id3v2Zhconvert: zhConvertOptions(settings, options.id3v2Direction),
+    id3v2SourceEncoding: options.id3v2SourceEncoding,
+    id3v2RepairSourceEncoding: options.id3v2RepairSourceEncoding,
+    id3v2Version: options.id3v2Version,
+    id3v2Encoding: options.id3v2Encoding,
+  };
+}
+
+async function createPlan() {
   busy.value = true;
   progress.value = undefined;
   progressStartedAt.value = Date.now();
   try {
-    const settings = await loadSettings();
-    plan.value = await core.request<AudioTagPlan>(
-      "audio.plan",
-      {
-        paths: paths.value,
-        recursive: options.recursive,
-        selectedPaths,
-        selectedFields,
-        conversion: {
-          direction: options.direction,
-          engine: options.engine,
-          vocabularyCorrection: options.vocabularyCorrection,
-          zhconvert: zhConvertOptions(settings, options.direction),
-          dictionaryPath: settings.dictionaryPath,
-        },
-        conflictPolicy: conflictPolicy.value,
-        backup: backup.value,
-        id3v1Enabled: options.id3v1Enabled,
-        id3v1Direction: options.id3v1Direction,
-        id3v1Zhconvert: zhConvertOptions(settings, options.id3v1Direction),
-        id3v1SourceEncoding: options.id3v1SourceEncoding,
-        id3v1OutputEncoding: options.id3v1OutputEncoding,
-        id3v2Enabled: options.id3v2Enabled,
-        id3v2Direction: options.id3v2Direction,
-        id3v2Zhconvert: zhConvertOptions(settings, options.id3v2Direction),
-        id3v2SourceEncoding: options.id3v2SourceEncoding,
-        id3v2RepairSourceEncoding: options.id3v2RepairSourceEncoding,
-        id3v2Version: options.id3v2Version,
-        id3v2Encoding: options.id3v2Encoding,
-      } satisfies AudioTagPlanRequest,
-      {
-        onProgress: (value) => {
-          progress.value = value;
-        },
-        onRequestId: (id) => {
-          activeRequestId.value = id;
-        },
+    plan.value = await core.request<AudioTagPlan>("audio.plan", await buildPlanRequest(), {
+      onProgress: (value) => {
+        progress.value = value;
       },
-    );
+      onRequestId: (id) => {
+        activeRequestId.value = id;
+      },
+    });
     files.value = plan.value.files;
     listFilter.value = "changed";
   } catch (error) {
@@ -433,6 +436,50 @@ async function cancelPlan() {
     await core.request("audio.cancel", { planId });
   }
   if (!busy.value) plan.value = undefined;
+}
+
+function adoptRescannedFile(updated: AudioTagFile) {
+  const next = replaceAudioFile(files.value, updated);
+  files.value = next;
+  if (plan.value) plan.value = { ...plan.value, files: next };
+}
+
+async function rescanFile(file: AudioTagFile) {
+  if (rescanningPath.value || busy.value) return;
+  rescanningPath.value = file.path;
+  try {
+    let updated: AudioTagFile;
+    if (plan.value) {
+      const request: AudioRescanFileRequest = {
+        ...(await buildPlanRequest()),
+        path: file.path,
+        planId: plan.value.planId,
+        paths: [file.path],
+        recursive: false,
+        selectedPaths: [file.path],
+      };
+      updated = await core.request<AudioTagFile>("audio.rescanFile", request);
+    } else {
+      const scanned = await core.request<AudioTagFile[]>("audio.scan", {
+        paths: [file.path],
+        recursive: false,
+        id3v1SourceEncoding: options.id3v1SourceEncoding,
+        id3v2SourceEncoding: options.id3v2SourceEncoding,
+        id3v2RepairSourceEncoding: options.id3v2RepairSourceEncoding,
+      });
+      updated = scanned.find((item) => item.path === file.path) ?? scanned[0];
+    }
+    if (!updated) return;
+    updated = { ...updated, path: file.path };
+    adoptRescannedFile(updated);
+    selectedPath.value = file.path;
+    if (updated.warning) ElMessage.warning(updated.warning);
+    else ElMessage.success(`已重新掃描 ${audioBaseName(file.path)}。`);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : String(error));
+  } finally {
+    rescanningPath.value = "";
+  }
 }
 
 function selectFile(file: AudioTagFile) {
@@ -526,41 +573,19 @@ watch(
         placeholder="搜尋檔名、專輯、標題"
         :disabled="!files.length"
       />
-      <el-check-tag :checked="listFilter === 'changed'" @change="listFilter = 'changed'"
-        >只看有變更 {{ stats.listedChanged }}</el-check-tag
+      <el-radio-group
+        v-model="listFilter"
+        class="audio-segments"
+        :disabled="!files.length"
+        aria-label="檔案篩選"
       >
-      <el-check-tag :checked="listFilter === 'errors'" @change="listFilter = 'errors'"
-        >只看錯誤 {{ stats.errors }}</el-check-tag
-      >
-      <el-check-tag :checked="listFilter === 'all'" @change="listFilter = 'all'"
-        >全部 {{ stats.total }}</el-check-tag
-      >
-      <div class="audio-stats">
-        <button type="button" :class="{ on: listFilter === 'all' }" @click="listFilter = 'all'">
-          共 {{ stats.total }}
-        </button>
-        <button
-          type="button"
-          :class="{ on: listFilter === 'changed' }"
-          @click="listFilter = 'changed'"
+        <el-radio-button value="changed">有變更 {{ segments.changed }}</el-radio-button>
+        <el-radio-button value="unchanged">不變 {{ segments.unchanged }}</el-radio-button>
+        <el-radio-button value="errors" :class="{ 'is-alert': segments.errors > 0 }"
+          >錯誤 {{ segments.errors }}</el-radio-button
         >
-          有變更 {{ stats.changed }}
-        </button>
-        <button
-          type="button"
-          :class="{ on: listFilter === 'unchanged' }"
-          @click="listFilter = 'unchanged'"
-        >
-          不變 {{ stats.unchanged }}
-        </button>
-        <button
-          type="button"
-          :class="{ on: listFilter === 'errors' }"
-          @click="listFilter = 'errors'"
-        >
-          錯誤 {{ stats.errors }}
-        </button>
-      </div>
+        <el-radio-button value="all">全部 {{ segments.all }}</el-radio-button>
+      </el-radio-group>
     </div>
 
     <div class="page-fill-main audio-review">
@@ -646,19 +671,33 @@ watch(
                   {{ selectedFile.hasCoverArt ? "含封面" : "無封面" }}
                 </p>
               </div>
-              <span class="audio-keys"
-                ><kbd>↑</kbd><kbd>↓</kbd> 移動 <kbd>Enter</kbd><kbd>←</kbd><kbd>→</kbd> 摺疊資料夾
-                <kbd>空白</kbd> 勾選</span
-              >
+              <el-tooltip placement="bottom-end">
+                <template #content>
+                  <div class="audio-shortcut-tip">
+                    <div>↑/↓ 切換檔案</div>
+                    <div>Enter / ←→ 摺疊或展開資料夾</div>
+                    <div>空白 勾選</div>
+                  </div>
+                </template>
+                <el-button class="audio-help" circle size="small" aria-label="快捷鍵說明"
+                  >?</el-button
+                >
+              </el-tooltip>
             </div>
-            <el-alert
-              v-if="selectedFile.warning"
-              type="error"
-              :title="selectedFile.warning"
-              description="此檔案有錯誤，不能勾選，也不會寫入。"
-              show-icon
-              :closable="false"
-            />
+            <template v-if="selectedFile.warning">
+              <el-alert type="error" title="無法讀取標籤" show-icon :closable="false">
+                <p class="audio-error-reason">{{ selectedFile.warning }}</p>
+                <p class="audio-error-path">{{ selectedFile.path }}</p>
+                <p>這個檔案不能勾選，也不會寫入。修復後可按「重新掃描這個檔案」。</p>
+              </el-alert>
+              <el-button
+                class="audio-rescan"
+                :loading="rescanningPath === selectedFile.path"
+                :disabled="busy"
+                @click="rescanFile(selectedFile)"
+                >重新掃描這個檔案</el-button
+              >
+            </template>
             <div v-else class="audio-detail-tools">
               <el-tag type="success" effect="plain"
                 >{{ changedFieldCount(selectedFile) }} 個變更</el-tag

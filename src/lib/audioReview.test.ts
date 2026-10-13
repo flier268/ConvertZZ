@@ -4,6 +4,8 @@ import {
   applyBulkSelection,
   audioParentDir,
   audioReviewStats,
+  audioSegmentCounts,
+  replaceAudioFile,
   audioRowSection,
   buildAudioListRows,
   charDiff,
@@ -86,6 +88,44 @@ describe("audioReview", () => {
       errors: 1,
       listedChanged: 1,
     });
+  });
+
+  it("同一個篩選值決定區段筆數，搜尋再和它取交集", () => {
+    const counts = audioSegmentCounts(sample);
+    expect(counts).toEqual({ changed: 1, unchanged: 1, errors: 1, all: 3 });
+    for (const filter of ["changed", "unchanged", "errors", "all"] as const) {
+      expect(filterAudioFiles(sample, filter, "")).toHaveLength(counts[filter]);
+    }
+    expect(filterAudioFiles(sample, "changed", "晨霧").map((item) => item.path)).toEqual([
+      "/tmp/晨雾/风.mp3",
+    ]);
+    expect(filterAudioFiles(sample, "unchanged", "晨霧")).toHaveLength(0);
+    expect(filterAudioFiles(sample, "errors", "broken")).toHaveLength(1);
+    expect(filterAudioFiles(sample, "errors", "晨霧")).toHaveLength(0);
+  });
+
+  it("重新掃描用同一個路徑換掉那一筆，區段筆數跟著變", () => {
+    const updated = file({
+      path: "/tmp/broken.mp3",
+      selected: true,
+      fields: [
+        {
+          key: "title",
+          label: "標題",
+          container: "id3v2",
+          values: ["夜曲"],
+          convertedValues: ["夜曲"],
+          selected: true,
+        },
+      ],
+    });
+    const next = replaceAudioFile(sample, updated);
+    expect(next).toHaveLength(3);
+    expect(next[2].warning).toBeUndefined();
+    expect(next[0].path).toBe("/tmp/晨雾/风.mp3");
+    expect(audioSegmentCounts(next)).toEqual({ changed: 1, unchanged: 2, errors: 0, all: 3 });
+    const added = replaceAudioFile(next, file({ path: "/tmp/new.mp3" }));
+    expect(added.map((item) => item.path)).toContain("/tmp/new.mp3");
   });
 
   it("尚未建立預覽時，只看有變更仍列出可審檔案", () => {

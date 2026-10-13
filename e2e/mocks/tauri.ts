@@ -111,6 +111,8 @@ export interface ConvertzzE2eConfig {
   lastOpenedUrl?: string;
   holdFileApply?: boolean;
   releaseFileApply?: () => void;
+  holdAudioRescan?: boolean;
+  releaseAudioRescan?: () => void;
   lastAudioApplyPaths?: string[];
 }
 
@@ -482,6 +484,38 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
         ),
       },
       files,
+    };
+  }
+  if (operation === "audio.rescanFile") {
+    if (e2e().holdAudioRescan) {
+      await new Promise<void>((resolve) => {
+        e2e().releaseAudioRescan = resolve;
+      });
+    }
+    const path = String(payload.path ?? "/music/現場/broken.mp3");
+    return {
+      path,
+      format: "mp3",
+      selected: true,
+      hasCoverArt: false,
+      fields: [
+        {
+          key: "title",
+          label: "標題",
+          container: "id3v2",
+          values: ["夜曲"],
+          convertedValues: ["夜曲繁"],
+          selected: true,
+        },
+        {
+          key: "album",
+          label: "專輯",
+          container: "id3v2",
+          values: ["北窗"],
+          convertedValues: ["北窗"],
+          selected: true,
+        },
+      ],
     };
   }
   if (operation === "audio.apply") {

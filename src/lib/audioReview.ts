@@ -91,6 +91,31 @@ export function audioFileBucket(
   return changedFieldCount(file) > 0 ? "changed" : "unchanged";
 }
 
+/** 區段按鈕的筆數。與 `filterAudioFiles` 使用同一個分桶，搜尋不會改這些數字。 */
+export function audioSegmentCounts(
+  files: readonly AudioTagFile[],
+): Record<AudioListFilter, number> {
+  const ready = audioPreviewReady(files);
+  const counts: Record<AudioListFilter, number> = {
+    changed: 0,
+    unchanged: 0,
+    errors: 0,
+    all: files.length,
+  };
+  for (const file of files) counts[audioFileBucket(file, ready)] += 1;
+  return counts;
+}
+
+/** 用同一個路徑換掉清單裡的一筆。找不到就加在最後。 */
+export function replaceAudioFile(
+  files: readonly AudioTagFile[],
+  updated: AudioTagFile,
+): AudioTagFile[] {
+  const index = files.findIndex((file) => file.path === updated.path);
+  if (index < 0) return [...files, updated];
+  return files.map((file, itemIndex) => (itemIndex === index ? updated : file));
+}
+
 export function audioReviewStats(files: readonly AudioTagFile[]): AudioReviewStats {
   let changed = 0;
   let errors = 0;

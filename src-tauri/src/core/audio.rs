@@ -925,6 +925,11 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
             // 原檔已有 ID3v2 卻解析失敗時，空標籤會整段換掉讀不到的影格。
             // 檔頭沒有 ID3v2（含只有 ID3v1）才允許從空標籤建立。
             let has_id3v2 = id3v2_tag_length(&source) > 0;
+            let version = if file.request.id3v2_version == 4 {
+                id3::Version::Id3v24
+            } else {
+                id3::Version::Id3v23
+            };
             let mut tag = match id3::Tag::read_from_path(&temporary) {
                 Ok(tag) => tag,
                 Err(error) if has_id3v2 => {
@@ -941,13 +946,13 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
                 if container != AudioContainer::Id3v2 {
                     continue;
                 }
-                set_id3v2_value(&mut tag, &key, values.first().cloned().unwrap_or_default());
+                set_id3v2_value_in_version(
+                    &mut tag,
+                    &key,
+                    values.first().cloned().unwrap_or_default(),
+                    version,
+                );
             }
-            let version = if file.request.id3v2_version == 4 {
-                id3::Version::Id3v24
-            } else {
-                id3::Version::Id3v23
-            };
             // 版本不同時 write_to_path 會換標頭。文字編碼已經符合時不要再重寫每一框。
             if file.rewrite_containers.contains(&AudioContainer::Id3v2)
                 && id3v2_text_encodings(&source)
@@ -1190,10 +1195,25 @@ fn push_standard_fields(fields: &mut Vec<AudioTagField>, container: AudioContain
     }
     if let Some(date) = tag.date() {
         fields.push(make_field(container, "year", vec![date.year.to_string()]));
+    } else if let Some(text) = raw_item_text(tag, &[ItemKey::RecordingDate, ItemKey::Year]) {
+        fields.push(make_field(container, "year", vec![text]));
     }
     if let Some(value) = tag.track() {
         fields.push(make_field(container, "track", vec![value.to_string()]));
+    } else if let Some(text) = raw_item_text(tag, &[ItemKey::TrackNumber]) {
+        fields.push(make_field(container, "track", vec![text]));
     }
+}
+
+fn raw_item_text(tag: &Tag, keys: &[ItemKey]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        let text = tag.get_string(*key)?;
+        if text.trim().is_empty() {
+            None
+        } else {
+            Some(text.to_string())
+        }
+    })
 }
 
 fn custom_item_key(key: ItemKey) -> Option<&'static str> {
@@ -1228,6 +1248,10 @@ fn set_lofty_values(tag: &mut Tag, key: &str, values: &[String]) {
                         year,
                         ..Timestamp::default()
                     });
+                } else {
+                    // 解析失敗仍寫原文字。Year 與 RecordingDate 都代表年份，留下舊數字會蓋過新文字。
+                    tag.remove_key(ItemKey::Year);
+                    tag.insert_text(ItemKey::RecordingDate, value.clone());
                 }
             }
         }
@@ -1235,6 +1259,8 @@ fn set_lofty_values(tag: &mut Tag, key: &str, values: &[String]) {
             if let Some(value) = values.first() {
                 if let Ok(track) = value.parse() {
                     tag.set_track(track);
+                } else {
+                    tag.insert_text(ItemKey::TrackNumber, value.clone());
                 }
             }
         }
@@ -1275,7 +1301,12 @@ fn id3v2_standard(tag: &id3::Tag, key: &str) -> Option<String> {
     }
 }
 
+#[cfg(test)]
 fn set_id3v2_value(tag: &mut id3::Tag, key: &str, value: String) {
+    set_id3v2_value_in_version(tag, key, value, tag.version());
+}
+
+fn set_id3v2_value_in_version(tag: &mut id3::Tag, key: &str, value: String, version: id3::Version) {
     use id3::TagLike;
     match key {
         "title" => tag.set_title(value),
@@ -1285,8 +1316,15 @@ fn set_id3v2_value(tag: &mut id3::Tag, key: &str, value: String) {
             if let Ok(year) = value.parse() {
                 tag.set_year(year);
             } else {
-                // 預覽已顯示這段文字。解析失敗時寫原 TYER，不要留下舊年份。
-                tag.set_text("TYER", value);
+                // v2.4 寫 TDRC，其餘版本寫 TYER。另一個框要拿掉，避免舊年份殘留。
+                let frame_id = if version == id3::Version::Id3v24 {
+                    "TDRC"
+                } else {
+                    "TYER"
+                };
+                tag.remove("TYER");
+                tag.remove("TDRC");
+                tag.set_text(frame_id, value);
             }
         }
         "track" => {

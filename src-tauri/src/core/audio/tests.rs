@@ -2185,7 +2185,8 @@ fn non_numeric_id3v2_year_and_track_are_stored_as_text_frames() {
     tag.set_track(3);
     set_id3v2_value(&mut tag, "year", "录制年".into());
     set_id3v2_value(&mut tag, "track", "第一辑".into());
-    assert_eq!(id3_text(&tag, "TYER").as_deref(), Some("录制年"));
+    assert_eq!(id3_text(&tag, "TDRC").as_deref(), Some("录制年"));
+    assert!(tag.get("TYER").is_none());
     assert_eq!(id3_text(&tag, "TRCK").as_deref(), Some("第一辑"));
     assert_eq!(id3v2_standard(&tag, "year").as_deref(), Some("录制年"));
     assert_eq!(id3v2_standard(&tag, "track").as_deref(), Some("第一辑"));

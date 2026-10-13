@@ -16,6 +16,7 @@ use lofty::tag::items::Timestamp;
 use lofty::tag::{Accessor, ItemKey, ItemValue, Tag, TagItem};
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
@@ -608,8 +609,36 @@ fn frame_carries_text(frame: &id3::frame::Frame) -> bool {
     id.starts_with('T') || matches!(id, "COMM" | "USLT" | "SYLT" | "USER" | "WXXX")
 }
 
-/// 只改文字框的編碼。封面與其他框保持原樣，避免整份標籤重編碼。
-fn apply_id3v2_encoding(tag: &mut id3::Tag, encoding: &str) {
+fn id3_frame_selected(frame_id: &str, keys: &HashSet<String>) -> bool {
+    keys.iter().any(|key| match key.as_str() {
+        "title" => frame_id == "TIT2",
+        "artist" => frame_id == "TPE1",
+        "album" => frame_id == "TALB",
+        "year" => matches!(frame_id, "TYER" | "TDRC"),
+        "track" => frame_id == "TRCK",
+        "genre" => frame_id == "TCON",
+        "comment" => frame_id == "COMM",
+        "albumArtist" => frame_id == "TPE2",
+        "composer" => frame_id == "TCOM",
+        "lyrics" => frame_id == "USLT",
+        other => other
+            .strip_prefix("frame:")
+            .is_some_and(|id| id == frame_id),
+    })
+}
+
+fn selected_id3v2_keys(file: &PreparedAudio) -> HashSet<String> {
+    fields_for_path(&file.request.selected_fields, &file.path)
+        .into_iter()
+        .filter_map(|identifier| {
+            let (container, key) = split_field_id(&identifier);
+            (container == AudioContainer::Id3v2).then_some(key)
+        })
+        .collect()
+}
+
+/// 只改已勾選文字框的編碼。未勾選的文字框與封面保持原編碼。
+fn apply_id3v2_encoding(tag: &mut id3::Tag, encoding: &str, keys: &HashSet<String>) {
     use id3::{frame::Frame, Encoding, TagLike};
     let encoding = match encoding {
         "utf16" | "utf-16" => Encoding::UTF16,
@@ -621,7 +650,7 @@ fn apply_id3v2_encoding(tag: &mut id3::Tag, encoding: &str) {
         .frames()
         .cloned()
         .map(|frame| {
-            if frame_carries_text(&frame) {
+            if frame_carries_text(&frame) && id3_frame_selected(frame.id(), keys) {
                 frame.set_encoding(Some(encoding))
             } else {
                 frame
@@ -669,7 +698,11 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
                 .into_iter()
                 .any(|encoding| encoding != id3_encoding_byte(&file.request.id3v2_encoding))
         {
-            apply_id3v2_encoding(&mut tag, &file.request.id3v2_encoding);
+            apply_id3v2_encoding(
+                &mut tag,
+                &file.request.id3v2_encoding,
+                &selected_id3v2_keys(file),
+            );
         }
         tag.write_to_path(&temporary, version)
             .map_err(|error| CoreError::new("ID3_WRITE", error.to_string()))?;
@@ -1193,57 +1226,290 @@ fn id3_encoding_byte(encoding: &str) -> u8 {
 }
 
 /// 已選的 ID3v2 標頭版本或文字框編碼與要求不同。
+/// 壓縮、實驗性或長度不完整的標籤回傳 false，避免依錯誤偏移重寫。
 fn id3v2_needs_rewrite(path: &Path, request: &AudioTagPlanRequest) -> bool {
-    let Ok(buffer) = fs::read(path) else {
-        return false;
+    let buffer = match read_id3v2_declared_tag(path) {
+        Ok(buffer) => buffer,
+        Err(_) => return false,
     };
-    if id3v2_header_version(&buffer) != Some(request.id3v2_version) {
-        return true;
-    }
     let wanted = id3_encoding_byte(&request.id3v2_encoding);
-    id3v2_text_encodings(&buffer)
-        .into_iter()
-        .any(|encoding| encoding != wanted)
+    match classify_id3v2(&buffer) {
+        Id3v2Class::Missing => true,
+        Id3v2Class::Unsafe(reason) => {
+            // 理由留給測試與呼叫端；這裡只略過重寫，不改檔案。
+            let _ = reason;
+            false
+        }
+        Id3v2Class::Frames { version, encodings } => {
+            version != request.id3v2_version
+                || encodings.into_iter().any(|encoding| encoding != wanted)
+        }
+    }
+}
+
+const ID3_TAG_READ_LIMIT: usize = 16 * 1024 * 1024;
+
+#[derive(Debug)]
+enum Id3v2Class {
+    Missing,
+    Frames {
+        version: u8,
+        encodings: Vec<u8>,
+    },
+    /// 無法安全解析。呼叫端必須略過編碼／版本重寫。
+    Unsafe(&'static str),
+}
+
+fn decode_synchsafe(bytes: &[u8]) -> Option<usize> {
+    if bytes.len() < 4 || bytes.iter().any(|byte| byte & 0x80 != 0) {
+        return None;
+    }
+    Some(
+        ((bytes[0] as usize) << 21)
+            | ((bytes[1] as usize) << 14)
+            | ((bytes[2] as usize) << 7)
+            | (bytes[3] as usize),
+    )
+}
+
+/// 只讀標頭宣告的標籤位元組，不把後面的音訊讀進記憶體。
+fn read_id3v2_declared_tag(path: &Path) -> Result<Vec<u8>, &'static str> {
+    let mut file = fs::File::open(path).map_err(|_| "無法開啟音訊檔，略過編碼重寫。")?;
+    let mut header = [0u8; 10];
+    let read = file
+        .read(&mut header)
+        .map_err(|_| "無法讀取 ID3 標頭，略過編碼重寫。")?;
+    if read < 10 || &header[..3] != b"ID3" {
+        return Ok(header[..read].to_vec());
+    }
+    let Some(size) = decode_synchsafe(&header[6..10]) else {
+        return Err("ID3 大小不是同步安全整數，略過編碼重寫。");
+    };
+    if size > ID3_TAG_READ_LIMIT {
+        return Err("ID3 標籤超過 16MB，略過編碼重寫。");
+    }
+    let mut body = vec![0u8; size];
+    file.read_exact(&mut body)
+        .map_err(|_| "ID3 標籤比標頭宣告的還短，略過編碼重寫。")?;
+    let mut buffer = Vec::with_capacity(10 + size);
+    buffer.extend_from_slice(&header);
+    buffer.extend_from_slice(&body);
+    Ok(buffer)
+}
+
+fn deunsync(data: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(data.len());
+    let mut index = 0;
+    while index < data.len() {
+        output.push(data[index]);
+        if data[index] == 0xff && index + 1 < data.len() && data[index + 1] == 0 {
+            index += 2;
+        } else {
+            index += 1;
+        }
+    }
+    output
+}
+
+fn skip_extended_header(version: u8, body: &[u8]) -> Result<usize, &'static str> {
+    if body.len() < 4 {
+        return Err("延伸標頭太短，略過編碼重寫。");
+    }
+    if version == 4 {
+        let Some(size) = decode_synchsafe(&body[..4]) else {
+            return Err("ID3v2.4 延伸標頭大小無效，略過編碼重寫。");
+        };
+        if size < 6 || size > body.len() {
+            return Err("ID3v2.4 延伸標頭長度不合理，略過編碼重寫。");
+        }
+        return Ok(size);
+    }
+    let size = u32::from_be_bytes([body[0], body[1], body[2], body[3]]) as usize;
+    let Some(total) = size.checked_add(4) else {
+        return Err("ID3v2.3 延伸標頭長度溢出，略過編碼重寫。");
+    };
+    if size < 6 || total > body.len() {
+        return Err("ID3v2.3 延伸標頭長度不合理，略過編碼重寫。");
+    }
+    Ok(total)
+}
+
+fn text_frame(id: &str) -> bool {
+    id.starts_with('T') || matches!(id, "COMM" | "USLT" | "USER" | "WXXX" | "COM")
+}
+
+fn classify_id3v2(buffer: &[u8]) -> Id3v2Class {
+    if buffer.len() < 10 || &buffer[..3] != b"ID3" {
+        return Id3v2Class::Missing;
+    }
+    let version = buffer[3];
+    let flags = buffer[5];
+    let Some(declared) = decode_synchsafe(&buffer[6..10]) else {
+        return Id3v2Class::Unsafe("ID3 大小不是同步安全整數，略過編碼重寫。");
+    };
+    if buffer.len() < 10 + declared {
+        return Id3v2Class::Unsafe("ID3 標籤比標頭宣告的還短，略過編碼重寫。");
+    }
+    let body = &buffer[10..10 + declared];
+    if version == 2 {
+        if flags & 0x40 != 0 {
+            return Id3v2Class::Unsafe("ID3v2.2 壓縮標籤無法安全判斷文字編碼，略過重寫。");
+        }
+        if flags & !0xc0 != 0 {
+            return Id3v2Class::Unsafe("ID3v2.2 有未知旗標，略過重寫。");
+        }
+        return parse_v22_frames(body, flags & 0x80 != 0);
+    }
+    if version != 3 && version != 4 {
+        return Id3v2Class::Unsafe("不支援的 ID3v2 版本，略過重寫。");
+    }
+    if flags & 0x20 != 0 {
+        return Id3v2Class::Unsafe("實驗性 ID3v2 標籤，略過重寫。");
+    }
+    let known = if version == 4 { 0xf0 } else { 0xe0 };
+    if flags & !known != 0 {
+        return Id3v2Class::Unsafe("ID3v2 有未知旗標，略過重寫。");
+    }
+    let mut offset = 0usize;
+    if flags & 0x40 != 0 {
+        match skip_extended_header(version, body) {
+            Ok(next) => offset = next,
+            Err(reason) => return Id3v2Class::Unsafe(reason),
+        }
+    }
+    parse_v23_frames(version, &body[offset..], flags & 0x80 != 0)
+}
+
+fn parse_v22_frames(body: &[u8], unsync: bool) -> Id3v2Class {
+    let mut offset = 0usize;
+    let mut encodings = Vec::new();
+    while offset + 6 <= body.len() {
+        let id_bytes = &body[offset..offset + 3];
+        if id_bytes == [0, 0, 0] {
+            break;
+        }
+        if !id_bytes
+            .iter()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit())
+        {
+            return Id3v2Class::Unsafe("ID3v2.2 幀識別碼無效，略過重寫。");
+        }
+        let frame_size = ((body[offset + 3] as usize) << 16)
+            | ((body[offset + 4] as usize) << 8)
+            | (body[offset + 5] as usize);
+        let Some(end) = offset.checked_add(6 + frame_size) else {
+            return Id3v2Class::Unsafe("ID3v2.2 幀長度溢出，略過重寫。");
+        };
+        if end > body.len() {
+            return Id3v2Class::Unsafe("ID3v2.2 幀超出標籤，略過重寫。");
+        }
+        let id = std::str::from_utf8(id_bytes).unwrap_or("");
+        if text_frame(id) && frame_size > 0 {
+            let raw = &body[offset + 6..end];
+            let payload = if unsync { deunsync(raw) } else { raw.to_vec() };
+            if let Some(encoding) = payload.first().copied() {
+                encodings.push(encoding);
+            }
+        }
+        offset = end;
+    }
+    Id3v2Class::Frames {
+        version: 2,
+        encodings,
+    }
+}
+
+fn parse_v23_frames(version: u8, body: &[u8], tag_unsync: bool) -> Id3v2Class {
+    let mut offset = 0usize;
+    let mut encodings = Vec::new();
+    while offset + 10 <= body.len() {
+        let id_bytes = &body[offset..offset + 4];
+        if id_bytes == [0, 0, 0, 0] {
+            break;
+        }
+        if !id_bytes
+            .iter()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit())
+        {
+            return Id3v2Class::Unsafe("ID3v2 幀識別碼無效，略過重寫。");
+        }
+        let frame_size = if version == 4 {
+            let Some(size) = decode_synchsafe(&body[offset + 4..offset + 8]) else {
+                return Id3v2Class::Unsafe("ID3v2.4 幀大小無效，略過重寫。");
+            };
+            size
+        } else {
+            u32::from_be_bytes([
+                body[offset + 4],
+                body[offset + 5],
+                body[offset + 6],
+                body[offset + 7],
+            ]) as usize
+        };
+        let Some(end) = offset.checked_add(10 + frame_size) else {
+            return Id3v2Class::Unsafe("ID3v2 幀長度溢出，略過重寫。");
+        };
+        if end > body.len() {
+            return Id3v2Class::Unsafe("ID3v2 幀超出標籤，略過重寫。");
+        }
+        let flags = [body[offset + 8], body[offset + 9]];
+        let id = std::str::from_utf8(id_bytes).unwrap_or("");
+        if text_frame(id) && frame_size > 0 {
+            if let Some(encoding) =
+                frame_text_encoding(version, flags, &body[offset + 10..end], tag_unsync)
+            {
+                encodings.push(encoding);
+            }
+        }
+        offset = end;
+    }
+    Id3v2Class::Frames { version, encodings }
+}
+
+/// 壓縮或加密的幀不拿來判斷編碼。回傳 None 表示略過這一幀。
+fn frame_text_encoding(version: u8, flags: [u8; 2], data: &[u8], tag_unsync: bool) -> Option<u8> {
+    let (compressed, encrypted, grouped, unsync, length_indicator) = if version == 4 {
+        let format = flags[1];
+        (
+            format & 0x08 != 0,
+            format & 0x04 != 0,
+            format & 0x40 != 0,
+            format & 0x02 != 0,
+            format & 0x01 != 0,
+        )
+    } else {
+        let format = flags[1];
+        (
+            format & 0x80 != 0,
+            format & 0x40 != 0,
+            format & 0x20 != 0,
+            false,
+            false,
+        )
+    };
+    if compressed || encrypted {
+        return None;
+    }
+    let payload = if unsync || tag_unsync {
+        deunsync(data)
+    } else {
+        data.to_vec()
+    };
+    let mut cursor = 0usize;
+    if grouped {
+        cursor += 1;
+    }
+    if length_indicator {
+        cursor += 4;
+    }
+    payload.get(cursor).copied()
 }
 
 fn id3v2_text_encodings(buffer: &[u8]) -> Vec<u8> {
-    let Some(version) = id3v2_header_version(buffer) else {
-        return Vec::new();
-    };
-    if buffer.len() < 10 || (version != 3 && version != 4) {
-        return Vec::new();
+    match classify_id3v2(buffer) {
+        Id3v2Class::Frames { encodings, .. } => encodings,
+        Id3v2Class::Missing | Id3v2Class::Unsafe(_) => Vec::new(),
     }
-    let size = ((buffer[6] as usize & 0x7f) << 21)
-        | ((buffer[7] as usize & 0x7f) << 14)
-        | ((buffer[8] as usize & 0x7f) << 7)
-        | (buffer[9] as usize & 0x7f);
-    let mut offset = 10;
-    let end = (10 + size).min(buffer.len());
-    let mut encodings = Vec::new();
-    while offset + 11 <= end {
-        let id = std::str::from_utf8(&buffer[offset..offset + 4]).unwrap_or_default();
-        if id.as_bytes().iter().all(|byte| *byte == 0) {
-            break;
-        }
-        let frame_size = if version == 4 {
-            ((buffer[offset + 4] as usize & 0x7f) << 21)
-                | ((buffer[offset + 5] as usize & 0x7f) << 14)
-                | ((buffer[offset + 6] as usize & 0x7f) << 7)
-                | (buffer[offset + 7] as usize & 0x7f)
-        } else {
-            u32::from_be_bytes([
-                buffer[offset + 4],
-                buffer[offset + 5],
-                buffer[offset + 6],
-                buffer[offset + 7],
-            ]) as usize
-        };
-        if id.starts_with('T') && frame_size > 0 && offset + 10 < buffer.len() {
-            encodings.push(buffer[offset + 10]);
-        }
-        offset = offset.saturating_add(10 + frame_size);
-    }
-    encodings
 }
 
 fn field_id(container: AudioContainer, key: &str) -> String {

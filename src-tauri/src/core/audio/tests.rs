@@ -6,6 +6,7 @@ use super::super::types::{
 };
 use super::*;
 use id3::{TagLike, Version};
+use std::collections::HashSet;
 use std::process::Command;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -1473,7 +1474,7 @@ fn write_id3v2(path: &Path, title: &str, version: Version, encoding: &str) {
     std::fs::write(path, mpeg_frame()).unwrap();
     let mut tag = id3::Tag::new();
     tag.set_title(title);
-    apply_id3v2_encoding(&mut tag, encoding);
+    apply_id3v2_encoding(&mut tag, encoding, &HashSet::from(["title".to_string()]));
     tag.write_to_path(path, version).unwrap();
 }
 
@@ -1879,4 +1880,156 @@ async fn recursive_audio_scan_skips_symlinks() {
     );
     let _ = std::fs::remove_dir_all(&directory);
     let _ = std::fs::remove_dir_all(&outside);
+}
+
+fn synchsafe(size: usize) -> [u8; 4] {
+    [
+        ((size >> 21) & 0x7f) as u8,
+        ((size >> 14) & 0x7f) as u8,
+        ((size >> 7) & 0x7f) as u8,
+        (size & 0x7f) as u8,
+    ]
+}
+
+fn id3_header(version: u8, flags: u8, body_len: usize) -> Vec<u8> {
+    let size = synchsafe(body_len);
+    vec![
+        b'I', b'D', b'3', version, 0, flags, size[0], size[1], size[2], size[3],
+    ]
+}
+
+fn v23_frame(id: &str, encoding: u8, text: &[u8]) -> Vec<u8> {
+    let mut data = vec![encoding];
+    data.extend_from_slice(text);
+    let size = (data.len() as u32).to_be_bytes();
+    let mut frame = id.as_bytes().to_vec();
+    frame.extend_from_slice(&size);
+    frame.extend_from_slice(&[0, 0]);
+    frame.extend_from_slice(&data);
+    frame
+}
+
+#[test]
+fn id3_header_parser_handles_extended_unsync_and_v22_without_reading_audio() {
+    let directory = temp_dir();
+    let extended = directory.join("extended.mp3");
+    let real = v23_frame("TIT2", 3, b"Hi");
+    let mut padding = b"TIT2".to_vec();
+    padding.extend_from_slice(&10u32.to_be_bytes());
+    padding.extend_from_slice(&[0, 0, 0]);
+    let extended_size = (6 + padding.len()) as u32;
+    let mut body = extended_size.to_be_bytes().to_vec();
+    body.extend_from_slice(&[0, 0]);
+    body.extend_from_slice(&0u32.to_be_bytes());
+    body.extend_from_slice(&padding);
+    body.extend_from_slice(&real);
+    let mut file = id3_header(3, 0x40, body.len());
+    file.extend_from_slice(&body);
+    file.extend_from_slice(&[0xAB; 64]);
+    std::fs::write(&extended, &file).unwrap();
+    let read = read_id3v2_declared_tag(&extended).unwrap();
+    assert_eq!(read.len(), 10 + body.len());
+    assert!(read.ends_with(&real));
+    match classify_id3v2(&read) {
+        Id3v2Class::Frames { version, encodings } => {
+            assert_eq!(version, 3);
+            assert_eq!(encodings, vec![3]);
+        }
+        other => panic!("延伸標頭應略過填充裡的假 TIT2：{other:?}"),
+    }
+
+    let unsync = directory.join("unsync.mp3");
+    // 資料長度指示先出現。未同步化把 FF 00 插在指示裡，還原後編碼才是 3。
+    let mut indicated = b"TIT2".to_vec();
+    indicated.extend_from_slice(&6u32.to_be_bytes());
+    indicated.extend_from_slice(&[0, 0x01]);
+    indicated.extend_from_slice(&[0, 0, 0, 0xff, 0x00, 3]);
+    let mut unsync_file = id3_header(4, 0x80, indicated.len());
+    unsync_file.extend_from_slice(&indicated);
+    unsync_file.extend_from_slice(b"NOT-A-TAG-AUDIO");
+    std::fs::write(&unsync, &unsync_file).unwrap();
+    let unsync_tag = read_id3v2_declared_tag(&unsync).unwrap();
+    assert!(!unsync_tag.windows(4).any(|window| window == b"NOT-"));
+    match classify_id3v2(&unsync_tag) {
+        Id3v2Class::Frames { encodings, .. } => assert_eq!(encodings, vec![3]),
+        other => panic!("未同步化應還原後再讀幀：{other:?}"),
+    }
+
+    let legacy = directory.join("v22.mp3");
+    let mut v22 = id3_header(2, 0, 10);
+    v22.extend_from_slice(b"TT2");
+    v22.extend_from_slice(&[0, 0, 4]);
+    v22.extend_from_slice(&[0, b'H', b'i', 0]);
+    v22.extend_from_slice(b"AUDIO");
+    std::fs::write(&legacy, &v22).unwrap();
+    let legacy_tag = read_id3v2_declared_tag(&legacy).unwrap();
+    assert_eq!(legacy_tag.len(), 20);
+    match classify_id3v2(&legacy_tag) {
+        Id3v2Class::Frames { version, encodings } => {
+            assert_eq!(version, 2);
+            assert_eq!(encodings, vec![0]);
+        }
+        other => panic!("ID3v2.2 應以 6 位元組幀頭解析：{other:?}"),
+    }
+
+    let compressed = directory.join("compressed.mp3");
+    let mut compressed_tag = id3_header(2, 0x40, 6);
+    compressed_tag.extend_from_slice(b"TT2");
+    compressed_tag.extend_from_slice(&[0, 0, 0]);
+    std::fs::write(&compressed, &compressed_tag).unwrap();
+    let before = std::fs::read(&compressed).unwrap();
+    let request = base_plan(&[compressed.clone()]);
+    assert!(!id3v2_needs_rewrite(&compressed, &request));
+    match classify_id3v2(&before) {
+        Id3v2Class::Unsafe(reason) => assert!(reason.contains("壓縮")),
+        other => panic!("壓縮的 v2.2 必須略過：{other:?}"),
+    }
+    assert_eq!(std::fs::read(&compressed).unwrap(), before);
+
+    let oversized = directory.join("huge.mp3");
+    let mut huge = id3_header(3, 0, 0);
+    let big = synchsafe(ID3_TAG_READ_LIMIT + 1);
+    huge[6..10].copy_from_slice(&big);
+    std::fs::write(&oversized, &huge).unwrap();
+    assert!(read_id3v2_declared_tag(&oversized).is_err());
+    assert!(!id3v2_needs_rewrite(
+        &oversized,
+        &base_plan(&[oversized.clone()])
+    ));
+
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn encoding_rewrite_leaves_unchecked_text_frames() {
+    let directory = temp_dir();
+    let path = directory.join("partial-encoding.mp3");
+    std::fs::write(&path, mpeg_frame()).unwrap();
+    let mut tag = id3::Tag::new();
+    tag.set_title("裡面");
+    tag.set_artist("歌手");
+    tag.write_to_path(&path, id3::Version::Id3v24).unwrap();
+    let before_artist = frame_encoding(&std::fs::read(&path).unwrap(), "TPE1");
+    let service = AudioService::new();
+    let mut request = base_plan(&[path.clone()]);
+    request.id3v2_version = 4;
+    request.id3v2_encoding = "utf16".into();
+    request.selected_fields = HashMap::from([(
+        path.to_string_lossy().into_owned(),
+        vec!["id3v2:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    let written = std::fs::read(&path).unwrap();
+    assert_eq!(frame_encoding(&written, "TIT2"), 1);
+    assert_eq!(frame_encoding(&written, "TPE1"), before_artist);
+    assert_eq!(mp3_audio_payload(&written), mpeg_frame());
+    let _ = std::fs::remove_dir_all(&directory);
 }

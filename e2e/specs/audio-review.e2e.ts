@@ -148,4 +148,40 @@ test.describe("音訊標籤審閱", () => {
       .poll(() => page.evaluate(() => window.__convertzzE2e?.lastAudioApplyPaths ?? []))
       .not.toContain("/music/專輯乙/same.ogg");
   });
+
+  test("預覽後取消勾選的檔案與欄位不會寫入", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openApp(page, { selectedFiles: "/tmp/song.mp3" });
+    await openPage(page, "#tour-audio", "音訊標籤");
+    await page.getByRole("button", { name: "選取音訊檔案" }).click();
+    await page.getByRole("button", { name: "建立標籤預覽" }).click();
+    await expect(page.getByRole("button", { name: "確認寫入 233 個檔案" })).toBeEnabled();
+
+    const song = page.locator(".audio-row", { hasText: "song.mp3" });
+    await song.locator("input").click();
+    await expect(page.getByRole("button", { name: "確認寫入 232 個檔案" })).toBeEnabled();
+
+    await page.locator(".audio-name", { hasText: "track-001.mp3" }).click();
+    const album = page.locator(".audio-detail .el-table__row", { hasText: "專輯" });
+    await album.locator("input").click();
+    await expect(page.getByRole("button", { name: "確認寫入 232 個檔案" })).toBeEnabled();
+    await expect(page.getByText("已勾選 232 個檔案・463 個欄位")).toBeVisible();
+
+    await page.getByRole("button", { name: "確認寫入 232 個檔案" }).click();
+    await expect
+      .poll(() => page.evaluate(() => window.__convertzzE2e?.lastAudioApply?.paths ?? []))
+      .not.toContain("/music/專輯甲/song.mp3");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            window.__convertzzE2e?.lastAudioApply?.selectedFields?.["/music/現場/track-001.mp3"] ??
+            [],
+        ),
+      )
+      .toEqual(["id3v2:title"]);
+    await expect
+      .poll(() => page.evaluate(() => window.__convertzzE2e?.confirms?.[0] ?? ""))
+      .toContain("232");
+  });
 });

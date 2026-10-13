@@ -114,6 +114,10 @@ export interface ConvertzzE2eConfig {
   holdAudioRescan?: boolean;
   releaseAudioRescan?: () => void;
   lastAudioApplyPaths?: string[];
+  lastAudioApply?: {
+    paths?: string[];
+    selectedFields?: Record<string, string[]>;
+  };
 }
 
 declare global {
@@ -520,7 +524,12 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
   }
   if (operation === "audio.apply") {
     const paths = Array.isArray(payload.paths) ? payload.paths.map((item) => String(item)) : [];
+    const selectedFields =
+      payload.selectedFields && typeof payload.selectedFields === "object"
+        ? (payload.selectedFields as Record<string, string[]>)
+        : {};
     e2e().lastAudioApplyPaths = paths;
+    e2e().lastAudioApply = { paths, selectedFields };
     return { succeeded: paths.slice(0, 1), skipped: [], failed: [] };
   }
   if (operation === "audio.cancel") {

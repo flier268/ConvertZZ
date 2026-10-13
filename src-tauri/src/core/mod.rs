@@ -189,10 +189,22 @@ pub async fn dispatch(
                     .map(ToOwned::to_owned)
                     .collect::<Vec<_>>()
             });
+            let selected_fields = match payload.get("selectedFields") {
+                Some(value) => Some(serde_json::from_value::<
+                    std::collections::HashMap<String, Vec<String>>,
+                >(value.clone())?),
+                None => None,
+            };
             to_value(
                 state
                     .audio
-                    .apply_filtered(&plan_id, only_paths.as_deref(), progress, is_cancelled)
+                    .apply_filtered(
+                        &plan_id,
+                        only_paths.as_deref(),
+                        selected_fields.as_ref(),
+                        progress,
+                        is_cancelled,
+                    )
                     .await?,
             )
         }

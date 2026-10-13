@@ -237,15 +237,17 @@ impl AudioService {
         progress: ProgressReporter,
         request_cancelled: CancelCheck,
     ) -> Result<ApplyResult, CoreError> {
-        self.apply_filtered(plan_id, None, progress, request_cancelled)
+        self.apply_filtered(plan_id, None, None, progress, request_cancelled)
             .await
     }
 
-    /// `only_paths` 有值時只寫這些路徑。未列入的檔案（含預覽後沒有實際變更的檔）略過。
+    /// `only_paths` 有值時只寫這些路徑。`selected_fields` 有值時每個路徑只寫列出的欄位。
+    /// 兩者都省略時寫入計畫裡全部有變更的欄位（無頭模式）。
     pub async fn apply_filtered(
         &self,
         plan_id: &str,
         only_paths: Option<&[String]>,
+        selected_fields: Option<&HashMap<String, Vec<String>>>,
         progress: ProgressReporter,
         request_cancelled: CancelCheck,
     ) -> Result<ApplyResult, CoreError> {
@@ -284,16 +286,26 @@ impl AudioService {
                 .as_ref()
                 .is_none_or(|set| set.contains(&resolve_path(&path.to_string_lossy())))
         };
-        let writable = plan
-            .files
+        let mut files = plan.files;
+        for file in &mut files {
+            if !included(&file.path) {
+                file.updates.clear();
+                file.selected_containers.clear();
+                continue;
+            }
+            if let Some(selection) = selected_fields {
+                restrict_to_fields(file, &fields_for_path(selection, &file.path));
+            }
+        }
+        let writable = files
             .iter()
-            .filter(|file| included(&file.path) && !file.updates.is_empty())
+            .filter(|file| file_should_write(file))
             .map(|file| file.path.clone())
             .collect::<Vec<_>>();
         if plan.backup && !writable.is_empty() {
             progress(super::types::ProgressEvent {
                 current: 0,
-                total: plan.files.len().max(1) as u64,
+                total: files.len().max(1) as u64,
                 message: "正在建立備份…".into(),
             });
             if let Err(error) =
@@ -310,7 +322,7 @@ impl AudioService {
             }
         }
 
-        for (index, file) in plan.files.into_iter().enumerate() {
+        for (index, file) in files.into_iter().enumerate() {
             self.throw_if_cancelled(plan_id)?;
             if request_cancelled() {
                 return Err(CoreError::new(
@@ -318,7 +330,7 @@ impl AudioService {
                     "音訊標籤作業已由使用者取消。",
                 ));
             }
-            if !included(&file.path) || file.updates.is_empty() {
+            if !file_should_write(&file) {
                 result
                     .skipped
                     .push(file.path.to_string_lossy().into_owned());
@@ -954,6 +966,34 @@ fn label_for(key: &str) -> &str {
         "track" => "音軌",
         other => other,
     }
+}
+
+fn file_should_write(file: &PreparedAudio) -> bool {
+    !file.updates.is_empty() || !file.selected_containers.is_empty()
+}
+
+fn fields_for_path(selection: &HashMap<String, Vec<String>>, path: &Path) -> HashSet<String> {
+    let owned = path.to_string_lossy().into_owned();
+    if let Some(fields) = selection.get(&owned) {
+        return fields.iter().cloned().collect();
+    }
+    let resolved = resolve_path(&owned);
+    selection
+        .iter()
+        .find(|(key, _)| resolve_path(key) == resolved)
+        .map(|(_, fields)| fields.iter().cloned().collect())
+        .unwrap_or_default()
+}
+
+/// 只留下這次勾選的欄位。沒被勾的文字變更不會寫入。
+fn restrict_to_fields(file: &mut PreparedAudio, allowed: &HashSet<String>) {
+    file.updates
+        .retain(|identifier, _| allowed.contains(identifier));
+    file.selected_containers = file
+        .updates
+        .keys()
+        .map(|identifier| split_field_id(identifier).0)
+        .collect();
 }
 
 fn field_id(container: AudioContainer, key: &str) -> String {

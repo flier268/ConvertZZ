@@ -32,7 +32,7 @@ import {
   selectionTotals,
   stepAudioRow,
   toggleFolderCollapsed,
-  writableAudioPaths,
+  audioApplySelection,
   settingsSummaryChips,
   fieldValuesChanged,
   type AudioListFilter,
@@ -401,7 +401,10 @@ async function applyPlan() {
   try {
     const result = await core.request<{ succeeded: string[]; failed: unknown[] }>(
       "audio.apply",
-      { planId: plan.value.planId, paths: writableAudioPaths(files.value, containers.value) },
+      {
+        planId: plan.value.planId,
+        ...audioApplySelection(files.value, containers.value),
+      },
       {
         onProgress: (value) => {
           progress.value = value;

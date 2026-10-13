@@ -15,6 +15,7 @@ import {
   selectionTotals,
   stepAudioRow,
   toggleFolderCollapsed,
+  audioApplySelection,
   writableAudioPaths,
   settingsSummaryChips,
 } from "./audioReview";
@@ -196,6 +197,21 @@ describe("audioReview", () => {
     expect(selectionTotals(sample, { id3v1: true, id3v2: true })).toEqual({ files: 1, fields: 3 });
     expect(selectionTotals(sample, { id3v1: true, id3v2: false })).toEqual({ files: 1, fields: 1 });
     expect(writableAudioPaths(sample, { id3v1: true, id3v2: true })).toEqual(["/tmp/晨雾/风.mp3"]);
+    expect(audioApplySelection(sample, { id3v1: true, id3v2: true })).toEqual({
+      paths: ["/tmp/晨雾/风.mp3"],
+      selectedFields: {
+        "/tmp/晨雾/风.mp3": ["id3v2:title", "id3v2:album", "id3v1:title"],
+      },
+    });
+    sample[0].fields[1].selected = false;
+    expect(audioApplySelection(sample, { id3v1: true, id3v2: true }).selectedFields).toEqual({
+      "/tmp/晨雾/风.mp3": ["id3v2:title", "id3v1:title"],
+    });
+    sample[0].selected = false;
+    expect(audioApplySelection(sample, { id3v1: true, id3v2: true })).toEqual({
+      paths: [],
+      selectedFields: {},
+    });
     const pending = [
       file({
         path: "/tmp/song.mp3",

@@ -301,10 +301,27 @@ export function writableAudioPaths(
   files: readonly AudioTagFile[],
   containers: AudioContainerFlags,
 ): string[] {
+  return audioApplySelection(files, containers).paths;
+}
+
+/** 目前勾選。`audio.apply` 必須帶這份，預覽之後改勾選才會影響寫入。 */
+export function audioApplySelection(
+  files: readonly AudioTagFile[],
+  containers: AudioContainerFlags,
+): { paths: string[]; selectedFields: Record<string, string[]> } {
   const ready = audioPreviewReady(files);
-  return files
-    .filter((file) => fileHasWritableSelection(file, containers, ready))
-    .map((file) => file.path);
+  const selectedFields: Record<string, string[]> = {};
+  const paths: string[] = [];
+  for (const file of files) {
+    if (!fileHasWritableSelection(file, containers, ready)) continue;
+    const ids = file.fields
+      .filter((field) => countsTowardWrite(field, containers, ready))
+      .map((field) => `${field.container}:${field.key}`);
+    if (!ids.length) continue;
+    paths.push(file.path);
+    selectedFields[file.path] = ids;
+  }
+  return { paths, selectedFields };
 }
 
 /** 錯誤檔一律未勾選，全選與反選也不能把它算進去。 */

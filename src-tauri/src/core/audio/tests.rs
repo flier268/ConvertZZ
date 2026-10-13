@@ -1389,6 +1389,80 @@ async fn truncated_ogg_reports_warning() {
     let _ = std::fs::remove_dir_all(&directory);
 }
 
+fn write_mp3_title_artist(path: &Path, title: &str, artist: &str) {
+    std::fs::write(path, mpeg_frame()).unwrap();
+    let mut tag = id3::Tag::new();
+    tag.set_title(title);
+    tag.set_artist(artist);
+    tag.write_to_path(path, Version::Id3v24).unwrap();
+}
+
+#[tokio::test]
+async fn apply_honours_current_file_and_field_selection() {
+    let directory = temp_dir();
+    let selected = directory.join("selected.mp3");
+    let other = directory.join("other.mp3");
+    write_mp3_title_artist(&selected, "里面", "头发");
+    write_mp3_title_artist(&other, "中国", "头发");
+    let other_before = std::fs::read(&other).unwrap();
+    let service = AudioService::new();
+    let mut request = base_plan(&[selected.clone(), other.clone()]);
+    request.id3v1_enabled = false;
+    request.selected_fields = HashMap::from([
+        (
+            selected.to_string_lossy().into_owned(),
+            vec!["id3v2:title".into(), "id3v2:artist".into()],
+        ),
+        (
+            other.to_string_lossy().into_owned(),
+            vec!["id3v2:title".into(), "id3v2:artist".into()],
+        ),
+    ]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let selected_path = selected.to_string_lossy().into_owned();
+    let other_path = other.to_string_lossy().into_owned();
+    let selection = HashMap::from([(selected_path.clone(), vec!["id3v2:title".into()])]);
+    let result = service
+        .apply_filtered(
+            &plan.plan_id,
+            Some(&[selected_path.clone()]),
+            Some(&selection),
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.succeeded, vec![selected_path.clone()], "{result:?}");
+    assert!(result.skipped.iter().any(|path| path == &other_path));
+    assert_eq!(std::fs::read(&other).unwrap(), other_before);
+    let written = service
+        .scan(
+            shared_conversion(),
+            AudioScanRequest {
+                paths: vec![selected_path],
+                recursive: None,
+                id3v1_source_encoding: None,
+                id3v2_source_encoding: None,
+                id3v2_repair_source_encoding: None,
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        field(&written[0], AudioContainer::Id3v2, "title").map(|field| field.values.clone()),
+        Some(vec!["裡面".into()])
+    );
+    assert_eq!(
+        field(&written[0], AudioContainer::Id3v2, "artist").map(|field| field.values.clone()),
+        Some(vec!["头发".into()])
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn write_failure_keeps_original_audio() {

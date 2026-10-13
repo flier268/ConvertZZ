@@ -67,6 +67,32 @@ describe("音訊預覽自動重建", () => {
     expect(plans).toEqual([]);
   });
 
+  it("進行中的預覽被 invalidate 且沒有新一輪接手時，仍會 onSettled", async () => {
+    let release: (value: { planId: string }) => void = () => undefined;
+    const started = Promise.withResolvers<void>();
+    const settled: number[] = [];
+    const controller = createAudioPreviewController({
+      plan: () => {
+        started.resolve();
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      },
+      cancelInFlight: async () => undefined,
+      apply: () => undefined,
+      onSettled: () => {
+        settled.push(settled.length + 1);
+      },
+    });
+
+    const running = controller.run();
+    await started.promise;
+    controller.invalidate();
+    release({ planId: "stale" });
+    await running;
+    expect(settled).toEqual([1]);
+  });
+
   it("套用進行中呼叫 schedule 不得取消 apply", async () => {
     vi.useFakeTimers();
     const cancels: number[] = [];

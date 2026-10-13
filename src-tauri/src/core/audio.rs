@@ -1229,12 +1229,21 @@ fn set_id3v2_value(tag: &mut id3::Tag, key: &str, value: String) {
         "albumArtist" => tag.set_album_artist(value),
         "composer" => tag.set_text("TCOM", value),
         "lyrics" => {
+            // 改第一則歌詞的文字，其餘語言與描述保留。沒有歌詞才新建 eng 框。
+            let mut lyrics: Vec<_> = tag.lyrics().cloned().collect();
             tag.remove_all_lyrics();
-            tag.add_frame(id3::frame::Lyrics {
-                lang: "eng".into(),
-                description: String::new(),
-                text: value,
-            });
+            if lyrics.is_empty() {
+                tag.add_frame(id3::frame::Lyrics {
+                    lang: "eng".into(),
+                    description: String::new(),
+                    text: value,
+                });
+            } else {
+                lyrics[0].text = value;
+                for lyric in lyrics {
+                    tag.add_frame(lyric);
+                }
+            }
         }
         "comment" => {
             // 改第一則註解的文字，其餘保留。重複套用不會再追加一框。

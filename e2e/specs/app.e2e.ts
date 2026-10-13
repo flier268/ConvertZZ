@@ -481,7 +481,7 @@ test.describe("ConvertZZ 前端", () => {
     await expect(page.locator(".audio-name", { hasText: "song.mp3" })).toBeVisible();
     await expect(page.getByText("含封面")).toBeVisible();
     await expect(page.getByRole("cell", { name: "里面", exact: true })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "未知字幕", exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "未知字幕", exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "編輯設定" }).click();
     await expect(page.getByText("ID3v2 版本")).toBeVisible();
     await page.keyboard.press("Escape");

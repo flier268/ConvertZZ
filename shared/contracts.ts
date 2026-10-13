@@ -214,7 +214,7 @@ export interface AudioTagFile {
   rewriteContainers?: AudioContainer[];
   /** 整個容器的移除。省略表示沒有。 */
   removals?: AudioContainerRemoval[];
-  /** 容器級說明。例如「ID3v2 標籤會整個重寫為 v2.4」。省略表示沒有。 */
+  /** 容器級說明。例如「ID3v2 標籤會整個重寫為 v2.4・UTF-16」「ID3v1 會重寫」。省略表示沒有。 */
   notices?: string[];
 }
 

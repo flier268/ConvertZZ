@@ -1632,7 +1632,7 @@ async fn id3v2_rewrite_sets_container_notice_on_the_plan() {
         .unwrap();
     assert_eq!(
         plan.files[0].notices,
-        vec!["ID3v2 標籤會整個重寫為 v2.4".to_string()]
+        vec!["ID3v2 標籤會整個重寫為 v2.4・UTF-8".to_string()]
     );
     assert!(
         field(&plan.files[0], AudioContainer::Id3v2, "title")
@@ -1657,7 +1657,7 @@ async fn id3v2_rewrite_sets_container_notice_on_the_plan() {
         .unwrap();
     assert_eq!(
         plan.files[0].notices,
-        vec!["ID3v2 標籤會整個重寫為 v2.4".to_string()],
+        vec!["ID3v2 標籤會整個重寫為 v2.4・UTF-8".to_string()],
         "來源已是 v2.4，文字修改仍會整段重寫標籤"
     );
 

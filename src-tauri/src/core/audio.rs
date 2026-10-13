@@ -297,7 +297,7 @@ impl AudioService {
                     let mut item =
                         convert_selected_fields(conversion, &request, file, &mut warnings).await?;
                     operations::expand_tag_operations(&request, file, &mut item, &mut warnings)?;
-                    note_id3v2_container_rewrite(file, &item);
+                    note_container_rewrites(file, &item);
                     if let Some(item) = item {
                         prepared.push(item);
                     }
@@ -392,7 +392,7 @@ impl AudioService {
         let mut prepared =
             convert_selected_fields(conversion, &request.plan, &mut file, &mut warnings).await?;
         operations::expand_tag_operations(&request.plan, &mut file, &mut prepared, &mut warnings)?;
-        note_id3v2_container_rewrite(&mut file, &prepared);
+        note_container_rewrites(&mut file, &prepared);
         self.upsert_prepared(&plan_id, &file.path, prepared)?;
         file.previewed = true;
         Ok(file)
@@ -1835,19 +1835,45 @@ fn restrict_to_fields(file: &mut PreparedAudio, allowed: &HashSet<String>) {
     file.selected_containers = containers;
 }
 
-/// 只要這次會寫 ID3v2，`write_to_path` 就會把整個標籤重寫成要求的 v2.3 或 v2.4。
-fn note_id3v2_container_rewrite(file: &mut AudioTagFile, prepared: &Option<PreparedAudio>) {
+fn push_notice(file: &mut AudioTagFile, notice: String) {
+    if !file.notices.iter().any(|existing| existing == &notice) {
+        file.notices.push(notice);
+    }
+}
+
+fn id3v2_encoding_label(encoding: &str) -> &str {
+    match encoding {
+        "utf8" | "utf-8" => "UTF-8",
+        "utf16" | "utf-16" => "UTF-16",
+        "utf16be" | "utf-16be" => "UTF-16BE",
+        "latin1" | "latin-1" => "Latin-1",
+        other => other,
+    }
+}
+
+/// 會寫 ID3v2 時，`write_to_path` 會把整個標籤重寫成要求的版本與編碼。
+/// ID3v1 只在輸出編碼與讀取編碼不同、因而整段重寫時說明。
+fn note_container_rewrites(file: &mut AudioTagFile, prepared: &Option<PreparedAudio>) {
     let Some(item) = prepared else {
         return;
     };
-    let writes = item.selected_containers.contains(&AudioContainer::Id3v2)
+    let writes_id3v2 = item.selected_containers.contains(&AudioContainer::Id3v2)
         && !item.remove_containers.contains(&AudioContainer::Id3v2);
-    if !writes {
-        return;
+    if writes_id3v2 {
+        let encoding = id3v2_encoding_label(&item.request.id3v2_encoding);
+        push_notice(
+            file,
+            format!(
+                "ID3v2 標籤會整個重寫為 v2.{}・{encoding}",
+                item.request.id3v2_version
+            ),
+        );
     }
-    let notice = format!("ID3v2 標籤會整個重寫為 v2.{}", item.request.id3v2_version);
-    if !file.notices.iter().any(|existing| existing == &notice) {
-        file.notices.push(notice);
+    let writes_id3v1 = item.rewrite_containers.contains(&AudioContainer::Id3v1)
+        && item.selected_containers.contains(&AudioContainer::Id3v1)
+        && !item.remove_containers.contains(&AudioContainer::Id3v1);
+    if writes_id3v1 {
+        push_notice(file, "ID3v1 會重寫".into());
     }
 }
 

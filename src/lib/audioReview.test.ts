@@ -288,8 +288,8 @@ describe("audioReview", () => {
       ],
     });
     expect(planned.fields.every((field) => !fieldVisibleWhenHidingUnchanged(field))).toBe(true);
-    expect(detailContainerNotices(planned, true)).toEqual(["ID3v2 標籤會整個重寫為 v2.4"]);
-    expect(detailContainerNotices(file({ path: "/tmp/quiet.mp3" }), true)).toEqual([]);
+    expect(detailContainerNotices(planned)).toEqual(["ID3v2 標籤會整個重寫為 v2.4"]);
+    expect(detailContainerNotices(file({ path: "/tmp/quiet.mp3" }))).toEqual([]);
   });
 
   it("只有編碼或 ID3 版本會變的檔案算進同一個分桶與確認筆數", () => {

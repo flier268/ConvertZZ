@@ -414,7 +414,7 @@ pub struct AudioTagFile {
     /// 這次計畫要移除的整個標籤。空陣列不輸出。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub removals: Vec<AudioContainerRemoval>,
-    /// 容器級說明。例如 ID3v2 會整段重寫成另一個版本。空陣列不輸出。
+    /// 容器級說明。例如「ID3v2 標籤會整個重寫為 v2.4・UTF-16」「ID3v1 會重寫」。空陣列不輸出。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<String>,
 }

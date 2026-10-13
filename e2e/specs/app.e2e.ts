@@ -503,7 +503,7 @@ test.describe("ConvertZZ 前端", () => {
     await page.getByRole("button", { name: "編輯設定" }).click();
     await page.locator(".el-form-item", { hasText: "備份衝突" }).locator(".el-select").click();
     await page.getByRole("option", { name: "覆寫" }).click();
-    await page.getByRole("button", { name: "套用並重新建立預覽" }).click();
+    await page.getByRole("button", { name: "關閉" }).click();
     await page.getByRole("button", { name: "選取音訊檔案" }).click();
     await page.getByRole("button", { name: "建立標籤預覽" }).click();
     await page.getByRole("button", { name: "確認寫入" }).click();
@@ -517,15 +517,14 @@ test.describe("ConvertZZ 前端", () => {
       );
   });
 
-  test("音訊頁取消計畫會回到可重新預覽狀態", async ({ page }) => {
+  test("音訊頁沒有取消計畫，預覽會留著", async ({ page }) => {
     await openApp(page, { selectedFiles: "/tmp/song.mp3" });
     await openPage(page, "#tour-audio", "音訊標籤");
     await page.getByRole("button", { name: "選取音訊檔案" }).click();
     await page.getByRole("button", { name: "建立標籤預覽" }).click();
     await expect(page.getByRole("button", { name: "確認寫入" })).toBeVisible();
-    await page.getByRole("button", { name: "取消計畫" }).click();
-    await expect(page.getByRole("button", { name: "確認寫入" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "建立標籤預覽" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "取消計畫" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "重新建立預覽" })).toBeVisible();
     await scrollAudioRow(page, "song.mp3");
     await expect(page.locator(".audio-name", { hasText: "song.mp3" })).toBeVisible();
   });

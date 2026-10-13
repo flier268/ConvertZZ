@@ -43,6 +43,7 @@ import {
   audioPreviewReady,
   settingsSummaryChips,
   fieldVisibleWhenHidingUnchanged,
+  createAudioPreviewController,
   type AudioListFilter,
   type AudioListRow,
   type AudioSortKey,
@@ -255,6 +256,7 @@ function containerLabel(container: AudioTagField["container"]): string {
 }
 
 function openSettings() {
+  draftMute += 1;
   draft.direction = options.direction;
   draft.engine = options.engine;
   draft.recursive = options.recursive;
@@ -272,6 +274,9 @@ function openSettings() {
   draft.id3v2Version = options.id3v2Version;
   draft.id3v2Encoding = options.id3v2Encoding;
   settingsOpen.value = true;
+  void nextTick(() => {
+    draftMute -= 1;
+  });
 }
 
 function applyDraftToOptions() {
@@ -312,12 +317,47 @@ async function chooseFolder() {
   await scan();
 }
 
-async function scan() {
+async function cancelInFlight() {
+  const requestId = activeRequestId.value;
+  const planId = plan.value?.planId;
+  activeRequestId.value = undefined;
+  if (requestId) {
+    try {
+      await core.cancel(requestId);
+    } catch {
+      // 仍會忽略過期回應。
+    }
+  }
+  if (planId) {
+    try {
+      await core.request("audio.cancel", { planId });
+    } catch {
+      // 計畫可能已經結束。
+    }
+  }
+}
+
+function beginAudioWork() {
   busy.value = true;
   operationError.value = "";
-  resetReviewView();
   progress.value = undefined;
   progressStartedAt.value = Date.now();
+}
+
+function settleAudioWork() {
+  busy.value = false;
+  activeRequestId.value = undefined;
+  progress.value = undefined;
+  progressStartedAt.value = undefined;
+}
+
+async function scan() {
+  previewController.invalidate();
+  await cancelInFlight();
+  beginAudioWork();
+  resetReviewView();
+  plan.value = undefined;
+  files.value = [];
   try {
     files.value = await core.request<AudioTagFile[]>(
       "audio.scan",
@@ -345,10 +385,7 @@ async function scan() {
       ElMessage.error(operationError.value);
     }
   } finally {
-    busy.value = false;
-    activeRequestId.value = undefined;
-    progress.value = undefined;
-    progressStartedAt.value = undefined;
+    settleAudioWork();
   }
 }
 
@@ -387,13 +424,26 @@ async function buildPlanRequest(): Promise<AudioTagPlanRequest> {
   };
 }
 
-async function createPlan() {
-  busy.value = true;
-  operationError.value = "";
-  progress.value = undefined;
-  progressStartedAt.value = Date.now();
-  try {
-    plan.value = await core.request<AudioTagPlan>("audio.plan", await buildPlanRequest(), {
+function adoptPlan(value: unknown) {
+  const next = value as AudioTagPlan;
+  files.value = next.files;
+  clearWarningSelection(files.value);
+  plan.value = { ...next, files: files.value };
+  listFilter.value = "changed";
+}
+
+function reportPreviewError(error: unknown) {
+  operationError.value = error instanceof Error ? error.message : String(error);
+  ElMessage.error(operationError.value);
+}
+
+let draftMute = 0;
+const previewController = createAudioPreviewController({
+  plan: async () => {
+    applyDraftToOptions();
+    if (!files.value.length) return undefined;
+    plan.value = undefined;
+    return core.request<AudioTagPlan>("audio.plan", await buildPlanRequest(), {
       onProgress: (value) => {
         progress.value = value;
       },
@@ -401,31 +451,32 @@ async function createPlan() {
         activeRequestId.value = id;
       },
     });
-    files.value = plan.value.files;
-    clearWarningSelection(files.value);
-    listFilter.value = "changed";
-  } catch (error) {
-    if (isCancellationError(error)) ElMessage.info("已取消建立預覽。");
-    else {
-      operationError.value = error instanceof Error ? error.message : String(error);
-      ElMessage.error(operationError.value);
-    }
-  } finally {
-    busy.value = false;
-    activeRequestId.value = undefined;
-    progress.value = undefined;
-    progressStartedAt.value = undefined;
-  }
+  },
+  cancelInFlight,
+  apply: adoptPlan,
+  onError: reportPreviewError,
+  isCancellation: isCancellationError,
+  onStart: beginAudioWork,
+  onSettled: settleAudioWork,
+});
+
+async function createPlan() {
+  await previewController.run();
 }
 
-async function applySettings() {
-  const hadPlan = Boolean(plan.value);
-  applyDraftToOptions();
+watch(
+  draft,
+  () => {
+    if (draftMute > 0 || !settingsOpen.value) return;
+    previewController.schedule();
+  },
+  { deep: true },
+);
+
+async function closeSettings() {
   settingsOpen.value = false;
-  plan.value = undefined;
-  if (!paths.value.length) return;
-  await scan();
-  if (hadPlan && files.value.length) await createPlan();
+  applyDraftToOptions();
+  await previewController.flush();
 }
 
 async function applyPlan() {
@@ -482,19 +533,8 @@ async function applyPlan() {
 }
 
 async function cancelPlan() {
-  const requestId = activeRequestId.value;
-  const planId = plan.value?.planId;
-  if (requestId) {
-    try {
-      await core.cancel(requestId);
-    } catch {
-      // 仍嘗試以計畫 ID 取消。
-    }
-  }
-  if (planId) {
-    await core.request("audio.cancel", { planId });
-  }
-  if (!busy.value) plan.value = undefined;
+  previewController.invalidate();
+  await cancelInFlight();
 }
 
 function adoptRescannedFile(updated: AudioTagFile) {
@@ -981,9 +1021,7 @@ watch(
         >反選目前篩選</el-button
       >
       <span class="audio-action-spacer" />
-      <el-button v-if="plan || busy" @click="cancelPlan">{{
-        busy ? "停止作業" : "取消計畫"
-      }}</el-button>
+      <el-button v-if="busy" @click="cancelPlan">停止作業</el-button>
       <el-button v-if="plan" :disabled="busy || !totals.files" @click="createPlan"
         >重新建立預覽</el-button
       >
@@ -1110,9 +1148,7 @@ watch(
         </template>
       </el-form>
       <template #footer>
-        <el-button type="primary" :disabled="busy" @click="applySettings"
-          >套用並重新建立預覽</el-button
-        >
+        <el-button type="primary" :disabled="busy" @click="closeSettings">關閉</el-button>
       </template>
     </el-drawer>
   </section>

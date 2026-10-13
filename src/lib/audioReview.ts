@@ -42,6 +42,87 @@ export interface AudioSettingsSnapshot {
   id3v2Encoding: string;
 }
 
+export const AUDIO_PREVIEW_DEBOUNCE_MS = 350;
+
+export function createPreviewRace() {
+  let generation = 0;
+  return {
+    start(): number {
+      generation += 1;
+      return generation;
+    },
+    current(): number {
+      return generation;
+    },
+    isCurrent(token: number): boolean {
+      return token === generation;
+    },
+  };
+}
+
+export interface AudioPreviewController {
+  schedule(): void;
+  flush(): Promise<void>;
+  run(): Promise<void>;
+  /** 讓進行中的預覽回應失效，例如使用者改去掃描。 */
+  invalidate(): void;
+}
+
+/**
+ * 設定變更先合併成一次預覽。後發出的要求蓋過先發出的；過期回應不會寫回。
+ */
+export function createAudioPreviewController(deps: {
+  debounceMs?: number;
+  plan: () => Promise<unknown>;
+  cancelInFlight: () => Promise<void>;
+  apply: (value: unknown) => void;
+  onError?: (error: unknown) => void;
+  isCancellation?: (error: unknown) => boolean;
+  onStart?: () => void;
+  onSettled?: () => void;
+}): AudioPreviewController {
+  const race = createPreviewRace();
+  const debounceMs = deps.debounceMs ?? AUDIO_PREVIEW_DEBOUNCE_MS;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  async function run(): Promise<void> {
+    const token = race.start();
+    deps.onStart?.();
+    try {
+      await deps.cancelInFlight();
+      if (!race.isCurrent(token)) return;
+      const value = await deps.plan();
+      if (!race.isCurrent(token) || value == null) return;
+      deps.apply(value);
+    } catch (error) {
+      if (!race.isCurrent(token) || deps.isCancellation?.(error)) return;
+      deps.onError?.(error);
+    } finally {
+      if (race.isCurrent(token)) deps.onSettled?.();
+    }
+  }
+
+  return {
+    schedule() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = undefined;
+        void run();
+      }, debounceMs);
+    },
+    async flush() {
+      if (!timer) return;
+      clearTimeout(timer);
+      timer = undefined;
+      await run();
+    },
+    run,
+    invalidate() {
+      race.start();
+    },
+  };
+}
+
 const DIRECTION_LABEL: Record<Direction, string> = {
   s2t: "簡→繁",
   t2s: "繁→簡",

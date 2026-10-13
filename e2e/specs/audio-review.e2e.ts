@@ -77,7 +77,9 @@ test.describe("音訊標籤審閱", () => {
     await expect(drawer.getByRole("heading", { name: "備份" })).toBeVisible();
     await expect(drawer.getByRole("heading", { name: "ID3v1" })).toBeVisible();
     await expect(drawer.getByRole("heading", { name: "ID3v2" })).toBeVisible();
-    await expect(drawer.getByRole("button", { name: "套用並重新建立預覽" })).toBeVisible();
+    await expect(drawer.getByRole("button", { name: "關閉" })).toBeVisible();
+    await expect(drawer.getByRole("button", { name: "套用並重新建立預覽" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "取消計畫" })).toHaveCount(0);
     await page.screenshot({ path: join(shots, "audio-settings-drawer.png") });
     await page.keyboard.press("Escape");
 

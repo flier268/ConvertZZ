@@ -1887,6 +1887,34 @@ async fn repeated_comment_apply_does_not_append_frames() {
     let _ = std::fs::remove_dir_all(&directory);
 }
 
+#[test]
+fn writing_lyrics_keeps_other_uslt_frames() {
+    let mut tag = id3::Tag::new();
+    tag.add_frame(id3::frame::Lyrics {
+        lang: "zho".into(),
+        description: "演唱".into(),
+        text: "里面".into(),
+    });
+    tag.add_frame(id3::frame::Lyrics {
+        lang: "eng".into(),
+        description: "translation".into(),
+        text: "inside".into(),
+    });
+    set_id3v2_value(&mut tag, "lyrics", "裡面".into());
+    let lyrics: Vec<_> = tag.lyrics().cloned().collect();
+    assert_eq!(
+        lyrics
+            .iter()
+            .map(|frame| (
+                frame.lang.as_str(),
+                frame.description.as_str(),
+                frame.text.as_str()
+            ))
+            .collect::<Vec<_>>(),
+        vec![("zho", "演唱", "裡面"), ("eng", "translation", "inside"),]
+    );
+}
+
 #[tokio::test]
 async fn plan_reuses_scan_cache_and_omits_duplicate_text() {
     let directory = temp_dir();

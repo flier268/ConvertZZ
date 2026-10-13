@@ -2199,6 +2199,75 @@ fn non_numeric_id3v2_year_and_track_are_stored_as_text_frames() {
     assert_eq!(id3_text(&numeric, "TRCK").as_deref(), Some("7/12"));
 }
 
+/// v2.4 年份在 TDRC。非數字年份要寫進該版本的年份框，並清掉另一框的舊值。
+#[test]
+fn non_numeric_year_uses_version_frame_and_clears_the_other() {
+    let mut v24 = id3::Tag::new();
+    assert_eq!(v24.version(), Version::Id3v24);
+    v24.set_text("TDRC", "1998");
+    v24.set_text("TYER", "1990");
+    set_id3v2_value(&mut v24, "year", "录制年".into());
+    assert_eq!(id3_text(&v24, "TDRC").as_deref(), Some("录制年"));
+    assert!(v24.get("TYER").is_none(), "v2.4 不應留下舊 TYER");
+    assert_eq!(id3v2_standard(&v24, "year").as_deref(), Some("录制年"));
+
+    let mut v23 = id3::Tag::with_version(Version::Id3v23);
+    v23.set_text("TDRC", "1998");
+    v23.set_text("TYER", "1990");
+    set_id3v2_value(&mut v23, "year", "录制年".into());
+    assert_eq!(id3_text(&v23, "TYER").as_deref(), Some("录制年"));
+    assert!(v23.get("TDRC").is_none(), "v2.3 不應留下舊 TDRC");
+    assert_eq!(id3v2_standard(&v23, "year").as_deref(), Some("录制年"));
+}
+
+/// APE／Vorbis 的年份與音軌不是純數字時，仍要寫回原文字，不能留下舊數字。
+#[test]
+fn non_numeric_ape_and_vorbis_year_and_track_keep_original_text() {
+    for tag_type in [
+        lofty::tag::TagType::Ape,
+        lofty::tag::TagType::VorbisComments,
+    ] {
+        let mut tag = Tag::new(tag_type);
+        tag.set_date(Timestamp {
+            year: 1998,
+            ..Timestamp::default()
+        });
+        tag.set_track(3);
+        set_lofty_values(&mut tag, "year", &["录制年".into()]);
+        set_lofty_values(&mut tag, "track", &["第一辑".into()]);
+        assert_eq!(
+            tag.get_string(ItemKey::RecordingDate)
+                .or_else(|| tag.get_string(ItemKey::Year)),
+            Some("录制年"),
+            "{tag_type:?}"
+        );
+        assert_eq!(
+            tag.get_string(ItemKey::TrackNumber),
+            Some("第一辑"),
+            "{tag_type:?}"
+        );
+        assert!(tag.date().is_none(), "{tag_type:?} 仍留著舊年份");
+        let mut fields = Vec::new();
+        push_standard_fields(&mut fields, AudioContainer::Apev2, &tag);
+        assert_eq!(
+            fields
+                .iter()
+                .find(|field| field.key == "year")
+                .map(|field| field.values.clone()),
+            Some(vec!["录制年".to_string()]),
+            "{tag_type:?}"
+        );
+        assert_eq!(
+            fields
+                .iter()
+                .find(|field| field.key == "track")
+                .map(|field| field.values.clone()),
+            Some(vec!["第一辑".to_string()]),
+            "{tag_type:?}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn plan_reuses_scan_cache_and_omits_duplicate_text() {
     let directory = temp_dir();

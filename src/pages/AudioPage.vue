@@ -408,8 +408,9 @@ async function confirmId3v1Overwrite(): Promise<boolean> {
 async function copyColumnTo(source: AudioContainer, target: AudioContainer, overwrite: boolean) {
   menuFor.value = "";
   const file = selectedFile.value;
-  if (!file) return;
+  if (!file || busy.value) return;
   if (overwrite && source === "id3v1" && !(await confirmId3v1Overwrite())) return;
+  if (busy.value) return;
   const next = manualCopyOperation(file.path, source, target, overwrite);
   headerOps.value = [
     ...headerOps.value.filter(
@@ -429,8 +430,9 @@ async function copyColumnTo(source: AudioContainer, target: AudioContainer, over
 async function overwriteColumn(source: AudioContainer) {
   menuFor.value = "";
   const file = selectedFile.value;
-  if (!file) return;
+  if (!file || busy.value) return;
   if (source === "id3v1" && !(await confirmId3v1Overwrite())) return;
+  if (busy.value) return;
   const next = overwriteOtherOperations(file.path, source);
   headerOps.value = [
     ...headerOps.value.filter(
@@ -458,7 +460,7 @@ function openRemoveDialog(container: AudioContainer) {
 function confirmRemoveDialog() {
   const dialog = removeDialog.value;
   const file = selectedFile.value;
-  if (!dialog || !file) return;
+  if (!dialog || !file || busy.value) return;
   if (presentContainers.value.length <= 1 && !dialog.onlyAck) return;
   const next = manualRemoveOperation(file.path, dialog.container, dialog.salvage);
   headerOps.value = [
@@ -806,6 +808,7 @@ async function applyPlan() {
     return;
   if (plan.value?.planId !== planId) return;
   previewController.invalidate();
+  previewController.setApplying(true);
   busy.value = true;
   progress.value = undefined;
   progressStartedAt.value = Date.now();
@@ -834,6 +837,7 @@ async function applyPlan() {
     if (isCancellationError(error)) ElMessage.info("已取消音訊轉換。");
     else ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
+    previewController.setApplying(false);
     busy.value = false;
     activeRequestId.value = undefined;
     progress.value = undefined;
@@ -1310,6 +1314,7 @@ watch(
                               :key="target"
                               type="button"
                               role="menuitem"
+                              :disabled="busy"
                               @click="copyColumnTo(container, target, container !== 'id3v1')"
                             >
                               複製到… {{ containerLabel(target) }}
@@ -1319,6 +1324,7 @@ watch(
                               v-if="container === 'id3v1'"
                               type="button"
                               role="menuitem"
+                              :disabled="busy"
                               @click="copyColumnTo(container, 'id3v2', true)"
                             >
                               複製到… ID3v2（覆蓋）
@@ -1327,7 +1333,7 @@ watch(
                           <button
                             type="button"
                             role="menuitem"
-                            :disabled="!copyTargetsFor(container).length"
+                            :disabled="busy || !copyTargetsFor(container).length"
                             @click="overwriteColumn(container)"
                           >
                             以此標籤覆蓋其他標籤
@@ -1336,7 +1342,7 @@ watch(
                             type="button"
                             role="menuitem"
                             class="audio-column-danger"
-                            :disabled="presentContainers.length <= 1"
+                            :disabled="busy || presentContainers.length <= 1"
                             @click="openRemoveDialog(container)"
                           >
                             移除這個標籤…
@@ -1791,7 +1797,9 @@ watch(
         <el-button @click="removeDialog = null">取消</el-button>
         <el-button
           type="danger"
-          :disabled="!removeDialog || (presentContainers.length <= 1 && !removeDialog.onlyAck)"
+          :disabled="
+            busy || !removeDialog || (presentContainers.length <= 1 && !removeDialog.onlyAck)
+          "
           @click="confirmRemoveDialog"
         >
           加入計畫：移除 {{ removeDialog ? containerLabel(removeDialog.container) : "" }}

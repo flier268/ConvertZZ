@@ -76,6 +76,8 @@ export interface AudioPreviewController {
   run(): Promise<void>;
   /** 讓進行中的預覽回應失效，例如使用者改去掃描。 */
   invalidate(): void;
+  /** 寫入進行中時，預覽不得再排程或取消這次寫入。 */
+  setApplying(applying: boolean): void;
 }
 
 /**
@@ -94,8 +96,10 @@ export function createAudioPreviewController(deps: {
   const race = createPreviewRace();
   const debounceMs = deps.debounceMs ?? AUDIO_PREVIEW_DEBOUNCE_MS;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let applying = false;
 
   async function run(): Promise<void> {
+    if (applying) return;
     const token = race.start();
     deps.onStart?.();
     try {
@@ -114,6 +118,7 @@ export function createAudioPreviewController(deps: {
 
   return {
     schedule() {
+      if (applying) return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = undefined;
@@ -131,6 +136,12 @@ export function createAudioPreviewController(deps: {
       if (timer) clearTimeout(timer);
       timer = undefined;
       race.start();
+    },
+    setApplying(next: boolean) {
+      applying = next;
+      if (!next) return;
+      if (timer) clearTimeout(timer);
+      timer = undefined;
     },
   };
 }

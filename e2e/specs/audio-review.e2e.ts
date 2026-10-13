@@ -60,12 +60,46 @@ test.describe("音訊標籤審閱", () => {
     await expect(page.locator(".audio-detail .diff-ins").first()).toBeVisible();
     await page.screenshot({ path: join(shots, "audio-list-detail.png") });
 
+    await page.getByText("全部 250").click();
+    await expect(page.locator(".audio-folder", { hasText: "/music/專輯甲" })).toBeVisible();
+    await expect(page.locator(".audio-folder", { hasText: "/music/專輯乙" })).toBeVisible();
+    await expect(page.locator(".audio-folder", { hasText: "/music/現場" })).toBeVisible();
+    const list = page.locator(".audio-file-pane .virtual-list");
+    await list.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect(page.locator(".audio-folder", { hasText: "/music/合輯" })).toBeVisible();
+    await list.evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    const album = page.locator(".audio-folder", { hasText: "/music/專輯甲" });
+    await expect(album).toContainText("1 檔");
+    await album.click();
+    await expect(page.locator(".audio-name", { hasText: "song.mp3" })).toHaveCount(0);
+    await page.screenshot({ path: join(shots, "audio-folder-collapsed.png") });
+    await page.locator(".audio-file-pane").focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.locator(".audio-folder.active")).toContainText("/music/專輯乙");
+    await page.keyboard.press("ArrowDown");
+    await expect(page.locator(".audio-row.active .audio-name")).toHaveText("same.ogg");
+    await expect(page.locator(".audio-name", { hasText: "song.mp3" })).toHaveCount(0);
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".audio-name", { hasText: "song.mp3" })).toBeVisible();
+
+    await page.getByRole("button", { name: "全不選" }).click();
+    await album.click();
+    await expect(page.locator(".audio-name", { hasText: "song.mp3" })).toHaveCount(0);
+    await page.getByRole("button", { name: "全選" }).click();
+    await expect(page.getByRole("button", { name: "確認寫入 233 個檔案" })).toBeEnabled();
+
     await page.getByRole("button", { name: "確認寫入 233 個檔案" }).click();
     await expect
       .poll(() => page.evaluate(() => window.__convertzzE2e?.lastAudioApplyPaths?.length ?? -1))
       .toBe(233);
     await expect
       .poll(() => page.evaluate(() => window.__convertzzE2e?.lastAudioApplyPaths ?? []))
-      .not.toContain("/tmp/same.ogg");
+      .not.toContain("/music/專輯乙/same.ogg");
   });
 });

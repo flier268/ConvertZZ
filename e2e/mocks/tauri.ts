@@ -367,7 +367,7 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
   }
   if (operation === "audio.plan") {
     const song = {
-      path: "/tmp/song.mp3",
+      path: "/music/專輯甲/song.mp3",
       format: "mp3" as const,
       selected: true,
       hasCoverArt: true,
@@ -406,7 +406,7 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
       ],
     };
     const unchanged = {
-      path: "/tmp/same.ogg",
+      path: "/music/專輯乙/same.ogg",
       format: "ogg" as const,
       selected: true,
       hasCoverArt: false,
@@ -422,7 +422,7 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
       ],
     };
     const warning = {
-      path: "/tmp/broken.mp3",
+      path: "/music/現場/broken.mp3",
       format: "mp3" as const,
       selected: false,
       hasCoverArt: false,
@@ -432,7 +432,7 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
     const batch = Array.from({ length: 247 }, (_, index) => {
       const same = index % 17 === 0;
       return {
-        path: `/tmp/batch/track-${String(index).padStart(3, "0")}.mp3`,
+        path: `${index % 2 === 0 ? "/music/合輯" : "/music/現場"}/track-${String(index).padStart(3, "0")}.mp3`,
         format: "mp3" as const,
         selected: true,
         hasCoverArt: false,

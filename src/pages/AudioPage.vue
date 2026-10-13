@@ -772,7 +772,9 @@ async function closeSettings() {
 }
 
 async function applyPlan() {
+  await previewController.flush();
   if (!plan.value || busy.value || totals.value.files === 0) return;
+  const planId = plan.value.planId;
   if (
     !(await confirm(`將寫入 ${totals.value.files} 個音訊檔案的已選標籤。`, {
       title: "確認標籤轉換",
@@ -780,6 +782,7 @@ async function applyPlan() {
     }))
   )
     return;
+  if (plan.value?.planId !== planId) return;
   if (
     backup.value &&
     conflictPolicy.value === "overwrite" &&
@@ -789,6 +792,8 @@ async function applyPlan() {
     }))
   )
     return;
+  if (plan.value?.planId !== planId) return;
+  previewController.invalidate();
   busy.value = true;
   progress.value = undefined;
   progressStartedAt.value = Date.now();

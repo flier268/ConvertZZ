@@ -128,6 +128,8 @@ export function createAudioPreviewController(deps: {
     },
     run,
     invalidate() {
+      if (timer) clearTimeout(timer);
+      timer = undefined;
       race.start();
     },
   };

@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 import type { AudioTagFile } from "@shared/contracts";
 import {
   applyBulkSelection,
+  audioParentDir,
   audioReviewStats,
+  audioRowSection,
+  buildAudioListRows,
   charDiff,
   filterAudioFiles,
   selectionTotals,
+  stepAudioRow,
+  toggleFolderCollapsed,
   writableAudioPaths,
   settingsSummaryChips,
 } from "./audioReview";
@@ -155,6 +160,53 @@ describe("audioReview", () => {
       "們",
     ]);
     expect(charDiff("同", "同").before).toEqual([{ text: "同", kind: "same" }]);
+  });
+
+  it("依資料夾收成單一扁平列，摺疊時拿掉檔案列", () => {
+    expect(audioParentDir("/music/專輯甲/song.mp3")).toBe("/music/專輯甲");
+    expect(audioParentDir("C:\\music\\a.mp3")).toBe("C:/music");
+    expect(audioParentDir("song.mp3")).toBe(".");
+    const rows = buildAudioListRows(sample, new Set());
+    expect(rows.map((row) => (row.type === "folder" ? row.path : row.file.path))).toEqual([
+      "/tmp/晨雾",
+      "/tmp/晨雾/风.mp3",
+      "/tmp",
+      "/tmp/same.ogg",
+      "/tmp/broken.mp3",
+    ]);
+    const folder = rows[0];
+    expect(folder).toMatchObject({
+      type: "folder",
+      counts: { files: 1, changed: 1, errors: 0 },
+      collapsed: false,
+    });
+    const errors = rows[2];
+    expect(errors).toMatchObject({
+      type: "folder",
+      path: "/tmp",
+      counts: { files: 2, changed: 0, errors: 1 },
+    });
+    const collapsed = toggleFolderCollapsed(new Set(), "/tmp");
+    const hidden = buildAudioListRows(sample, collapsed);
+    expect(hidden.map((row) => row.type)).toEqual(["folder", "file", "folder"]);
+    expect(audioRowSection(hidden, 1)).toBe(0);
+    expect(audioRowSection(hidden, 2)).toBe(2);
+    expect(stepAudioRow(hidden.length, 0, 1)).toBe(1);
+    expect(stepAudioRow(hidden.length, -1, 1)).toBe(0);
+    expect(stepAudioRow(hidden.length, -1, -1)).toBe(2);
+    expect(stepAudioRow(0, -1, 1)).toBe(-1);
+  });
+
+  it("全選作用於全部篩選檔，不因資料夾摺疊而略過", () => {
+    const files = sample.map((item) => ({ ...item, selected: false }));
+    const filtered = filterAudioFiles(files, "all", "");
+    const collapsed = buildAudioListRows(filtered, new Set(["/tmp"]));
+    expect(collapsed.some((row) => row.type === "file" && row.file.path === "/tmp/same.ogg")).toBe(
+      false,
+    );
+    applyBulkSelection(files, filtered, "all");
+    expect(files.find((item) => item.path === "/tmp/same.ogg")?.selected).toBe(true);
+    expect(files.find((item) => item.path === "/tmp/broken.mp3")?.selected).toBe(false);
   });
 
   it("設定摘要含 ID3、錯碼修復與備份", () => {

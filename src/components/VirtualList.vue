@@ -8,6 +8,8 @@ const props = withDefaults(
     overscan?: number;
     /** 測試或不依賴版面計算時可直接指定可視高度。 */
     viewportHeight?: number;
+    /** 列索引 → 所屬區段標題列。有提供時，標題捲出視窗後會黏在上方。 */
+    sectionOf?: (index: number) => number | null;
   }>(),
   { itemHeight: 40, overscan: 6 },
 );
@@ -32,6 +34,14 @@ const indexes = computed(() => {
   const list: number[] = [];
   for (let index = start.value; index < end.value; index += 1) list.push(index);
   return list;
+});
+const stickyIndex = computed(() => {
+  if (!props.sectionOf || props.count <= 0) return null;
+  const first = Math.min(props.count - 1, Math.floor(scrollTop.value / props.itemHeight));
+  const section = props.sectionOf(first);
+  if (section == null || section < 0) return null;
+  if (section * props.itemHeight >= scrollTop.value) return null;
+  return section;
 });
 
 function onScroll(event: Event) {
@@ -69,6 +79,13 @@ defineExpose({ scrollToIndex, start, end });
 
 <template>
   <div ref="root" class="virtual-list" @scroll="onScroll">
+    <div
+      v-if="stickyIndex != null"
+      class="virtual-list-sticky"
+      :style="{ height: `${itemHeight}px`, marginBottom: `-${itemHeight}px` }"
+    >
+      <slot name="sticky" :index="stickyIndex" />
+    </div>
     <div class="virtual-list-spacer" :style="{ height: `${count * itemHeight}px` }">
       <div
         v-for="index in indexes"

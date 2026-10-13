@@ -137,6 +137,92 @@ export function filterAudioFiles(
   });
 }
 
+export interface AudioFolderCounts {
+  /** 目前篩選下這個資料夾的檔案數。 */
+  files: number;
+  /** 其中標籤數值有變更的檔案數。 */
+  changed: number;
+  /** 其中讀取失敗的檔案數。 */
+  errors: number;
+}
+
+export type AudioListRow =
+  | { type: "folder"; path: string; counts: AudioFolderCounts; collapsed: boolean }
+  | { type: "file"; file: AudioTagFile };
+
+/** 檔案所在資料夾。無分隔字元時歸在「.」。 */
+export function audioParentDir(path: string): string {
+  const normalized = path.replaceAll("\\", "/");
+  const index = normalized.lastIndexOf("/");
+  if (index < 0) return ".";
+  if (index === 0) return "/";
+  return normalized.slice(0, index);
+}
+
+/**
+ * 把已篩選的檔案收成單一扁平列：資料夾標題＋檔案。
+ * 摺疊的資料夾不輸出檔案列，虛擬清單因此不會畫到它們。
+ * 資料夾順序依檔案首次出現，同資料夾維持原順序。
+ */
+export function buildAudioListRows(
+  files: readonly AudioTagFile[],
+  collapsed: ReadonlySet<string>,
+): AudioListRow[] {
+  const groups = new Map<string, AudioTagFile[]>();
+  for (const file of files) {
+    const dir = audioParentDir(file.path);
+    const list = groups.get(dir);
+    if (list) list.push(file);
+    else groups.set(dir, [file]);
+  }
+  const rows: AudioListRow[] = [];
+  for (const [path, group] of groups) {
+    const isCollapsed = collapsed.has(path);
+    let changed = 0;
+    let errors = 0;
+    for (const file of group) {
+      if (file.warning) errors += 1;
+      else if (changedFieldCount(file) > 0) changed += 1;
+    }
+    rows.push({
+      type: "folder",
+      path,
+      collapsed: isCollapsed,
+      counts: { files: group.length, changed, errors },
+    });
+    if (!isCollapsed) {
+      for (const file of group) rows.push({ type: "file", file });
+    }
+  }
+  return rows;
+}
+
+export function toggleFolderCollapsed(collapsed: ReadonlySet<string>, folder: string): Set<string> {
+  const next = new Set(collapsed);
+  if (next.has(folder)) next.delete(folder);
+  else next.add(folder);
+  return next;
+}
+
+/**
+ * 在扁平可見列上移動。被摺疊拿掉的檔案不在 `length` 裡，所以 ↑/↓ 會直接跳過。
+ * `index` 為 -1（例如選取落在隱藏列）時，往下從第一列開始、往上從最後一列開始。
+ */
+export function stepAudioRow(length: number, index: number, delta: number): number {
+  if (length <= 0) return -1;
+  if (index < 0) return delta < 0 ? length - 1 : 0;
+  return Math.min(length - 1, Math.max(0, index + delta));
+}
+
+/** 這一列所屬的資料夾標題索引，供黏住目前資料夾。 */
+export function audioRowSection(rows: readonly { type: string }[], index: number): number | null {
+  if (index < 0 || index >= rows.length) return null;
+  for (let cursor = index; cursor >= 0; cursor -= 1) {
+    if (rows[cursor]?.type === "folder") return cursor;
+  }
+  return null;
+}
+
 function containerEnabled(field: AudioTagField, containers: AudioContainerFlags): boolean {
   if (field.container === "id3v1") return containers.id3v1;
   if (field.container === "id3v2") return containers.id3v2;
@@ -196,6 +282,11 @@ export function writableAudioPaths(
     .map((file) => file.path);
 }
 
+/**
+ * 全選、全不選、反選只改 `visible` 裡的檔案（目前篩選結果、且非錯誤檔）。
+ * 資料夾摺疊只影響畫面列，不影響這份清單：呼叫端要傳入全部篩選檔，
+ * 摺疊資料夾裡的檔案才會一起被勾選或取消。
+ */
 export function applyBulkSelection(
   files: readonly AudioTagFile[],
   visible: readonly AudioTagFile[],

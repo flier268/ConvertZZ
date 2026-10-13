@@ -19,14 +19,19 @@ import {
   applyBulkSelection,
   audioBaseName,
   audioReviewStats,
+  audioRowSection,
+  buildAudioListRows,
   changedFieldCount,
   charDiff,
   filterAudioFiles,
   selectionTotals,
+  stepAudioRow,
+  toggleFolderCollapsed,
   writableAudioPaths,
   settingsSummaryChips,
   fieldValuesChanged,
   type AudioListFilter,
+  type AudioListRow,
   type DiffPiece,
 } from "../lib/audioReview";
 import VirtualList from "../components/VirtualList.vue";
@@ -48,6 +53,9 @@ const listFilter = ref<AudioListFilter>("changed");
 const query = ref("");
 const hideUnchanged = ref(true);
 const selectedPath = ref("");
+const collapsedFolders = ref<Set<string>>(new Set());
+const focusKind = ref<"file" | "folder">("file");
+const focusFolder = ref("");
 const listRef = ref<{ scrollToIndex: (index: number) => void } | null>(null);
 const options = reactive({
   direction: "s2t" as Direction,
@@ -102,10 +110,8 @@ const containers = computed(() => ({
 const totals = computed(() => selectionTotals(files.value, containers.value));
 const stats = computed(() => audioReviewStats(files.value));
 const filteredFiles = computed(() => filterAudioFiles(files.value, listFilter.value, query.value));
+const listRows = computed(() => buildAudioListRows(filteredFiles.value, collapsedFolders.value));
 const selectedFile = computed(() => files.value.find((file) => file.path === selectedPath.value));
-const selectedIndex = computed(() =>
-  filteredFiles.value.findIndex((file) => file.path === selectedPath.value),
-);
 const visibleFields = computed(() => {
   const file = selectedFile.value;
   if (!file) return [];
@@ -133,8 +139,48 @@ const summaryChips = computed(() =>
 watch(filteredFiles, (list) => {
   if (!list.some((file) => file.path === selectedPath.value)) {
     selectedPath.value = list[0]?.path ?? "";
+    focusKind.value = "file";
   }
 });
+
+function sectionOf(index: number): number | null {
+  return audioRowSection(listRows.value, index);
+}
+
+function folderAt(index: number): Extract<AudioListRow, { type: "folder" }> | undefined {
+  const row = listRows.value[index];
+  return row?.type === "folder" ? row : undefined;
+}
+
+function focusIndex(): number {
+  if (focusKind.value === "folder") {
+    return listRows.value.findIndex(
+      (row) => row.type === "folder" && row.path === focusFolder.value,
+    );
+  }
+  return listRows.value.findIndex(
+    (row) => row.type === "file" && row.file.path === selectedPath.value,
+  );
+}
+
+function focusRow(index: number) {
+  const row = listRows.value[index];
+  if (!row) return;
+  if (row.type === "folder") {
+    focusKind.value = "folder";
+    focusFolder.value = row.path;
+  } else {
+    focusKind.value = "file";
+    selectedPath.value = row.file.path;
+  }
+  listRef.value?.scrollToIndex(index);
+}
+
+function toggleFolder(path: string) {
+  focusKind.value = "folder";
+  focusFolder.value = path;
+  collapsedFolders.value = toggleFolderCollapsed(collapsedFolders.value, path);
+}
 
 function joinValues(values: string[] | undefined): string {
   return (values ?? []).join("\n");
@@ -390,15 +436,22 @@ async function cancelPlan() {
 }
 
 function selectFile(file: AudioTagFile) {
+  focusKind.value = "file";
   selectedPath.value = file.path;
 }
 
 function moveSelection(delta: number) {
-  const list = filteredFiles.value;
-  if (!list.length) return;
-  const next = Math.min(list.length - 1, Math.max(0, selectedIndex.value + delta));
-  selectedPath.value = list[next]?.path ?? "";
-  listRef.value?.scrollToIndex(next);
+  const next = stepAudioRow(listRows.value.length, focusIndex(), delta);
+  if (next < 0) return;
+  focusRow(next);
+}
+
+function onFolderKey(key: string): boolean {
+  if (focusKind.value !== "folder") return false;
+  if (key !== "Enter" && key !== " " && key !== "ArrowLeft" && key !== "ArrowRight") return false;
+  if (!focusFolder.value) return false;
+  toggleFolder(focusFolder.value);
+  return true;
 }
 
 function onReviewKeydown(event: KeyboardEvent) {
@@ -411,9 +464,11 @@ function onReviewKeydown(event: KeyboardEvent) {
   } else if (event.key === "ArrowUp") {
     event.preventDefault();
     moveSelection(-1);
+  } else if (onFolderKey(event.key)) {
+    event.preventDefault();
   } else if (event.key === " ") {
     const file = selectedFile.value;
-    if (!file || file.warning) return;
+    if (focusKind.value !== "file" || !file || file.warning) return;
     event.preventDefault();
     file.selected = !file.selected;
   }
@@ -513,32 +568,69 @@ watch(
         <el-empty description="請選取 MP3、APE、OGG 或 Opus 檔案" />
       </div>
       <template v-else>
-        <div class="audio-file-pane">
-          <VirtualList ref="listRef" :count="filteredFiles.length" :item-height="40">
+        <div class="audio-file-pane" tabindex="-1">
+          <VirtualList
+            ref="listRef"
+            :count="listRows.length"
+            :item-height="40"
+            :section-of="sectionOf"
+          >
+            <template #sticky="{ index }">
+              <div
+                v-if="folderAt(index)"
+                class="audio-folder"
+                :aria-expanded="folderAt(index) ? !folderAt(index)!.collapsed : undefined"
+              >
+                <span class="audio-caret">{{ folderAt(index)!.collapsed ? "▸" : "▾" }}</span>
+                <span class="audio-folder-path">{{ folderAt(index)!.path }}</span>
+                <span class="audio-folder-counts">
+                  {{ folderAt(index)!.counts.files }} 檔 · 變更
+                  {{ folderAt(index)!.counts.changed }} · 錯誤
+                  {{ folderAt(index)!.counts.errors }}
+                </span>
+              </div>
+            </template>
             <template #default="{ index }">
               <div
+                v-if="listRows[index]?.type === 'folder'"
+                class="audio-folder"
+                role="button"
+                :aria-expanded="!listRows[index].collapsed"
+                :class="{ active: focusKind === 'folder' && focusFolder === listRows[index].path }"
+                @click="toggleFolder(listRows[index].path)"
+              >
+                <span class="audio-caret">{{ listRows[index].collapsed ? "▸" : "▾" }}</span>
+                <span class="audio-folder-path">{{ listRows[index].path }}</span>
+                <span class="audio-folder-counts">
+                  {{ listRows[index].counts.files }} 檔 · 變更
+                  {{ listRows[index].counts.changed }} · 錯誤
+                  {{ listRows[index].counts.errors }}
+                </span>
+              </div>
+              <div
+                v-else-if="listRows[index]?.type === 'file'"
                 class="audio-row"
                 :class="{
-                  active: filteredFiles[index]?.path === selectedPath,
-                  warn: Boolean(filteredFiles[index]?.warning),
+                  active: focusKind === 'file' && listRows[index].file.path === selectedPath,
+                  warn: Boolean(listRows[index].file.warning),
                 }"
-                @click="selectFile(filteredFiles[index])"
+                @click="selectFile(listRows[index].file)"
               >
                 <el-checkbox
-                  v-model="filteredFiles[index].selected"
-                  :disabled="Boolean(filteredFiles[index].warning) || busy"
+                  v-model="listRows[index].file.selected"
+                  :disabled="Boolean(listRows[index].file.warning) || busy"
                   @click.stop
                 />
-                <span class="audio-name">{{ audioBaseName(filteredFiles[index].path) }}</span>
-                <span class="audio-format">{{ filteredFiles[index].format.toUpperCase() }}</span>
-                <span v-if="filteredFiles[index].warning" class="audio-bang" title="此檔案有錯誤"
+                <span class="audio-name">{{ audioBaseName(listRows[index].file.path) }}</span>
+                <span class="audio-format">{{ listRows[index].file.format.toUpperCase() }}</span>
+                <span v-if="listRows[index].file.warning" class="audio-bang" title="此檔案有錯誤"
                   >!</span
                 >
                 <span
                   v-else
                   class="audio-badge"
-                  :class="{ zero: changedFieldCount(filteredFiles[index]) === 0 }"
-                  >{{ changedFieldCount(filteredFiles[index]) }}</span
+                  :class="{ zero: changedFieldCount(listRows[index].file) === 0 }"
+                  >{{ changedFieldCount(listRows[index].file) }}</span
                 >
               </div>
             </template>
@@ -554,7 +646,10 @@ watch(
                   {{ selectedFile.hasCoverArt ? "含封面" : "無封面" }}
                 </p>
               </div>
-              <span class="audio-keys"><kbd>↑</kbd><kbd>↓</kbd> 切換檔案 <kbd>空白</kbd> 勾選</span>
+              <span class="audio-keys"
+                ><kbd>↑</kbd><kbd>↓</kbd> 移動 <kbd>Enter</kbd><kbd>←</kbd><kbd>→</kbd> 摺疊資料夾
+                <kbd>空白</kbd> 勾選</span
+              >
             </div>
             <el-alert
               v-if="selectedFile.warning"
@@ -636,18 +731,21 @@ watch(
       <el-button
         link
         :disabled="!filteredFiles.length || busy"
+        title="作用於目前篩選的全部檔案，包含已摺疊資料夾裡的檔案"
         @click="applyBulkSelection(files, filteredFiles, 'all')"
         >全選</el-button
       >
       <el-button
         link
         :disabled="!filteredFiles.length || busy"
+        title="作用於目前篩選的全部檔案，包含已摺疊資料夾裡的檔案"
         @click="applyBulkSelection(files, filteredFiles, 'none')"
         >全不選</el-button
       >
       <el-button
         link
         :disabled="!filteredFiles.length || busy"
+        title="作用於目前篩選的全部檔案，包含已摺疊資料夾裡的檔案"
         @click="applyBulkSelection(files, filteredFiles, 'invert')"
         >反選</el-button
       >

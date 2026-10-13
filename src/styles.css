@@ -393,6 +393,40 @@ html.floating-window * {
   margin: 10px 0;
   justify-content: flex-start;
 }
+.audio-folder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  background: #f4faf8;
+  border-bottom: 1px solid #e7efed;
+  cursor: pointer;
+  user-select: none;
+}
+.audio-folder.active {
+  box-shadow: inset 3px 0 0 #0f8f82;
+}
+.audio-caret {
+  width: 14px;
+  color: #0f6f65;
+  font-size: 12px;
+}
+.audio-folder-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 650;
+}
+.audio-folder-counts {
+  flex: 0 0 auto;
+  color: #5d7672;
+  font-size: 11px;
+}
 .audio-row {
   display: flex;
   align-items: center;
@@ -484,6 +518,11 @@ html.floating-window * {
 .virtual-list-spacer {
   position: relative;
   width: 100%;
+}
+.virtual-list-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 .virtual-list-row {
   position: absolute;

@@ -28,4 +28,25 @@ describe("VirtualList", () => {
     expect(wrapper.text()).toContain("列100");
     expect(wrapper.text()).not.toContain("列0");
   });
+
+  it("區段標題捲出視窗後黏在上方", async () => {
+    const wrapper = mount(VirtualList, {
+      props: {
+        count: 50,
+        itemHeight: 40,
+        overscan: 1,
+        viewportHeight: 80,
+        sectionOf: (index: number) => Math.floor(index / 10) * 10,
+      },
+      slots: {
+        default: ({ index }: { index: number }) => `列${index}`,
+        sticky: ({ index }: { index: number }) => `黏住${index}`,
+      },
+    });
+    expect(wrapper.find(".virtual-list-sticky").exists()).toBe(false);
+    const host = wrapper.get(".virtual-list").element as HTMLElement;
+    host.scrollTop = 80;
+    await wrapper.get(".virtual-list").trigger("scroll");
+    expect(wrapper.get(".virtual-list-sticky").text()).toBe("黏住0");
+  });
 });

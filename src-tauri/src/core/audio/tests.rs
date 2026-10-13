@@ -232,6 +232,7 @@ async fn damaged_audio_reports_warning() {
         .await
         .unwrap();
     assert!(files[0].warning.is_some());
+    assert!(!files[0].selected);
     assert!(files[0].fields.is_empty());
     let _ = std::fs::remove_dir_all(&directory);
 }
@@ -1383,6 +1384,7 @@ async fn truncated_ogg_reports_warning() {
         .await
         .unwrap();
     assert!(files[0].warning.is_some());
+    assert!(!files[0].selected);
     assert!(files[0].fields.is_empty());
     let _ = std::fs::remove_dir_all(&directory);
 }

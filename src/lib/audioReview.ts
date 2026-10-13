@@ -307,8 +307,25 @@ export function writableAudioPaths(
     .map((file) => file.path);
 }
 
+/** 錯誤檔一律未勾選，全選與反選也不能把它算進去。 */
+export function clearWarningSelection(files: readonly AudioTagFile[]): void {
+  for (const file of files) {
+    if (file.warning) file.selected = false;
+  }
+}
+
+export const AUDIO_TAG_READ_ERROR = "無法讀取標籤";
+
+/** 與標題相同的原因不重複顯示。 */
+export function audioWarningDetail(warning: string | undefined): string | undefined {
+  const text = warning?.trim();
+  if (!text || text === AUDIO_TAG_READ_ERROR) return undefined;
+  return text;
+}
+
 /**
  * 全選、全不選、反選只改 `visible` 裡的檔案（目前篩選結果、且非錯誤檔）。
+ * 錯誤檔在這次操作裡一律清成未勾選。
  * 資料夾摺疊只影響畫面列，不影響這份清單：呼叫端要傳入全部篩選檔，
  * 摺疊資料夾裡的檔案才會一起被勾選或取消。
  */
@@ -317,6 +334,7 @@ export function applyBulkSelection(
   visible: readonly AudioTagFile[],
   mode: "all" | "none" | "invert",
 ): void {
+  clearWarningSelection(files);
   const paths = new Set(visible.filter((file) => !file.warning).map((file) => file.path));
   for (const file of files) {
     if (!paths.has(file.path) || file.warning) continue;

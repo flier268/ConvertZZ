@@ -81,7 +81,7 @@ impl AudioService {
                 Err(error) => AudioTagFile {
                     path: path.to_string_lossy().into_owned(),
                     format: format_from_path(path).unwrap_or(AudioFormat::Mp3),
-                    selected: true,
+                    selected: false,
                     fields: Vec::new(),
                     has_cover_art: false,
                     duration_seconds: None,
@@ -116,7 +116,8 @@ impl AudioService {
 
         let total = scanned.len() as u64;
         for (index, file) in scanned.iter_mut().enumerate() {
-            file.selected = selected_paths.contains(&resolve_path(&file.path));
+            file.selected =
+                file.warning.is_none() && selected_paths.contains(&resolve_path(&file.path));
             if file.warning.is_some() {
                 continue;
             }

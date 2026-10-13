@@ -19,6 +19,9 @@ import { formatProgressLabel, progressPercentage, type ProgressSnapshot } from "
 import {
   applyBulkSelection,
   audioBaseName,
+  AUDIO_TAG_READ_ERROR,
+  audioWarningDetail,
+  clearWarningSelection,
   audioRowSection,
   audioSegmentCounts,
   buildAudioListRows,
@@ -283,6 +286,7 @@ async function scan() {
         },
       },
     );
+    clearWarningSelection(files.value);
   } catch (error) {
     if (isCancellationError(error)) ElMessage.info("已取消掃描。");
     else ElMessage.error(error instanceof Error ? error.message : String(error));
@@ -350,6 +354,7 @@ async function createPlan() {
       },
     });
     files.value = plan.value.files;
+    clearWarningSelection(files.value);
     listFilter.value = "changed";
   } catch (error) {
     if (isCancellationError(error)) ElMessage.info("已取消建立預覽。");
@@ -470,7 +475,7 @@ async function rescanFile(file: AudioTagFile) {
       updated = scanned.find((item) => item.path === file.path) ?? scanned[0];
     }
     if (!updated) return;
-    updated = { ...updated, path: file.path };
+    updated = { ...updated, path: file.path, selected: updated.warning ? false : updated.selected };
     adoptRescannedFile(updated);
     selectedPath.value = file.path;
     if (updated.warning) ElMessage.warning(updated.warning);
@@ -480,6 +485,16 @@ async function rescanFile(file: AudioTagFile) {
   } finally {
     rescanningPath.value = "";
   }
+}
+
+function setFileSelected(file: AudioTagFile, selected: boolean) {
+  if (file.warning || busy.value) return;
+  file.selected = selected;
+}
+
+function onRowChecked(row: AudioListRow | undefined, selected: boolean) {
+  if (row?.type !== "file") return;
+  setFileSelected(row.file, selected);
 }
 
 function selectFile(file: AudioTagFile) {
@@ -581,7 +596,12 @@ watch(
       >
         <el-radio-button value="changed">有變更 {{ segments.changed }}</el-radio-button>
         <el-radio-button value="unchanged">不變 {{ segments.unchanged }}</el-radio-button>
-        <el-radio-button value="errors" :class="{ 'is-alert': segments.errors > 0 }"
+        <el-radio-button
+          value="errors"
+          :class="{
+            'is-alert': segments.errors > 0,
+            'is-filled': listFilter === 'errors' && segments.errors > 0,
+          }"
           >錯誤 {{ segments.errors }}</el-radio-button
         >
         <el-radio-button value="all">全部 {{ segments.all }}</el-radio-button>
@@ -642,8 +662,11 @@ watch(
                 @click="selectFile(listRows[index].file)"
               >
                 <el-checkbox
-                  v-model="listRows[index].file.selected"
+                  :model-value="
+                    !listRows[index].file.warning && Boolean(listRows[index].file.selected)
+                  "
                   :disabled="Boolean(listRows[index].file.warning) || busy"
+                  @change="(checked: boolean) => onRowChecked(listRows[index], checked)"
                   @click.stop
                 />
                 <span class="audio-name">{{ audioBaseName(listRows[index].file.path) }}</span>
@@ -685,8 +708,10 @@ watch(
               </el-tooltip>
             </div>
             <template v-if="selectedFile.warning">
-              <el-alert type="error" title="無法讀取標籤" show-icon :closable="false">
-                <p class="audio-error-reason">{{ selectedFile.warning }}</p>
+              <el-alert type="error" :title="AUDIO_TAG_READ_ERROR" show-icon :closable="false">
+                <p v-if="audioWarningDetail(selectedFile.warning)" class="audio-error-reason">
+                  {{ audioWarningDetail(selectedFile.warning) }}
+                </p>
                 <p class="audio-error-path">{{ selectedFile.path }}</p>
                 <p>這個檔案不能勾選，也不會寫入。修復後可按「重新掃描這個檔案」。</p>
               </el-alert>

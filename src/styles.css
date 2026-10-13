@@ -341,9 +341,16 @@ html.floating-window * {
 }
 .audio-segments .el-radio-button.is-alert .el-radio-button__inner {
   color: #c0392b;
+  border-color: #c0392b;
 }
-.audio-segments .el-radio-button.is-alert.is-active .el-radio-button__inner {
-  background: #c0392b;
+.audio-segments .el-radio-button.is-alert .el-radio-button__inner:hover {
+  color: #c0392b;
+}
+.audio-segments
+  .el-radio-button.is-filled.is-active
+  .el-radio-button__original-radio:not(:disabled)
+  + .el-radio-button__inner {
+  background-color: #c0392b;
   border-color: #c0392b;
   color: #fff;
   box-shadow: -1px 0 0 0 #c0392b;

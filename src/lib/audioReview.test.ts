@@ -3,6 +3,8 @@ import type { AudioTagFile } from "@shared/contracts";
 import {
   applyBulkSelection,
   audioParentDir,
+  audioWarningDetail,
+  clearWarningSelection,
   audioReviewStats,
   audioSegmentCounts,
   replaceAudioFile,
@@ -162,6 +164,21 @@ describe("audioReview", () => {
     applyBulkSelection(sample, sample, "all");
     expect(sample[2].selected).toBe(false);
     expect(sample[1].selected).toBe(true);
+
+    const forced = file({ path: "/tmp/broken.mp3", selected: true, warning: "截斷" });
+    clearWarningSelection([forced]);
+    expect(forced.selected).toBe(false);
+    applyBulkSelection([forced], [forced], "all");
+    expect(forced.selected).toBe(false);
+    forced.selected = true;
+    applyBulkSelection([forced], [forced], "invert");
+    expect(forced.selected).toBe(false);
+  });
+
+  it("錯誤原因與標題相同時不重複", () => {
+    expect(audioWarningDetail("無法讀取標籤")).toBeUndefined();
+    expect(audioWarningDetail("  無法讀取標籤  ")).toBeUndefined();
+    expect(audioWarningDetail("檔案已截斷")).toBe("檔案已截斷");
   });
 
   it("勾選計數只算會變更的欄位，並略過錯誤檔與未啟用的 ID3 容器", () => {

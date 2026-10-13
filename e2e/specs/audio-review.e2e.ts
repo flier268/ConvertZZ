@@ -12,7 +12,8 @@ test.describe("音訊標籤審閱", () => {
     await openPage(page, "#tour-audio", "音訊標籤");
     await page.getByRole("button", { name: "選取音訊檔案" }).click();
     await page.getByRole("button", { name: "建立標籤預覽" }).click();
-    await expect(page.getByRole("button", { name: "確認寫入 249 個檔案" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "確認寫入 233 個檔案" })).toBeEnabled();
+    await expect(page.getByText("已勾選 233 個檔案・467 個欄位")).toBeVisible();
     await expect(page.getByText("只看有變更 233")).toBeVisible();
     await expect(page.getByRole("button", { name: "有變更 233" })).toBeVisible();
     await expect(page.getByRole("button", { name: "錯誤 1" })).toBeVisible();
@@ -24,7 +25,8 @@ test.describe("音訊標籤審閱", () => {
     await page.getByRole("button", { name: "全不選" }).click();
     await expect(page.getByRole("button", { name: "確認寫入 0 個檔案" })).toBeDisabled();
     await page.getByRole("button", { name: "全選" }).click();
-    await expect(page.getByRole("button", { name: "確認寫入 249 個檔案" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "確認寫入 233 個檔案" })).toBeEnabled();
+    await expect(page.getByText("已勾選 233 個檔案・467 個欄位")).toBeVisible();
 
     await page.getByText("只看有變更 233").click();
     await page.getByPlaceholder("搜尋檔名、專輯、標題").fill("same");
@@ -57,5 +59,13 @@ test.describe("音訊標籤審閱", () => {
     await page.locator(".audio-name", { hasText: "song.mp3" }).click();
     await expect(page.locator(".audio-detail .diff-ins").first()).toBeVisible();
     await page.screenshot({ path: join(shots, "audio-list-detail.png") });
+
+    await page.getByRole("button", { name: "確認寫入 233 個檔案" }).click();
+    await expect
+      .poll(() => page.evaluate(() => window.__convertzzE2e?.lastAudioApplyPaths?.length ?? -1))
+      .toBe(233);
+    await expect
+      .poll(() => page.evaluate(() => window.__convertzzE2e?.lastAudioApplyPaths ?? []))
+      .not.toContain("/tmp/same.ogg");
   });
 });

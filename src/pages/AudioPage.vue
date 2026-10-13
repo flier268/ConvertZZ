@@ -23,6 +23,7 @@ import {
   charDiff,
   filterAudioFiles,
   selectionTotals,
+  writableAudioPaths,
   settingsSummaryChips,
   fieldValuesChanged,
   type AudioListFilter,
@@ -346,7 +347,7 @@ async function applyPlan() {
   try {
     const result = await core.request<{ succeeded: string[]; failed: unknown[] }>(
       "audio.apply",
-      { planId: plan.value.planId },
+      { planId: plan.value.planId, paths: writableAudioPaths(files.value, containers.value) },
       {
         onProgress: (value) => {
           progress.value = value;

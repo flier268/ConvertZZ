@@ -173,7 +173,19 @@ pub async fn dispatch(
         }
         "audio.apply" => {
             let plan_id = required_string(&payload, "planId")?;
-            to_value(state.audio.apply(&plan_id, progress, is_cancelled).await?)
+            let only_paths = payload.get("paths").and_then(Value::as_array).map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(ToOwned::to_owned)
+                    .collect::<Vec<_>>()
+            });
+            to_value(
+                state
+                    .audio
+                    .apply_filtered(&plan_id, only_paths.as_deref(), progress, is_cancelled)
+                    .await?,
+            )
         }
         "audio.cancel" => {
             let plan_id = required_string(&payload, "planId")?;

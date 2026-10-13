@@ -143,17 +143,39 @@ function containerEnabled(field: AudioTagField, containers: AudioContainerFlags)
   return true;
 }
 
+function countsTowardWrite(
+  field: AudioTagField,
+  containers: AudioContainerFlags,
+  ready: boolean,
+): boolean {
+  if (!field.selected || !containerEnabled(field, containers)) return false;
+  // 預覽完成前還不知道結果，已勾欄位先算進「建立預覽」。預覽後只算真的會變的欄位。
+  if (!ready) return true;
+  return fieldValuesChanged(field);
+}
+
+/** 至少有一個已勾、且（預覽後）數值會變的欄位。不變檔不計入、也不寫入。 */
+export function fileHasWritableSelection(
+  file: AudioTagFile,
+  containers: AudioContainerFlags,
+  previewReady: boolean,
+): boolean {
+  if (!file.selected || file.warning) return false;
+  return file.fields.some((field) => countsTowardWrite(field, containers, previewReady));
+}
+
 export function selectionTotals(
   files: readonly AudioTagFile[],
   containers: AudioContainerFlags,
 ): AudioSelectionTotals {
+  const ready = audioPreviewReady(files);
   let fileCount = 0;
   let fieldCount = 0;
   for (const file of files) {
     if (!file.selected || file.warning) continue;
     let selected = 0;
     for (const field of file.fields) {
-      if (!field.selected || !containerEnabled(field, containers)) continue;
+      if (!countsTowardWrite(field, containers, ready)) continue;
       selected += 1;
     }
     if (selected > 0) {
@@ -162,6 +184,16 @@ export function selectionTotals(
     }
   }
   return { files: fileCount, fields: fieldCount };
+}
+
+export function writableAudioPaths(
+  files: readonly AudioTagFile[],
+  containers: AudioContainerFlags,
+): string[] {
+  const ready = audioPreviewReady(files);
+  return files
+    .filter((file) => fileHasWritableSelection(file, containers, ready))
+    .map((file) => file.path);
 }
 
 export function applyBulkSelection(

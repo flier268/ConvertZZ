@@ -111,6 +111,7 @@ export interface ConvertzzE2eConfig {
   lastOpenedUrl?: string;
   holdFileApply?: boolean;
   releaseFileApply?: () => void;
+  lastAudioApplyPaths?: string[];
 }
 
 declare global {
@@ -484,7 +485,9 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
     };
   }
   if (operation === "audio.apply") {
-    return { succeeded: ["/tmp/song.mp3"], skipped: [], failed: [] };
+    const paths = Array.isArray(payload.paths) ? payload.paths.map((item) => String(item)) : [];
+    e2e().lastAudioApplyPaths = paths;
+    return { succeeded: paths.slice(0, 1), skipped: [], failed: [] };
   }
   if (operation === "audio.cancel") {
     return { cancelled: true };

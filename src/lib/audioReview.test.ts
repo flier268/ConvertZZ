@@ -6,6 +6,7 @@ import {
   charDiff,
   filterAudioFiles,
   selectionTotals,
+  writableAudioPaths,
   settingsSummaryChips,
 } from "./audioReview";
 
@@ -118,12 +119,30 @@ describe("audioReview", () => {
     expect(sample[1].selected).toBe(true);
   });
 
-  it("勾選計數略過錯誤檔與未啟用的 ID3 容器", () => {
+  it("勾選計數只算會變更的欄位，並略過錯誤檔與未啟用的 ID3 容器", () => {
     sample[0].selected = true;
     sample[0].fields[0].selected = true;
     sample[0].fields[1].selected = true;
-    expect(selectionTotals(sample, { id3v1: true, id3v2: true })).toEqual({ files: 2, fields: 3 });
+    sample[0].fields.push({
+      key: "title",
+      label: "標題",
+      container: "id3v1",
+      values: ["风"],
+      convertedValues: ["風"],
+      selected: true,
+    });
+    expect(selectionTotals(sample, { id3v1: true, id3v2: true })).toEqual({ files: 1, fields: 3 });
     expect(selectionTotals(sample, { id3v1: true, id3v2: false })).toEqual({ files: 1, fields: 1 });
+    expect(writableAudioPaths(sample, { id3v1: true, id3v2: true })).toEqual(["/tmp/晨雾/风.mp3"]);
+    const pending = [
+      file({
+        path: "/tmp/song.mp3",
+        fields: [
+          { key: "title", label: "標題", container: "id3v2", values: ["里面"], selected: true },
+        ],
+      }),
+    ];
+    expect(selectionTotals(pending, { id3v1: true, id3v2: true })).toEqual({ files: 1, fields: 1 });
   });
 
   it("字元差異把舊字與新字分開", () => {

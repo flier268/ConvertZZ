@@ -158,8 +158,10 @@ impl AudioService {
                     warnings.extend(result.warnings);
                 }
                 field.converted_values = Some(converted_values.clone());
-                updates.insert(identifier, converted_values);
-                containers.insert(field.container);
+                if converted_values != field.values {
+                    updates.insert(identifier, converted_values);
+                    containers.insert(field.container);
+                }
             }
             prepared.push(PreparedAudio {
                 path: PathBuf::from(&file.path),
@@ -208,6 +210,18 @@ impl AudioService {
         progress: ProgressReporter,
         request_cancelled: CancelCheck,
     ) -> Result<ApplyResult, CoreError> {
+        self.apply_filtered(plan_id, None, progress, request_cancelled)
+            .await
+    }
+
+    /// `only_paths` 有值時只寫這些路徑。未列入的檔案（含預覽後沒有實際變更的檔）略過。
+    pub async fn apply_filtered(
+        &self,
+        plan_id: &str,
+        only_paths: Option<&[String]>,
+        progress: ProgressReporter,
+        request_cancelled: CancelCheck,
+    ) -> Result<ApplyResult, CoreError> {
         let plan = self
             .plans
             .lock()
@@ -232,10 +246,21 @@ impl AudioService {
             failed: Vec::new(),
             warnings: Vec::new(),
         };
+        let allowed = only_paths.map(|paths| {
+            paths
+                .iter()
+                .map(|path| resolve_path(path))
+                .collect::<HashSet<_>>()
+        });
+        let included = |path: &Path| {
+            allowed
+                .as_ref()
+                .is_none_or(|set| set.contains(&resolve_path(&path.to_string_lossy())))
+        };
         let writable = plan
             .files
             .iter()
-            .filter(|file| !file.updates.is_empty())
+            .filter(|file| included(&file.path) && !file.updates.is_empty())
             .map(|file| file.path.clone())
             .collect::<Vec<_>>();
         if plan.backup && !writable.is_empty() {
@@ -266,7 +291,7 @@ impl AudioService {
                     "音訊標籤作業已由使用者取消。",
                 ));
             }
-            if file.updates.is_empty() {
+            if !included(&file.path) || file.updates.is_empty() {
                 result
                     .skipped
                     .push(file.path.to_string_lossy().into_owned());

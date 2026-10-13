@@ -119,7 +119,7 @@ describe("驗收項目的自動化契約", () => {
     expect(readProjectFile("src/pages/ClipboardPage.vue")).toContain("fill-height");
     expect(readProjectFile("src/pages/ToolsPage.vue")).toContain("page-fill-main");
     expect(readProjectFile("src/pages/DictionaryPage.vue")).toContain("page-fill-main");
-    expect(readProjectFile("src/pages/AudioPage.vue")).toContain("page-fill-main audio-file-list");
+    expect(readProjectFile("src/pages/AudioPage.vue")).toContain("page-fill-main audio-review");
     expect(readProjectFile("src/pages/SettingsPage.vue")).toContain(
       'class="page-fill-main settings-main-card"',
     );
@@ -151,11 +151,11 @@ describe("驗收項目的自動化契約", () => {
 
   it("音訊標籤預覽可檢視欄位差異", () => {
     const page = readProjectFile("src/pages/AudioPage.vue");
-    expect(page).toContain("PreviewDiffDialog");
-    expect(page).toContain("openFieldDiff");
-    expect(page).toContain('label="差異"');
-    expect(page).toContain(">檢視</el-button");
+    expect(page).toContain("charDiff");
+    expect(page).toContain('label="轉換預覽"');
+    expect(page).toContain("diff-del");
     expect(page).toContain("convertedValues");
+    expect(page).toContain("隱藏不變欄位");
   });
 
   it("E-05 覆寫需要額外確認", () => {
@@ -189,8 +189,8 @@ describe("驗收項目的自動化契約", () => {
 
   it("F-08 預覽列出所有可轉換字串欄位", () => {
     const page = readProjectFile("src/pages/AudioPage.vue");
-    expect(page).toContain('v-for="file in files"');
-    expect(page).toContain(':data="file.fields"');
+    expect(page).toContain("filteredFiles");
+    expect(page).toContain(':data="visibleFields"');
     expect(page).toContain("scope.row.values.join");
     expect(page).toContain("convertedValues");
   });

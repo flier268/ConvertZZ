@@ -2653,6 +2653,49 @@ async fn id3v2_hidden_count_includes_frames_the_scan_does_not_show() {
     assert_eq!(removal.hidden_field_count, 3, "{removal:?}");
 }
 
+/// 封面與其他非文字框不是畫面上的文字欄位，不該算進隱藏欄位數。
+/// 這裡只有標題是可見文字框，APIC 不計。
+#[tokio::test]
+async fn id3v2_hidden_count_ignores_cover_frames() {
+    let directory = temp_dir();
+    let path = directory.join("cover-not-hidden.mp3");
+    std::fs::write(&path, mpeg_frame()).unwrap();
+    let mut tag = id3::Tag::new();
+    tag.set_title("可見標題");
+    tag.add_frame(id3::frame::Picture {
+        mime_type: "image/png".into(),
+        picture_type: id3::frame::PictureType::CoverFront,
+        description: "cover".into(),
+        data: vec![1, 2, 3, 4],
+    });
+    tag.write_to_path(&path, Version::Id3v24).unwrap();
+    let mut output = std::fs::read(&path).unwrap();
+    output = append_id3v1(
+        &strip_id3v1(&output),
+        &HashMap::from([("title", "v1".to_string())]),
+        17,
+        TextEncoding::Utf8,
+    )
+    .unwrap();
+    std::fs::write(&path, output).unwrap();
+
+    let service = AudioService::new();
+    let mut request = quiet_plan(&[path.clone()]);
+    request.tag_operations = vec![remove_operation(AudioContainer::Id3v2)];
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let removal = plan.files[0]
+        .removals
+        .iter()
+        .find(|item| item.container == AudioContainer::Id3v2)
+        .expect("id3v2 removal");
+    assert!(removal.refused.is_none(), "{removal:?}");
+    assert_eq!(removal.hidden_field_count, 0, "{removal:?}");
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
 fn remove_operation(container: AudioContainer) -> TagOperation {
     TagOperation {
         action: TagAction::Remove,

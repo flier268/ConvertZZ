@@ -224,7 +224,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
       const version = /\/download\/v([^/]+)\/latest\.json/u.exec(endpoint)?.[1] ?? "2.1.0";
       return {
         rid: 1,
-        currentVersion: "2.0.0-beta9",
+        currentVersion: "2.0.0-beta10",
         version,
         body: "測試更新",
         rawJson: {},
@@ -244,7 +244,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
 
 async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<unknown> {
   const payload = (rawPayload ?? {}) as Record<string, unknown>;
-  if (operation === "health") return { engine: "rust", version: "2.0.0-beta9" };
+  if (operation === "health") return { engine: "rust", version: "2.0.0-beta10" };
   if (operation === "settings.migrate") {
     const input = payload.input as SettingsV2 | undefined;
     return input?.version === 2 ? input : structuredClone(defaultSettings);
@@ -710,7 +710,7 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
 }
 
 export async function getVersion(): Promise<string> {
-  return "2.0.0-beta9";
+  return "2.0.0-beta10";
 }
 
 export class LogicalPosition {
@@ -799,7 +799,7 @@ export class Update {
 export async function check() {
   if (e2e().update !== "install") return null;
   return new Update({
-    currentVersion: "2.0.0-beta9",
+    currentVersion: "2.0.0-beta10",
     version: "2.1.0",
     body: "測試更新",
   });

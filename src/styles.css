@@ -384,6 +384,22 @@ html.floating-window * {
   background: #fff1d6;
   font-size: 12px;
 }
+.audio-rule-section,
+.audio-rule-presets {
+  grid-column: 1 / -1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.audio-rule-section > .audio-rule,
+.audio-rule-section > .audio-rule-editor,
+.audio-rule-section > .audio-rule-lead,
+.audio-rule-presets > .audio-rule-lead {
+  width: 100%;
+  box-sizing: border-box;
+}
 .audio-rule {
   display: flex;
   align-items: center;
@@ -391,7 +407,7 @@ html.floating-window * {
   border: 1px solid #d5e4e1;
   border-radius: 8px;
   padding: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 0;
 }
 .audio-rule.is-on {
   border-color: #0f8f82;
@@ -402,6 +418,7 @@ html.floating-window * {
   background: #fffafa;
 }
 .audio-rule-index {
+  flex-shrink: 0;
   border: 1px solid #c9d8d5;
   border-bottom-width: 2px;
   border-radius: 4px;
@@ -410,11 +427,20 @@ html.floating-window * {
 }
 .audio-rule-name {
   flex: 1;
+  min-width: 0;
   text-align: left;
   background: none;
   border: 0;
   padding: 0;
   cursor: pointer;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.audio-rule .el-switch,
+.audio-rule .el-button {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .audio-rule-lead {
   color: #667b78;
@@ -422,11 +448,12 @@ html.floating-window * {
   margin: 6px 0;
 }
 .audio-rule-editor {
-  margin-top: 10px;
+  margin-top: 4px;
   padding: 12px;
   background: #f9fcfb;
   border: 1px solid #d5e4e1;
   border-radius: 8px;
+  box-sizing: border-box;
 }
 .audio-rule-grid {
   display: grid;

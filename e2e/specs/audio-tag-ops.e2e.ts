@@ -39,6 +39,26 @@ test("標籤操作規則、詳細來源與警告", async ({ page }) => {
   await page.screenshot({ path: join(shots, "ops-warnings.png") });
 });
 
+test("轉換設定抽屜的標籤規則整列排版", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 640 });
+  await openApp(page, { selectedFiles: "/tmp/song.mp3" });
+  await openPage(page, "#tour-audio", "音訊標籤");
+  await page.getByRole("button", { name: "選取音訊檔案" }).click();
+  await expect(page.getByRole("button", { name: /確認寫入/ })).toBeEnabled();
+
+  await page.getByRole("button", { name: "編輯設定" }).click();
+  const drawer = page.getByRole("dialog");
+  await drawer.getByRole("button", { name: "＋ 新增規則" }).click();
+  const name = drawer.locator(".audio-rule-name").first();
+  const editor = drawer.locator(".audio-rule-editor");
+  await expect(name).toBeVisible();
+  await expect(editor).toBeVisible();
+  const nameBox = await name.boundingBox();
+  const editorBox = await editor.boundingBox();
+  expect(nameBox?.width ?? 0).toBeGreaterThan(150);
+  expect(editorBox?.width ?? 0).toBeGreaterThan(300);
+});
+
 test("音訊頁沒有並排標籤欄與複製標籤", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await openApp(page, { selectedFiles: "/tmp/song.mp3" });

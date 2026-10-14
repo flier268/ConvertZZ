@@ -1441,93 +1441,97 @@ watch(
             draft.tagOperations.filter((rule) => rule.enabled).length
           }}</span>
         </h3>
-        <p class="audio-rule-lead">
-          規則由上到下執行，套用到所有已勾選的檔案。來源一律用讀到的原始標籤。結果一樣先進預覽。
-        </p>
-        <div
-          v-for="(rule, index) in draft.tagOperations"
-          :key="rule.id"
-          class="audio-rule"
-          :class="{ 'is-on': rule.id === editingRuleId, 'is-remove': rule.action === 'remove' }"
-        >
-          <span class="audio-rule-index">{{ index + 1 }}</span>
-          <button type="button" class="audio-rule-name" @click="editingRuleId = rule.id">
-            <span v-if="rule.action === 'remove'" class="audio-remove">移除</span>
-            {{ tagRuleSummary(rule) }}
-          </button>
-          <el-switch v-model="rule.enabled" :aria-label="`啟用規則 ${index + 1}`" />
-          <el-button link :disabled="index === 0" @click="moveTagRule(index, -1)">上移</el-button>
-          <el-button
-            link
-            :disabled="index === draft.tagOperations.length - 1"
-            @click="moveTagRule(index, 1)"
-            >下移</el-button
-          >
-          <el-button link type="danger" @click="deleteTagRule(index)">刪除</el-button>
-        </div>
-        <el-button @click="addTagRule">＋ 新增規則</el-button>
-        <div v-if="editingRule" class="audio-rule-editor">
-          <strong
-            >編輯規則
-            {{ draft.tagOperations.findIndex((rule) => rule.id === editingRule?.id) + 1 }}</strong
-          >
-          <div class="audio-rule-grid">
-            <label
-              >動作
-              <el-select v-model="editingRule.action">
-                <el-option label="合併" value="merge" />
-                <el-option label="移除" value="remove" />
-              </el-select>
-            </label>
-            <label
-              >衝突時
-              <el-select
-                v-model="editingRule.onConflict"
-                :disabled="editingRule.action === 'remove'"
-              >
-                <el-option label="覆蓋目標" value="overwrite" />
-                <el-option label="只補空白" value="fillEmpty" />
-              </el-select>
-            </label>
-            <label
-              >來源
-              <el-select v-model="editingRule.source">
-                <el-option label="ID3v2" value="id3v2" />
-                <el-option label="ID3v1" value="id3v1" />
-                <el-option label="APEv2" value="apev2" />
-              </el-select>
-            </label>
-            <label
-              >目標
-              <el-select v-model="editingRule.target" :disabled="editingRule.action === 'remove'">
-                <el-option label="ID3v1" value="id3v1" />
-                <el-option label="ID3v2" value="id3v2" />
-                <el-option label="APEv2" value="apev2" />
-              </el-select>
-            </label>
-          </div>
-          <p v-if="editingRule.action !== 'remove'">欄位</p>
-          <div v-if="editingRule.action !== 'remove'" class="audio-rule-fields">
-            <el-checkbox
-              v-for="[key, label] in TAG_RULE_FIELDS"
-              :key="key"
-              :model-value="editingRule.fields.includes(key)"
-              @change="
-                (checked: boolean) => editingRule && toggleRuleField(editingRule, key, checked)
-              "
-              >{{ label }}</el-checkbox
-            >
-          </div>
-          <p
-            v-if="editingRule.target === 'id3v1' && editingRule.action !== 'remove'"
-            class="audio-rule-lead"
-          >
-            ID3v1 輸出編碼沿用「ID3v1」區塊：{{ draft.id3v1OutputEncoding }}
+        <div class="audio-rule-section">
+          <p class="audio-rule-lead">
+            規則由上到下執行，套用到所有已勾選的檔案。來源一律用讀到的原始標籤。結果一樣先進預覽。
           </p>
+          <div
+            v-for="(rule, index) in draft.tagOperations"
+            :key="rule.id"
+            class="audio-rule"
+            :class="{ 'is-on': rule.id === editingRuleId, 'is-remove': rule.action === 'remove' }"
+          >
+            <span class="audio-rule-index">{{ index + 1 }}</span>
+            <button type="button" class="audio-rule-name" @click="editingRuleId = rule.id">
+              <span v-if="rule.action === 'remove'" class="audio-remove">移除</span>
+              {{ tagRuleSummary(rule) }}
+            </button>
+            <el-switch v-model="rule.enabled" :aria-label="`啟用規則 ${index + 1}`" />
+            <el-button link :disabled="index === 0" @click="moveTagRule(index, -1)">上移</el-button>
+            <el-button
+              link
+              :disabled="index === draft.tagOperations.length - 1"
+              @click="moveTagRule(index, 1)"
+              >下移</el-button
+            >
+            <el-button link type="danger" @click="deleteTagRule(index)">刪除</el-button>
+          </div>
+          <el-button @click="addTagRule">＋ 新增規則</el-button>
+          <div v-if="editingRule" class="audio-rule-editor">
+            <strong
+              >編輯規則
+              {{ draft.tagOperations.findIndex((rule) => rule.id === editingRule?.id) + 1 }}</strong
+            >
+            <div class="audio-rule-grid">
+              <label
+                >動作
+                <el-select v-model="editingRule.action">
+                  <el-option label="合併" value="merge" />
+                  <el-option label="移除" value="remove" />
+                </el-select>
+              </label>
+              <label
+                >衝突時
+                <el-select
+                  v-model="editingRule.onConflict"
+                  :disabled="editingRule.action === 'remove'"
+                >
+                  <el-option label="覆蓋目標" value="overwrite" />
+                  <el-option label="只補空白" value="fillEmpty" />
+                </el-select>
+              </label>
+              <label
+                >來源
+                <el-select v-model="editingRule.source">
+                  <el-option label="ID3v2" value="id3v2" />
+                  <el-option label="ID3v1" value="id3v1" />
+                  <el-option label="APEv2" value="apev2" />
+                </el-select>
+              </label>
+              <label
+                >目標
+                <el-select v-model="editingRule.target" :disabled="editingRule.action === 'remove'">
+                  <el-option label="ID3v1" value="id3v1" />
+                  <el-option label="ID3v2" value="id3v2" />
+                  <el-option label="APEv2" value="apev2" />
+                </el-select>
+              </label>
+            </div>
+            <p v-if="editingRule.action !== 'remove'">欄位</p>
+            <div v-if="editingRule.action !== 'remove'" class="audio-rule-fields">
+              <el-checkbox
+                v-for="[key, label] in TAG_RULE_FIELDS"
+                :key="key"
+                :model-value="editingRule.fields.includes(key)"
+                @change="
+                  (checked: boolean) => editingRule && toggleRuleField(editingRule, key, checked)
+                "
+                >{{ label }}</el-checkbox
+              >
+            </div>
+            <p
+              v-if="editingRule.target === 'id3v1' && editingRule.action !== 'remove'"
+              class="audio-rule-lead"
+            >
+              ID3v1 輸出編碼沿用「ID3v1」區塊：{{ draft.id3v1OutputEncoding }}
+            </p>
+          </div>
         </div>
-        <p class="audio-rule-lead">預設範本</p>
-        <el-button link @click="addCleanupRule">清理多餘標籤</el-button>
-        <p class="audio-rule-lead">{{ CLEANUP_APE_NOTE }}</p>
+        <div class="audio-rule-presets">
+          <p class="audio-rule-lead">預設範本</p>
+          <el-button link @click="addCleanupRule">清理多餘標籤</el-button>
+          <p class="audio-rule-lead">{{ CLEANUP_APE_NOTE }}</p>
+        </div>
       </el-form>
       <template #footer>
         <el-button type="primary" :disabled="busy" @click="closeSettings">完成</el-button>

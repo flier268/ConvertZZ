@@ -1,0 +1,34 @@
+# ConvertZZ 字形特例。欄位以 Tab 分隔：kind  from  to  dir  when
+# 協議見同目錄 README.md。不要把這些字硬刻進 conversion.rs。
+#
+# kind: skip | s2t | t2s | variant | s2t-multi | t2s-multi | pin
+# from 可用 | 列多個來源。when 省略＝一律；例外規則寫在預設前面。
+# pin 與 word=／word^= 的整詞會在分詞時釘入（固定 extra），轉換時仍走 skip／s2t-multi。
+# 台灣完整「xx縣／xx市／xx鄉／xx鎮／xx里」見 place-names.txt（fetch-place-names.py）；分詞、轉換、roundtrip-dict 都會讀。
+
+# 璇：min 表會改成璿。人名用字不同，只跳過、不把璿改回璇。
+skip	璇		s2t
+
+# 疱：台灣醫學常用疱（膿疱／疱疹），跳過 min 的疱→皰。
+skip	疱		s2t
+# 異體：皰正規成疱。
+variant	皰	疱	s2t
+
+# 一簡多繁：么。排行保留么；其餘語氣／疑問用麼。
+s2t-multi	么|幺	么	s2t	word^=老么|老幺
+s2t-multi	么|幺	么	s2t	word=么|幺;next^=兒|儿|女|弟|妹|叔|伯|姐|兄
+s2t-multi	么|幺	么	s2t	ch0=么|幺;ch1=兒|儿|女|弟|妹|叔|伯|姐|兄
+s2t-multi	么	麼	s2t
+
+# 和牛：避免「和牛只剩」切成「牛只」再轉「牛隻」。
+pin	和牛		s2t
+
+# 選手／表現：避免「選手表現」切成「手表」再轉「手錶」。
+pin	選手|选手		s2t
+pin	表現|表现		s2t
+
+# 胜肽：化學／保健用字維持胜，不要變成勝肽。
+s2t-multi	胜|勝	胜	s2t	word=胜肽|勝肽
+
+# 里：村里用字維持里（本里／里辦／里民／里長／里名），不要變成裡。
+s2t-multi	里|裡	里	s2t	word=本里|本裡|里辦|裡辦|里民|裡民|里長|裡長|里名|裡名

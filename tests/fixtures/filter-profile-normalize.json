@@ -1,0 +1,86 @@
+{
+  "legacyPatterns": [
+    { "input": "*.txt", "expected": ".txt" },
+    { "input": "*.TXT", "expected": ".txt" },
+    { "input": "*.tar.gz", "expected": ".gz" },
+    { "input": "txt", "expected": ".txt" },
+    { "input": ".srt", "expected": ".srt" },
+    { "input": "*", "expected": null },
+    { "input": "*.", "expected": null },
+    { "input": "", "expected": null }
+  ],
+  "profiles": [
+    {
+      "name": "合法 profile 正規化副檔名並去重",
+      "input": [
+        {
+          "id": "a",
+          "name": "A",
+          "builtin": false,
+          "mode": "deny",
+          "extensions": [".LOG", "*.tar.gz", "log", ".gz"],
+          "includeNoExtension": true
+        }
+      ],
+      "expected": [
+        {
+          "id": "a",
+          "name": "A",
+          "builtin": false,
+          "mode": "deny",
+          "extensions": [".log", ".gz"],
+          "includeNoExtension": true
+        }
+      ]
+    },
+    {
+      "name": "mode 不合法丟棄",
+      "input": [{ "id": "a", "name": "A", "mode": "bogus", "extensions": [] }],
+      "expected": []
+    },
+    {
+      "name": "extensions 不是字串陣列丟棄",
+      "input": [
+        { "id": "a", "name": "A", "mode": "allow", "extensions": ".txt" },
+        { "id": "b", "name": "B", "mode": "allow", "extensions": [1] }
+      ],
+      "expected": []
+    },
+    {
+      "name": "includeNoExtension 不是布林丟棄，缺少則為 false",
+      "input": [
+        { "id": "a", "name": "A", "mode": "allow", "extensions": [], "includeNoExtension": "yes" },
+        { "id": "b", "name": "B", "mode": "allow", "extensions": [] }
+      ],
+      "expected": [
+        {
+          "id": "b",
+          "name": "B",
+          "builtin": false,
+          "mode": "allow",
+          "extensions": [],
+          "includeNoExtension": false
+        }
+      ]
+    },
+    {
+      "name": "id 重複只留第一個，空 id 或非字串 id 丟棄",
+      "input": [
+        { "id": "a", "name": "第一", "mode": "all", "extensions": [] },
+        { "id": "a", "name": "第二", "mode": "all", "extensions": [] },
+        { "id": "", "name": "空", "mode": "all", "extensions": [] },
+        { "id": 3, "name": "數字", "mode": "all", "extensions": [] }
+      ],
+      "expected": [
+        {
+          "id": "a",
+          "name": "第一",
+          "builtin": false,
+          "mode": "all",
+          "extensions": [],
+          "includeNoExtension": false
+        }
+      ]
+    }
+  ]
+}

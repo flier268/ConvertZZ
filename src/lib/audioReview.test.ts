@@ -31,16 +31,6 @@ import {
   cleanupApeRule,
   tagRuleSummary,
   activeRemovals,
-  tagColumnsForFile,
-  defaultColumnPicks,
-  columnPicksToOperations,
-  mergedColumnValue,
-  onConflictForSource,
-  id3v1OverwriteWarning,
-  overwriteOtherOperations,
-  manualRemoveOperation,
-  hiddenColumnCount,
-  manualCopyOperation,
   detailContainerNotices,
   fieldVisibleWhenHidingUnchanged,
   mergeAudioFiles,
@@ -627,52 +617,5 @@ describe("audioReview", () => {
     expect(
       audioApplySelection([warned], { id3v1: false, id3v2: true }).selectedFields["/tmp/warn.mp3"],
     ).not.toContain("remove:apev2");
-  });
-
-  it("並排欄挑選只產生這個檔案的手動合併", () => {
-    const song = file({
-      path: "/tmp/song.mp3",
-      fields: [
-        { key: "title", label: "標題", container: "id3v2", values: ["缶来"], selected: true },
-        { key: "title", label: "標題", container: "id3v1", values: ["後來"], selected: false },
-        { key: "title", label: "標題", container: "apev2", values: ["後來"], selected: false },
-        { key: "artist", label: "演出者", container: "id3v2", values: [""], selected: false },
-        { key: "artist", label: "演出者", container: "apev2", values: ["林間"], selected: false },
-        {
-          key: "replaygain",
-          label: "ReplayGain",
-          container: "apev2",
-          values: ["-1"],
-          selected: false,
-        },
-      ],
-    });
-    expect(tagColumnsForFile(song)).toEqual(["id3v1", "id3v2", "apev2"]);
-    expect(tagColumnsForFile({ ...song, format: "ogg" })).toContain("vorbis-comment");
-    const picks = defaultColumnPicks(song, "id3v2", tagColumnsForFile(song));
-    expect(picks.find((pick) => pick.key === "title")?.source).toBe("id3v2");
-    expect(picks.find((pick) => pick.key === "artist")?.source).toBe("apev2");
-    const chosen = picks.map((pick) =>
-      pick.key === "title" ? { ...pick, source: "id3v1" as const } : pick,
-    );
-    const ops = columnPicksToOperations(song.path, "id3v2", chosen);
-    expect(ops.map((op) => op.paths)).toEqual([[song.path], [song.path]]);
-    expect(ops.find((op) => op.source === "id3v1")?.onConflict).toBe("fillEmpty");
-    expect(ops.find((op) => op.source === "apev2")?.onConflict).toBe("overwrite");
-    expect(ops.find((op) => op.source === "id3v1")?.fields).toEqual(["title"]);
-    expect(mergedColumnValue("缶来", "id3v1", "後來", "fillEmpty")).toBe("缶来");
-    expect(mergedColumnValue("缶来", "id3v1", "後來", "overwrite")).toBe("後來");
-    expect(onConflictForSource("id3v1", false)).toBe("fillEmpty");
-    expect(onConflictForSource("id3v1", true)).toBe("overwrite");
-    expect(id3v1OverwriteWarning("id3v1", "overwrite")).toContain("30");
-    expect(id3v1OverwriteWarning("id3v2", "overwrite")).toBeUndefined();
-    expect(overwriteOtherOperations(song.path, "apev2")).toEqual([
-      manualCopyOperation(song.path, "apev2", "id3v2", true),
-    ]);
-    expect(hiddenColumnCount(song, "apev2")).toBe(1);
-    const removal = manualRemoveOperation(song.path, "apev2", true);
-    expect(removal[0]).toMatchObject({ action: "merge", target: "id3v2", onConflict: "fillEmpty" });
-    expect(removal[1]).toMatchObject({ action: "remove", source: "apev2", paths: [song.path] });
-    expect(manualRemoveOperation(song.path, "id3v2", true)).toHaveLength(1);
   });
 });

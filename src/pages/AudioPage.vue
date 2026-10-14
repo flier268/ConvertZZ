@@ -3,7 +3,6 @@ import { computed, nextTick, reactive, ref, watch } from "vue";
 import { open, confirm } from "@tauri-apps/plugin-dialog";
 import { ElMessage } from "element-plus";
 import type {
-  AudioContainer,
   AudioTagField,
   AudioTagFile,
   AudioRescanFileRequest,
@@ -11,10 +10,8 @@ import type {
   AudioTagPlanRequest,
   Direction,
   EngineKind,
-  TagOperation,
   TextEncoding,
 } from "@shared/contracts";
-import { ElMessageBox } from "element-plus";
 import { core, isCancellationError } from "../lib/coreClient";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { cliInvocation } from "../lib/cli";
@@ -53,27 +50,10 @@ import {
   fileHasTextLoss,
   createAudioPreviewController,
   createTagRule,
-  legacyPlayerRule,
   cleanupApeRule,
   tagRuleSummary,
   toTagOperations,
-  TAG_COLUMN_KEYS,
-  tagColumnLabel,
-  tagColumnsForFile,
-  columnFieldValue,
-  hiddenColumnCount,
-  copyTargetsFor,
-  defaultColumnPicks,
-  columnPicksToOperations,
-  mergedColumnValue,
-  onConflictForSource,
-  id3v1OverwriteWarning,
-  manualCopyOperation,
-  overwriteOtherOperations,
-  manualRemoveOperation,
-  type ColumnPick,
   TAG_RULE_FIELDS,
-  LEGACY_PLAYER_NOTE,
   CLEANUP_APE_NOTE,
   containerName,
   detailContainerNotices,
@@ -313,172 +293,6 @@ function containerLabel(container: AudioTagField["container"]): string {
   return containerName(container);
 }
 
-const detailView = ref<"table" | "columns">("table");
-const mergeTarget = ref<AudioContainer>("id3v2");
-const columnOps = ref<TagOperation[]>([]);
-const headerOps = ref<TagOperation[]>([]);
-const picksByPath = ref<Record<string, ColumnPick[]>>({});
-const menuFor = ref<AudioContainer | "">("");
-const removeDialog = ref<{ container: AudioContainer; salvage: boolean; onlyAck: boolean } | null>(
-  null,
-);
-
-const selectedColumns = computed(() =>
-  selectedFile.value ? tagColumnsForFile(selectedFile.value) : [],
-);
-const selectedPicks = computed(() => {
-  const file = selectedFile.value;
-  if (!file) return [];
-  return (
-    picksByPath.value[file.path] ??
-    defaultColumnPicks(file, mergeTarget.value, selectedColumns.value)
-  );
-});
-const presentContainers = computed(() => {
-  const file = selectedFile.value;
-  if (!file) return [];
-  return [...new Set(file.fields.map((field) => field.container))];
-});
-const columnNotes = computed(() => {
-  const file = selectedFile.value;
-  if (!file) return [];
-  const notes = new Set<string>();
-  for (const operation of [...columnOps.value, ...headerOps.value]) {
-    if (!operation.paths?.includes(file.path)) continue;
-    const warning = id3v1OverwriteWarning(operation.source, operation.onConflict);
-    if (warning) notes.add(warning);
-  }
-  if (
-    selectedPicks.value.some((pick) => pick.source === "id3v1" && pick.source !== mergeTarget.value)
-  ) {
-    notes.add("ID3v1 當來源時只補空白欄位。");
-  }
-  return [...notes];
-});
-
-function commitColumnPicks(file: AudioTagFile, picks: ColumnPick[]) {
-  picksByPath.value = { ...picksByPath.value, [file.path]: picks };
-  columnOps.value = [
-    ...columnOps.value.filter((operation) => !operation.paths?.includes(file.path)),
-    ...columnPicksToOperations(file.path, mergeTarget.value, picks),
-  ];
-  previewController.schedule();
-}
-
-function chooseColumn(key: string, source: AudioContainer) {
-  const file = selectedFile.value;
-  if (!file || busy.value) return;
-  commitColumnPicks(
-    file,
-    selectedPicks.value.map((pick) => (pick.key === key ? { key, source } : pick)),
-  );
-}
-
-function onMergeTarget(value: AudioContainer) {
-  mergeTarget.value = value;
-  const file = selectedFile.value;
-  if (!file) return;
-  commitColumnPicks(file, selectedPicks.value);
-}
-
-function clearColumnPicks() {
-  const file = selectedFile.value;
-  if (!file) return;
-  commitColumnPicks(file, defaultColumnPicks(file, mergeTarget.value, selectedColumns.value));
-}
-
-function pickFor(key: string): AudioContainer {
-  return selectedPicks.value.find((pick) => pick.key === key)?.source ?? mergeTarget.value;
-}
-
-async function confirmId3v1Overwrite(): Promise<boolean> {
-  const message = id3v1OverwriteWarning("id3v1", "overwrite");
-  if (!message) return true;
-  try {
-    await ElMessageBox.confirm(message, "ID3v1 覆蓋", {
-      type: "warning",
-      confirmButtonText: "仍要覆蓋",
-      cancelButtonText: "取消",
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function copyColumnTo(source: AudioContainer, target: AudioContainer, overwrite: boolean) {
-  menuFor.value = "";
-  const file = selectedFile.value;
-  if (!file || busy.value) return;
-  if (overwrite && source === "id3v1" && !(await confirmId3v1Overwrite())) return;
-  if (busy.value) return;
-  const next = manualCopyOperation(file.path, source, target, overwrite);
-  headerOps.value = [
-    ...headerOps.value.filter(
-      (operation) =>
-        !(
-          operation.paths?.includes(file.path) &&
-          operation.action === "copy" &&
-          operation.source === source &&
-          operation.target === target
-        ),
-    ),
-    next,
-  ];
-  previewController.schedule();
-}
-
-async function overwriteColumn(source: AudioContainer) {
-  menuFor.value = "";
-  const file = selectedFile.value;
-  if (!file || busy.value) return;
-  if (source === "id3v1" && !(await confirmId3v1Overwrite())) return;
-  if (busy.value) return;
-  const next = overwriteOtherOperations(file.path, source);
-  headerOps.value = [
-    ...headerOps.value.filter(
-      (operation) =>
-        !(
-          operation.paths?.includes(file.path) &&
-          operation.action === "copy" &&
-          operation.source === source
-        ),
-    ),
-    ...next,
-  ];
-  previewController.schedule();
-}
-
-function openRemoveDialog(container: AudioContainer) {
-  menuFor.value = "";
-  removeDialog.value = {
-    container,
-    salvage: container !== "id3v2",
-    onlyAck: false,
-  };
-}
-
-function confirmRemoveDialog() {
-  const dialog = removeDialog.value;
-  const file = selectedFile.value;
-  if (!dialog || !file || busy.value) return;
-  if (presentContainers.value.length <= 1 && !dialog.onlyAck) return;
-  const next = manualRemoveOperation(file.path, dialog.container, dialog.salvage);
-  headerOps.value = [
-    ...headerOps.value.filter(
-      (operation) =>
-        !(
-          operation.paths?.includes(file.path) &&
-          operation.source === dialog.container &&
-          (operation.action === "remove" || operation.target === "id3v2")
-        ),
-    ),
-    ...next,
-  ];
-  removeDialog.value = null;
-  previewController.schedule();
-}
-
 function cloneRules(rules: TagRule[]): TagRule[] {
   return rules.map((rule) => ({ ...rule, fields: [...rule.fields] }));
 }
@@ -530,15 +344,7 @@ function applyDraftToOptions() {
 }
 
 function addTagRule() {
-  const rule = createTagRule({ action: "copy" });
-  draft.tagOperations.push(rule);
-  editingRuleId.value = rule.id;
-}
-
-function addLegacyPlayerRule() {
-  draft.id3v1OutputEncoding = "big5";
-  draft.id3v1Enabled = true;
-  const rule = legacyPlayerRule();
+  const rule = createTagRule({ action: "merge" });
   draft.tagOperations.push(rule);
   editingRuleId.value = rule.id;
 }
@@ -824,11 +630,7 @@ async function buildPlanRequest(): Promise<AudioTagPlanRequest> {
     id3v2RepairSourceEncoding: options.id3v2RepairSourceEncoding,
     id3v2Version: options.id3v2Version,
     id3v2Encoding: options.id3v2Encoding,
-    tagOperations: [
-      ...toTagOperations(options.tagOperations),
-      ...columnOps.value,
-      ...headerOps.value,
-    ],
+    tagOperations: toTagOperations(options.tagOperations),
   };
 }
 
@@ -1364,10 +1166,6 @@ watch(
               >
             </template>
             <div v-else class="audio-detail-tools">
-              <el-radio-group v-model="detailView" size="small" class="audio-view-switch">
-                <el-radio-button value="table">現有欄位表</el-radio-button>
-                <el-radio-button value="columns">並排標籤欄</el-radio-button>
-              </el-radio-group>
               <el-alert
                 v-for="note in id3v1TruncationNotes(selectedFile)"
                 :key="note"
@@ -1398,136 +1196,8 @@ watch(
                 隱藏不變欄位
               </button>
             </div>
-            <div v-if="!selectedFile.warning && detailView === 'columns'" class="audio-columns">
-              <p class="audio-keys">
-                點每一列要保留的來源。結果寫入合併目標，只作用於這個檔案，並加入轉換計畫。
-              </p>
-              <table class="audio-column-table">
-                <thead>
-                  <tr>
-                    <th>欄位</th>
-                    <th v-for="container in selectedColumns" :key="container">
-                      <div class="audio-column-head">
-                        <span>{{ containerLabel(container) }}</span>
-                        <button
-                          type="button"
-                          class="audio-column-menu-button"
-                          :aria-label="`${containerLabel(container)} 欄位選單`"
-                          :aria-expanded="menuFor === container"
-                          @click="menuFor = menuFor === container ? '' : container"
-                        >
-                          ⋯
-                        </button>
-                        <div v-if="menuFor === container" class="audio-column-menu" role="menu">
-                          <template v-if="copyTargetsFor(container).length">
-                            <button
-                              v-for="target in copyTargetsFor(container)"
-                              :key="target"
-                              type="button"
-                              role="menuitem"
-                              :disabled="busy"
-                              @click="copyColumnTo(container, target, container !== 'id3v1')"
-                            >
-                              複製到… {{ containerLabel(target) }}
-                              <template v-if="container === 'id3v1'">（只補空白）</template>
-                            </button>
-                            <button
-                              v-if="container === 'id3v1'"
-                              type="button"
-                              role="menuitem"
-                              :disabled="busy"
-                              @click="copyColumnTo(container, 'id3v2', true)"
-                            >
-                              複製到… ID3v2（覆蓋）
-                            </button>
-                          </template>
-                          <button
-                            type="button"
-                            role="menuitem"
-                            :disabled="busy || !copyTargetsFor(container).length"
-                            @click="overwriteColumn(container)"
-                          >
-                            以此標籤覆蓋其他標籤
-                          </button>
-                          <button
-                            type="button"
-                            role="menuitem"
-                            class="audio-column-danger"
-                            :disabled="busy || presentContainers.length <= 1"
-                            @click="openRemoveDialog(container)"
-                          >
-                            移除這個標籤…
-                          </button>
-                        </div>
-                      </div>
-                    </th>
-                    <th>合併後</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="key in TAG_COLUMN_KEYS" :key="key">
-                    <td>{{ tagColumnLabel(key) }}</td>
-                    <td v-for="container in selectedColumns" :key="container">
-                      <label>
-                        <input
-                          type="radio"
-                          :name="`tag-col-${selectedFile.path}-${key}`"
-                          :checked="pickFor(key) === container"
-                          :aria-label="`${tagColumnLabel(key)} 採用 ${containerLabel(container)}`"
-                          :disabled="busy"
-                          @change="chooseColumn(key, container)"
-                        />
-                        {{ columnFieldValue(selectedFile, container, key) || "—" }}
-                      </label>
-                    </td>
-                    <td>
-                      {{
-                        mergedColumnValue(
-                          columnFieldValue(selectedFile, mergeTarget, key),
-                          pickFor(key),
-                          columnFieldValue(selectedFile, pickFor(key), key),
-                          onConflictForSource(pickFor(key), false),
-                        ) || "—"
-                      }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <div class="audio-column-foot">
-                <label>
-                  合併目標
-                  <select
-                    :value="mergeTarget"
-                    aria-label="合併目標"
-                    :disabled="busy"
-                    @change="
-                      onMergeTarget(($event.target as HTMLSelectElement).value as AudioContainer)
-                    "
-                  >
-                    <option
-                      v-for="container in selectedColumns"
-                      :key="container"
-                      :value="container"
-                    >
-                      {{ containerLabel(container) }}
-                    </option>
-                  </select>
-                </label>
-                <button type="button" class="audio-hide-unchanged" @click="clearColumnPicks">
-                  清除挑選
-                </button>
-              </div>
-              <el-alert
-                v-for="note in columnNotes"
-                :key="note"
-                type="warning"
-                :title="note"
-                show-icon
-                :closable="false"
-              />
-            </div>
             <el-table
-              v-if="!selectedFile.warning && detailView === 'table'"
+              v-if="!selectedFile.warning"
               :key="hideUnchanged ? 'hide-unchanged' : 'show-all'"
               :data="detailRows"
               empty-text="沒有可顯示的欄位"
@@ -1772,7 +1442,7 @@ watch(
           }}</span>
         </h3>
         <p class="audio-rule-lead">
-          規則由上到下執行，套用到所有已勾選的檔案。來源一律用讀到的原始標籤，所以先移除再從該標籤複製，仍然複製得到移除前的內容。結果一樣先進預覽。
+          規則由上到下執行，套用到所有已勾選的檔案。來源一律用讀到的原始標籤。結果一樣先進預覽。
         </p>
         <div
           v-for="(rule, index) in draft.tagOperations"
@@ -1805,7 +1475,6 @@ watch(
             <label
               >動作
               <el-select v-model="editingRule.action">
-                <el-option label="複製" value="copy" />
                 <el-option label="合併" value="merge" />
                 <el-option label="移除" value="remove" />
               </el-select>
@@ -1857,62 +1526,12 @@ watch(
           </p>
         </div>
         <p class="audio-rule-lead">預設範本</p>
-        <el-button link @click="addLegacyPlayerRule">舊播放器相容</el-button>
         <el-button link @click="addCleanupRule">清理多餘標籤</el-button>
-        <p class="audio-rule-lead">{{ LEGACY_PLAYER_NOTE }}</p>
         <p class="audio-rule-lead">{{ CLEANUP_APE_NOTE }}</p>
       </el-form>
       <template #footer>
         <el-button type="primary" :disabled="busy" @click="closeSettings">完成</el-button>
       </template>
     </el-drawer>
-
-    <el-dialog
-      :model-value="Boolean(removeDialog)"
-      :title="removeDialog ? `移除 ${containerLabel(removeDialog.container)} 標籤` : ''"
-      width="600px"
-      append-to-body
-      class="audio-remove-dialog"
-      @close="removeDialog = null"
-    >
-      <template v-if="removeDialog && selectedFile">
-        <el-alert
-          type="error"
-          :closable="false"
-          show-icon
-          :title="`這會刪除整個 ${containerLabel(removeDialog.container)} 標籤`"
-          description="包含畫面上沒列出的自訂欄位（例如 ReplayGain、歌詞）。只會加入轉換計畫，按「確認寫入」才會動檔案。寫入前會先建立 .bak 備份。"
-        />
-        <p class="audio-rule-lead">套用範圍</p>
-        <el-radio-group model-value="file" class="audio-remove-scope">
-          <el-radio value="file">只有這個檔案（{{ audioBaseName(selectedFile.path) }}）</el-radio>
-          <el-radio value="checked" disabled>已勾選的檔案（第二版）</el-radio>
-        </el-radio-group>
-        <p class="audio-rule-lead">
-          含 {{ hiddenColumnCount(selectedFile, removeDialog.container) }} 個隱藏欄位
-        </p>
-        <el-checkbox
-          v-model="removeDialog.salvage"
-          :disabled="removeDialog.container === 'id3v2' || presentContainers.length <= 1"
-        >
-          移除前先補到 ID3v2
-        </el-checkbox>
-        <el-checkbox v-if="presentContainers.length <= 1" v-model="removeDialog.onlyAck">
-          我確定要移除檔案唯一的標籤
-        </el-checkbox>
-      </template>
-      <template #footer>
-        <el-button @click="removeDialog = null">取消</el-button>
-        <el-button
-          type="danger"
-          :disabled="
-            busy || !removeDialog || (presentContainers.length <= 1 && !removeDialog.onlyAck)
-          "
-          @click="confirmRemoveDialog"
-        >
-          加入計畫：移除 {{ removeDialog ? containerLabel(removeDialog.container) : "" }}
-        </el-button>
-      </template>
-    </el-dialog>
   </section>
 </template>

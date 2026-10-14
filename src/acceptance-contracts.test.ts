@@ -149,6 +149,22 @@ describe("驗收項目的自動化契約", () => {
     expect(page).not.toContain("editor-grid");
   });
 
+  it("音訊標籤沒有並排欄切換，也不提供複製標籤", () => {
+    const page = readProjectFile("src/pages/AudioPage.vue");
+    const styles = readProjectFile("src/styles.css");
+    expect(page).not.toContain("並排標籤欄");
+    expect(page).not.toContain("audio-view-switch");
+    expect(page).not.toContain("audio-columns");
+    expect(page).not.toContain("複製到");
+    expect(page).not.toContain('value="copy"');
+    expect(page).not.toContain("舊播放器相容");
+    expect(page).not.toContain("detailView");
+    expect(styles).not.toContain("audio-column-table");
+    expect(styles).not.toContain("audio-column-menu");
+    expect(page).toContain('label="合併"');
+    expect(page).toContain('label="移除"');
+  });
+
   it("音訊標籤預覽可檢視欄位差異", () => {
     const page = readProjectFile("src/pages/AudioPage.vue");
     expect(page).toContain("buildFieldDiffs");

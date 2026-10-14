@@ -2704,7 +2704,6 @@ fn remove_operation(container: AudioContainer) -> TagOperation {
         fields: Vec::new(),
         on_conflict: None,
         enabled: true,
-        paths: Vec::new(),
     }
 }
 
@@ -3348,7 +3347,6 @@ async fn merge_id3v2_to_id3v1_reports_big5_truncation_and_unrepresentable() {
         fields: vec!["title".into(), "genre".into()],
         on_conflict: Some(TagOnConflict::Overwrite),
         enabled: true,
-        paths: Vec::new(),
     }];
     let plan = service
         .plan(shared_conversion(), request, noop())
@@ -3413,88 +3411,47 @@ async fn removing_the_only_id3v2_tag_is_refused() {
 }
 
 #[tokio::test]
-async fn manual_path_operation_stays_on_that_file_and_marks_origin_manual() {
+async fn merge_id3v2_to_id3v1_without_conflict_keeps_existing_title() {
     let directory = temp_dir();
-    let first = directory.join("first.mp3");
-    let second = directory.join("second.mp3");
-    for path in [&first, &second] {
-        std::fs::write(path, mpeg_frame()).unwrap();
-        let mut tag = id3::Tag::new();
-        tag.set_title("v2-title");
-        tag.write_to_path(path, Version::Id3v24).unwrap();
-        let output = append_id3v1(
-            &strip_id3v1(&std::fs::read(path).unwrap()),
-            &HashMap::from([
-                ("title", "v1-title".to_string()),
-                ("artist", "v1-artist".to_string()),
-            ]),
-            255,
-            TextEncoding::Utf8,
-        )
-        .unwrap();
-        std::fs::write(path, output).unwrap();
-    }
+    let path = directory.join("filled.mp3");
+    std::fs::write(&path, mpeg_frame()).unwrap();
+    let mut tag = id3::Tag::new();
+    tag.set_title("v2-title");
+    tag.write_to_path(&path, Version::Id3v24).unwrap();
+    let output = append_id3v1(
+        &strip_id3v1(&std::fs::read(&path).unwrap()),
+        &HashMap::from([("title", "v1-title".to_string())]),
+        255,
+        TextEncoding::Utf8,
+    )
+    .unwrap();
+    std::fs::write(&path, output).unwrap();
     let service = AudioService::new();
-    let mut request = quiet_plan(&[first.clone(), second.clone()]);
-    request.tag_operations = vec![
-        TagOperation {
-            action: TagAction::Merge,
-            source: Some(AudioContainer::Id3v2),
-            target: Some(AudioContainer::Id3v1),
-            fields: vec!["artist".into()],
-            on_conflict: Some(TagOnConflict::Overwrite),
-            enabled: false,
-            paths: Vec::new(),
-        },
-        TagOperation {
-            action: TagAction::Merge,
-            source: Some(AudioContainer::Id3v1),
-            target: Some(AudioContainer::Id3v2),
-            fields: vec!["title".into(), "artist".into()],
-            on_conflict: None,
-            enabled: true,
-            paths: vec![first.to_string_lossy().into_owned()],
-        },
-        TagOperation {
-            action: TagAction::Merge,
-            source: Some(AudioContainer::Id3v2),
-            target: Some(AudioContainer::Id3v1),
-            fields: vec!["title".into()],
-            on_conflict: Some(TagOnConflict::Overwrite),
-            enabled: true,
-            paths: Vec::new(),
-        },
-    ];
+    let mut request = quiet_plan(&[path.clone()]);
+    request.tag_operations = vec![TagOperation {
+        action: TagAction::Merge,
+        source: Some(AudioContainer::Id3v2),
+        target: Some(AudioContainer::Id3v1),
+        fields: vec!["title".into()],
+        on_conflict: None,
+        enabled: true,
+    }];
     let plan = service
         .plan(shared_conversion(), request, noop())
         .await
         .unwrap();
-    let first_file = plan
-        .files
-        .iter()
-        .find(|file| file.path.ends_with("first.mp3"))
-        .unwrap();
-    let second_file = plan
-        .files
-        .iter()
-        .find(|file| file.path.ends_with("second.mp3"))
-        .unwrap();
-    let kept = field(first_file, AudioContainer::Id3v2, "title").unwrap();
-    // ID3v1 當來源且沒指定衝突策略時只補空白，不會蓋掉已有的 v2 標題。
-    assert!(kept.converted_values.is_none(), "{kept:?}");
-    assert!(kept.origin.is_none(), "{kept:?}");
-    let manual = field(first_file, AudioContainer::Id3v2, "artist").unwrap();
-    assert_eq!(manual.origin.as_deref(), Some("manual"));
-    assert_eq!(manual.converted_values.as_ref().unwrap()[0], "v1-artist");
-    let rule = field(first_file, AudioContainer::Id3v1, "title").unwrap();
-    assert_eq!(rule.origin.as_deref(), Some("rule 2"));
-    assert_eq!(rule.converted_values.as_ref().unwrap()[0], "v2-title");
-    assert!(field(second_file, AudioContainer::Id3v2, "title")
-        .and_then(|item| item.origin.clone())
-        .is_none());
-    let second_rule = field(second_file, AudioContainer::Id3v1, "title").unwrap();
-    assert_eq!(second_rule.origin.as_deref(), Some("rule 2"));
+    let title = field(&plan.files[0], AudioContainer::Id3v1, "title").unwrap();
+    // 合併省略衝突策略時一律只補空白，目標已有標題就不會被蓋掉。
+    assert!(title.converted_values.is_none(), "{title:?}");
+    assert!(title.origin.is_none(), "{title:?}");
+    assert_eq!(title.values.first().map(String::as_str), Some("v1-title"));
     let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[test]
+fn copy_action_is_rejected() {
+    let error = serde_json::from_str::<TagAction>(r#""copy""#).unwrap_err();
+    assert!(error.to_string().contains("已不支援 copy"), "{error}");
 }
 
 /// 合法的 ID3v2.3 標頭，但影格設了加密旗標。id3 crate 讀整份標籤會失敗，
@@ -3537,7 +3494,6 @@ async fn unreadable_id3v2_is_not_replaced_with_an_empty_tag() {
         fields: vec!["title".into()],
         on_conflict: Some(TagOnConflict::Overwrite),
         enabled: true,
-        paths: Vec::new(),
     }];
     let plan = service
         .plan(shared_conversion(), request, noop())

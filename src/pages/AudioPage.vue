@@ -1507,6 +1507,12 @@ watch(
                 </el-select>
               </label>
             </div>
+            <p
+              v-if="editingRule.source === 'id3v1' && editingRule.onConflict === 'overwrite'"
+              class="audio-rule-lead"
+            >
+              ID3v1 只有約 30 位元組。選覆蓋會取代目標裡較完整的值。
+            </p>
             <p v-if="editingRule.action !== 'remove'">欄位</p>
             <div v-if="editingRule.action !== 'remove'" class="audio-rule-fields">
               <el-checkbox

@@ -419,11 +419,26 @@ pub struct AudioTagFile {
     pub notices: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TagAction {
     Remove,
     Merge,
+}
+
+impl<'de> Deserialize<'de> for TagAction {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        match value.as_str() {
+            "remove" => Ok(Self::Remove),
+            "merge" => Ok(Self::Merge),
+            "copy" => Err(serde::de::Error::custom("已不支援 copy")),
+            other => Err(serde::de::Error::custom(format!("未知的標籤動作：{other}"))),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -450,10 +465,6 @@ pub struct TagOperation {
     /// 略過時後端仍保留規則編號，但不會套用。省略視為啟用。
     #[serde(default = "default_tag_operation_enabled")]
     pub enabled: bool,
-    /// 有路徑時只作用於這些檔案，來源欄記成 `manual`，不佔規則編號。
-    /// 空陣列是整批規則。
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub paths: Vec<String>,
 }
 
 fn default_tag_operation_enabled() -> bool {

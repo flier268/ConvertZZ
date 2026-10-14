@@ -10,15 +10,6 @@ import type {
 
 export type AudioListFilter = "changed" | "unchanged" | "errors" | "warnings" | "all";
 
-export interface AudioReviewStats {
-  total: number;
-  changed: number;
-  unchanged: number;
-  errors: number;
-  /** 「只看有變更」實際列出的筆數（尚未建立預覽時含待審檔案）。 */
-  listedChanged: number;
-}
-
 export interface AudioSelectionTotals {
   files: number;
   fields: number;
@@ -286,7 +277,6 @@ export function fileHasTextLoss(file: AudioTagFile): boolean {
 
 export function fieldOriginLabel(origin: string | undefined): string {
   if (!origin) return "";
-  if (origin === "manual") return "手動";
   if (origin === "convert") return "轉換";
   const rule = /^rule (\d+)$/.exec(origin);
   if (rule) return `規則 ${rule[1]}`;
@@ -368,17 +358,6 @@ export function replaceAudioFile(
   const index = files.findIndex((file) => audioPathKey(file.path) === audioPathKey(updated.path));
   if (index < 0) return [...files, updated];
   return files.map((file, itemIndex) => (itemIndex === index ? updated : file));
-}
-
-export function audioReviewStats(files: readonly AudioTagFile[]): AudioReviewStats {
-  const counts = audioSegmentCounts(files);
-  return {
-    total: counts.all,
-    changed: counts.changed,
-    unchanged: counts.unchanged,
-    errors: counts.errors,
-    listedChanged: counts.changed,
-  };
 }
 
 function fieldBlob(file: AudioTagFile, keys: Set<string>, label: string): string {
@@ -615,13 +594,6 @@ export function selectionTotals(
   return { files: fileCount, fields: fieldCount };
 }
 
-export function writableAudioPaths(
-  files: readonly AudioTagFile[],
-  containers: AudioContainerFlags,
-): string[] {
-  return audioApplySelection(files, containers).paths;
-}
-
 /** 目前勾選。`audio.apply` 必須帶這份，預覽之後改勾選才會影響寫入。 */
 export function audioApplySelection(
   files: readonly AudioTagFile[],
@@ -683,18 +655,6 @@ export function folderSelectionState(
   if (selected === 0) return "none";
   if (selected === group.length) return "all";
   return "mixed";
-}
-
-/** 與全選相同規則，範圍只限這個資料夾在目前篩選下的非錯誤檔。 */
-export function toggleFolderSelection(
-  files: readonly AudioTagFile[],
-  visible: readonly AudioTagFile[],
-  folder: string,
-): void {
-  const group = selectableFolderFiles(visible, folder);
-  if (!group.length) return;
-  const mode = group.every((file) => file.selected) ? "none" : "all";
-  applyBulkSelection(files, group, mode);
 }
 
 /** `audio.plan` 只帶有勾選欄位的檔案。 */
@@ -851,9 +811,7 @@ export function createTagRule(partial: Partial<TagRule> & Pick<TagRule, "action"
     source: partial.source ?? "id3v2",
     target: partial.target ?? "id3v1",
     fields: partial.fields ?? TAG_RULE_FIELDS.map(([key]) => key),
-    onConflict:
-      partial.onConflict ??
-      (partial.action === "merge" || partial.source === "id3v1" ? "fillEmpty" : "overwrite"),
+    onConflict: partial.onConflict ?? (partial.action === "merge" ? "fillEmpty" : "overwrite"),
   };
 }
 

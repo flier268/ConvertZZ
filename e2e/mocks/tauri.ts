@@ -123,7 +123,7 @@ export interface ConvertzzE2eConfig {
     selectedFields?: Record<string, string[]>;
   };
   lastAudioPlan?: {
-    tagOperations?: Array<{ action?: string; paths?: string[]; source?: string }>;
+    tagOperations?: Array<{ action?: string; source?: string }>;
   };
 }
 
@@ -413,18 +413,9 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
     if (e2e().failAudioPlan) throw new Error("無法建立標籤預覽");
     const tagOperations = Array.isArray(payload.tagOperations) ? payload.tagOperations : [];
     e2e().lastAudioPlan = {
-      tagOperations: tagOperations as Array<{ action?: string; paths?: string[]; source?: string }>,
+      tagOperations: tagOperations as Array<{ action?: string; source?: string }>,
     };
-    const manualOnly =
-      tagOperations.length > 0 &&
-      tagOperations.every(
-        (operation) =>
-          operation &&
-          typeof operation === "object" &&
-          Array.isArray((operation as { paths?: unknown }).paths) &&
-          ((operation as { paths?: unknown[] }).paths?.length ?? 0) > 0,
-      );
-    if (tagOperations.length > 0 && !manualOnly) {
+    if (tagOperations.length > 0) {
       const song = {
         path: "/music/專輯甲/song.mp3",
         format: "mp3" as const,
@@ -549,15 +540,6 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
         },
       ],
     };
-    if (manualOnly) {
-      const title = song.fields.find(
-        (field) => field.container === "id3v2" && field.key === "title",
-      );
-      if (title) {
-        title.convertedValues = ["後來的我們"];
-        (title as { origin?: string }).origin = "manual";
-      }
-    }
     const unchanged = {
       path: "/music/專輯乙/same.ogg",
       format: "ogg" as const,

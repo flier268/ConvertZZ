@@ -5,7 +5,6 @@ import {
   audioParentDir,
   audioWarningDetail,
   clearWarningSelection,
-  audioReviewStats,
   audioSegmentCounts,
   replaceAudioFile,
   audioRowSection,
@@ -15,13 +14,11 @@ import {
   folderSelectionState,
   planSelectedFields,
   sortAudioFilesWithinFolders,
-  toggleFolderSelection,
   filterAudioFiles,
   selectionTotals,
   stepAudioRow,
   toggleFolderCollapsed,
   audioApplySelection,
-  writableAudioPaths,
   settingsSummaryChips,
   fieldOriginLabel,
   fileHasTextLoss,
@@ -100,16 +97,6 @@ const sample: AudioTagFile[] = [
 ];
 
 describe("audioReview", () => {
-  it("統計有變更、不變與錯誤", () => {
-    expect(audioReviewStats(sample)).toMatchObject({
-      total: 3,
-      changed: 1,
-      unchanged: 1,
-      errors: 1,
-      listedChanged: 1,
-    });
-  });
-
   it("同一個篩選值決定區段筆數，搜尋再和它取交集", () => {
     const counts = audioSegmentCounts(sample);
     expect(counts).toEqual({ changed: 1, unchanged: 1, errors: 1, warnings: 0, all: 3 });
@@ -193,7 +180,6 @@ describe("audioReview", () => {
       }),
       file({ path: "/tmp/bad.mp3", warning: "損壞", selected: false, fields: [] }),
     ];
-    expect(audioReviewStats(pending).listedChanged).toBe(1);
     expect(filterAudioFiles(pending, "changed", "").map((item) => item.path)).toEqual([
       "/tmp/song.mp3",
     ]);
@@ -203,12 +189,6 @@ describe("audioReview", () => {
     for (const filter of ["changed", "unchanged", "errors", "all"] as const) {
       expect(filterAudioFiles(pending, filter, "")).toHaveLength(counts[filter]);
     }
-    expect(audioReviewStats(pending)).toMatchObject({
-      changed: counts.changed,
-      unchanged: counts.unchanged,
-      errors: counts.errors,
-      listedChanged: counts.changed,
-    });
   });
 
   it("搜尋檔名、專輯與標題，批次勾選只動到篩選結果", () => {
@@ -259,7 +239,6 @@ describe("audioReview", () => {
     });
     expect(selectionTotals(sample, { id3v1: true, id3v2: true })).toEqual({ files: 1, fields: 3 });
     expect(selectionTotals(sample, { id3v1: true, id3v2: false })).toEqual({ files: 1, fields: 1 });
-    expect(writableAudioPaths(sample, { id3v1: true, id3v2: true })).toEqual(["/tmp/晨雾/风.mp3"]);
     expect(audioApplySelection(sample, { id3v1: true, id3v2: true })).toEqual({
       paths: ["/tmp/晨雾/风.mp3"],
       selectedFields: {
@@ -349,11 +328,6 @@ describe("audioReview", () => {
       errors: 0,
       warnings: 0,
       all: 2,
-    });
-    expect(audioReviewStats(files)).toMatchObject({
-      changed: 2,
-      unchanged: 0,
-      listedChanged: 2,
     });
     expect(filterAudioFiles(files, "changed", "")).toHaveLength(2);
     expect(selectionTotals(files, { id3v1: true, id3v2: true })).toEqual({ files: 2, fields: 2 });
@@ -507,16 +481,14 @@ describe("audioReview", () => {
     expect(files.find((item) => item.path === "/tmp/broken.mp3")?.selected).toBe(false);
   });
 
-  it("資料夾全選只改該資料夾在目前篩選中的非錯誤檔", () => {
+  it("資料夾勾選狀態只看目前篩選中的非錯誤檔", () => {
     const files = sample.map((item) => ({ ...item, selected: false }));
     const visible = filterAudioFiles(files, "changed", "");
     expect(folderSelectionState(visible, "/tmp/晨雾")).toBe("none");
-    toggleFolderSelection(files, visible, "/tmp/晨雾");
-    expect(files.find((item) => item.path === "/tmp/晨雾/风.mp3")?.selected).toBe(true);
-    expect(files.find((item) => item.path === "/tmp/same.ogg")?.selected).toBe(false);
+    const target = files.find((item) => item.path === "/tmp/晨雾/风.mp3");
+    if (target) target.selected = true;
     expect(folderSelectionState(visible, "/tmp/晨雾")).toBe("all");
-    toggleFolderSelection(files, visible, "/tmp/晨雾");
-    expect(folderSelectionState(visible, "/tmp/晨雾")).toBe("none");
+    expect(folderSelectionState(visible, "/tmp/missing")).toBe("empty");
   });
 
   it("預覽請求只送有勾選欄位的檔案", () => {
@@ -589,8 +561,8 @@ describe("audioReview", () => {
     expect(tagRuleSummary(cleanup)).toContain("移除 APEv2");
     expect(toTagOperations([merge, { ...cleanup, enabled: false }])[1].enabled).toBe(false);
     expect(fieldOriginLabel("rule 2")).toBe("規則 2");
-    expect(fieldOriginLabel("manual")).toBe("手動");
     expect(fieldOriginLabel("convert")).toBe("轉換");
+    expect(createTagRule({ action: "merge", source: "apev2" }).onConflict).toBe("fillEmpty");
     const warned = file({
       path: "/tmp/warn.mp3",
       previewed: true,

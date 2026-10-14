@@ -22,6 +22,9 @@ describe("版本檢查", () => {
     expect(compareVersions("v2.0.0-beta9", "2.0.0-beta8")).toBe(1);
     expect(compareVersions("2.0.0-rc.1", "2.0.0-beta.9")).toBe(1);
     expect(compareVersions("2.0.0-beta.2", "2.0.0-beta.10")).toBe(-1);
+    expect(compareVersions("2.0.0-beta9", "2.0.0-beta10")).toBe(-1);
+    expect(compareVersions("2.0.0-beta10", "2.0.0-beta9")).toBe(1);
+    expect(compareVersions("2.0.0-beta10", "2.0.0-beta.10")).toBe(0);
   });
 
   it("辨識並保留預發佈版本字串", () => {

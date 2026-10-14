@@ -85,7 +85,7 @@ export function parseVersion(value: string): ParsedVersion | null {
   if (!match) return null;
   return {
     core: [Number(match[1]), Number(match[2]), Number(match[3])],
-    pre: match[4] ? match[4].split(".").map(parsePreReleasePart) : null,
+    pre: match[4] ? splitPreRelease(match[4]) : null,
   };
 }
 
@@ -212,6 +212,20 @@ export function isUpdateVersionSkipped(
   const skipped = skippedVersion?.trim();
   if (!skipped) return false;
   return compareVersions(latestVersion, skipped) <= 0;
+}
+
+function splitPreRelease(pre: string): PreReleasePart[] {
+  const parts: PreReleasePart[] = [];
+  for (const part of pre.split(".")) {
+    // 發行標籤用 beta9／beta10，沒有 SemVer 的點號。尾端數字要分開比，否則 "beta9" > "beta10"。
+    const numericTail = /^([A-Za-z][0-9A-Za-z-]*?)(0|[1-9]\d*)$/u.exec(part);
+    if (numericTail) {
+      parts.push(numericTail[1]!, Number(numericTail[2]));
+      continue;
+    }
+    parts.push(parsePreReleasePart(part));
+  }
+  return parts;
 }
 
 function parsePreReleasePart(part: string): PreReleasePart {

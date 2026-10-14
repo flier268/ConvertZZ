@@ -163,6 +163,13 @@ describe("驗收項目的自動化契約", () => {
     expect(styles).not.toContain("audio-column-menu");
     expect(page).toContain('label="合併"');
     expect(page).toContain('label="移除"');
+    expect(readProjectFile("shared/contracts.ts")).toContain(
+      'export type TagAction = "remove" | "merge"',
+    );
+    expect(readProjectFile("src-tauri/src/core/types.rs")).not.toMatch(
+      /enum TagAction \{[^}]*Copy/s,
+    );
+    expect(readProjectFile("src/lib/audioReview.ts")).not.toContain('action: "copy"');
   });
 
   it("音訊標籤預覽可檢視欄位差異", () => {

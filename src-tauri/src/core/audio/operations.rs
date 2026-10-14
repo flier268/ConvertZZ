@@ -1,10 +1,10 @@
 //! 把標籤操作展開成既有計畫裡的欄位更新與容器移除。
 //!
 //! 來源一律讀這次掃描到的原始欄位，不讀前面規則寫進目標的結果。
-//! 所以「先移除 APEv2，再從 APEv2 複製」仍然複製得到移除前的文字，順序是確定的。
+//! 所以「先移除 APEv2，再從 APEv2 合併」仍然用得到移除前的文字，順序是確定的。
 //! 同一個容器若先移除、後面又寫入，寫入蓋過移除；先寫入再移除，則最後移除整個容器。
 //! `fillEmpty` 看的是原始目標再加上更早規則寫入後的文字，不看簡繁轉換的結果。
-//! 來源是空字串時略過，避免把目標清成空白。ID3v1 當來源且沒指定衝突策略時，預設只補空白。
+//! 來源是空字串時略過，避免把目標清成空白。沒指定衝突策略時，合併預設只補空白。
 
 use super::super::types::{
     AudioContainer, AudioContainerRemoval, AudioFieldWarning, AudioFieldWarningCode, AudioTagField,
@@ -237,7 +237,7 @@ pub(super) fn expand_tag_operations(
                 &mut removals,
                 warnings,
             ),
-            TagAction::Copy | TagAction::Merge => expand_transfer(
+            TagAction::Merge => expand_transfer(
                 request,
                 file,
                 operation,
@@ -388,23 +388,19 @@ fn expand_transfer(
     warnings: &mut Vec<String>,
 ) -> Result<(), super::super::error::CoreError> {
     let (Some(source), Some(target)) = (operation.source, operation.target) else {
-        warnings.push(format!("{}：複製規則需要來源和目標。", file.path));
+        warnings.push(format!("{}：合併規則需要來源和目標。", file.path));
         return Ok(());
     };
     if !transfer_supported(source, target) {
         warnings.push(format!(
-            "{}：第一版不能從 {} 複製到 {}。",
+            "{}：第一版不能從 {} 合併到 {}。",
             file.path,
             container_token(source),
             container_token(target)
         ));
         return Ok(());
     }
-    let conflict = operation.on_conflict.unwrap_or(match operation.action {
-        TagAction::Merge => TagOnConflict::FillEmpty,
-        TagAction::Copy if source == AudioContainer::Id3v1 => TagOnConflict::FillEmpty,
-        _ => TagOnConflict::Overwrite,
-    });
+    let conflict = operation.on_conflict.unwrap_or(TagOnConflict::FillEmpty);
     let keys = if operation.fields.is_empty() {
         STANDARD_FIELDS
             .iter()

@@ -3329,7 +3329,7 @@ fn big5_reports_unrepresentable_character() {
 }
 
 #[tokio::test]
-async fn copy_id3v2_to_id3v1_reports_big5_truncation_and_unrepresentable() {
+async fn merge_id3v2_to_id3v1_reports_big5_truncation_and_unrepresentable() {
     let directory = temp_dir();
     let path = directory.join("copy.mp3");
     std::fs::write(&path, mpeg_frame()).unwrap();
@@ -3342,7 +3342,7 @@ async fn copy_id3v2_to_id3v1_reports_big5_truncation_and_unrepresentable() {
     let mut request = quiet_plan(&[path.clone()]);
     request.id3v1_output_encoding = TextEncoding::Big5;
     request.tag_operations = vec![TagOperation {
-        action: TagAction::Copy,
+        action: TagAction::Merge,
         source: Some(AudioContainer::Id3v2),
         target: Some(AudioContainer::Id3v1),
         fields: vec!["title".into(), "genre".into()],
@@ -3438,7 +3438,7 @@ async fn manual_path_operation_stays_on_that_file_and_marks_origin_manual() {
     let mut request = quiet_plan(&[first.clone(), second.clone()]);
     request.tag_operations = vec![
         TagOperation {
-            action: TagAction::Copy,
+            action: TagAction::Merge,
             source: Some(AudioContainer::Id3v2),
             target: Some(AudioContainer::Id3v1),
             fields: vec!["artist".into()],
@@ -3447,7 +3447,7 @@ async fn manual_path_operation_stays_on_that_file_and_marks_origin_manual() {
             paths: Vec::new(),
         },
         TagOperation {
-            action: TagAction::Copy,
+            action: TagAction::Merge,
             source: Some(AudioContainer::Id3v1),
             target: Some(AudioContainer::Id3v2),
             fields: vec!["title".into(), "artist".into()],
@@ -3456,7 +3456,7 @@ async fn manual_path_operation_stays_on_that_file_and_marks_origin_manual() {
             paths: vec![first.to_string_lossy().into_owned()],
         },
         TagOperation {
-            action: TagAction::Copy,
+            action: TagAction::Merge,
             source: Some(AudioContainer::Id3v2),
             target: Some(AudioContainer::Id3v1),
             fields: vec!["title".into()],
@@ -3531,7 +3531,7 @@ async fn unreadable_id3v2_is_not_replaced_with_an_empty_tag() {
     let service = AudioService::new();
     let mut request = quiet_plan(&[path.clone()]);
     request.tag_operations = vec![TagOperation {
-        action: TagAction::Copy,
+        action: TagAction::Merge,
         source: Some(AudioContainer::Id3v1),
         target: Some(AudioContainer::Id3v2),
         fields: vec!["title".into()],

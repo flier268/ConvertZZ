@@ -142,7 +142,7 @@ export interface FilePreviewRequest {
   sourcePath: string;
 }
 
-export type TagAction = "copy" | "remove" | "merge";
+export type TagAction = "remove" | "merge";
 export type TagOnConflict = "overwrite" | "fillEmpty";
 
 /** 一條標籤操作。來源在後端展開時一律讀原始標籤。 */

@@ -1453,7 +1453,7 @@ watch(
           <span class="audio-rule-index">{{ index + 1 }}</span>
           <button type="button" class="audio-rule-name" @click="editingRuleId = rule.id">
             <span v-if="rule.action === 'remove'" class="audio-remove">移除</span>
-            {{ tagRuleSummary(rule, draft.id3v1OutputEncoding) }}
+            {{ tagRuleSummary(rule) }}
           </button>
           <el-switch v-model="rule.enabled" :aria-label="`啟用規則 ${index + 1}`" />
           <el-button link :disabled="index === 0" @click="moveTagRule(index, -1)">上移</el-button>

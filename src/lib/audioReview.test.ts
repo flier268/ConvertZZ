@@ -27,8 +27,8 @@ import {
   fileHasTextLoss,
   fileHasTagWarning,
   toTagOperations,
-  legacyPlayerRule,
   cleanupApeRule,
+  createTagRule,
   tagRuleSummary,
   activeRemovals,
   detailContainerNotices,
@@ -577,12 +577,17 @@ describe("audioReview", () => {
   });
 
   it("標籤操作的來源、警告篩選與移除勾選", () => {
-    const legacy = legacyPlayerRule();
+    const merge = createTagRule({
+      action: "merge",
+      source: "id3v2",
+      target: "id3v1",
+      onConflict: "overwrite",
+    });
     const cleanup = cleanupApeRule();
-    expect(tagRuleSummary(legacy, "big5")).toContain("從 ID3v2 複製到 ID3v1");
-    expect(tagRuleSummary(legacy, "big5")).toContain("Big5");
+    expect(tagRuleSummary(merge)).toContain("以 ID3v2 為主合併到 ID3v1");
+    expect(tagRuleSummary(merge)).toContain("覆蓋目標");
     expect(tagRuleSummary(cleanup)).toContain("移除 APEv2");
-    expect(toTagOperations([legacy, { ...cleanup, enabled: false }])[1].enabled).toBe(false);
+    expect(toTagOperations([merge, { ...cleanup, enabled: false }])[1].enabled).toBe(false);
     expect(fieldOriginLabel("rule 2")).toBe("規則 2");
     expect(fieldOriginLabel("manual")).toBe("手動");
     expect(fieldOriginLabel("convert")).toBe("轉換");

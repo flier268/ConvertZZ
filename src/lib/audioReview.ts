@@ -857,40 +857,20 @@ export function createTagRule(partial: Partial<TagRule> & Pick<TagRule, "action"
   };
 }
 
-/** 舊播放器或車機只讀 ID3v1。輸出編碼由呼叫端改成 Big5。 */
-export const LEGACY_PLAYER_NOTE =
-  "把 ID3v2 複製到 ID3v1，輸出 Big5。超過 30 位元組會截斷，目標編碼沒有的字會變成 ?。給只讀 ID3v1 的舊播放器或車機。";
-
 /** 有的播放器偏好 APEv2，移除後畫面上的標題可能改變。 */
 export const CLEANUP_APE_NOTE =
   "移除 MP3 上多餘的 APEv2。有的播放器偏好 APEv2，移除後顯示的標題可能會改變。檔案只剩這一個標籤時不會刪。";
-
-export function legacyPlayerRule(): TagRule {
-  return createTagRule({
-    action: "copy",
-    source: "id3v2",
-    target: "id3v1",
-    onConflict: "overwrite",
-  });
-}
 
 export function cleanupApeRule(): TagRule {
   return createTagRule({ action: "remove", source: "apev2", target: "apev2" });
 }
 
-export function tagRuleSummary(rule: TagRule, id3v1OutputEncoding = "big5"): string {
+export function tagRuleSummary(rule: TagRule): string {
   const source = containerName(rule.source);
   const target = containerName(rule.target);
   if (rule.action === "remove") return `移除 ${source}（MP3 才執行）`;
-  if (rule.action === "merge") {
-    const how = rule.onConflict === "fillEmpty" ? "只補空白欄位" : "覆蓋目標";
-    return `以 ${source} 為主合併到 ${target}（${how}）`;
-  }
-  const encoding =
-    rule.target === "id3v1"
-      ? `${encodingLabel(id3v1OutputEncoding)}，超過 30 位元組會截斷`
-      : "覆蓋目標";
-  return `從 ${source} 複製到 ${target}（${encoding}）`;
+  const how = rule.onConflict === "fillEmpty" ? "只補空白欄位" : "覆蓋目標";
+  return `以 ${source} 為主合併到 ${target}（${how}）`;
 }
 
 export function toTagOperations(rules: readonly TagRule[]): TagOperation[] {

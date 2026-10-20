@@ -1,0 +1,504 @@
+export type EngineKind = "segmented" | "legacy" | "zhconvert";
+export type Direction = "none" | "s2t" | "t2s";
+export type AudioContainer = "id3v1" | "id3v2" | "apev2" | "vorbis-comment";
+export type ConflictPolicy = "skip" | "overwrite";
+
+export interface ConversionRequest {
+  text: string;
+  direction: Direction;
+  engine: EngineKind;
+  dictionaryPath?: string;
+  zhconvert?: ZhConvertOptions;
+  vocabularyCorrection?: boolean;
+}
+
+export interface ConversionResult {
+  text: string;
+  engine: EngineKind;
+  direction: Direction;
+  warnings: string[];
+  durationMs: number;
+}
+
+export interface ZhConvertOptions {
+  converter?: string;
+  modules?: Record<string, -1 | 0 | 1> | string[];
+  jpTextConversionStrategy?: "none" | "protect" | "protectOnlySameOrigin" | "fix";
+  jpStyleConversionStrategy?: "none" | "protect" | "protectOnlySameOrigin" | "fix";
+  cleanUpText?: boolean;
+  userPreReplace?: string;
+  userPostReplace?: string;
+  userProtectReplace?: string;
+  ensureNewlineAtEof?: boolean;
+  translateTabsToSpaces?: number;
+  trimTrailingWhiteSpaces?: boolean;
+  unifyLeadingHyphen?: boolean;
+  ignoreTextStyles?: string;
+  jpTextStyles?: string;
+}
+
+export type TextEncoding =
+  | "auto"
+  | "utf8"
+  | "utf8-bom"
+  | "utf16le"
+  | "utf16be"
+  | "big5"
+  | "gbk"
+  | "shift-jis"
+  | "euc-jp"
+  | "iso-2022-jp"
+  | "hz-gb-2312";
+
+export type ExtensionFilterMode = "allow" | "deny" | "all";
+
+/**
+ * 資料夾掃描的副檔名篩選。`extensions` 含前導點、小寫。
+ * `includeNoExtension`：白名單時收無副檔名檔案；黑名單時一併排除無副檔名檔案。
+ * 空白名單且不含無副檔名＝不收任何檔案；空黑名單等同所有檔案。
+ */
+export interface ExtensionFilter {
+  mode: ExtensionFilterMode;
+  extensions: string[];
+  includeNoExtension: boolean;
+}
+
+export interface ScanExtensionStatsRequest {
+  path: string;
+  recursive: boolean;
+}
+
+export interface ExtensionCount {
+  extension: string;
+  count: number;
+}
+
+/** `files.scanExtensions` 結果：只統計，不讀檔案內容。 */
+export interface ExtensionStats {
+  /** 依數量遞減、副檔名排序。 */
+  extensions: ExtensionCount[];
+  noExtensionCount: number;
+  totalFiles: number;
+  directoryCount: number;
+  warnings: string[];
+}
+
+export interface FilePlanRequest {
+  paths: string[];
+  outputPath?: string;
+  outputDirectory?: string;
+  mode: "content" | "filename" | "both";
+  recursive: boolean;
+  inputEncoding: TextEncoding;
+  outputEncoding: TextEncoding;
+  addBom: boolean;
+  fixCharsetDeclaration: boolean;
+  fixCharsetExtensions?: string[];
+  /**
+   * 資料夾掃描允許的副檔名（含前導點）。省略表示所有檔案，只在明確的所有檔案狀態使用。
+   * 空陣列表示資料夾掃描不收任何檔案；直接指定的檔案仍收。
+   */
+  allowedExtensions?: string[];
+  /** 副檔名篩選（含黑名單與無副檔名）。存在時優先於 `allowedExtensions`；前端一律送這個。 */
+  extensionFilter?: ExtensionFilter;
+  previewMaxBytes?: number;
+  conflictPolicy: ConflictPolicy;
+  /** 轉換前自動建立 .bak 備份；省略時預設啟用。 */
+  backup?: boolean;
+  /**
+   * 直接指定版本控制資料夾（.git、.svn、.hg、.bzr）或其中的路徑時是否照樣處理。
+   * 省略或 false：這些輸入會被略過並列在 `FileConversionPlan.ignoredInputs`。
+   */
+  includeIgnored?: boolean;
+  conversion: Omit<ConversionRequest, "text">;
+}
+
+export interface FilePlanItem {
+  sourcePath: string;
+  outputPath: string;
+  kind: "file" | "directory";
+  selected: boolean;
+  detectedEncoding?: TextEncoding;
+  sourcePreview: string;
+  outputPreview: string;
+  /** 內容預覽是否已依目前計畫載入；檔名模式可在列舉時即為 true。 */
+  previewLoaded?: boolean;
+  status: "ready" | "skipped" | "conflict" | "error";
+  warning?: string;
+}
+
+export interface FileConversionPlan {
+  planId: string;
+  createdAt: string;
+  items: FilePlanItem[];
+  warnings: string[];
+  /** 因位於版本控制資料夾而略過的直接輸入（`includeIgnored` 未開啟時）。 */
+  ignoredInputs?: string[];
+}
+
+/** 對計畫內單一檔案載入截斷後的內容預覽。 */
+export interface FilePreviewRequest {
+  planId: string;
+  sourcePath: string;
+}
+
+export type TagAction = "remove" | "merge";
+export type TagOnConflict = "overwrite" | "fillEmpty";
+
+/** 一條標籤操作。來源在後端展開時一律讀原始標籤。 */
+export interface TagOperation {
+  action: TagAction;
+  source?: AudioContainer;
+  target?: AudioContainer;
+  /** 省略或空陣列表示七個共通欄位。 */
+  fields?: string[];
+  /** 省略時合併一律 fillEmpty；移除忽略此欄。 */
+  onConflict?: TagOnConflict;
+  /** 省略視為啟用。停用的規則仍佔編號。 */
+  enabled?: boolean;
+}
+
+export type AudioFieldWarningCode = "truncated" | "unrepresentable" | "hidden" | "unmappable";
+
+export interface AudioFieldWarning {
+  code: AudioFieldWarningCode;
+  message: string;
+  fromBytes?: number;
+  toBytes?: number;
+  count?: number;
+}
+
+export interface AudioTagField {
+  key: string;
+  label: string;
+  container: AudioContainer;
+  values: string[];
+  /** 與 `values` 相同時後端省略，表示預覽後沒有文字變化。 */
+  convertedValues?: string[];
+  selected: boolean;
+  /** ID3v1 固定寬度寫入時，這個欄位被切到完整字元。 */
+  truncated?: boolean;
+  /** 例如「ID3v1 標題超過 30 位元組，已截斷為 …」。 */
+  truncation?: string;
+  /** `rule n` 或 `convert`。 */
+  origin?: "convert" | `rule ${number}` | string;
+  warnings?: AudioFieldWarning[];
+}
+
+export interface AudioContainerRemoval {
+  container: AudioContainer;
+  hiddenFieldCount: number;
+  origin: string;
+  selected: boolean;
+  /** 有值表示沒有排進寫入，例如這是檔案唯一的標籤。 */
+  refused?: string;
+}
+
+export interface AudioTagFile {
+  path: string;
+  format: "mp3" | "ape" | "ogg" | "opus";
+  selected: boolean;
+  fields: AudioTagField[];
+  /** 省略或 false 表示沒有封面。 */
+  hasCoverArt?: boolean;
+  durationSeconds?: number;
+  warning?: string;
+  /** 已套用轉換預覽。沒有文字變化的欄位不會再帶一份相同的 `convertedValues`。 */
+  previewed?: boolean;
+  /** 這些容器的編碼或 ID3 版本與寫入設定不同，欄位文字相同也算變更。 */
+  rewriteContainers?: AudioContainer[];
+  /** 整個容器的移除。省略表示沒有。 */
+  removals?: AudioContainerRemoval[];
+  /** 容器級說明。例如「ID3v2 標籤會整個重寫為 v2.4・UTF-16」「ID3v1 會重寫」。省略表示沒有。 */
+  notices?: string[];
+}
+
+export interface AudioScanRequest {
+  paths: string[];
+  recursive?: boolean;
+  id3v1SourceEncoding?: Exclude<TextEncoding, "auto">;
+  id3v2SourceEncoding?: Exclude<TextEncoding, "auto">;
+  id3v2RepairSourceEncoding?: boolean;
+}
+
+/** 只重掃一個檔案。有 `planId` 時會換掉該計畫裡同一個路徑的寫入項目。 */
+export interface AudioRescanFileRequest extends AudioTagPlanRequest {
+  path: string;
+  planId?: string;
+}
+
+export interface AudioTagPlanRequest extends AudioScanRequest {
+  selectedPaths: string[];
+  selectedFields: Record<string, string[]>;
+  conversion: Omit<ConversionRequest, "text">;
+  conflictPolicy: ConflictPolicy;
+  /** 寫入前自動建立 .bak 備份；省略時預設啟用。 */
+  backup?: boolean;
+  id3v1Enabled: boolean;
+  id3v1Direction: Direction;
+  id3v1Zhconvert?: ZhConvertOptions;
+  id3v1OutputEncoding: Exclude<TextEncoding, "auto">;
+  id3v2Enabled: boolean;
+  id3v2Direction: Direction;
+  id3v2Zhconvert?: ZhConvertOptions;
+  id3v2Version: 3 | 4;
+  id3v2Encoding: "utf8" | "utf16" | "utf16be" | "latin1";
+  /** 省略或空陣列時，預覽與寫入維持原本的逐欄轉換。 */
+  tagOperations?: TagOperation[];
+}
+
+export interface AudioTagPlanSummary {
+  total: number;
+  changed: number;
+  unchanged: number;
+  errors: number;
+  selectedFields: number;
+}
+
+export interface AudioTagPlan {
+  planId: string;
+  createdAt: string;
+  files: AudioTagFile[];
+  /** 空陣列時後端省略。 */
+  warnings?: string[];
+  /** 後端附帶的統計。前端審閱仍以目前勾選即時重算。 */
+  summary?: AudioTagPlanSummary;
+}
+
+export interface ApplyResult {
+  succeeded: string[];
+  skipped: string[];
+  failed: Array<{ path: string; message: string }>;
+  /** 略過二進位內容或解碼失敗等警告。可能省略。 */
+  warnings?: string[];
+}
+
+export interface PlatformCapabilities {
+  platform: "windows" | "linux" | "macos" | "unknown";
+  displayServer: "windows" | "x11" | "wayland" | "macos" | "unknown";
+  globalShortcuts: boolean;
+  automaticCopyPaste: boolean;
+  floatingAlwaysOnTop: boolean;
+  tray: boolean;
+  sendToShortcut: boolean;
+  credentialStorage: boolean;
+  /** 執行檔旁有 `portable` 標記時為 true（Windows 免安裝 zip）。 */
+  portable: boolean;
+  /** 是否可用應用程式內簽署更新（免安裝 zip 為 false）。 */
+  automaticUpdates: boolean;
+  limitations: string[];
+}
+
+export interface ParsedCli {
+  mode: "file" | "audio" | "interactive";
+  paths: string[];
+  outputPath?: string;
+  inputEncoding: TextEncoding;
+  outputEncoding: TextEncoding;
+  direction: Direction;
+  engine: EngineKind;
+  operation: "content" | "filename" | "both";
+  vocabularyCorrection: "settings" | "enabled" | "disabled";
+  /** 轉換前備份；預設 true。`/b:f` 可關閉。 */
+  backup: boolean;
+  /** 無頭 CLI：全程不開 GUI。 */
+  headless?: boolean;
+  /** 寫入確認：`/y`／`--yes`。 */
+  confirmWrite?: boolean;
+  /** 是否明確指定 `/o:*`。 */
+  outputEncodingExplicit?: boolean;
+  /** 是否明確指定 `--input`／`/i:*`。 */
+  inputEncodingExplicit?: boolean;
+  /** 是否明確指定 `/f:*`／`--direction`。 */
+  directionExplicit?: boolean;
+  /** 是否明確指定 `--engine`／`/e:*`。 */
+  engineExplicit?: boolean;
+  /** 是否明確指定 `--vocabulary`／`/d:*`。 */
+  vocabularyExplicit?: boolean;
+  /** 是否明確指定 `--backup`／`--no-backup`／`/b:*`。 */
+  backupExplicit?: boolean;
+  /** 無頭時載入本機全域／可攜設定（`--globalconfig`）。 */
+  useGlobalConfig?: boolean;
+  /** 無頭時載入指定設定檔（`--config <路徑>`）。 */
+  configPath?: string;
+  /** `--include-ignored`：直接指定的版本控制資料夾也照樣處理。 */
+  includeIgnored?: boolean;
+  /** 已知旗標但值無效時的解析錯誤。 */
+  parseErrors?: string[];
+}
+
+export interface ShortcutSetting {
+  enabled: boolean;
+  accelerator: string;
+  action: string;
+}
+
+export interface QuickActionSettings {
+  leftClickCtrl: string;
+  leftClickAlt: string;
+  leftClickShift: string;
+  rightClickCtrl: string;
+  rightClickAlt: string;
+  rightClickShift: string;
+  leftDropCtrl: string;
+  leftDropAlt: string;
+  leftDropShift: string;
+  rightDropCtrl: string;
+  rightDropAlt: string;
+  rightDropShift: string;
+}
+
+/** 懸浮球拖入檔案後，上次確認的轉換動作選項。 */
+export interface LastDropActionSettings {
+  kind: "file" | "audio";
+  operation: "content" | "filename" | "both";
+  direction: Direction;
+}
+
+export type FolderPickBehavior = "rememberLast" | "alwaysWizard";
+
+export interface FileFilterProfile extends ExtensionFilter {
+  id: string;
+  name: string;
+  /** 內建 profile 不可刪除。 */
+  builtin: boolean;
+}
+
+export interface AudioPageSettings {
+  backup: boolean;
+  conflictPolicy: ConflictPolicy;
+  recursive: boolean;
+  direction: Direction;
+  engine: EngineKind;
+  vocabularyCorrection: boolean;
+  id3v1Enabled: boolean;
+  id3v1Direction: Direction;
+  id3v1SourceEncoding: Exclude<TextEncoding, "auto">;
+  id3v1OutputEncoding: Exclude<TextEncoding, "auto">;
+  id3v2Enabled: boolean;
+  id3v2Direction: Direction;
+  id3v2SourceEncoding: Exclude<TextEncoding, "auto">;
+  id3v2RepairSourceEncoding: boolean;
+  id3v2Version: 3 | 4;
+  id3v2Encoding: "utf8" | "utf16" | "utf16be" | "latin1";
+  tagOperations: TagOperation[];
+}
+
+export interface SettingsV2 {
+  version: 2;
+  engine: EngineKind;
+  direction: Direction;
+  vocabularyCorrection: boolean;
+  dictionaryPath?: string;
+  promptAfterConversion: boolean;
+  /** 檔案、檔名與音訊標籤轉換前自動建立 .bak 備份。 */
+  autoBackupBeforeConversion: boolean;
+  /** 音訊標籤頁「編輯設定」抽屜。缺欄時由設定遷移補預設。 */
+  audio: AudioPageSettings;
+  recognizeEncoding: boolean;
+  previewMaxKb: number;
+  floatingBall: { enabled: boolean; x: number; y: number };
+  hotkeys: {
+    autoCopy: boolean;
+    autoPaste: boolean;
+    shortcuts: ShortcutSetting[];
+  };
+  quickActions: QuickActionSettings;
+  files: {
+    defaultPath: string;
+    /** 舊版篩選器字串。profile 遷移後保留一版供回滾，不再作為執行時來源。 */
+    typeFilter: string;
+    filterProfiles: FileFilterProfile[];
+    defaultFilterProfileId: string;
+    lastFilterProfileId: string;
+    folderPickBehavior: FolderPickBehavior;
+    fixCharsetExtensions: string[];
+    unicodeAddBom: boolean;
+  };
+  zhconvert: {
+    converterS2T: string;
+    converterT2S: string;
+    modules: Record<string, -1 | 0 | 1>;
+    jpTextConversionStrategy: "none" | "protect" | "protectOnlySameOrigin" | "fix";
+    jpStyleConversionStrategy: "none" | "protect" | "protectOnlySameOrigin" | "fix";
+    cleanUpText: boolean;
+    userPreReplace: string;
+    userPostReplace: string;
+    userProtectReplace: string;
+    ensureNewlineAtEof: boolean;
+    translateTabsToSpaces: number;
+    trimTrailingWhiteSpaces: boolean;
+    unifyLeadingHyphen: boolean;
+    ignoreTextStyles: string;
+    jpTextStyles: string;
+    serviceInfoCachedAt?: string;
+  };
+  checkVersionOnStart: boolean;
+  /** 是否檢查 alpha／beta／rc 通道並自動更新；若正式版較新則仍使用正式版。正式版預設只檢查正式版；目前版本不是正式版時預設檢查開發通道。 */
+  checkPreReleaseUpdates: boolean;
+  skippedUpdateVersion: string;
+  showMainWindowOnStart: boolean;
+  /** 懸浮球拖放詢問對話框記住的上次選項。 */
+  lastDropAction: LastDropActionSettings;
+}
+
+export type CoreOperation =
+  | "health"
+  | "convert.preview"
+  | "core.cancel"
+  | "files.plan"
+  | "files.preview"
+  | "files.apply"
+  | "files.scanExtensions"
+  | "files.cancel"
+  | "audio.scan"
+  | "audio.plan"
+  | "audio.prioritize"
+  | "audio.rescanFile"
+  | "audio.apply"
+  | "audio.cancel"
+  | "dictionary.read"
+  | "dictionary.update"
+  | "dictionary.preview"
+  | "settings.migrate"
+  | "zhconvert.configure"
+  | "zhconvert.serviceInfo"
+  | "utility.convert"
+  | "cli.parse";
+
+export interface CoreRequest<T = unknown> {
+  id: string;
+  operation: CoreOperation;
+  payload: T;
+}
+
+export interface CoreError {
+  code: string;
+  message: string;
+  details?: unknown;
+}
+
+export interface CoreResponse<T = unknown> {
+  id: string;
+  type: "response" | "progress";
+  ok: boolean;
+  result?: T;
+  error?: CoreError;
+  progress?: { current: number; total: number; message: string };
+}
+
+export interface UtilityConvertRequest {
+  kind:
+    | "html-decimal-encode"
+    | "html-decimal-decode"
+    | "html-hex-encode"
+    | "html-hex-decode"
+    | "unicode-escape-encode"
+    | "unicode-escape-decode"
+    | "encoding"
+    | "fullwidth"
+    | "halfwidth";
+  text: string;
+  sourceEncoding?: TextEncoding;
+  targetEncoding?: TextEncoding;
+}

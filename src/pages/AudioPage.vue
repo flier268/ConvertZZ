@@ -8,12 +8,15 @@ import type {
   AudioRescanFileRequest,
   AudioTagPlan,
   AudioTagPlanRequest,
+  ApplyResult,
   Direction,
   EngineKind,
+  SettingsV2,
   TextEncoding,
 } from "@shared/contracts";
 import { core, isCancellationError } from "../lib/coreClient";
-import { loadSettings, zhConvertOptions } from "../lib/settings";
+import { loadSettings, patchSavedSettings, zhConvertOptions } from "../lib/settings";
+import { defaultAudioSettings } from "../lib/audioPageSettings";
 import { cliInvocation } from "../lib/cli";
 import { formatProgressLabel, progressPercentage, type ProgressSnapshot } from "../lib/progressEta";
 import type { Progress } from "../lib/coreClient";
@@ -53,6 +56,7 @@ import {
   cleanupApeRule,
   tagRuleSummary,
   toTagOperations,
+  fromTagOperations,
   TAG_RULE_FIELDS,
   CLEANUP_APE_NOTE,
   containerName,
@@ -129,14 +133,31 @@ const draft = reactive({
   tagOperations: [] as TagRule[],
 });
 
-loadSettings().then((settings) => {
+function applySettings(settings: SettingsV2) {
+  const audio = settings.audio ?? defaultAudioSettings();
   options.direction = settings.direction;
-  options.id3v1Direction = settings.direction;
-  options.id3v2Direction = settings.direction;
   options.engine = settings.engine;
   options.vocabularyCorrection = settings.vocabularyCorrection;
   promptAfterConversion.value = settings.promptAfterConversion;
-  backup.value = settings.autoBackupBeforeConversion;
+  backup.value = audio.backup;
+  conflictPolicy.value = audio.conflictPolicy;
+  options.recursive = audio.recursive;
+  options.id3v1Enabled = audio.id3v1Enabled;
+  options.id3v1Direction = audio.id3v1Direction;
+  options.id3v1SourceEncoding = audio.id3v1SourceEncoding;
+  options.id3v1OutputEncoding = audio.id3v1OutputEncoding;
+  options.id3v2Enabled = audio.id3v2Enabled;
+  options.id3v2Direction = audio.id3v2Direction;
+  options.id3v2SourceEncoding = audio.id3v2SourceEncoding;
+  options.id3v2RepairSourceEncoding = audio.id3v2RepairSourceEncoding;
+  options.id3v2Version = audio.id3v2Version;
+  options.id3v2Encoding = audio.id3v2Encoding;
+  options.tagOperations = fromTagOperations(audio.tagOperations ?? []);
+  copyOptionsToDraft();
+}
+
+loadSettings().then((settings) => {
+  applySettings(settings);
 });
 
 const hasMp3 = computed(() => files.value.some((file) => file.format === "mp3"));
@@ -297,8 +318,7 @@ function cloneRules(rules: TagRule[]): TagRule[] {
   return rules.map((rule) => ({ ...rule, fields: [...rule.fields] }));
 }
 
-function openSettings() {
-  draftMute += 1;
+function copyOptionsToDraft() {
   draft.direction = options.direction;
   draft.engine = options.engine;
   draft.recursive = options.recursive;
@@ -316,6 +336,11 @@ function openSettings() {
   draft.id3v2Version = options.id3v2Version;
   draft.id3v2Encoding = options.id3v2Encoding;
   draft.tagOperations = cloneRules(options.tagOperations);
+}
+
+function openSettings() {
+  draftMute += 1;
+  copyOptionsToDraft();
   editingRuleId.value = draft.tagOperations[0]?.id ?? "";
   settingsOpen.value = true;
   void nextTick(() => {
@@ -656,7 +681,7 @@ function reportPreviewError(error: unknown) {
 let draftMute = 0;
 const previewController = createAudioPreviewController({
   plan: async () => {
-    applyDraftToOptions();
+    if (settingsOpen.value) applyDraftToOptions();
     if (!files.value.length) return undefined;
     plan.value = undefined;
     const token = beginStream();
@@ -692,11 +717,37 @@ watch(
   { deep: true },
 );
 
+async function persistAudioSettings() {
+  await patchSavedSettings((settings) => {
+    settings.audio = {
+      backup: backup.value,
+      conflictPolicy: conflictPolicy.value,
+      recursive: options.recursive,
+      id3v1Enabled: options.id3v1Enabled,
+      id3v1Direction: options.id3v1Direction,
+      id3v1SourceEncoding: options.id3v1SourceEncoding,
+      id3v1OutputEncoding: options.id3v1OutputEncoding,
+      id3v2Enabled: options.id3v2Enabled,
+      id3v2Direction: options.id3v2Direction,
+      id3v2SourceEncoding: options.id3v2SourceEncoding,
+      id3v2RepairSourceEncoding: options.id3v2RepairSourceEncoding,
+      id3v2Version: options.id3v2Version,
+      id3v2Encoding: options.id3v2Encoding,
+      tagOperations: toTagOperations(options.tagOperations),
+    };
+  });
+}
+
 async function closeSettings() {
-  settingsOpen.value = false;
   applyDraftToOptions();
+  await persistAudioSettings();
   await previewController.flush();
 }
+
+watch(settingsOpen, (open, wasOpen) => {
+  if (!wasOpen || open) return;
+  void closeSettings();
+});
 
 async function applyPlan() {
   await previewController.flush();
@@ -727,7 +778,7 @@ async function applyPlan() {
   progress.value = undefined;
   progressStartedAt.value = Date.now();
   try {
-    const result = await core.request<{ succeeded: string[]; failed: unknown[] }>(
+    const result = await core.request<ApplyResult>(
       "audio.apply",
       {
         planId: plan.value.planId,
@@ -742,9 +793,23 @@ async function applyPlan() {
         },
       },
     );
-    if (promptAfterConversion.value)
-      ElMessage.success(`已完成 ${result.succeeded.length} 個音訊檔案。`);
-    if (result.failed.length) ElMessage.warning(`${result.failed.length} 個檔案失敗。`);
+    const skipped = result.skipped?.length ?? 0;
+    if (result.failed.length) {
+      const detail = result.failed[0]?.message ?? "";
+      ElMessage.warning(
+        detail
+          ? `${result.failed.length} 個檔案失敗：${detail}`
+          : `${result.failed.length} 個檔案失敗。`,
+      );
+    }
+    if (result.succeeded.length) {
+      if (promptAfterConversion.value)
+        ElMessage.success(`已完成 ${result.succeeded.length} 個音訊檔案。`);
+    } else if (!result.failed.length) {
+      ElMessage.warning(
+        skipped > 0 ? `沒有寫入任何檔案（${skipped} 個略過）。` : "沒有寫入任何檔案。",
+      );
+    }
     plan.value = undefined;
   } catch (error) {
     if (isCancellationError(error)) ElMessage.info("已取消音訊轉換。");
@@ -1540,7 +1605,7 @@ watch(
         </div>
       </el-form>
       <template #footer>
-        <el-button type="primary" :disabled="busy" @click="closeSettings">完成</el-button>
+        <el-button type="primary" :disabled="busy" @click="settingsOpen = false">完成</el-button>
       </template>
     </el-drawer>
   </section>

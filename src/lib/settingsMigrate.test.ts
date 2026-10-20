@@ -110,6 +110,20 @@ describe("副檔名篩選 profile 遷移", () => {
     expect(files.folderPickBehavior).toBe("rememberLast");
   });
 
+  it("缺音訊編輯設定時補預設，已存的編碼與備份會保留", () => {
+    const defaults = defaultSettings("2.0.0").audio;
+    expect(defaults.backup).toBe(true);
+    expect(defaults.id3v1SourceEncoding).toBe("gbk");
+    expect(defaults.id3v2Encoding).toBe("utf8");
+    const migrated = migrateSettings({
+      version: 2,
+      audio: { backup: false, id3v1SourceEncoding: "big5" },
+    });
+    expect(migrated.audio.backup).toBe(false);
+    expect(migrated.audio.id3v1SourceEncoding).toBe("big5");
+    expect(migrated.audio.id3v2Encoding).toBe("utf8");
+  });
+
   it("v2 設定缺 profile 時由自己的 typeFilter 遷移並保留舊字串", () => {
     const migrated = migrateSettings({
       ...defaultSettings("2.0.0"),

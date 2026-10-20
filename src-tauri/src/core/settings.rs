@@ -92,7 +92,27 @@ fn base_default_settings() -> Value {
             "kind": "file",
             "operation": "content",
             "direction": "s2t"
-        }
+        },
+        "audio": default_audio_settings()
+    })
+}
+
+fn default_audio_settings() -> Value {
+    json!({
+        "backup": true,
+        "conflictPolicy": "skip",
+        "recursive": true,
+        "id3v1Enabled": true,
+        "id3v1Direction": "s2t",
+        "id3v1SourceEncoding": "gbk",
+        "id3v1OutputEncoding": "big5",
+        "id3v2Enabled": true,
+        "id3v2Direction": "s2t",
+        "id3v2SourceEncoding": "gbk",
+        "id3v2RepairSourceEncoding": true,
+        "id3v2Version": 4,
+        "id3v2Encoding": "utf8",
+        "tagOperations": []
     })
 }
 
@@ -196,7 +216,8 @@ fn migrate_document(input: Value) -> Value {
         "checkPreReleaseUpdates": default_check_pre_release_updates(),
         "skippedUpdateVersion": "",
         "showMainWindowOnStart": false,
-        "lastDropAction": defaults["lastDropAction"].clone()
+        "lastDropAction": defaults["lastDropAction"].clone(),
+        "audio": defaults["audio"].clone()
     })
 }
 
@@ -208,7 +229,7 @@ fn merge_v2(input: Value) -> Value {
         for (key, value) in object {
             match key.as_str() {
                 "floatingBall" | "hotkeys" | "quickActions" | "files" | "zhconvert"
-                | "lastDropAction" => {
+                | "lastDropAction" | "audio" => {
                     merged.insert(key.clone(), merge_object(defaults.get(key), value));
                 }
                 "autoBackupBeforeConversion" => {

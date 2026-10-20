@@ -22,6 +22,7 @@ vi.mock("../lib/settings", () => ({
     promptAfterConversion: true,
     autoBackupBeforeConversion: true,
   }),
+  patchSavedSettings: vi.fn(async () => ({})),
   zhConvertOptions: () => ({}),
 }));
 

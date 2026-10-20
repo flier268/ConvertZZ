@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { version as appVersion } from "../../package.json";
 import { DEFAULT_FILE_TYPE_FILTER, isLegacyBuiltinFileTypeFilter } from "./fileFilters";
 import { withFilterProfiles } from "./filterProfiles";
+import { defaultAudioSettings } from "./audioPageSettings";
 import { isPreReleaseVersion } from "./update";
 
 type LegacySettings = Record<string, unknown>;
@@ -83,6 +84,7 @@ export function defaultSettings(currentVersion = appVersion): SettingsV2 {
       operation: "content",
       direction: "s2t",
     },
+    audio: defaultAudioSettings(),
   };
 }
 
@@ -115,6 +117,7 @@ export function migrateSettings(input: unknown, currentVersion = appVersion): Se
       }),
       zhconvert: { ...defaults.zhconvert, ...input.zhconvert },
       lastDropAction: { ...defaults.lastDropAction, ...input.lastDropAction },
+      audio: { ...defaults.audio, ...input.audio },
     };
   }
   const legacy = (input && typeof input === "object" ? input : {}) as LegacySettings;

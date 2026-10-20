@@ -184,6 +184,45 @@ fn missing_backup_flag_defaults_true() {
 }
 
 #[test]
+fn missing_audio_settings_defaults() {
+    assert_eq!(
+        migrate(Value::Null)["audio"],
+        json!({
+            "backup": true,
+            "conflictPolicy": "skip",
+            "recursive": true,
+            "id3v1Enabled": true,
+            "id3v1Direction": "s2t",
+            "id3v1SourceEncoding": "gbk",
+            "id3v1OutputEncoding": "big5",
+            "id3v2Enabled": true,
+            "id3v2Direction": "s2t",
+            "id3v2SourceEncoding": "gbk",
+            "id3v2RepairSourceEncoding": true,
+            "id3v2Version": 4,
+            "id3v2Encoding": "utf8",
+            "tagOperations": []
+        })
+    );
+    assert_eq!(
+        migrate(
+            json!({ "version": 2, "audio": { "backup": false, "id3v1SourceEncoding": "big5" } })
+        )["audio"]["backup"],
+        false
+    );
+    assert_eq!(
+        migrate(
+            json!({ "version": 2, "audio": { "backup": false, "id3v1SourceEncoding": "big5" } })
+        )["audio"]["id3v1SourceEncoding"],
+        "big5"
+    );
+    assert_eq!(
+        migrate(json!({ "version": 2, "audio": { "backup": false } }))["audio"]["id3v2Encoding"],
+        "utf8"
+    );
+}
+
+#[test]
 fn missing_last_drop_action_defaults() {
     assert_eq!(
         migrate(Value::Null)["lastDropAction"],

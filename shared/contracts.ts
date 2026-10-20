@@ -364,6 +364,23 @@ export interface FileFilterProfile extends ExtensionFilter {
   builtin: boolean;
 }
 
+export interface AudioPageSettings {
+  backup: boolean;
+  conflictPolicy: ConflictPolicy;
+  recursive: boolean;
+  id3v1Enabled: boolean;
+  id3v1Direction: Direction;
+  id3v1SourceEncoding: Exclude<TextEncoding, "auto">;
+  id3v1OutputEncoding: Exclude<TextEncoding, "auto">;
+  id3v2Enabled: boolean;
+  id3v2Direction: Direction;
+  id3v2SourceEncoding: Exclude<TextEncoding, "auto">;
+  id3v2RepairSourceEncoding: boolean;
+  id3v2Version: 3 | 4;
+  id3v2Encoding: "utf8" | "utf16" | "utf16be" | "latin1";
+  tagOperations: TagOperation[];
+}
+
 export interface SettingsV2 {
   version: 2;
   engine: EngineKind;
@@ -373,6 +390,8 @@ export interface SettingsV2 {
   promptAfterConversion: boolean;
   /** 檔案、檔名與音訊標籤轉換前自動建立 .bak 備份。 */
   autoBackupBeforeConversion: boolean;
+  /** 音訊標籤頁「編輯設定」抽屜。缺欄時由設定遷移補預設。 */
+  audio: AudioPageSettings;
   recognizeEncoding: boolean;
   previewMaxKb: number;
   floatingBall: { enabled: boolean; x: number; y: number };

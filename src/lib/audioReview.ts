@@ -842,6 +842,19 @@ export function toTagOperations(rules: readonly TagRule[]): TagOperation[] {
   }));
 }
 
+export function fromTagOperations(operations: readonly TagOperation[]): TagRule[] {
+  return operations.map((operation) =>
+    createTagRule({
+      action: operation.action,
+      enabled: operation.enabled,
+      source: operation.source,
+      target: operation.target ?? operation.source,
+      fields: operation.fields,
+      onConflict: operation.onConflict,
+    }),
+  );
+}
+
 export function containerName(container: AudioContainer): string {
   if (container === "id3v1") return "ID3v1";
   if (container === "id3v2") return "ID3v2";

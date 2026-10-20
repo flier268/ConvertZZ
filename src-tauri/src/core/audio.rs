@@ -67,6 +67,7 @@ fn ignore_cancel() -> CancelCheck {
     Arc::new(|| false)
 }
 
+#[derive(Clone)]
 struct PreparedAudio {
     path: PathBuf,
     format: AudioFormat,
@@ -80,6 +81,7 @@ struct PreparedAudio {
     original_picture_count: usize,
 }
 
+#[derive(Clone)]
 struct StoredAudioPlan {
     files: Vec<PreparedAudio>,
     backup: bool,
@@ -455,6 +457,7 @@ impl AudioService {
                 .ok()
                 .is_some_and(|set| set.contains(plan_id))
         {
+            self.put_plan_back(plan_id, plan, &[]);
             return Err(CoreError::new(
                 "PLAN_CANCELLED",
                 "音訊標籤作業已由使用者取消。",
@@ -490,7 +493,7 @@ impl AudioService {
                 .count()
                 .max(1) as u64
         };
-        let mut files = plan.files;
+        let mut files = plan.files.clone();
         let mut seen = 0u64;
         for file in &mut files {
             if !included(&file.path) {
@@ -526,13 +529,24 @@ impl AudioService {
                     path: "備份".into(),
                     message: error.message,
                 });
+                self.put_plan_back(plan_id, plan, &[]);
                 return Ok(result);
             }
         }
 
         for file in files.into_iter() {
-            self.throw_if_cancelled(plan_id)?;
+            if let Err(error) = self.throw_if_cancelled(plan_id) {
+                if let Ok(mut cancelled) = self.cancelled.lock() {
+                    cancelled.remove(plan_id);
+                }
+                self.put_plan_back(plan_id, plan, &result.succeeded);
+                return Err(error);
+            }
             if request_cancelled() {
+                if let Ok(mut cancelled) = self.cancelled.lock() {
+                    cancelled.remove(plan_id);
+                }
+                self.put_plan_back(plan_id, plan, &result.succeeded);
                 return Err(CoreError::new(
                     "PLAN_CANCELLED",
                     "音訊標籤作業已由使用者取消。",
@@ -578,7 +592,23 @@ impl AudioService {
         if let Ok(mut cancelled) = self.cancelled.lock() {
             cancelled.remove(plan_id);
         }
+        self.put_plan_back(plan_id, plan, &result.succeeded);
         Ok(result)
+    }
+
+    fn put_plan_back(&self, plan_id: &str, mut plan: StoredAudioPlan, succeeded: &[String]) {
+        let done = succeeded
+            .iter()
+            .map(|path| resolve_path(path))
+            .collect::<HashSet<_>>();
+        plan.files
+            .retain(|file| !done.contains(&resolve_path(&file.path.to_string_lossy())));
+        if plan.files.is_empty() {
+            return;
+        }
+        if let Ok(mut plans) = self.plans.lock() {
+            plans.insert(plan_id.to_string(), plan);
+        }
     }
 
     fn throw_if_cancelled(&self, plan_id: &str) -> Result<(), CoreError> {

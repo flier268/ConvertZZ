@@ -113,6 +113,9 @@ describe("副檔名篩選 profile 遷移", () => {
   it("缺音訊編輯設定時補預設，已存的編碼與備份會保留", () => {
     const defaults = defaultSettings("2.0.0").audio;
     expect(defaults.backup).toBe(true);
+    expect(defaults.direction).toBe("s2t");
+    expect(defaults.engine).toBe("segmented");
+    expect(defaults.vocabularyCorrection).toBe(true);
     expect(defaults.id3v1SourceEncoding).toBe("gbk");
     expect(defaults.id3v2Encoding).toBe("utf8");
     const migrated = migrateSettings({

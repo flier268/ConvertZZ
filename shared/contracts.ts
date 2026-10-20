@@ -368,6 +368,9 @@ export interface AudioPageSettings {
   backup: boolean;
   conflictPolicy: ConflictPolicy;
   recursive: boolean;
+  direction: Direction;
+  engine: EngineKind;
+  vocabularyCorrection: boolean;
   id3v1Enabled: boolean;
   id3v1Direction: Direction;
   id3v1SourceEncoding: Exclude<TextEncoding, "auto">;

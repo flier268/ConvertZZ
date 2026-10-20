@@ -28,6 +28,9 @@ vi.mock("../lib/settings", () => ({
       backup: false,
       conflictPolicy: "skip",
       recursive: true,
+      direction: "t2s",
+      engine: "legacy",
+      vocabularyCorrection: false,
       id3v1Enabled: true,
       id3v1Direction: "s2t",
       id3v1SourceEncoding: "big5",
@@ -72,6 +75,29 @@ function plannedFile() {
 }
 
 describe("音訊編輯設定", () => {
+  it("關閉抽屜時若存檔失敗會提示", async () => {
+    patchSavedSettings.mockRejectedValueOnce(new Error("無法寫入設定"));
+    const error = vi.spyOn(ElMessage, "error").mockImplementation(() => undefined as never);
+    const wrapper = mount(AudioPage, {
+      attachTo: document.body,
+      global: { plugins: [ElementPlus], stubs: { transition: false } },
+    });
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("編輯設定"))!
+      .trigger("click");
+    await flushPromises();
+    const done = Array.from(document.body.querySelectorAll("button")).find(
+      (button) => button.textContent?.replace(/\s+/gu, "") === "完成",
+    );
+    done!.click();
+    await flushPromises();
+    expect(error).toHaveBeenCalledWith("無法寫入設定");
+    error.mockRestore();
+    wrapper.unmount();
+  });
+
   it("啟動時套用已存的編碼與備份，關閉抽屜時寫回設定", async () => {
     patchSavedSettings.mockImplementation(async (patch: (settings: SettingsV2) => void) => {
       const settings = { audio: {} } as SettingsV2;
@@ -99,8 +125,19 @@ describe("音訊編輯設定", () => {
     await flushPromises();
 
     expect(patchSavedSettings).toHaveBeenCalled();
-    const written = { audio: {} } as SettingsV2;
+    const written = {
+      direction: "t2s",
+      engine: "opencc",
+      vocabularyCorrection: false,
+      audio: {},
+    } as unknown as SettingsV2;
     (patchSavedSettings.mock.calls[0]?.[0] as (settings: SettingsV2) => void)(written);
+    expect(written.direction).toBe("t2s");
+    expect(written.engine).toBe("opencc");
+    expect(written.vocabularyCorrection).toBe(false);
+    expect(written.audio.direction).toBe("t2s");
+    expect(written.audio.engine).toBe("legacy");
+    expect(written.audio.vocabularyCorrection).toBe(false);
     expect(written.audio.backup).toBe(false);
     expect(written.audio.id3v1SourceEncoding).toBe("big5");
     expect(written.audio.id3v2Encoding).toBe("utf16");
@@ -139,6 +176,9 @@ describe("音訊編輯設定", () => {
       .trigger("click");
     await flushPromises();
     expect(warning).toHaveBeenCalledWith(expect.stringContaining("沒有寫入任何檔案"));
+    const operations = coreRequest.mock.calls.map((call) => call[0] as string);
+    expect(operations.filter((operation) => operation === "audio.scan")).toHaveLength(1);
+    expect(wrapper.text()).toContain("轉換預覽");
     warning.mockRestore();
     wrapper.unmount();
   });
@@ -177,6 +217,123 @@ describe("音訊編輯設定", () => {
     expect(wrapper.findAll("button").some((button) => button.text().includes("確認寫入"))).toBe(
       false,
     );
+    wrapper.unmount();
+  });
+
+  it("寫入中途失敗會清掉預覽並重掃磁碟", async () => {
+    openDialog.mockResolvedValueOnce("/tmp/song.mp3");
+    coreRequest.mockImplementation(async (operation: string) => {
+      if (operation === "audio.scan") return [scannedFile];
+      if (operation === "audio.plan") return { planId: "plan-1", files: [plannedFile()] };
+      if (operation === "audio.apply") throw new Error("磁碟已滿");
+      return undefined;
+    });
+    const wrapper = mount(AudioPage, {
+      global: { plugins: [ElementPlus], stubs: { transition: false } },
+    });
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("選取音訊檔案"))!
+      .trigger("click");
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("確認寫入"))!
+      .trigger("click");
+    await flushPromises();
+    const operations = coreRequest.mock.calls.map((call) => call[0] as string);
+    const afterApply = operations.slice(operations.lastIndexOf("audio.apply"));
+    expect(afterApply).toContain("audio.scan");
+    expect(wrapper.text()).not.toContain("轉換預覽");
+    wrapper.unmount();
+  });
+
+  it("部分寫入失敗時保留預覽並只重掃已寫入檔案", async () => {
+    const second = {
+      ...scannedFile,
+      path: "/tmp/other.mp3",
+      fields: [{ ...scannedFile.fields[0], values: ["里面"] }],
+    };
+    openDialog.mockResolvedValueOnce(["/tmp/song.mp3", "/tmp/other.mp3"]);
+    coreRequest.mockImplementation(async (operation: string, payload?: { paths?: string[] }) => {
+      if (operation === "audio.scan") {
+        const paths = payload?.paths ?? [];
+        if (paths.length === 1 && paths[0] === "/tmp/song.mp3")
+          return [{ ...scannedFile, fields: [{ ...scannedFile.fields[0], values: ["裡面"] }] }];
+        return [scannedFile, second];
+      }
+      if (operation === "audio.plan")
+        return {
+          planId: "plan-1",
+          files: [
+            plannedFile(),
+            {
+              ...second,
+              previewed: true,
+              fields: [{ ...second.fields[0], convertedValues: ["裡面"] }],
+            },
+          ],
+        };
+      if (operation === "audio.apply")
+        return {
+          succeeded: ["/tmp/song.mp3"],
+          skipped: [],
+          failed: [{ path: "/tmp/other.mp3", message: "權限不足" }],
+        };
+      return undefined;
+    });
+    const wrapper = mount(AudioPage, {
+      global: { plugins: [ElementPlus], stubs: { transition: false } },
+    });
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("選取音訊檔案"))!
+      .trigger("click");
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("確認寫入"))!
+      .trigger("click");
+    await flushPromises();
+    const scanCalls = coreRequest.mock.calls.filter((call) => call[0] === "audio.scan");
+    const lastScan = scanCalls.at(-1)?.[1] as { paths?: string[] };
+    expect(lastScan.paths).toEqual(["/tmp/song.mp3"]);
+    expect(wrapper.text()).toContain("轉換預覽");
+    wrapper.unmount();
+  });
+
+  it("寫入後完整重掃失敗時保留原清單", async () => {
+    openDialog.mockResolvedValueOnce("/tmp/song.mp3");
+    let scans = 0;
+    coreRequest.mockImplementation(async (operation: string) => {
+      if (operation === "audio.scan") {
+        scans += 1;
+        if (scans > 1) throw new Error("掃描失敗");
+        return [scannedFile];
+      }
+      if (operation === "audio.plan") return { planId: "plan-1", files: [plannedFile()] };
+      if (operation === "audio.apply")
+        return { succeeded: ["/tmp/song.mp3"], skipped: [], failed: [] };
+      return undefined;
+    });
+    const wrapper = mount(AudioPage, {
+      global: { plugins: [ElementPlus], stubs: { transition: false } },
+    });
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("選取音訊檔案"))!
+      .trigger("click");
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("確認寫入"))!
+      .trigger("click");
+    await flushPromises();
+    expect(wrapper.text()).toContain("song.mp3");
+    expect(wrapper.text()).toContain("里面");
     wrapper.unmount();
   });
 });

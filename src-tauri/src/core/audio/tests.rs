@@ -1814,7 +1814,7 @@ async fn encoding_or_version_only_changes_are_written() {
         .apply_filtered(
             &plan.plan_id,
             Some(&[encoding_key.clone()]),
-            Some(&HashMap::from([(encoding_key, Vec::new())])),
+            Some(&HashMap::from([(encoding_key.clone(), Vec::new())])),
             noop(),
             never_cancel(),
         )
@@ -1822,6 +1822,24 @@ async fn encoding_or_version_only_changes_are_written() {
         .unwrap();
     assert!(skipped.succeeded.is_empty(), "{skipped:?}");
     assert_eq!(std::fs::read(&encoding_path).unwrap(), before);
+    let retried = service
+        .apply_filtered(
+            &plan.plan_id,
+            Some(&[encoding_key.clone()]),
+            Some(&HashMap::from([(
+                encoding_key.clone(),
+                vec!["id3v2:title".into()],
+            )])),
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(retried.succeeded.len(), 1, "{retried:?}");
+    assert_eq!(
+        frame_encoding(&std::fs::read(&encoding_path).unwrap(), "TIT2"),
+        3
+    );
 
     let v1 = directory.join("v1.mp3");
     std::fs::write(&v1, id3v1_only_mp3("裡面", TextEncoding::Gbk)).unwrap();

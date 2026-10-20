@@ -135,9 +135,9 @@ const draft = reactive({
 
 function applySettings(settings: SettingsV2) {
   const audio = settings.audio ?? defaultAudioSettings();
-  options.direction = settings.direction;
-  options.engine = settings.engine;
-  options.vocabularyCorrection = settings.vocabularyCorrection;
+  options.direction = audio.direction ?? settings.direction;
+  options.engine = audio.engine ?? settings.engine;
+  options.vocabularyCorrection = audio.vocabularyCorrection ?? settings.vocabularyCorrection;
   promptAfterConversion.value = settings.promptAfterConversion;
   backup.value = audio.backup;
   conflictPolicy.value = audio.conflictPolicy;
@@ -537,6 +537,7 @@ let pendingFullSnapshot:
   | {
       epoch: number;
       snapshot: ReturnType<typeof selectionSnapshot>;
+      files: AudioTagFile[];
     }
   | undefined;
 
@@ -559,9 +560,17 @@ async function scan(onlyPaths?: readonly string[], extras?: { preview?: boolean 
   if (!merging) {
     // 重疊的完整掃描沿用尚未被作廢的那份勾選。世代對不上就重拍，避免還原更早的選擇。
     if (pendingFullSnapshot?.epoch === epoch - 1 || pendingFullSnapshot?.epoch === epoch) {
-      pendingFullSnapshot = { epoch, snapshot: pendingFullSnapshot.snapshot };
+      pendingFullSnapshot = {
+        epoch,
+        snapshot: pendingFullSnapshot.snapshot,
+        files: pendingFullSnapshot.files,
+      };
     } else {
-      pendingFullSnapshot = { epoch, snapshot: selectionSnapshot(files.value) };
+      pendingFullSnapshot = {
+        epoch,
+        snapshot: selectionSnapshot(files.value),
+        files: files.value.map((file) => file),
+      };
     }
     resetReviewView();
     plan.value = undefined;
@@ -601,6 +610,9 @@ async function scan(onlyPaths?: readonly string[], extras?: { preview?: boolean 
   } catch (error) {
     if (token !== streamToken) return;
     if (!merging && pendingFullSnapshot?.epoch === epoch) {
+      if (!files.value.length && pendingFullSnapshot.files.length) {
+        files.value = pendingFullSnapshot.files;
+      }
       restoreSelection(files.value, pendingFullSnapshot.snapshot);
     }
     if (isCancellationError(error)) ElMessage.info("已取消掃描。");
@@ -719,12 +731,57 @@ watch(
   { deep: true },
 );
 
+function snapshotPageSettings() {
+  return {
+    direction: options.direction,
+    engine: options.engine,
+    recursive: options.recursive,
+    vocabularyCorrection: options.vocabularyCorrection,
+    backup: backup.value,
+    conflictPolicy: conflictPolicy.value,
+    id3v1Enabled: options.id3v1Enabled,
+    id3v1Direction: options.id3v1Direction,
+    id3v1SourceEncoding: options.id3v1SourceEncoding,
+    id3v1OutputEncoding: options.id3v1OutputEncoding,
+    id3v2Enabled: options.id3v2Enabled,
+    id3v2Direction: options.id3v2Direction,
+    id3v2SourceEncoding: options.id3v2SourceEncoding,
+    id3v2RepairSourceEncoding: options.id3v2RepairSourceEncoding,
+    id3v2Version: options.id3v2Version,
+    id3v2Encoding: options.id3v2Encoding,
+    tagOperations: cloneRules(options.tagOperations),
+  };
+}
+
+function restorePageSettings(snapshot: ReturnType<typeof snapshotPageSettings>) {
+  options.direction = snapshot.direction;
+  options.engine = snapshot.engine;
+  options.recursive = snapshot.recursive;
+  options.vocabularyCorrection = snapshot.vocabularyCorrection;
+  backup.value = snapshot.backup;
+  conflictPolicy.value = snapshot.conflictPolicy;
+  options.id3v1Enabled = snapshot.id3v1Enabled;
+  options.id3v1Direction = snapshot.id3v1Direction;
+  options.id3v1SourceEncoding = snapshot.id3v1SourceEncoding;
+  options.id3v1OutputEncoding = snapshot.id3v1OutputEncoding;
+  options.id3v2Enabled = snapshot.id3v2Enabled;
+  options.id3v2Direction = snapshot.id3v2Direction;
+  options.id3v2SourceEncoding = snapshot.id3v2SourceEncoding;
+  options.id3v2RepairSourceEncoding = snapshot.id3v2RepairSourceEncoding;
+  options.id3v2Version = snapshot.id3v2Version;
+  options.id3v2Encoding = snapshot.id3v2Encoding;
+  options.tagOperations = cloneRules(snapshot.tagOperations);
+}
+
 async function persistAudioSettings() {
   await patchSavedSettings((settings) => {
     settings.audio = {
       backup: backup.value,
       conflictPolicy: conflictPolicy.value,
       recursive: options.recursive,
+      direction: options.direction,
+      engine: options.engine,
+      vocabularyCorrection: options.vocabularyCorrection,
       id3v1Enabled: options.id3v1Enabled,
       id3v1Direction: options.id3v1Direction,
       id3v1SourceEncoding: options.id3v1SourceEncoding,
@@ -741,8 +798,15 @@ async function persistAudioSettings() {
 }
 
 async function closeSettings() {
+  const previous = snapshotPageSettings();
   applyDraftToOptions();
-  await persistAudioSettings();
+  try {
+    await persistAudioSettings();
+  } catch (error) {
+    restorePageSettings(previous);
+    copyOptionsToDraft();
+    ElMessage.error(error instanceof Error ? error.message : String(error));
+  }
   await previewController.flush();
 }
 
@@ -779,6 +843,8 @@ async function applyPlan() {
   busy.value = true;
   progress.value = undefined;
   progressStartedAt.value = Date.now();
+  let rescanPaths: string[] | undefined;
+  let dropPlan = false;
   try {
     const result = await core.request<ApplyResult>(
       "audio.apply",
@@ -812,19 +878,34 @@ async function applyPlan() {
         skipped > 0 ? `沒有寫入任何檔案（${skipped} 個略過）。` : "沒有寫入任何檔案。",
       );
     }
-    plan.value = undefined;
+    if (result.succeeded.length && !result.failed.length) {
+      dropPlan = true;
+      if (paths.value.length) rescanPaths = undefined;
+    } else if (result.failed.length && result.succeeded.length) {
+      rescanPaths = result.succeeded;
+    }
   } catch (error) {
     if (isCancellationError(error)) ElMessage.info("已取消音訊轉換。");
     else ElMessage.error(error instanceof Error ? error.message : String(error));
+    dropPlan = !isCancellationError(error);
+    if (dropPlan && paths.value.length) rescanPaths = undefined;
   } finally {
     previewController.setApplying(false);
     applying.value = false;
-    busy.value = false;
     activeRequestId.value = undefined;
     progress.value = undefined;
     progressStartedAt.value = undefined;
   }
-  if (!plan.value && paths.value.length) await scan(undefined, { preview: false });
+  try {
+    if (dropPlan) plan.value = undefined;
+    if (dropPlan && paths.value.length) await scan(undefined, { preview: false });
+    else if (rescanPaths?.length) {
+      await scan(rescanPaths, { preview: false });
+      if (plan.value) plan.value = { ...plan.value, files: files.value };
+    }
+  } finally {
+    busy.value = false;
+  }
 }
 
 async function cancelPlan() {

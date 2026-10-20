@@ -1537,6 +1537,74 @@ fn write_mp3_title_artist(path: &Path, title: &str, artist: &str) {
 }
 
 #[tokio::test]
+async fn real_fixture_mp3_gui_style_apply_writes_tags() {
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/测试音乐.mp3");
+    assert!(source.is_file(), "缺少 tests/fixtures/测试音乐.mp3");
+    let directory = temp_dir();
+    let path = directory.join("probe.mp3");
+    std::fs::copy(&source, &path).unwrap();
+    let before = std::fs::read(&path).unwrap();
+    let path_text = path.to_string_lossy().into_owned();
+    let service = AudioService::new();
+    let mut request = base_plan(&[path.clone()]);
+    request.id3v1_enabled = false;
+    request.selected_fields = HashMap::from([(
+        path_text.clone(),
+        vec!["id3v2:title".into(), "id3v2:artist".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let title = field(&plan.files[0], AudioContainer::Id3v2, "title").unwrap();
+    assert_eq!(title.values, vec!["测试音乐".to_string()]);
+    assert_eq!(
+        title.converted_values.as_deref(),
+        Some(["測試音樂".to_string()].as_slice())
+    );
+    let result = service
+        .apply_filtered(
+            &plan.plan_id,
+            Some(&[path_text.clone()]),
+            Some(&HashMap::from([(
+                path_text.clone(),
+                vec!["id3v2:title".into(), "id3v2:artist".into()],
+            )])),
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.succeeded, vec![path_text.clone()], "{result:?}");
+    assert!(result.failed.is_empty(), "{result:?}");
+    let after = std::fs::read(&path).unwrap();
+    assert_ne!(after, before);
+    let reread = service
+        .scan(
+            shared_conversion(),
+            AudioScanRequest {
+                paths: vec![path_text],
+                recursive: None,
+                id3v1_source_encoding: None,
+                id3v2_source_encoding: None,
+                id3v2_repair_source_encoding: None,
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        field(&reread[0], AudioContainer::Id3v2, "title").map(|field| field.values.clone()),
+        Some(vec!["測試音樂".into()])
+    );
+    assert_eq!(
+        field(&reread[0], AudioContainer::Id3v2, "artist").map(|field| field.values.clone()),
+        Some(vec!["測試藝人".into()])
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
 async fn apply_honours_current_file_and_field_selection() {
     let directory = temp_dir();
     let selected = directory.join("selected.mp3");

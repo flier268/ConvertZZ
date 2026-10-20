@@ -540,8 +540,9 @@ let pendingFullSnapshot:
     }
   | undefined;
 
-async function scan(onlyPaths?: readonly string[]) {
+async function scan(onlyPaths?: readonly string[], extras?: { preview?: boolean }) {
   if (applying.value) return;
+  const previewAfter = extras?.preview !== false;
   const subset = Array.isArray(onlyPaths) ? onlyPaths : undefined;
   const merging = subset != null;
   const epoch = ++scanEpoch;
@@ -619,7 +620,8 @@ async function scan(onlyPaths?: readonly string[]) {
     if (epoch === scanEpoch) scanInFlight = false;
   }
   if (completed && token === streamToken && files.value.length && !applying.value) {
-    await previewController.run();
+    if (previewAfter) await previewController.run();
+    else listFilter.value = "all";
   }
 }
 
@@ -822,7 +824,7 @@ async function applyPlan() {
     progress.value = undefined;
     progressStartedAt.value = undefined;
   }
-  if (!plan.value && paths.value.length) await scan();
+  if (!plan.value && paths.value.length) await scan(undefined, { preview: false });
 }
 
 async function cancelPlan() {
@@ -1428,78 +1430,76 @@ watch(
             <el-option label="覆寫" value="overwrite" />
           </el-select>
         </el-form-item>
-        <template v-if="hasMp3">
-          <h3 class="audio-drawer-section">ID3v1</h3>
-          <el-form-item label="ID3v1">
-            <el-switch v-model="draft.id3v1Enabled" active-text="啟用轉換" />
-          </el-form-item>
-          <el-form-item label="ID3v1 方向">
-            <el-select v-model="draft.id3v1Direction" :disabled="!draft.id3v1Enabled">
-              <el-option label="不轉換" value="none" />
-              <el-option label="簡轉繁" value="s2t" />
-              <el-option label="繁轉簡" value="t2s" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="ID3v1 來源">
-            <el-select v-model="draft.id3v1SourceEncoding" :disabled="!draft.id3v1Enabled">
-              <el-option label="GBK" value="gbk" />
-              <el-option label="Big5" value="big5" />
-              <el-option label="Shift-JIS" value="shift-jis" />
-              <el-option label="UTF-8" value="utf8" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="ID3v1 輸出">
-            <el-select v-model="draft.id3v1OutputEncoding" :disabled="!draft.id3v1Enabled">
-              <el-option label="Big5" value="big5" />
-              <el-option label="GBK" value="gbk" />
-              <el-option label="Shift-JIS" value="shift-jis" />
-              <el-option label="UTF-8" value="utf8" />
-            </el-select>
-          </el-form-item>
-          <h3 class="audio-drawer-section">ID3v2</h3>
-          <el-form-item label="ID3v2">
-            <el-switch v-model="draft.id3v2Enabled" active-text="啟用轉換" />
-          </el-form-item>
-          <el-form-item label="ID3v2 方向">
-            <el-select v-model="draft.id3v2Direction" :disabled="!draft.id3v2Enabled">
-              <el-option label="不轉換" value="none" />
-              <el-option label="簡轉繁" value="s2t" />
-              <el-option label="繁轉簡" value="t2s" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="ID3v2 來源錯碼">
-            <el-switch
-              v-model="draft.id3v2RepairSourceEncoding"
-              :disabled="!draft.id3v2Enabled"
-              active-text="嘗試修復"
-            />
-          </el-form-item>
-          <el-form-item label="ID3v2 錯碼來源編碼">
-            <el-select
-              v-model="draft.id3v2SourceEncoding"
-              :disabled="!draft.id3v2Enabled || !draft.id3v2RepairSourceEncoding"
-            >
-              <el-option label="GBK" value="gbk" />
-              <el-option label="Big5" value="big5" />
-              <el-option label="Shift-JIS" value="shift-jis" />
-              <el-option label="UTF-8" value="utf8" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="ID3v2 版本">
-            <el-select v-model="draft.id3v2Version" :disabled="!draft.id3v2Enabled">
-              <el-option label="2.4" :value="4" />
-              <el-option label="2.3" :value="3" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="ID3v2 編碼">
-            <el-select v-model="draft.id3v2Encoding" :disabled="!draft.id3v2Enabled">
-              <el-option label="UTF-8" value="utf8" />
-              <el-option label="UTF-16" value="utf16" />
-              <el-option label="UTF-16BE" value="utf16be" />
-              <el-option label="Latin-1" value="latin1" />
-            </el-select>
-          </el-form-item>
-        </template>
+        <h3 class="audio-drawer-section">MP3／ID3v1</h3>
+        <el-form-item label="ID3v1">
+          <el-switch v-model="draft.id3v1Enabled" active-text="啟用轉換" />
+        </el-form-item>
+        <el-form-item label="ID3v1 方向">
+          <el-select v-model="draft.id3v1Direction" :disabled="!draft.id3v1Enabled">
+            <el-option label="不轉換" value="none" />
+            <el-option label="簡轉繁" value="s2t" />
+            <el-option label="繁轉簡" value="t2s" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="ID3v1 來源">
+          <el-select v-model="draft.id3v1SourceEncoding" :disabled="!draft.id3v1Enabled">
+            <el-option label="GBK" value="gbk" />
+            <el-option label="Big5" value="big5" />
+            <el-option label="Shift-JIS" value="shift-jis" />
+            <el-option label="UTF-8" value="utf8" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="ID3v1 輸出">
+          <el-select v-model="draft.id3v1OutputEncoding" :disabled="!draft.id3v1Enabled">
+            <el-option label="Big5" value="big5" />
+            <el-option label="GBK" value="gbk" />
+            <el-option label="Shift-JIS" value="shift-jis" />
+            <el-option label="UTF-8" value="utf8" />
+          </el-select>
+        </el-form-item>
+        <h3 class="audio-drawer-section">MP3／ID3v2</h3>
+        <el-form-item label="ID3v2">
+          <el-switch v-model="draft.id3v2Enabled" active-text="啟用轉換" />
+        </el-form-item>
+        <el-form-item label="ID3v2 方向">
+          <el-select v-model="draft.id3v2Direction" :disabled="!draft.id3v2Enabled">
+            <el-option label="不轉換" value="none" />
+            <el-option label="簡轉繁" value="s2t" />
+            <el-option label="繁轉簡" value="t2s" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="ID3v2 來源錯碼">
+          <el-switch
+            v-model="draft.id3v2RepairSourceEncoding"
+            :disabled="!draft.id3v2Enabled"
+            active-text="嘗試修復"
+          />
+        </el-form-item>
+        <el-form-item label="ID3v2 錯碼來源編碼">
+          <el-select
+            v-model="draft.id3v2SourceEncoding"
+            :disabled="!draft.id3v2Enabled || !draft.id3v2RepairSourceEncoding"
+          >
+            <el-option label="GBK" value="gbk" />
+            <el-option label="Big5" value="big5" />
+            <el-option label="Shift-JIS" value="shift-jis" />
+            <el-option label="UTF-8" value="utf8" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="ID3v2 版本">
+          <el-select v-model="draft.id3v2Version" :disabled="!draft.id3v2Enabled">
+            <el-option label="2.4" :value="4" />
+            <el-option label="2.3" :value="3" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="ID3v2 編碼">
+          <el-select v-model="draft.id3v2Encoding" :disabled="!draft.id3v2Enabled">
+            <el-option label="UTF-8" value="utf8" />
+            <el-option label="UTF-16" value="utf16" />
+            <el-option label="UTF-16BE" value="utf16be" />
+            <el-option label="Latin-1" value="latin1" />
+          </el-select>
+        </el-form-item>
         <h3 class="audio-drawer-section">
           標籤操作
           <span v-if="draft.tagOperations.length" class="audio-rule-count">{{

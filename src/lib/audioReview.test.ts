@@ -546,6 +546,22 @@ describe("audioReview", () => {
         tagOperationCount: 2,
       }),
     ).toContain("標籤操作 2 條");
+    expect(
+      settingsSummaryChips({
+        direction: "s2t",
+        vocabularyCorrection: false,
+        backup: false,
+        id3v1Enabled: true,
+        id3v1SourceEncoding: "big5",
+        id3v1OutputEncoding: "utf8",
+        id3v2Enabled: true,
+        id3v2Direction: "s2t",
+        id3v2RepairSourceEncoding: false,
+        id3v2SourceEncoding: "gbk",
+        id3v2Version: 4,
+        id3v2Encoding: "utf16",
+      }),
+    ).toEqual(["ID3v2 簡→繁", "ID3v1 Big5→UTF-8", "APE/Vorbis 簡→繁", "不備份", "ID3v2.4・UTF-16"]);
   });
 
   it("標籤操作的來源、警告篩選與移除勾選", () => {

@@ -29,7 +29,8 @@ export interface AudioSettingsSnapshot {
   direction: Direction;
   vocabularyCorrection: boolean;
   backup: boolean;
-  hasMp3: boolean;
+  /** 省略時仍顯示 ID3 摘要，讓尚未選檔也能看到記住的編碼。 */
+  hasMp3?: boolean;
   id3v1Enabled: boolean;
   id3v1SourceEncoding: string;
   id3v1OutputEncoding: string;
@@ -755,13 +756,13 @@ function encodingLabel(value: string): string {
 
 export function settingsSummaryChips(settings: AudioSettingsSnapshot): string[] {
   const chips: string[] = [];
-  if (settings.hasMp3 && settings.id3v2Enabled) {
+  if (settings.id3v2Enabled) {
     chips.push(`ID3v2 ${DIRECTION_LABEL[settings.id3v2Direction]}`);
     if (settings.id3v2RepairSourceEncoding) {
       chips.push(`${encodingLabel(settings.id3v2SourceEncoding)} 錯碼修復`);
     }
   }
-  if (settings.hasMp3 && settings.id3v1Enabled) {
+  if (settings.id3v1Enabled) {
     chips.push(
       `ID3v1 ${encodingLabel(settings.id3v1SourceEncoding)}→${encodingLabel(settings.id3v1OutputEncoding)}`,
     );
@@ -769,7 +770,7 @@ export function settingsSummaryChips(settings: AudioSettingsSnapshot): string[] 
   chips.push(`APE/Vorbis ${DIRECTION_LABEL[settings.direction]}`);
   if (settings.vocabularyCorrection) chips.push("詞彙修正");
   chips.push(settings.backup ? "備份 .bak" : "不備份");
-  if (settings.hasMp3 && settings.id3v2Enabled) {
+  if (settings.id3v2Enabled) {
     chips.push(
       `ID3v2.${settings.id3v2Version}・${ID3V2_ENCODING_LABEL[settings.id3v2Encoding] ?? settings.id3v2Encoding}`,
     );

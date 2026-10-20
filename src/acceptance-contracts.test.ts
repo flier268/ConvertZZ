@@ -200,14 +200,14 @@ describe("驗收項目的自動化契約", () => {
     expect(page).toContain('title: "確認覆寫備份"');
   });
 
-  it("F-07 APEv2 與 Vorbis 不顯示 ID3 編碼選項", () => {
+  it("F-07 ID3 編碼與 APE／Vorbis 方向分開，尚未選 MP3 也可改 ID3", () => {
     const page = readProjectFile("src/pages/AudioPage.vue");
-    const id3Block = page.slice(page.indexOf('v-if="hasMp3"'));
-    expect(id3Block).toContain("ID3v2 版本");
-    expect(id3Block).toContain("ID3v2 編碼");
-    expect(page.indexOf("ID3v2 編碼")).toBeGreaterThan(page.indexOf('v-if="hasMp3"'));
-    expect(page).toContain("APE");
-    expect(page).toContain("Vorbis");
+    expect(page).toContain("MP3／ID3v1");
+    expect(page).toContain("MP3／ID3v2");
+    expect(page).toContain("ID3v2 版本");
+    expect(page).toContain("ID3v2 編碼");
+    expect(page).toContain("APEv2／Vorbis 方向");
+    expect(page).not.toContain('v-if="hasMp3"');
   });
 
   it("F-08 預覽列出所有可轉換字串欄位", () => {

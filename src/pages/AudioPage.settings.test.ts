@@ -84,6 +84,7 @@ describe("音訊編輯設定", () => {
     });
     await flushPromises();
     expect(wrapper.text()).toContain("不備份");
+    expect(wrapper.text()).toContain("UTF-16");
 
     await wrapper
       .findAll("button")
@@ -103,6 +104,13 @@ describe("音訊編輯設定", () => {
     expect(written.audio.backup).toBe(false);
     expect(written.audio.id3v1SourceEncoding).toBe("big5");
     expect(written.audio.id3v2Encoding).toBe("utf16");
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("編輯設定"))!
+      .trigger("click");
+    await flushPromises();
+    expect(document.body.textContent).toContain("MP3／ID3v1");
+    expect(document.body.textContent).toContain("MP3／ID3v2");
     wrapper.unmount();
   });
 
@@ -132,6 +140,43 @@ describe("音訊編輯設定", () => {
     await flushPromises();
     expect(warning).toHaveBeenCalledWith(expect.stringContaining("沒有寫入任何檔案"));
     warning.mockRestore();
+    wrapper.unmount();
+  });
+
+  it("寫入成功後重掃磁碟、不再自動預覽", async () => {
+    openDialog.mockResolvedValueOnce("/tmp/song.mp3");
+    coreRequest.mockImplementation(async (operation: string) => {
+      if (operation === "audio.scan")
+        return [{ ...scannedFile, fields: [{ ...scannedFile.fields[0], values: ["裡面"] }] }];
+      if (operation === "audio.plan") return { planId: "plan-1", files: [plannedFile()] };
+      if (operation === "audio.apply")
+        return { succeeded: ["/tmp/song.mp3"], skipped: [], failed: [] };
+      return undefined;
+    });
+    const wrapper = mount(AudioPage, {
+      global: { plugins: [ElementPlus], stubs: { transition: false } },
+    });
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("選取音訊檔案"))!
+      .trigger("click");
+    await flushPromises();
+    expect(wrapper.text()).toContain("轉換預覽");
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text().includes("確認寫入"))!
+      .trigger("click");
+    await flushPromises();
+    const operations = coreRequest.mock.calls.map((call) => call[0] as string);
+    const afterApply = operations.slice(operations.lastIndexOf("audio.apply"));
+    expect(afterApply).toContain("audio.scan");
+    expect(afterApply.filter((operation) => operation === "audio.plan")).toEqual([]);
+    expect(wrapper.text()).toContain("裡面");
+    expect(wrapper.text()).not.toContain("轉換預覽");
+    expect(wrapper.findAll("button").some((button) => button.text().includes("確認寫入"))).toBe(
+      false,
+    );
     wrapper.unmount();
   });
 });

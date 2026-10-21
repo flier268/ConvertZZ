@@ -113,6 +113,9 @@ const defaultSettings: SettingsV2 = {
     id3v2Version: 4,
     id3v2Encoding: "utf8",
     tagOperations: [],
+    convertFilename: false,
+    filenameInputEncoding: "auto",
+    filenameOutputEncoding: "utf8",
   },
 };
 

@@ -110,8 +110,6 @@ describe("完整掃描的勾選快照", () => {
     await fileBox.trigger("change");
     expect((wrapper.get(".audio-row input").element as HTMLInputElement).checked).toBe(false);
 
-    await buttonByText(wrapper, "編輯設定")!.trigger("click");
-    await flushPromises();
     await buttonByText(wrapper, "重新掃描")!.trigger("click");
     await flushPromises();
 

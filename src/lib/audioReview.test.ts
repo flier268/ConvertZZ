@@ -19,7 +19,6 @@ import {
   stepAudioRow,
   toggleFolderCollapsed,
   audioApplySelection,
-  settingsSummaryChips,
   fieldOriginLabel,
   fileHasTextLoss,
   fileHasTagWarning,
@@ -30,8 +29,11 @@ import {
   activeRemovals,
   detailContainerNotices,
   fieldVisibleWhenHidingUnchanged,
+  fieldPreviewText,
   mergeAudioFiles,
   audioPathKey,
+  filenameChanged,
+  pruneMissingAudioFiles,
 } from "./audioReview";
 
 function file(partial: Partial<AudioTagFile> & Pick<AudioTagFile, "path">): AudioTagFile {
@@ -265,6 +267,63 @@ describe("audioReview", () => {
     expect(selectionTotals(pending, { id3v1: true, id3v2: true })).toEqual({ files: 1, fields: 1 });
   });
 
+  it("編碼重寫的欄位在隱藏不變時仍顯示", () => {
+    const encodingOnly = file({
+      path: "/tmp/enc.mp3",
+      rewriteContainers: ["id3v2"],
+      fields: [
+        {
+          key: "title",
+          label: "標題",
+          container: "id3v2",
+          values: ["Hello"],
+          convertedValues: ["Hello"],
+          selected: true,
+        },
+      ],
+    });
+    expect(fieldVisibleWhenHidingUnchanged(encodingOnly.fields[0], encodingOnly)).toBe(true);
+    const omitted = file({
+      path: "/tmp/v1.mp3",
+      rewriteContainers: ["id3v1"],
+      fields: [
+        {
+          key: "artist",
+          label: "演出者",
+          container: "id3v1",
+          values: ["陝澴衹煦弐"],
+          selected: true,
+        },
+      ],
+    });
+    expect(fieldVisibleWhenHidingUnchanged(omitted.fields[0], omitted)).toBe(true);
+    expect(fieldPreviewText(omitted.fields[0])).toBe("陝澴衹煦弐");
+    expect(
+      fieldPreviewText({
+        key: "title",
+        label: "標題",
+        container: "id3v2",
+        values: ["里面"],
+        convertedValues: ["裡面"],
+        selected: true,
+      }),
+    ).toBe("裡面");
+    expect(
+      fieldPreviewText({
+        key: "artist",
+        label: "演出者",
+        container: "vorbis-comment",
+        values: ["头发"],
+        convertedValues: ["頭髮"],
+        selected: true,
+      }),
+    ).toBe("頭髮");
+    expect(filenameChanged(file({ path: "/a.mp3", convertedPath: "/b.mp3" }))).toBe(true);
+    expect(pruneMissingAudioFiles([file({ path: "/gone.mp3", warning: "No such file" })])).toEqual(
+      [],
+    );
+  });
+
   it("隱藏不變欄位時仍顯示 ID3v2 整段重寫說明", () => {
     const planned = file({
       path: "/tmp/notice.mp3",
@@ -287,7 +346,9 @@ describe("audioReview", () => {
         },
       ],
     });
-    expect(planned.fields.every((field) => !fieldVisibleWhenHidingUnchanged(field))).toBe(true);
+    expect(planned.fields.every((field) => !fieldVisibleWhenHidingUnchanged(field, planned))).toBe(
+      true,
+    );
     expect(detailContainerNotices(planned)).toEqual(["ID3v2 標籤會整個重寫為 v2.4"]);
     expect(detailContainerNotices(file({ path: "/tmp/quiet.mp3" }))).toEqual([]);
   });
@@ -500,68 +561,6 @@ describe("audioReview", () => {
     expect(planSelectedFields(files)).toEqual({
       [files[0].path]: [`${files[0].fields[0].container}:${files[0].fields[0].key}`],
     });
-  });
-
-  it("設定摘要含 ID3、錯碼修復與備份", () => {
-    expect(
-      settingsSummaryChips({
-        direction: "s2t",
-        vocabularyCorrection: true,
-        backup: true,
-        hasMp3: true,
-        id3v1Enabled: true,
-        id3v1SourceEncoding: "gbk",
-        id3v1OutputEncoding: "big5",
-        id3v2Enabled: true,
-        id3v2Direction: "s2t",
-        id3v2RepairSourceEncoding: true,
-        id3v2SourceEncoding: "gbk",
-        id3v2Version: 4,
-        id3v2Encoding: "utf8",
-      }),
-    ).toEqual([
-      "ID3v2 簡→繁",
-      "GBK 錯碼修復",
-      "ID3v1 GBK→Big5",
-      "APE/Vorbis 簡→繁",
-      "詞彙修正",
-      "備份 .bak",
-      "ID3v2.4・UTF-8",
-    ]);
-    expect(
-      settingsSummaryChips({
-        direction: "none",
-        vocabularyCorrection: false,
-        backup: true,
-        hasMp3: true,
-        id3v1Enabled: false,
-        id3v1SourceEncoding: "gbk",
-        id3v1OutputEncoding: "big5",
-        id3v2Enabled: false,
-        id3v2Direction: "none",
-        id3v2RepairSourceEncoding: false,
-        id3v2SourceEncoding: "gbk",
-        id3v2Version: 4,
-        id3v2Encoding: "utf8",
-        tagOperationCount: 2,
-      }),
-    ).toContain("標籤操作 2 條");
-    expect(
-      settingsSummaryChips({
-        direction: "s2t",
-        vocabularyCorrection: false,
-        backup: false,
-        id3v1Enabled: true,
-        id3v1SourceEncoding: "big5",
-        id3v1OutputEncoding: "utf8",
-        id3v2Enabled: true,
-        id3v2Direction: "s2t",
-        id3v2RepairSourceEncoding: false,
-        id3v2SourceEncoding: "gbk",
-        id3v2Version: 4,
-        id3v2Encoding: "utf16",
-      }),
-    ).toEqual(["ID3v2 簡→繁", "ID3v1 Big5→UTF-8", "APE/Vorbis 簡→繁", "不備份", "ID3v2.4・UTF-16"]);
   });
 
   it("標籤操作的來源、警告篩選與移除勾選", () => {

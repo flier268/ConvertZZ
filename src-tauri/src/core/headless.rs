@@ -368,6 +368,9 @@ async fn prepare_audio(
         id3v2_version: 4,
         id3v2_encoding: "utf8".into(),
         tag_operations: Vec::new(),
+        convert_filename: false,
+        filename_input_encoding: None,
+        filename_output_encoding: None,
     };
 
     eprintln!("正在建立音訊標籤計劃…");

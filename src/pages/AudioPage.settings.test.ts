@@ -42,6 +42,9 @@ vi.mock("../lib/settings", () => ({
       id3v2Version: 4,
       id3v2Encoding: "utf16",
       tagOperations: [],
+      convertFilename: false,
+      filenameInputEncoding: "auto",
+      filenameOutputEncoding: "utf8",
     },
   }),
   patchSavedSettings: (...args: unknown[]) => patchSavedSettings(...args),
@@ -75,7 +78,7 @@ function plannedFile() {
 }
 
 describe("音訊編輯設定", () => {
-  it("關閉抽屜時若存檔失敗會提示", async () => {
+  it("設定寫入失敗會提示", async () => {
     patchSavedSettings.mockRejectedValueOnce(new Error("無法寫入設定"));
     const error = vi.spyOn(ElMessage, "error").mockImplementation(() => undefined as never);
     const wrapper = mount(AudioPage, {
@@ -83,22 +86,12 @@ describe("音訊編輯設定", () => {
       global: { plugins: [ElementPlus], stubs: { transition: false } },
     });
     await flushPromises();
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("編輯設定"))!
-      .trigger("click");
-    await flushPromises();
-    const done = Array.from(document.body.querySelectorAll("button")).find(
-      (button) => button.textContent?.replace(/\s+/gu, "") === "完成",
-    );
-    done!.click();
-    await flushPromises();
     expect(error).toHaveBeenCalledWith("無法寫入設定");
     error.mockRestore();
     wrapper.unmount();
   });
 
-  it("啟動時套用已存的編碼與備份，關閉抽屜時寫回設定", async () => {
+  it("啟動時套用已存的編碼與備份，修改時寫回設定", async () => {
     patchSavedSettings.mockImplementation(async (patch: (settings: SettingsV2) => void) => {
       const settings = { audio: {} } as SettingsV2;
       patch(settings);
@@ -109,20 +102,10 @@ describe("音訊編輯設定", () => {
       global: { plugins: [ElementPlus], stubs: { transition: false } },
     });
     await flushPromises();
-    expect(wrapper.text()).toContain("不備份");
+    expect(wrapper.text()).toContain("轉換前備份（.bak）");
     expect(wrapper.text()).toContain("UTF-16");
-
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("編輯設定"))!
-      .trigger("click");
-    await flushPromises();
-    const done = Array.from(document.body.querySelectorAll("button")).find(
-      (button) => button.textContent?.replace(/\s+/gu, "") === "完成",
-    );
-    expect(done).toBeTruthy();
-    done!.click();
-    await flushPromises();
+    expect(wrapper.text()).toContain("ID3v1");
+    expect(wrapper.text()).toContain("ID3v2");
 
     expect(patchSavedSettings).toHaveBeenCalled();
     const written = {
@@ -141,13 +124,6 @@ describe("音訊編輯設定", () => {
     expect(written.audio.backup).toBe(false);
     expect(written.audio.id3v1SourceEncoding).toBe("big5");
     expect(written.audio.id3v2Encoding).toBe("utf16");
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("編輯設定"))!
-      .trigger("click");
-    await flushPromises();
-    expect(document.body.textContent).toContain("MP3／ID3v1");
-    expect(document.body.textContent).toContain("MP3／ID3v2");
     wrapper.unmount();
   });
 

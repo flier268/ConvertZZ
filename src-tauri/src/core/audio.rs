@@ -1,13 +1,13 @@
 use super::backup::{create_user_backups, resolve_backup_roots, resolve_path, BackupRoot};
 use super::conversion::ConversionService;
 mod operations;
-use super::encoding::{decode_text, encode_text, encode_text_detailed};
+use super::encoding::{decode_text, encode_text, encode_text_detailed, reinterpret_text};
 use super::error::CoreError;
 use super::types::{
     ApplyFailure, ApplyResult, AudioContainer, AudioFieldWarning, AudioFieldWarningCode,
     AudioFormat, AudioScanRequest, AudioTagField, AudioTagFile, AudioTagPlan, AudioTagPlanRequest,
-    AudioTagPlanSummary, CancelCheck, ConflictPolicy, ConversionOptions, ProgressReporter,
-    TextEncoding,
+    AudioTagPlanSummary, CancelCheck, ConflictPolicy, ConversionOptions, Direction,
+    ProgressReporter, TextEncoding,
 };
 use chrono::Utc;
 use lofty::config::WriteOptions;
@@ -77,6 +77,7 @@ struct PreparedAudio {
     rewrite_containers: HashSet<AudioContainer>,
     /// 寫入時整段拿掉的標籤。音訊位元組仍用 `mp3_audio_payload` 核對。
     remove_containers: HashSet<AudioContainer>,
+    rename_to: Option<PathBuf>,
     request: AudioTagPlanRequest,
     original_picture_count: usize,
 }
@@ -670,21 +671,33 @@ async fn read_audio_files(
                 "音訊標籤作業已由使用者取消。",
             ));
         }
+        if !path.exists() {
+            done += 1;
+            continue;
+        }
         let file = match scan_file(&path, request) {
             Ok(file) => file,
-            Err(error) => AudioTagFile {
-                path: path.to_string_lossy().into_owned(),
-                format: format_from_path(&path).unwrap_or(AudioFormat::Mp3),
-                selected: false,
-                fields: Vec::new(),
-                has_cover_art: false,
-                duration_seconds: None,
-                warning: Some(error.message),
-                previewed: false,
-                rewrite_containers: Vec::new(),
-                removals: Vec::new(),
-                notices: Vec::new(),
-            },
+            Err(error) => {
+                if !path.exists() {
+                    done += 1;
+                    continue;
+                }
+                AudioTagFile {
+                    path: path.to_string_lossy().into_owned(),
+                    format: format_from_path(&path).unwrap_or(AudioFormat::Mp3),
+                    selected: false,
+                    fields: Vec::new(),
+                    has_cover_art: false,
+                    duration_seconds: None,
+                    warning: Some(error.message),
+                    previewed: false,
+                    rewrite_containers: Vec::new(),
+                    removals: Vec::new(),
+                    notices: Vec::new(),
+                    converted_path: None,
+                    missing: false,
+                }
+            }
         };
         done += 1;
         batch.push(file.clone());
@@ -718,7 +731,7 @@ fn scan_file(path: &Path, request: &AudioScanRequest) -> Result<AudioTagFile, Co
             path,
             request.id3v1_source_encoding.unwrap_or(TextEncoding::Gbk),
             request.id3v2_source_encoding.unwrap_or(TextEncoding::Gbk),
-            request.id3v2_repair_source_encoding.unwrap_or(false),
+            false,
         );
     }
     let tagged = read_tagged(path)?;
@@ -744,6 +757,8 @@ fn scan_file(path: &Path, request: &AudioScanRequest) -> Result<AudioTagFile, Co
         rewrite_containers: Vec::new(),
         removals: Vec::new(),
         notices: Vec::new(),
+        converted_path: None,
+        missing: false,
     })
 }
 
@@ -833,6 +848,8 @@ fn scan_mp3(
         rewrite_containers: Vec::new(),
         removals: Vec::new(),
         notices: Vec::new(),
+        converted_path: None,
+        missing: false,
     })
 }
 
@@ -934,11 +951,41 @@ fn apply_id3v2_encoding(tag: &mut id3::Tag, encoding: &str, keys: &HashSet<Strin
 }
 
 fn apply_file(file: &PreparedAudio) -> Result<(), CoreError> {
-    if file.format == AudioFormat::Mp3 {
-        apply_mp3(file)
-    } else {
-        apply_taglib(file)
+    let writes_tags = !file.updates.is_empty()
+        || !file.selected_containers.is_empty()
+        || !file.remove_containers.is_empty();
+    if writes_tags {
+        if file.format == AudioFormat::Mp3 {
+            apply_mp3(file)?;
+        } else {
+            apply_taglib(file)?;
+        }
     }
+    if let Some(dest) = &file.rename_to {
+        apply_audio_rename(&file.path, dest, file.request.conflict_policy)?;
+    }
+    Ok(())
+}
+
+fn apply_audio_rename(source: &Path, dest: &Path, policy: ConflictPolicy) -> Result<(), CoreError> {
+    if source == dest {
+        return Ok(());
+    }
+    if dest.exists() {
+        match policy {
+            ConflictPolicy::Skip => {
+                return Err(CoreError::new(
+                    "PATH_EXISTS",
+                    format!("檔名衝突，已略過重新命名：{}", dest.display()),
+                ));
+            }
+            ConflictPolicy::Overwrite => {
+                fs::remove_file(dest)?;
+            }
+        }
+    }
+    fs::rename(source, dest)?;
+    Ok(())
 }
 
 fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
@@ -1461,10 +1508,26 @@ async fn convert_selected_fields(
         }
         let mut converted_values = Vec::new();
         for value in &field.values {
+            let mut source = if field.container == AudioContainer::Id3v2 {
+                repair_id3v2_value(
+                    value,
+                    request.id3v2_source_encoding.unwrap_or(TextEncoding::Gbk),
+                    repair_source_encoding(request),
+                )?
+            } else {
+                value.clone()
+            };
+            if field.container == AudioContainer::Id3v1 {
+                source = reinterpret_id3v1_value(source, request, true, warnings, &file.path);
+            }
             let result = conversion
-                .convert(conversion_for_container(request, field.container).with_text(value))
+                .convert(conversion_for_container(request, field.container).with_text(source))
                 .await?;
-            converted_values.push(result.text);
+            let mut text = result.text;
+            if field.container == AudioContainer::Id3v1 {
+                text = reinterpret_id3v1_value(text, request, false, warnings, &file.path);
+            }
+            converted_values.push(text);
             warnings.extend(result.warnings);
         }
         if converted_values != field.values {
@@ -1485,7 +1548,8 @@ async fn convert_selected_fields(
     if containers.contains(&AudioContainer::Id3v1) || rewrite.contains(&AudioContainer::Id3v1) {
         note_id3v1_truncation(request, file, &mut updates, warnings)?;
     }
-    if updates.is_empty() && rewrite.is_empty() {
+    let rename_to = convert_audio_filename(conversion, request, file, warnings).await?;
+    if updates.is_empty() && rewrite.is_empty() && rename_to.is_none() {
         return Ok(None);
     }
     Ok(Some(PreparedAudio {
@@ -1495,6 +1559,7 @@ async fn convert_selected_fields(
         selected_containers: containers,
         rewrite_containers: rewrite.into_iter().collect(),
         remove_containers: HashSet::new(),
+        rename_to,
         request: request.clone(),
         original_picture_count: if file.has_cover_art {
             picture_count(Path::new(&file.path))?
@@ -1502,6 +1567,63 @@ async fn convert_selected_fields(
             0
         },
     }))
+}
+
+async fn convert_audio_filename(
+    conversion: &ConversionService,
+    request: &AudioTagPlanRequest,
+    file: &mut AudioTagFile,
+    warnings: &mut Vec<String>,
+) -> Result<Option<PathBuf>, CoreError> {
+    if !request.convert_filename {
+        file.converted_path = None;
+        return Ok(None);
+    }
+    let path = Path::new(&file.path);
+    let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+        return Ok(None);
+    };
+    let input = request
+        .filename_input_encoding
+        .unwrap_or(TextEncoding::Auto);
+    let output = request
+        .filename_output_encoding
+        .unwrap_or(TextEncoding::Utf8);
+    let reinterpret =
+        input != TextEncoding::Auto && output != TextEncoding::Auto && input != output;
+    let prepared = if reinterpret && request.conversion.direction == Direction::S2t {
+        match super::encoding::reinterpret_text(name, output, input) {
+            Ok(text) => text,
+            Err(error) => {
+                warnings.push(format!("{}：{}", file.path, error.message));
+                name.to_string()
+            }
+        }
+    } else {
+        name.to_string()
+    };
+    let converted = conversion
+        .convert(request.conversion.clone().with_text(prepared))
+        .await?;
+    warnings.extend(converted.warnings);
+    let text = if reinterpret && request.conversion.direction != Direction::S2t {
+        match super::encoding::reinterpret_text(&converted.text, output, input) {
+            Ok(text) => text,
+            Err(error) => {
+                warnings.push(format!("{}：{}", file.path, error.message));
+                converted.text
+            }
+        }
+    } else {
+        converted.text
+    };
+    if text == name {
+        file.converted_path = None;
+        return Ok(None);
+    }
+    let dest = path.with_file_name(text);
+    file.converted_path = Some(dest.to_string_lossy().into_owned());
+    Ok(Some(dest))
 }
 
 fn container_enabled(request: &AudioTagPlanRequest, container: AudioContainer) -> bool {
@@ -1534,6 +1656,37 @@ fn conversion_for_container(
         _ => request.conversion.zhconvert.clone(),
     };
     conversion
+}
+
+/// 設定契約欄位仍叫 `id3v2RepairSourceEncoding`；畫面上「嘗試修復錯碼」同時開 ID3v1 重新解讀。
+fn repair_source_encoding(request: &AudioTagPlanRequest) -> bool {
+    request.id3v2_repair_source_encoding.unwrap_or(false)
+}
+
+/// ID3v1 沒有編碼標頭。「嘗試修復錯碼」且來源≠輸出時，依位元組重新解讀（與檔名／文字工具相同）。
+fn reinterpret_id3v1_value(
+    text: String,
+    request: &AudioTagPlanRequest,
+    before_conversion: bool,
+    warnings: &mut Vec<String>,
+    path: &str,
+) -> String {
+    let source = request.id3v1_source_encoding.unwrap_or(TextEncoding::Gbk);
+    let output = request.id3v1_output_encoding;
+    if !repair_source_encoding(request) || source == output {
+        return text;
+    }
+    let s2t = request.id3v1_direction == Direction::S2t;
+    if before_conversion != s2t {
+        return text;
+    }
+    match reinterpret_text(&text, source, output) {
+        Ok(repaired) => repaired,
+        Err(error) => {
+            warnings.push(format!("{path}：{}", error.message));
+            text
+        }
+    }
 }
 
 fn repair_id3v2_value(
@@ -1641,6 +1794,10 @@ pub(crate) fn summarize_audio_files(files: &[AudioTagFile]) -> AudioTagPlanSumma
             continue;
         }
         let mut file_changed = !file.rewrite_containers.is_empty()
+            || file
+                .converted_path
+                .as_ref()
+                .is_some_and(|path| path != &file.path)
             || file
                 .removals
                 .iter()
@@ -1865,6 +2022,7 @@ fn file_should_write(file: &PreparedAudio) -> bool {
     !file.updates.is_empty()
         || !file.selected_containers.is_empty()
         || !file.remove_containers.is_empty()
+        || file.rename_to.is_some()
 }
 
 fn fields_for_path(selection: &HashMap<String, Vec<String>>, path: &Path) -> HashSet<String> {
@@ -2734,7 +2892,11 @@ fn expand_audio_paths(input_paths: &[String], recursive: bool) -> Result<Vec<Pat
     let mut paths = HashSet::new();
     for input in input_paths {
         let path = resolve_path(input);
-        let metadata = fs::symlink_metadata(&path)?;
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
         if metadata.file_type().is_symlink() {
             continue;
         }

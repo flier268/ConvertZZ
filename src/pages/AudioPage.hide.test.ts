@@ -58,14 +58,13 @@ const planned = {
       label: "備註",
       container: "id3v2",
       values: ["Hello"],
-      convertedValues: ["Hello"],
       selected: true,
     },
   ],
 };
 
 describe("隱藏不變欄位", () => {
-  it("文字相同的欄位在開啟隱藏後不出現，即使容器要重寫編碼", async () => {
+  it("編碼重寫時文字相同的欄位仍顯示為變更", async () => {
     openDialog.mockResolvedValueOnce("/tmp/enc.mp3");
     coreRequest.mockImplementation(async (operation: string) => {
       if (operation === "audio.scan") return [scanned];
@@ -90,12 +89,13 @@ describe("隱藏不變欄位", () => {
     const hide = wrapper.get(".audio-hide-unchanged");
     expect(hide.attributes("aria-pressed")).toBe("true");
     expect(wrapper.get(".audio-detail").text()).toContain("標題");
-    expect(wrapper.get(".audio-detail").text()).not.toContain("備註");
+    expect(wrapper.get(".audio-detail").text()).toContain("備註");
 
+    expect(wrapper.get(".audio-detail").text()).toContain("裡面");
     await hide.trigger("click");
     expect(hide.attributes("aria-pressed")).toBe("false");
     expect(wrapper.get(".audio-detail").text()).toContain("備註");
-    expect(wrapper.get(".audio-detail").text()).toContain("不變");
+    expect(wrapper.get(".audio-detail").text()).toContain("Hello");
     expect(wrapper.get(".audio-detail").text()).toContain("ID3v2 標籤會整個重寫為 v2.4・UTF-8");
   });
 });

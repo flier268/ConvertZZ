@@ -1,5 +1,5 @@
 use super::super::conversion::shared_conversion;
-use super::super::encoding::encode_text;
+use super::super::encoding::{decode_text, encode_text};
 use super::super::types::{
     AudioContainer, AudioFieldWarningCode, AudioFormat, AudioRescanFileRequest, AudioTagField,
     AudioTagFile, ConflictPolicy, ConversionOptions, Direction, EngineKind, TagAction,
@@ -122,6 +122,9 @@ fn base_plan(paths: &[PathBuf]) -> AudioTagPlanRequest {
         id3v2_version: 4,
         id3v2_encoding: "utf8".into(),
         tag_operations: Vec::new(),
+        convert_filename: false,
+        filename_input_encoding: None,
+        filename_output_encoding: None,
     }
 }
 
@@ -724,8 +727,76 @@ async fn repairs_id3v2_mojibake() {
         .unwrap();
     assert_eq!(
         field(&repaired[0], AudioContainer::Id3v2, "title").map(|field| field.values.clone()),
+        Some(vec![mojibake.clone()]),
+        "掃描保留磁碟上的原文，錯碼修復在預覽時才算變更"
+    );
+    let mut request = base_plan(&[path.clone()]);
+    request.id3v1_enabled = false;
+    request.id3v2_direction = Direction::None;
+    request.id3v2_source_encoding = Some(TextEncoding::Big5);
+    request.id3v2_repair_source_encoding = Some(true);
+    request.selected_fields = HashMap::from([(
+        path.to_string_lossy().into_owned(),
+        vec!["id3v2:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert_eq!(
+        field(&plan.files[0], AudioContainer::Id3v2, "title")
+            .and_then(|field| field.converted_values.clone()),
         Some(vec!["裡面".into()])
     );
+    assert_eq!(plan.summary.changed, 1);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn scan_skips_deleted_files() {
+    let directory = temp_dir();
+    let path = directory.join("gone.mp3");
+    let service = AudioService::new();
+    let scanned = service
+        .scan(
+            shared_conversion(),
+            AudioScanRequest {
+                paths: vec![path.to_string_lossy().into_owned()],
+                recursive: None,
+                id3v1_source_encoding: None,
+                id3v2_source_encoding: None,
+                id3v2_repair_source_encoding: None,
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert!(scanned.is_empty());
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn convert_filename_counts_as_change() {
+    let directory = temp_dir();
+    let path = directory.join("里面.mp3");
+    std::fs::write(&path, id3v1_only_mp3("Hello", TextEncoding::Utf8)).unwrap();
+    let service = AudioService::new();
+    let mut request = base_plan(&[path.clone()]);
+    request.id3v1_enabled = false;
+    request.id3v2_enabled = false;
+    request.convert_filename = true;
+    request.filename_input_encoding = Some(TextEncoding::Auto);
+    request.filename_output_encoding = Some(TextEncoding::Utf8);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let converted = plan.files[0]
+        .converted_path
+        .as_ref()
+        .expect("應有轉換後檔名");
+    assert!(converted.ends_with("裡面.mp3"), "{converted}");
+    assert_eq!(plan.summary.changed, 1);
     let _ = std::fs::remove_dir_all(&directory);
 }
 
@@ -755,6 +826,85 @@ async fn reads_id3v1_with_big5_and_gbk() {
             Some(vec!["裡面".into()])
         );
     }
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn id3v1_repairs_gbk_bytes_read_as_big5_in_preview() {
+    let directory = temp_dir();
+    let path = directory.join("v1-enc.mp3");
+    std::fs::write(&path, id3v1_only_mp3("头发", TextEncoding::Gbk)).unwrap();
+    let mojibake = decode_text(
+        &encode_text("头发", TextEncoding::Gbk, false).unwrap(),
+        TextEncoding::Big5,
+    )
+    .unwrap()
+    .0;
+    let service = AudioService::new();
+    let scanned = service
+        .scan(
+            shared_conversion(),
+            AudioScanRequest {
+                paths: vec![path.to_string_lossy().into_owned()],
+                recursive: None,
+                id3v1_source_encoding: Some(TextEncoding::Big5),
+                id3v2_source_encoding: None,
+                id3v2_repair_source_encoding: None,
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        field(&scanned[0], AudioContainer::Id3v1, "title").map(|field| field.values.clone()),
+        Some(vec![mojibake.clone()])
+    );
+
+    let mut request = base_plan(&[path.clone()]);
+    request.id3v1_source_encoding = Some(TextEncoding::Big5);
+    request.id3v1_output_encoding = TextEncoding::Gbk;
+    request.id3v1_direction = Direction::S2t;
+    request.id3v2_repair_source_encoding = Some(true);
+    request.id3v2_enabled = false;
+    request.selected_fields = HashMap::from([(
+        path.to_string_lossy().into_owned(),
+        vec!["id3v1:title".into()],
+    )]);
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let title = field(&plan.files[0], AudioContainer::Id3v1, "title").unwrap();
+    assert_eq!(title.values, vec![mojibake]);
+    assert_eq!(
+        title.converted_values.as_deref(),
+        Some(["頭髮".to_string()].as_slice()),
+        "{title:?}"
+    );
+
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    let verified = service
+        .scan(
+            shared_conversion(),
+            AudioScanRequest {
+                paths: vec![path.to_string_lossy().into_owned()],
+                recursive: None,
+                id3v1_source_encoding: Some(TextEncoding::Gbk),
+                id3v2_source_encoding: None,
+                id3v2_repair_source_encoding: None,
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        field(&verified[0], AudioContainer::Id3v1, "title").map(|field| field.values.clone()),
+        Some(vec!["頭髮".into()])
+    );
     let _ = std::fs::remove_dir_all(&directory);
 }
 
@@ -1323,6 +1473,8 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
         rewrite_containers: Vec::new(),
         removals: Vec::new(),
         notices: Vec::new(),
+        converted_path: None,
+        missing: false,
     };
     let same = AudioTagFile {
         path: "b.ogg".into(),
@@ -1347,6 +1499,8 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
         rewrite_containers: Vec::new(),
         removals: Vec::new(),
         notices: Vec::new(),
+        converted_path: None,
+        missing: false,
     };
     let broken = AudioTagFile {
         path: "c.mp3".into(),
@@ -1360,6 +1514,8 @@ fn summarize_audio_files_counts_changed_unchanged_and_errors() {
         rewrite_containers: Vec::new(),
         removals: Vec::new(),
         notices: Vec::new(),
+        converted_path: None,
+        missing: false,
     };
     let summary = summarize_audio_files(&[changed, same, broken]);
     assert_eq!(summary.total, 3);
@@ -3612,6 +3768,7 @@ fn apply_mp3_error_removes_temporary_file() {
         selected_containers: HashSet::from([AudioContainer::Id3v1]),
         rewrite_containers: HashSet::new(),
         remove_containers: HashSet::new(),
+        rename_to: None,
         request,
         original_picture_count: 0,
     };

@@ -211,6 +211,10 @@ export interface AudioTagFile {
   removals?: AudioContainerRemoval[];
   /** 容器級說明。例如「ID3v2 標籤會整個重寫為 v2.4・UTF-16」「ID3v1 會重寫」。省略表示沒有。 */
   notices?: string[];
+  /** 轉換後的完整路徑。與 `path` 相同或省略表示不改檔名。 */
+  convertedPath?: string;
+  /** 磁碟上已不存在。前端會從列表拿掉。 */
+  missing?: boolean;
 }
 
 export interface AudioScanRequest {
@@ -245,6 +249,10 @@ export interface AudioTagPlanRequest extends AudioScanRequest {
   id3v2Encoding: "utf8" | "utf16" | "utf16be" | "latin1";
   /** 省略或空陣列時，預覽與寫入維持原本的逐欄轉換。 */
   tagOperations?: TagOperation[];
+  /** 同時轉換檔名。省略為 false。 */
+  convertFilename?: boolean;
+  filenameInputEncoding?: TextEncoding;
+  filenameOutputEncoding?: TextEncoding;
 }
 
 export interface AudioTagPlanSummary {
@@ -382,6 +390,9 @@ export interface AudioPageSettings {
   id3v2Version: 3 | 4;
   id3v2Encoding: "utf8" | "utf16" | "utf16be" | "latin1";
   tagOperations: TagOperation[];
+  convertFilename: boolean;
+  filenameInputEncoding: TextEncoding;
+  filenameOutputEncoding: TextEncoding;
 }
 
 export interface SettingsV2 {
@@ -393,7 +404,7 @@ export interface SettingsV2 {
   promptAfterConversion: boolean;
   /** 檔案、檔名與音訊標籤轉換前自動建立 .bak 備份。 */
   autoBackupBeforeConversion: boolean;
-  /** 音訊標籤頁「編輯設定」抽屜。缺欄時由設定遷移補預設。 */
+  /** 音訊標籤頁轉換設定。缺欄時由設定遷移補預設。 */
   audio: AudioPageSettings;
   recognizeEncoding: boolean;
   previewMaxKb: number;

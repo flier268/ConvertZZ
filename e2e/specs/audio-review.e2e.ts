@@ -76,17 +76,14 @@ test.describe("音訊標籤審閱", () => {
     await expect(page.getByRole("button", { name: "重新掃描這個檔案" })).toBeVisible();
     await page.screenshot({ path: join(shots, "audio-error-selected.png") });
 
-    await page.getByRole("button", { name: "編輯設定" }).click();
-    const drawer = page.getByRole("dialog");
-    await expect(drawer.getByRole("heading", { name: "一般" })).toBeVisible();
-    await expect(drawer.getByRole("heading", { name: "備份" })).toBeVisible();
-    await expect(drawer.getByRole("heading", { name: "ID3v1" })).toBeVisible();
-    await expect(drawer.getByRole("heading", { name: "ID3v2" })).toBeVisible();
-    await expect(drawer.getByRole("button", { name: "完成", exact: true })).toBeVisible();
-    await expect(drawer.getByRole("button", { name: "套用並重新建立預覽" })).toHaveCount(0);
+    await expect(page.getByText("APEv2／Vorbis 方向")).toBeVisible();
+    await expect(page.getByText("ID3v1", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("ID3v2", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("轉換檔名")).toBeVisible();
+    await expect(page.getByRole("button", { name: "編輯設定" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "套用並重新建立預覽" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "取消計畫" })).toHaveCount(0);
     await page.screenshot({ path: join(shots, "audio-settings-drawer.png") });
-    await page.keyboard.press("Escape");
 
     await segment(page, "全部 250").click();
     await scrollAudioRow(page, "same.ogg");
@@ -153,6 +150,7 @@ test.describe("音訊標籤審閱", () => {
     await expect(page.getByRole("button", { name: "重新掃描這個檔案" })).toHaveClass(/is-loading/);
     await page.evaluate(() => window.__convertzzE2e?.releaseAudioRescan?.());
     await expect(page.getByRole("radio", { name: "錯誤 0" })).toBeVisible();
+    await segment(page, "有變更 234").click();
     await expect(page.getByRole("radio", { name: "有變更 234" })).toBeChecked();
     await expect(page.locator(".audio-detail")).toContainText("夜曲繁");
     await expect(page.locator(".audio-detail")).not.toContainText("不能勾選");
@@ -278,17 +276,15 @@ test.describe("音訊標籤審閱", () => {
     await expect(page.locator(".audio-detail")).toContainText("未知字幕");
     await page.screenshot({ path: join(shots, "live-hide-unchanged-off.png") });
 
-    await page.getByRole("button", { name: "編輯設定" }).click();
-    const drawer = page.getByRole("dialog");
-    await expect(drawer.getByRole("button", { name: "完成", exact: true })).toBeVisible();
     await page.screenshot({ path: join(shots, "live-drawer.png") });
-    await drawer
+    await page
       .locator(".el-form-item", { hasText: "APEv2／Vorbis 方向" })
       .locator(".el-select")
       .click();
     await page.getByRole("option", { name: "繁轉簡" }).click();
-    await drawer.getByRole("button", { name: "完成", exact: true }).click();
-    await expect(page.getByText("APE/Vorbis 繁→簡")).toBeVisible();
+    await expect(page.locator(".el-form-item", { hasText: "APEv2／Vorbis 方向" })).toContainText(
+      "繁轉簡",
+    );
     await expect(page.getByRole("button", { name: "確認寫入" })).toBeEnabled();
     await page.screenshot({ path: join(shots, "live-auto-rebuild.png") });
   });

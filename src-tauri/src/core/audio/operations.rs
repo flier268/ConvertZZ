@@ -290,6 +290,7 @@ pub(super) fn expand_tag_operations(
         selected_containers: HashSet::new(),
         rewrite_containers: HashSet::new(),
         remove_containers: HashSet::new(),
+        rename_to: None,
         request: request.clone(),
         original_picture_count,
     });

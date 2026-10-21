@@ -417,6 +417,12 @@ pub struct AudioTagFile {
     /// 容器級說明。例如「ID3v2 標籤會整個重寫為 v2.4・UTF-16」「ID3v1 會重寫」。空陣列不輸出。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<String>,
+    /// 轉換後完整路徑。與 `path` 相同或省略表示不改檔名。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub converted_path: Option<String>,
+    /// 磁碟上已不存在。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub missing: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -526,6 +532,12 @@ pub struct AudioTagPlanRequest {
     /// 空陣列時行為與沒有標籤操作相同。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tag_operations: Vec<TagOperation>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub convert_filename: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filename_input_encoding: Option<TextEncoding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filename_output_encoding: Option<TextEncoding>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

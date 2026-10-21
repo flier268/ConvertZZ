@@ -119,13 +119,9 @@ describe("音訊錯誤檔畫面", () => {
     ]);
     await wrapper.get(".audio-rescan").trigger("click");
     await flushPromises();
-    const changed = wrapper
-      .findAll(".el-radio-button")
-      .find((button) => button.text().includes("有變更"));
-    expect(changed!.classes()).toContain("is-active");
-    expect(wrapper.get(".audio-detail").text()).toContain("夜曲");
-    expect(wrapper.get(".audio-detail").text()).not.toContain("不能勾選");
-    expect(wrapper.get(".audio-detail").text()).toContain("/tmp/broken.mp3");
+    expect(wrapper.text()).toContain("錯誤 0");
+    expect(wrapper.text()).toContain("有變更 1");
+    expect(wrapper.get(".audio-detail").text()).toContain("沒有符合的檔案");
   });
 
   it("列核取方塊不是上下鍵的攔截目標", async () => {

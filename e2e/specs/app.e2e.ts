@@ -482,9 +482,7 @@ test.describe("ConvertZZ 前端", () => {
     await expect(page.getByText("含封面")).toBeVisible();
     await expect(page.getByRole("cell", { name: "里面", exact: true })).toBeVisible();
     await expect(page.getByRole("cell", { name: "未知字幕", exact: true })).toHaveCount(0);
-    await page.getByRole("button", { name: "編輯設定" }).click();
     await expect(page.getByText("ID3v2 版本")).toBeVisible();
-    await page.keyboard.press("Escape");
     await expect(page.getByRole("columnheader", { name: "轉換預覽" })).toBeVisible();
     await expect(page.locator(".audio-detail .diff-ins").first()).toContainText("裡");
     await expect(page.locator(".audio-detail .diff-del").first()).toContainText("里");
@@ -499,10 +497,8 @@ test.describe("ConvertZZ 前端", () => {
   test("音訊備份覆寫需要額外確認", async ({ page }) => {
     await openApp(page, { selectedFiles: "/tmp/song.mp3" });
     await openPage(page, "#tour-audio", "音訊標籤");
-    await page.getByRole("button", { name: "編輯設定" }).click();
     await page.locator(".el-form-item", { hasText: "備份衝突" }).locator(".el-select").click();
     await page.getByRole("option", { name: "覆寫" }).click();
-    await page.getByRole("button", { name: "完成", exact: true }).click();
     await page.getByRole("button", { name: "選取音訊檔案" }).click();
     await page.getByRole("button", { name: "確認寫入" }).click();
     await expect

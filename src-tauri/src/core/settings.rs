@@ -115,7 +115,10 @@ fn default_audio_settings() -> Value {
         "id3v2RepairSourceEncoding": true,
         "id3v2Version": 4,
         "id3v2Encoding": "utf8",
-        "tagOperations": []
+        "tagOperations": [],
+        "convertFilename": false,
+        "filenameInputEncoding": "auto",
+        "filenameOutputEncoding": "utf8"
     })
 }
 

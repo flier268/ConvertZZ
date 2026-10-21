@@ -2,7 +2,6 @@ import type {
   AudioContainer,
   AudioTagField,
   AudioTagFile,
-  Direction,
   TagAction,
   TagOnConflict,
   TagOperation,
@@ -23,25 +22,6 @@ export interface AudioContainerFlags {
 export interface DiffPiece {
   text: string;
   kind: "same" | "remove" | "add";
-}
-
-export interface AudioSettingsSnapshot {
-  direction: Direction;
-  vocabularyCorrection: boolean;
-  backup: boolean;
-  /** 省略時仍顯示 ID3 摘要，讓尚未選檔也能看到記住的編碼。 */
-  hasMp3?: boolean;
-  id3v1Enabled: boolean;
-  id3v1SourceEncoding: string;
-  id3v1OutputEncoding: string;
-  id3v2Enabled: boolean;
-  id3v2Direction: Direction;
-  id3v2RepairSourceEncoding: boolean;
-  id3v2SourceEncoding: string;
-  id3v2Version: 3 | 4;
-  id3v2Encoding: string;
-  /** 啟用中的標籤操作條數。省略或 0 不顯示 chip。 */
-  tagOperationCount?: number;
 }
 
 export const AUDIO_PREVIEW_DEBOUNCE_MS = 350;
@@ -169,26 +149,6 @@ export function createAudioPreviewController(deps: {
   };
 }
 
-const DIRECTION_LABEL: Record<Direction, string> = {
-  s2t: "簡→繁",
-  t2s: "繁→簡",
-  none: "不轉換",
-};
-
-const TEXT_ENCODING_LABEL: Record<string, string> = {
-  gbk: "GBK",
-  big5: "Big5",
-  "shift-jis": "Shift-JIS",
-  utf8: "UTF-8",
-};
-
-const ID3V2_ENCODING_LABEL: Record<string, string> = {
-  utf8: "UTF-8",
-  utf16: "UTF-16",
-  utf16be: "UTF-16BE",
-  latin1: "Latin-1",
-};
-
 const TITLE_KEYS = new Set(["title", "tit2"]);
 const ALBUM_KEYS = new Set(["album", "talb"]);
 
@@ -213,15 +173,44 @@ export function fieldAffectsAudio(file: AudioTagFile, field: AudioTagField): boo
   return fieldValuesChanged(field) || containerRewrites(file, field.container);
 }
 
+/** 轉換預覽欄要顯示的寫入結果。沒帶 convertedValues 時就是目前內容。 */
+export function fieldPreviewText(field: AudioTagField): string {
+  return (field.convertedValues ?? field.values).join(" / ");
+}
+
 /**
- * 「隱藏不變欄位」只看文字。編碼或 ID3 版本要重寫時，文字相同的欄位在預覽欄仍是「不變」。
+ * 「隱藏不變欄位」仍顯示文字變更、警告、規則與編碼／版本重寫。
  */
-export function fieldVisibleWhenHidingUnchanged(field: AudioTagField): boolean {
+export function fieldVisibleWhenHidingUnchanged(
+  field: AudioTagField,
+  file?: AudioTagFile,
+): boolean {
   return (
     fieldValuesChanged(field) ||
     (field.warnings?.length ?? 0) > 0 ||
-    Boolean(field.origin?.startsWith("rule "))
+    Boolean(field.origin?.startsWith("rule ")) ||
+    Boolean(file && containerRewrites(file, field.container))
   );
+}
+
+export function filenameChanged(file: AudioTagFile): boolean {
+  return Boolean(file.convertedPath && file.convertedPath !== file.path);
+}
+
+export function isMissingAudioWarning(warning: string | undefined): boolean {
+  if (!warning) return false;
+  return /no such file|not found|找不到|cannot find|os error 2/iu.test(warning);
+}
+
+export function dropAudioFiles(
+  files: readonly AudioTagFile[],
+  keys: ReadonlySet<string>,
+): AudioTagFile[] {
+  return files.filter((file) => !keys.has(audioPathKey(file.path)));
+}
+
+export function pruneMissingAudioFiles(files: readonly AudioTagFile[]): AudioTagFile[] {
+  return files.filter((file) => !isMissingAudioWarning(file.warning) && !file.missing);
 }
 
 /** 計畫上的容器重寫說明。隱藏不變欄位時仍然顯示。 */
@@ -245,7 +234,8 @@ export function activeRemovals(file: AudioTagFile) {
 export function changedFieldCount(file: AudioTagFile): number {
   return (
     file.fields.filter((field) => fieldAffectsAudio(file, field)).length +
-    activeRemovals(file).length
+    activeRemovals(file).length +
+    (filenameChanged(file) ? 1 : 0)
   );
 }
 
@@ -294,6 +284,7 @@ export function audioFileBucket(
   file: AudioTagFile,
   previewReady: boolean,
 ): Exclude<AudioListFilter, "all"> {
+  if (file.missing || isMissingAudioWarning(file.warning)) return "errors";
   if (file.warning) return "errors";
   if (!previewReady) return "changed";
   return changedFieldCount(file) > 0 ? "changed" : "unchanged";
@@ -569,6 +560,7 @@ export function fileHasWritableSelection(
   previewReady: boolean,
 ): boolean {
   if (!file.selected || file.warning) return false;
+  if (filenameChanged(file)) return true;
   if (activeRemovals(file).length > 0) return true;
   return file.fields.some((field) => countsTowardWrite(file, field, containers, previewReady));
 }
@@ -587,6 +579,7 @@ export function selectionTotals(
       if (!countsTowardWrite(file, field, containers, ready)) continue;
       selected += 1;
     }
+    if (filenameChanged(file)) selected += 1;
     if (selected > 0) {
       fileCount += 1;
       fieldCount += selected;
@@ -609,7 +602,7 @@ export function audioApplySelection(
       .filter((field) => countsTowardWrite(file, field, containers, ready))
       .map((field) => `${field.container}:${field.key}`);
     for (const removal of activeRemovals(file)) ids.push(removalFieldId(removal.container));
-    if (!ids.length) continue;
+    if (!ids.length && !filenameChanged(file)) continue;
     paths.push(file.path);
     selectedFields[file.path] = ids;
   }
@@ -748,37 +741,6 @@ export function charDiff(
     j += 1;
   }
   return { before: mergePieces(oldPieces), after: mergePieces(newPieces) };
-}
-
-function encodingLabel(value: string): string {
-  return TEXT_ENCODING_LABEL[value] ?? value;
-}
-
-export function settingsSummaryChips(settings: AudioSettingsSnapshot): string[] {
-  const chips: string[] = [];
-  if (settings.id3v2Enabled) {
-    chips.push(`ID3v2 ${DIRECTION_LABEL[settings.id3v2Direction]}`);
-    if (settings.id3v2RepairSourceEncoding) {
-      chips.push(`${encodingLabel(settings.id3v2SourceEncoding)} 錯碼修復`);
-    }
-  }
-  if (settings.id3v1Enabled) {
-    chips.push(
-      `ID3v1 ${encodingLabel(settings.id3v1SourceEncoding)}→${encodingLabel(settings.id3v1OutputEncoding)}`,
-    );
-  }
-  chips.push(`APE/Vorbis ${DIRECTION_LABEL[settings.direction]}`);
-  if (settings.vocabularyCorrection) chips.push("詞彙修正");
-  chips.push(settings.backup ? "備份 .bak" : "不備份");
-  if (settings.id3v2Enabled) {
-    chips.push(
-      `ID3v2.${settings.id3v2Version}・${ID3V2_ENCODING_LABEL[settings.id3v2Encoding] ?? settings.id3v2Encoding}`,
-    );
-  }
-  if ((settings.tagOperationCount ?? 0) > 0) {
-    chips.push(`標籤操作 ${settings.tagOperationCount} 條`);
-  }
-  return chips;
 }
 
 export const TAG_RULE_FIELDS: ReadonlyArray<readonly [string, string]> = [

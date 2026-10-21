@@ -495,4 +495,24 @@ describe("音訊掃描修正", () => {
     expect(folders[1]).toBe("/tmp");
     wrapper.unmount();
   });
+
+  it("可從列表移除檔案，預覽不會把篩選切回有變更", async () => {
+    openDialog.mockResolvedValueOnce(["/tmp/a.mp3", "/tmp/b.mp3"]);
+    coreRequest.mockImplementation(async (operation: string) => {
+      if (operation === "audio.scan") return [file("/tmp/a.mp3"), file("/tmp/b.mp3")];
+      if (operation === "audio.plan") {
+        return { planId: "plan-rm", files: [planned("/tmp/a.mp3"), planned("/tmp/b.mp3")] };
+      }
+      return undefined;
+    });
+    const wrapper = mountPage();
+    await flushPromises();
+    await buttonByText(wrapper, "選取音訊檔案")!.trigger("click");
+    await flushPromises();
+    await wrapper.get('[aria-label="從列表移除 a.mp3"]').trigger("click");
+    await flushPromises();
+    expect(wrapper.text()).not.toContain("a.mp3");
+    expect(wrapper.text()).toContain("b.mp3");
+    wrapper.unmount();
+  });
 });

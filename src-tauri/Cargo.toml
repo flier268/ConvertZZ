@@ -1,6 +1,6 @@
 [package]
 name = "convertzz"
-version = "2.0.0-beta11"
+version.workspace = true
 description = "Cross-platform Chinese text conversion desktop application"
 authors = ["ConvertZZ contributors"]
 license = "GPL-3.0-only"
@@ -12,6 +12,9 @@ default-run = "convertzz"
 [workspace]
 members = ["roundtrip-dict"]
 resolver = "2"
+
+[workspace.package]
+version = "2.0.0-beta11"
 
 [lib]
 name = "convertzz_lib"

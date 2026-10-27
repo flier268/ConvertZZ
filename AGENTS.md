@@ -59,6 +59,7 @@ Wiki 在 `wiki/`。修改後先於 `wiki/` 內 commit 並 `git push origin maste
 - Rust 格式檢查：`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`。
 - `pnpm run tauri:build` 與 `pnpm run test:qemu` 很重，只在使用者明確要求發行或乾淨環境驗證時執行。
 - `pnpm run test:e2e` 用 Playwright 對 Vite 前端做畫面測試，Tauri API 由 `e2e/mocks/` 模擬。不要把這條指令加進 `pnpm run check`。
+- 產品版本只寫在 `package.json`。升版用 `pnpm bump-version <版本>`，它會同步 `src-tauri/Cargo.toml` 的 `[workspace.package]` 與 `Cargo.lock` 裡 convertzz／roundtrip-dict。不要手改 `tauri.conf.json`、`roundtrip-dict/Cargo.toml`、e2e 模擬或 `docs/MIGRATION_COMPLETED.md` 的版本字串。
 
 ## 套件更新
 

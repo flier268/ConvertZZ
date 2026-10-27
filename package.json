@@ -22,7 +22,8 @@
     "fmt": "prettier --write . && cargo fmt --manifest-path src-tauri/Cargo.toml",
     "fmt:check": "prettier --check . && cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
     "prepare": "node scripts/setup-git-hooks.mjs",
-    "check": "prettier --check . && pnpm run typecheck && pnpm test && pnpm run build:web"
+    "check": "prettier --check . && pnpm run typecheck && pnpm test && pnpm run build:web",
+    "bump-version": "node scripts/bump-version.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "2.3.2",

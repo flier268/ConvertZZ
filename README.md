@@ -392,6 +392,17 @@ pnpm run tauri:build
 
 ## 發行
 
+升版只改產品版本來源，再打標籤。`package.json` 的 `version` 是單一來源；`tauri.conf.json` 指向該檔，Cargo crate 共用 `[workspace.package]`。其餘檔案不要手改。
+
+```bash
+pnpm bump-version 2.0.0-beta12
+git add package.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+git commit -m "chore: 版本升至 2.0.0-beta12"
+git tag -a v2.0.0-beta12 -m "ConvertZZ v2.0.0-beta12"
+```
+
+在 VS Code 也可執行工作「升版」，輸入版本號後會跑同一條指令。
+
 Windows x64 會產生 NSIS 安裝程式，以及解壓即可執行的免安裝 zip。免安裝 zip 內含 `portable` 標記，設定會寫在程式目錄的 `settings-v2.json`，可整包帶走；不支援應用程式內自動更新。預發行版本（例如 `2.0.0-beta1`）不產 MSI：WiX 只接受純數字預發行號。
 
 Linux x64 會產生 AppImage、DEB 與 RPM。

@@ -1,0 +1,22 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "升版",
+      "type": "shell",
+      "command": "pnpm bump-version ${input:appVersion}",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "appVersion",
+      "type": "promptString",
+      "description": "產品版本（例如 2.0.0-beta12）"
+    }
+  ]
+}

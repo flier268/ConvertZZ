@@ -91,6 +91,8 @@ cat ~/.tauri/convertzz.key
 
 這是刻意的。
 
+macOS Gatekeeper（「無法驗證是否為惡意軟體」）與這組 minisign 金鑰無關。要讓系統信任安裝包，請另設 Apple Developer ID 並公證，見 [macOS 簽名與公證](MACOS_SIGNING.md)。
+
 ## 發行時會發生什麼
 
 推送 `v*` 標籤，或手動執行 Release 工作流程。

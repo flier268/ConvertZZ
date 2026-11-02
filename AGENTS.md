@@ -113,6 +113,7 @@ Vitest 涵蓋 `src/**/*.test.ts` 與 `tests/**/*.test.ts`。轉換核心單元�
 - 舊 WPF 原始碼已於 K-07 移除；可自 git 標籤 `legacy-wpf-final` 回復 `ConvertZZ/`。
 - 命令列以 2.0 `--flag` 為準（如 `--output`、`--direction`、`--headless`、`--yes`）；舊版 `/o:utf8`、`/f:t` 等仍可解析但不做後續擴充。檔案作業須先預覽（GUI）或 CLI 計劃摘要後確認。無頭模式（`--headless`，或明確 `--output`／`-o` 且未指定 `--file`／`--audio`）全程不開 GUI，寫入需 `--yes`／`-y` 或 TTY 確認（是／否）；`--audio --filename` 先寫標籤再改名、只確認一次。不要恢復無確認寫入。無頭預設不讀設定，須由命令列提供必要參數（至少 `--direction`）；`--globalconfig` 載入本機全域／可攜設定，`--config <路徑>` 載入指定設定檔（二者不可併用）。無頭在 `tauri::Builder`／single-instance 之前 early-exit，行為不依賴 GUI 是否已開啟。
 - 自動更新簽署 Windows 安裝程式、Linux AppImage 與 macOS `.app.tar.gz`。公鑰放在 `tauri.conf.json`，私鑰只存在 GitHub Secrets `TAURI_SIGNING_PRIVATE_KEY`。
+- macOS Gatekeeper 需要 Apple Developer ID 憑證與公證（`APPLE_CERTIFICATE`、`APPLE_ID`／`APPLE_API_KEY` 等 Secrets）。沒有憑證時發行仍可進行，使用者需在「隱私權與安全性」按「仍要打開」。說明見 `docs/MACOS_SIGNING.md`。
 - 授權維持 GPL-3.0-only。第三方授權聲明必須同步更新。
 
 ## 代理程式注意事項

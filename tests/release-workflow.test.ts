@@ -91,6 +91,12 @@ describe("發行工作流程契約", () => {
     expect(workflow).toContain("**/*.app.tar.gz");
     expect(workflow).toContain("verify-macos-app.mjs");
     expect(workflow).toContain("brew install ffmpeg");
+    expect(workflow).toContain("APPLE_CERTIFICATE");
+    expect(workflow).toContain("APPLE_API_KEY_P8");
+    expect(workflow).toContain("Developer ID Application");
+    expect(workflow).toContain("spctl --assess");
+    expect(workflow).toContain("stapler validate");
+    expect(tauri).toContain('"hardenedRuntime": true');
     expect(tauri).toContain('"app"');
     expect(tauri).toContain('"dmg"');
   });
@@ -144,6 +150,8 @@ describe("發行工作流程契約", () => {
     expect(workflow).toContain("自動更新會驗證 latest.json 與安裝包簽章。");
     expect(workflow).toContain("DEB、RPM 與 Windows 免安裝 zip 請改從本頁下載。");
     expect(workflow).toContain("所有發行檔仍可用隨附的 SHA-256 檔案驗證。");
+    expect(workflow).toContain("系統設定 → 隱私權與安全性");
+    expect(workflow).toContain("xattr -cr /Applications/ConvertZZ.app");
     expect(workflow).not.toContain("作業系統程式碼簽章");
   });
 

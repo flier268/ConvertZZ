@@ -427,7 +427,16 @@ Linux x64 會產生 AppImage、DEB 與 RPM。
 
 Linux 基準環境是 Ubuntu 22.04。
 
-macOS 會產生 Universal DMG（Apple Silicon 與 Intel）。請把應用程式拖到「應用程式」資料夾。若系統提示無法開啟，請在 Finder 對應用程式按右鍵再選「開啟」。
+macOS 會產生 Universal DMG（Apple Silicon 與 Intel）。請把應用程式拖到「應用程式」資料夾。
+
+未以 Apple Developer ID 公證時，系統會顯示「無法驗證是否為惡意軟體」。請打開「系統設定 → 隱私權與安全性」，捲到下方按「仍要打開」；或在終端機執行：
+
+```bash
+xattr -cr /Applications/ConvertZZ.app
+open /Applications/ConvertZZ.app
+```
+
+要讓這則提示消失，需要付費的 Apple Developer 帳號、Developer ID Application 憑證，以及公證。GitHub Secrets 與發行步驟見 [macOS 簽名與公證](docs/MACOS_SIGNING.md)。
 
 GitHub Actions 會建立草稿 Release。
 
@@ -441,7 +450,7 @@ DEB 與 RPM 不會自動覆寫，程式會改開啟 GitHub Releases。
 
 發行工作流程會簽署更新產物並上傳 `latest.json`。
 
-金鑰產生、GitHub Secrets 與發行注意事項請見 [自動更新金鑰與發行說明](docs/AUTO_UPDATE.md)。
+金鑰產生、GitHub Secrets 與發行注意事項請見 [自動更新金鑰與發行說明](docs/AUTO_UPDATE.md)。macOS Gatekeeper 與 Developer ID 公證請見 [macOS 簽名與公證](docs/MACOS_SIGNING.md)。
 
 第三方授權請見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 

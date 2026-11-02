@@ -277,6 +277,7 @@ fn file_candidates() -> Vec<PathBuf> {
         candidates.push(directory.join("conversion-specials/rules.txt"));
         candidates.push(directory.join("resources/conversion-specials/rules.txt"));
         candidates.push(directory.join("../lib/ConvertZZ/conversion-specials/rules.txt"));
+        candidates.push(directory.join("../Resources/conversion-specials/rules.txt"));
     }
     if let Some(appdir) = std::env::var_os("APPDIR").map(PathBuf::from) {
         candidates.push(appdir.join("usr/lib/ConvertZZ/conversion-specials/rules.txt"));

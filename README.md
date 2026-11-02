@@ -4,7 +4,7 @@ ConvertZZ 是跨平台中文轉換工具。
 
 2.0 版使用 Vue、Element Plus、Tauri 2 與 Rust 轉換核心。
 
-正式支援 Windows x64 與 Linux x64。
+正式支援 Windows x64、Linux x64 與 macOS Universal（Apple Silicon 與 Intel）。
 
 下載請前往 [GitHub Releases](https://github.com/flier268/ConvertZZ/releases)。
 
@@ -76,12 +76,12 @@ Linux 缺少 Secret Service 時只會保留於目前工作階段。
 
 ## 音訊標籤
 
-| 格式 | 標籤容器 | Windows | Linux |
-| --- | --- | --- | --- |
-| MP3 | ID3v1、ID3v2.3、ID3v2.4 | 支援 | 支援 |
-| APE | APEv2 | 支援 | 支援 |
-| OGG、OGA | Vorbis Comment | 支援 | 支援 |
-| Opus | Vorbis Comment | 支援 | 支援 |
+| 格式 | 標籤容器 | Windows | Linux | macOS |
+| --- | --- | --- | --- | --- |
+| MP3 | ID3v1、ID3v2.3、ID3v2.4 | 支援 | 支援 | 支援 |
+| APE | APEv2 | 支援 | 支援 | 支援 |
+| OGG、OGA | Vorbis Comment | 支援 | 支援 | 支援 |
+| Opus | Vorbis Comment | 支援 | 支援 | 支援 |
 
 音訊標籤由 Rust 核心以 `id3` 與 `lofty` 處理。
 
@@ -129,17 +129,17 @@ APEv2 與 Vorbis Comment 固定使用 UTF-8。
 
 ## 平台差異
 
-| 功能 | Windows | Linux X11 | Linux Wayland |
-| --- | --- | --- | --- |
-| 文字、檔案與檔名轉換 | 完整 | 完整 | 完整 |
-| ID3、APEv2、OGG、Opus 標籤 | 完整 | 完整 | 完整 |
-| 全域快捷鍵 | 完整 | 完整 | 本版停用 |
-| 自動複製與貼上 | 完整 | 完整 | 停用 |
-| 浮動球置頂 | 完整 | 完整 | 依合成器 |
-| SendTo 捷徑 | 完整 | 不適用 | 不適用 |
-| 系統托盤 | 左鍵與選單完整 | 需 AppIndicator；使用選單開啟 | 需 AppIndicator；使用選單開啟 |
-| 憑證庫 | Windows Credential Manager | Secret Service | Secret Service |
-| 自動更新 | 安裝程式可下載安裝 | AppImage 可下載安裝；DEB／RPM 開啟下載頁 | AppImage 可下載安裝；DEB／RPM 開啟下載頁 |
+| 功能 | Windows | Linux X11 | Linux Wayland | macOS |
+| --- | --- | --- | --- | --- |
+| 文字、檔案與檔名轉換 | 完整 | 完整 | 完整 | 完整 |
+| ID3、APEv2、OGG、Opus 標籤 | 完整 | 完整 | 完整 | 完整 |
+| 全域快捷鍵 | 完整 | 完整 | 本版停用 | 完整 |
+| 自動複製與貼上 | 完整 | 完整 | 停用 | 完整；需輔助使用權限 |
+| 浮動球置頂 | 完整 | 完整 | 依合成器 | 完整 |
+| SendTo 捷徑 | 完整 | 不適用 | 不適用 | 不適用 |
+| 系統托盤 | 左鍵與選單完整 | 需 AppIndicator；使用選單開啟 | 需 AppIndicator；使用選單開啟 | 選單列圖示與選單 |
+| 憑證庫 | Windows Credential Manager | Secret Service | Secret Service | 鑰匙圈 |
+| 自動更新 | 安裝程式可下載安裝 | AppImage 可下載安裝；DEB／RPM 開啟下載頁 | AppImage 可下載安裝；DEB／RPM 開啟下載頁 | DMG／應用程式包可下載安裝 |
 
 Wayland 不允許一般應用程式注入鍵盤事件。
 
@@ -303,6 +303,18 @@ git clone --recurse-submodules https://github.com/flier268/ConvertZZ.git
 
 Windows 需要 WebView2。
 
+macOS 需要 Xcode Command Line Tools。
+
+```bash
+xcode-select --install
+```
+
+發行 Universal 安裝包時另需 Intel 與 Apple Silicon 兩個 Rust 目標。
+
+```bash
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+```
+
 Ubuntu 22.04 建置全部 Linux 發行格式時可安裝下列套件。
 
 ```bash
@@ -390,6 +402,12 @@ pnpm run test:qemu
 pnpm run tauri:build
 ```
 
+macOS 發行 Universal DMG：
+
+```bash
+pnpm tauri build --bundles app,dmg --target universal-apple-darwin
+```
+
 ## 發行
 
 升版只改產品版本來源，再打標籤。`package.json` 的 `version` 是單一來源；`tauri.conf.json` 指向該檔，Cargo crate 共用 `[workspace.package]`。其餘檔案不要手改。
@@ -409,11 +427,13 @@ Linux x64 會產生 AppImage、DEB 與 RPM。
 
 Linux 基準環境是 Ubuntu 22.04。
 
+macOS 會產生 Universal DMG（Apple Silicon 與 Intel）。請把應用程式拖到「應用程式」資料夾。若系統提示無法開啟，請在 Finder 對應用程式按右鍵再選「開啟」。
+
 GitHub Actions 會建立草稿 Release。
 
 每個發行檔會附帶 SHA-256。
 
-Windows 安裝程式與 Linux AppImage 支援應用程式內自動更新。
+Windows 安裝程式、Linux AppImage 與 macOS 應用程式包支援應用程式內自動更新。
 
 更新檔會以 minisign 公鑰驗證。
 

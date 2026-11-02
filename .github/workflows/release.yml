@@ -34,6 +34,11 @@ jobs:
           - os: ubuntu-22.04
             artifact: linux-x64
             bundles: appimage,deb,rpm
+          - os: macos-latest
+            artifact: macos-universal
+            bundles: app,dmg
+            target: universal-apple-darwin
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -45,6 +50,9 @@ jobs:
           node-version: 24
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
+      - name: 加入 macOS Universal 編譯目標
+        if: runner.os == 'macOS'
+        run: rustup target add ${{ matrix.rust_targets }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
@@ -56,6 +64,9 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential ffmpeg file libayatana-appindicator3-dev libdbus-1-dev \
             librsvg2-dev libwebkit2gtk-4.1-dev patchelf pkg-config rpm
+      - name: 安裝 macOS 建置套件
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
       - name: 確認更新私鑰
         shell: bash
         env:
@@ -70,13 +81,13 @@ jobs:
       - name: 執行測試
         run: pnpm run check
       - name: 執行 Rust 核心測試
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' || runner.os == 'macOS'
         run: cargo test --manifest-path src-tauri/Cargo.toml --workspace -- --test-threads=1
       - name: 建立安裝包
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: pnpm tauri build --bundles ${{ matrix.bundles }} --config src-tauri/tauri.updater.conf.json
+        run: pnpm tauri build --bundles ${{ matrix.bundles }} --config src-tauri/tauri.updater.conf.json ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
       - name: 建立 Windows 免安裝版
         if: runner.os == 'Windows'
         shell: bash
@@ -87,6 +98,17 @@ jobs:
             --release-dir src-tauri/target/release \
             --version "$version" \
             --out-dir src-tauri/target/release/bundle/portable
+      - name: 離線驗證 macOS 應用程式包
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          apps=(src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app)
+          test "${#apps[@]}" -eq 1
+          node scripts/verify-macos-app.mjs \
+            "${apps[0]}" \
+            tests/fixtures/mac-399.ape \
+            tests/fixtures/test.ogg
       - name: 離線驗證 AppImage 內的轉換核心
         if: runner.os == 'Linux'
         shell: bash
@@ -99,6 +121,13 @@ jobs:
             "${appimages[0]}" \
             tests/fixtures/mac-399.ape \
             tests/fixtures/test.ogg
+      - name: 建立 macOS SHA-256
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="src-tauri/target/universal-apple-darwin/release/bundle"
+          shasum -a 256 "$bundle"/dmg/*.dmg "$bundle"/macos/*.app.tar.gz > SHA256SUMS-macos-universal.txt
       - name: 建立 Linux SHA-256
         if: runner.os == 'Linux'
         shell: bash
@@ -153,6 +182,9 @@ jobs:
             src-tauri/target/release/bundle/**/*.exe
             src-tauri/target/release/bundle/**/*.zip
             src-tauri/target/release/bundle/**/*.sig
+            src-tauri/target/universal-apple-darwin/release/bundle/**/*.dmg
+            src-tauri/target/universal-apple-darwin/release/bundle/**/*.app.tar.gz
+            src-tauri/target/universal-apple-darwin/release/bundle/**/*.sig
             SHA256SUMS-*.txt
             RUNTIME-DEPENDENCIES-*.txt
           if-no-files-found: error
@@ -193,12 +225,15 @@ jobs:
             | Linux x64（建議） | [`ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.AppImage`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.AppImage) | 免安裝；支援應用程式內自動更新 |
             | Linux x64（DEB） | [`ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.deb`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.deb) | 以 APT 安裝；請改從本頁下載更新 |
             | Linux x64（RPM） | [`ConvertZZ-${{ env.RELEASE_VERSION }}-1.x86_64.rpm`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ-${{ env.RELEASE_VERSION }}-1.x86_64.rpm) | 以 DNF 安裝；請改從本頁下載更新 |
+            | macOS Universal（建議） | [`ConvertZZ_${{ env.RELEASE_VERSION }}_universal.dmg`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_universal.dmg) | 拖到「應用程式」資料夾；Apple Silicon 與 Intel 皆可用；支援應用程式內自動更新 |
 
-            Windows 安裝程式與 Linux AppImage 可用應用程式內自動更新。
+            Windows 安裝程式、Linux AppImage 與 macOS 應用程式包可用應用程式內自動更新。
 
             自動更新會驗證 latest.json 與安裝包簽章。
 
             DEB、RPM 與 Windows 免安裝 zip 請改從本頁下載。
+
+            macOS 若提示無法開啟，請在 Finder 對應用程式按右鍵再選「開啟」。
 
             所有發行檔仍可用隨附的 SHA-256 檔案驗證。
           files: artifacts/**/*

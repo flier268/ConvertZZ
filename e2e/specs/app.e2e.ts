@@ -372,6 +372,7 @@ test.describe("ConvertZZ 前端", () => {
     await expect(page.getByText("SendTo 捷徑")).toBeVisible();
     await expect(page.getByText("需 AppIndicator；使用選單開啟").first()).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "Linux Wayland" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "macOS" })).toBeVisible();
   });
 
   test("D-11 儲存字典前會詢問", async ({ page }) => {

@@ -163,6 +163,8 @@ fn segment_dict_candidates(executable: Option<&Path>, appdir: Option<&Path>) -> 
         candidates.push(directory.join("resources/segment-dict"));
         // Linux AppImage／DEB／RPM：二進位在 usr/bin，資源在 usr/lib/ConvertZZ。
         candidates.push(directory.join("../lib/ConvertZZ/segment-dict"));
+        // macOS .app：二進位在 Contents/MacOS，資源在 Contents/Resources。
+        candidates.push(directory.join("../Resources/segment-dict"));
     }
     if let Some(appdir) = appdir {
         candidates.push(appdir.join("usr/lib/ConvertZZ/segment-dict"));
@@ -199,6 +201,7 @@ fn extra_correction_candidates(executable: Option<&Path>, appdir: Option<&Path>)
         candidates.push(directory.join("extra-correction"));
         candidates.push(directory.join("resources/extra-correction"));
         candidates.push(directory.join("../lib/ConvertZZ/extra-correction"));
+        candidates.push(directory.join("../Resources/extra-correction"));
     }
     if let Some(appdir) = appdir {
         candidates.push(appdir.join("usr/lib/ConvertZZ/extra-correction"));

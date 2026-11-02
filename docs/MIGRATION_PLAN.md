@@ -15,7 +15,7 @@
 - 版本提升為 `2.0.0`。
 - 桌面介面遷移至 Vue 3、Element Plus 與 Tauri 2。
 - 文字與檔案核心遷移至 Rust（`cjk-convert-rs`、`ws-segment-rs`）。
-- Windows x64 與 Linux x64 共用相同轉換核心。
+- Windows x64、Linux x64 與 macOS Universal 共用相同轉換核心。
 - 新式分詞轉換成為預設方法。
 - 舊版六欄字典保留為相容方法。
 - APE 與 OGG 標籤成為正式支援功能。
@@ -124,7 +124,7 @@ AppIndicator 開發套件只存在於建置環境。
 
 將分詞字典與字典資源一併封入安裝包；轉換核心與桌面層同程序，不另外封裝外部程序。
 
-建立 Windows 與 Linux 發行工作流程。
+建立 Windows、Linux 與 macOS 發行工作流程。
 
 本階段完成後，乾淨環境可直接安裝及執行。
 

@@ -34,6 +34,7 @@ export function buildLatestJson({ files, tag, repo, pubDate }) {
   const downloadBase = `https://github.com/${repo}/releases/download/${tag}`;
   const windows = findSignedAsset(files, (name) => name.endsWith("-setup.exe"));
   const linux = findSignedAsset(files, (name) => name.endsWith(".AppImage"));
+  const macos = findSignedAsset(files, (name) => name.endsWith(".app.tar.gz"));
   /** @type {Record<string, { signature: string; url: string }>} */
   const platforms = {};
   if (windows) {
@@ -48,8 +49,17 @@ export function buildLatestJson({ files, tag, repo, pubDate }) {
       url: `${downloadBase}/${linux.name}`,
     };
   }
+  if (macos) {
+    const entry = {
+      signature: macos.signature,
+      url: `${downloadBase}/${macos.name}`,
+    };
+    platforms["darwin-aarch64"] = entry;
+    platforms["darwin-x86_64"] = entry;
+    platforms["darwin-universal"] = entry;
+  }
   if (Object.keys(platforms).length === 0) {
-    throw new Error("找不到已簽署的 Windows NSIS 或 Linux AppImage。");
+    throw new Error("找不到已簽署的 Windows NSIS、Linux AppImage 或 macOS 應用程式包。");
   }
   return {
     version,

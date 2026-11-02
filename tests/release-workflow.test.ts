@@ -53,6 +53,8 @@ describe("發行工作流程契約", () => {
     expect(tauri).toContain('"appimage"');
     expect(tauri).toContain('"deb"');
     expect(tauri).toContain('"rpm"');
+    expect(tauri).toContain('"app"');
+    expect(tauri).toContain('"dmg"');
     expect(tauri).not.toContain('"msi"');
     expect(tauri).toContain('"wix"');
   });
@@ -79,9 +81,25 @@ describe("發行工作流程契約", () => {
     expect(workflow).toContain("**/*.rpm");
   });
 
+  it("macOS matrix 產出 Universal DMG 與應用程式包", () => {
+    expect(workflow).toContain("os: macos-latest");
+    expect(workflow).toContain("artifact: macos-universal");
+    expect(workflow).toContain("bundles: app,dmg");
+    expect(workflow).toContain("target: universal-apple-darwin");
+    expect(workflow).toContain("rust_targets: aarch64-apple-darwin,x86_64-apple-darwin");
+    expect(workflow).toContain("rustup target add ${{ matrix.rust_targets }}");
+    expect(workflow).toContain("**/*.dmg");
+    expect(workflow).toContain("**/*.app.tar.gz");
+    expect(workflow).toContain("verify-macos-app.mjs");
+    expect(workflow).toContain("brew install ffmpeg");
+    expect(tauri).toContain('"app"');
+    expect(tauri).toContain('"dmg"');
+  });
+
   it("J-06 發行產物會建立 SHA-256 校驗檔", () => {
     expect(workflow).toContain("SHA256SUMS-linux-x64.txt");
     expect(workflow).toContain("SHA256SUMS-windows-x64.txt");
+    expect(workflow).toContain("SHA256SUMS-macos-universal.txt");
     expect(workflow).toContain("sha256sum src-tauri/target/release/bundle/appimage/*.AppImage");
     expect(workflow).toContain("Get-FileHash -Algorithm SHA256");
     expect(workflow).toContain("SHA256SUMS-*.txt");
@@ -117,8 +135,13 @@ describe("發行工作流程契約", () => {
     expect(workflow).toContain(
       "[`ConvertZZ-${{ env.RELEASE_VERSION }}-1.x86_64.rpm`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ-${{ env.RELEASE_VERSION }}-1.x86_64.rpm)",
     );
+    expect(workflow).toContain(
+      "[`ConvertZZ_${{ env.RELEASE_VERSION }}_universal.dmg`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_universal.dmg)",
+    );
     expect(workflow).toContain("RELEASE_VERSION=${RELEASE_TAG#v}");
-    expect(workflow).toContain("Windows 安裝程式與 Linux AppImage 可用應用程式內自動更新。");
+    expect(workflow).toContain(
+      "Windows 安裝程式、Linux AppImage 與 macOS 應用程式包可用應用程式內自動更新。",
+    );
     expect(workflow).toContain("自動更新會驗證 latest.json 與安裝包簽章。");
     expect(workflow).toContain("DEB、RPM 與 Windows 免安裝 zip 請改從本頁下載。");
     expect(workflow).toContain("所有發行檔仍可用隨附的 SHA-256 檔案驗證。");
@@ -135,7 +158,7 @@ describe("發行工作流程契約", () => {
     expect(channelWorkflow).not.toContain("per_page=30");
   });
 
-  it("G-15 簽署更新只涵蓋 Windows 安裝程式與 Linux AppImage", () => {
+  it("G-15 簽署更新涵蓋 Windows 安裝程式、Linux AppImage 與 macOS 應用程式包", () => {
     expect(updater).toContain('"createUpdaterArtifacts": true');
     expect(workflow).toContain("tauri.updater.conf.json");
     expect(workflow).toContain("TAURI_SIGNING_PRIVATE_KEY");

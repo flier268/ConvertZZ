@@ -349,6 +349,8 @@ fn discover_dictionary(app: Option<&AppHandle>) -> Option<std::path::PathBuf> {
     if let Ok(executable) = std::env::current_exe() {
         if let Some(directory) = executable.parent() {
             candidates.push(directory.join("Dictionary.csv"));
+            candidates.push(directory.join("../lib/ConvertZZ/Dictionary.csv"));
+            candidates.push(directory.join("../Resources/Dictionary.csv"));
         }
     }
     candidates.push(

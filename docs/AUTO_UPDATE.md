@@ -105,6 +105,7 @@ cat ~/.tauri/convertzz.key
 
 - Windows：`*-setup.exe` 與它的 `.sig`
 - Linux：`*.AppImage` 與它的 `.sig`
+- macOS：`*.app.tar.gz` 與它的 `.sig`（Universal 產物同時對應 `darwin-aarch64`、`darwin-x86_64`、`darwin-universal`）
 
 然後寫出 `latest.json`，一併放到草稿 Release。
 
@@ -118,7 +119,7 @@ cat ~/.tauri/convertzz.key
 
 含 `-` 的發行標籤（如 `v2.0.0-beta1`）會在 GitHub Release 標成 Pre-release，因此不會成為 `/releases/latest`。發佈這類 Release 後，工作流程會把 `alpha`、`beta` 或 `rc` 標籤強制移到該 commit；標籤已存在時會覆蓋。
 
-開啟開發／預發佈檢查時，簽署自動更新會改查該目標版本的 `latest.json`（例如 `.../releases/download/v2.1.0-beta1/latest.json`），不再只看 `/releases/latest`。Windows 安裝程式與 Linux AppImage 可直接下載安裝開發版；該版本沒有簽署清單時才改開下載頁。
+開啟開發／預發佈檢查時，簽署自動更新會改查該目標版本的 `latest.json`（例如 `.../releases/download/v2.1.0-beta1/latest.json`），不再只看 `/releases/latest`。Windows 安裝程式、Linux AppImage 與 macOS 應用程式包可直接下載安裝開發版；該版本沒有簽署清單時才改開下載頁。
 
 草稿 Release 不會被程式查到。
 
@@ -130,6 +131,7 @@ cat ~/.tauri/convertzz.key
 | --- | --- |
 | Windows NSIS | 先詢問，確認後下載、驗證簽章、安裝並重啟 |
 | Linux AppImage | 同上 |
+| macOS DMG／.app | 同上。更新安裝包是簽署過的 `.app.tar.gz` |
 | Linux DEB / RPM | 無法就地覆寫。程式會改開啟 GitHub Releases |
 | Windows 免安裝 zip | 不納入自動更新產物。請改從 GitHub Releases 下載。設定寫在程式目錄的 `settings-v2.json`，可整包帶走 |
 

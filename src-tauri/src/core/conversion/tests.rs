@@ -593,6 +593,15 @@ fn segment_dict_candidates_include_linux_bundle_layout() {
 }
 
 #[test]
+fn segment_dict_candidates_include_macos_bundle_layout() {
+    let exe = Path::new("/tmp/ConvertZZ.app/Contents/MacOS/convertzz");
+    let candidates = super::segment_dict_candidates(Some(exe), None);
+    assert!(candidates.iter().any(|path| {
+        path == Path::new("/tmp/ConvertZZ.app/Contents/MacOS/../Resources/segment-dict")
+    }));
+}
+
+#[test]
 fn segment_dict_candidates_resolve_extracted_appimage_layout() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/tmp-segment-dict-layout");
     let bin_dir = root.join("usr/bin");

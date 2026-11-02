@@ -31,38 +31,48 @@ async function checkForUpdates(): Promise<void> {
   }
 }
 
-type PlatformColumn = "windows" | "x11" | "wayland";
+type PlatformColumn = "windows" | "x11" | "wayland" | "macos";
 
 const platformColumns: Array<{ key: PlatformColumn; label: string }> = [
   { key: "windows", label: "Windows" },
   { key: "x11", label: "Linux X11" },
   { key: "wayland", label: "Linux Wayland" },
+  { key: "macos", label: "macOS" },
 ];
 
 const differences: Array<{ feature: string } & Record<PlatformColumn, string>> = [
-  { feature: "文字、檔案與檔名轉換", windows: "完整", x11: "完整", wayland: "完整" },
-  { feature: "ID3、APEv2、OGG、Opus 標籤", windows: "完整", x11: "完整", wayland: "完整" },
-  { feature: "全域快捷鍵", windows: "完整", x11: "完整", wayland: "本版停用" },
-  { feature: "自動複製與貼上", windows: "完整", x11: "完整", wayland: "停用" },
-  { feature: "浮動球置頂", windows: "完整", x11: "完整", wayland: "依合成器" },
-  { feature: "SendTo 捷徑", windows: "完整", x11: "不適用", wayland: "不適用" },
+  { feature: "文字、檔案與檔名轉換", windows: "完整", x11: "完整", wayland: "完整", macos: "完整" },
+  {
+    feature: "ID3、APEv2、OGG、Opus 標籤",
+    windows: "完整",
+    x11: "完整",
+    wayland: "完整",
+    macos: "完整",
+  },
+  { feature: "全域快捷鍵", windows: "完整", x11: "完整", wayland: "本版停用", macos: "完整" },
+  { feature: "自動複製與貼上", windows: "完整", x11: "完整", wayland: "停用", macos: "完整" },
+  { feature: "浮動球置頂", windows: "完整", x11: "完整", wayland: "依合成器", macos: "完整" },
+  { feature: "SendTo 捷徑", windows: "完整", x11: "不適用", wayland: "不適用", macos: "不適用" },
   {
     feature: "系統托盤",
     windows: "左鍵與選單完整",
     x11: "需 AppIndicator；使用選單開啟",
     wayland: "需 AppIndicator；使用選單開啟",
+    macos: "選單列圖示與選單",
   },
   {
     feature: "憑證庫",
     windows: "Windows Credential Manager",
     x11: "Secret Service",
     wayland: "Secret Service",
+    macos: "鑰匙圈",
   },
   {
     feature: "自動更新",
     windows: "安裝程式可下載安裝",
     x11: "AppImage 可下載安裝；DEB／RPM 開啟下載頁",
     wayland: "AppImage 可下載安裝；DEB／RPM 開啟下載頁",
+    macos: "DMG／應用程式包可下載安裝",
   },
 ];
 
@@ -93,6 +103,7 @@ const currentColumn = computed<PlatformColumn | null>(() => {
   const value = capabilities.value;
   if (!value) return null;
   if (value.platform === "windows") return "windows";
+  if (value.platform === "macos") return "macos";
   if (value.displayServer === "x11") return "x11";
   if (value.displayServer === "wayland") return "wayland";
   return null;
@@ -128,7 +139,8 @@ function capabilityTone(value: string): "success" | "warning" | "info" | undefin
         <div>
           <h2>新的核心。</h2>
           <p>
-            Vue 與 Element Plus 提供介面。Rust 轉換核心在同程序提供相同的 Windows 與 Linux 結果。
+            Vue 與 Element Plus 提供介面。Rust 轉換核心在同程序提供相同的 Windows、Linux 與 macOS
+            結果。
           </p>
         </div>
       </el-card>

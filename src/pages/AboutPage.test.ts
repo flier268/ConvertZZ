@@ -65,6 +65,22 @@ describe("關於與差異", () => {
     expect(wrapper.text()).toContain("目前環境：linux / x11");
     expect(wrapper.get("th.is-current").text()).toContain("Linux X11");
     expect(wrapper.get("th.is-current").text()).toContain("目前");
+    expect(wrapper.text()).toContain("macOS");
+    expect(wrapper.text()).toContain("鑰匙圈");
+    wrapper.unmount();
+  });
+
+  it("macOS 環境會標示目前欄並顯示輔助使用限制", async () => {
+    const wrapper = await mountPage({
+      ...linuxX11,
+      platform: "macos",
+      displayServer: "macos",
+      sendToShortcut: false,
+      limitations: ["自動複製貼上需要輔助使用（Accessibility）權限。"],
+    });
+    expect(wrapper.text()).toContain("目前環境：macos / macos");
+    expect(wrapper.get("th.is-current").text()).toContain("macOS");
+    expect(wrapper.text()).toContain("自動複製貼上需要輔助使用（Accessibility）權限。");
     wrapper.unmount();
   });
 

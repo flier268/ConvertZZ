@@ -37,6 +37,38 @@ describe("latest.json", () => {
     });
   });
 
+  it("組出 macOS Universal 的簽署更新清單", () => {
+    const root = mkdtempSync(join(tmpdir(), "convertzz-latest-mac-"));
+    writeFileSync(join(root, "ConvertZZ_2.1.0_x64-setup.exe"), "exe");
+    writeFileSync(join(root, "ConvertZZ_2.1.0_x64-setup.exe.sig"), "windows-sig\n");
+    writeFileSync(join(root, "ConvertZZ_2.1.0_amd64.AppImage"), "appimage");
+    writeFileSync(join(root, "ConvertZZ_2.1.0_amd64.AppImage.sig"), "linux-sig\n");
+    writeFileSync(join(root, "ConvertZZ.app.tar.gz"), "app");
+    writeFileSync(join(root, "ConvertZZ.app.tar.gz.sig"), "macos-sig\n");
+
+    expect(
+      buildLatestJson({
+        files: collectFiles(root),
+        tag: "v2.1.0",
+        repo: "flier268/ConvertZZ",
+        pubDate: "2026-08-15T00:00:00.000Z",
+      }).platforms,
+    ).toMatchObject({
+      "darwin-aarch64": {
+        signature: "macos-sig",
+        url: "https://github.com/flier268/ConvertZZ/releases/download/v2.1.0/ConvertZZ.app.tar.gz",
+      },
+      "darwin-x86_64": {
+        signature: "macos-sig",
+        url: "https://github.com/flier268/ConvertZZ/releases/download/v2.1.0/ConvertZZ.app.tar.gz",
+      },
+      "darwin-universal": {
+        signature: "macos-sig",
+        url: "https://github.com/flier268/ConvertZZ/releases/download/v2.1.0/ConvertZZ.app.tar.gz",
+      },
+    });
+  });
+
   it("預發佈標籤會保留 SemVer 預發佈字串", () => {
     const root = mkdtempSync(join(tmpdir(), "convertzz-latest-beta-"));
     writeFileSync(join(root, "ConvertZZ_2.0.0-beta1_x64-setup.exe"), "exe");

@@ -423,6 +423,19 @@ describe("Tauri desktop shell", () => {
     expect(verifier).toContain("segment-dict");
   });
 
+  it("verifies the macOS app bundle layout and universal architectures", () => {
+    const workflow = readProjectFile(".github/workflows/release.yml");
+    const verifier = readProjectFile("scripts/verify-macos-app.mjs");
+
+    expect(workflow).toContain("node scripts/verify-macos-app.mjs");
+    expect(workflow).toContain("universal-apple-darwin");
+    expect(verifier).toContain('"Contents", "MacOS"');
+    expect(verifier).toContain('"Contents", "Resources"');
+    expect(verifier).toContain("segment-dict");
+    expect(verifier).toContain("arm64");
+    expect(verifier).toContain("x86_64");
+  });
+
   it("documents a QEMU clean Ubuntu guest for Linux package acceptance", () => {
     const qemu = readProjectFile("scripts/qemu-linux.mjs");
     const verifier = readProjectFile("scripts/verify-linux-qemu.mjs");

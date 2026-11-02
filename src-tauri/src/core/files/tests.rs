@@ -4214,6 +4214,31 @@ fn trailing_dot_name_has_no_extension() {
 }
 
 #[cfg(unix)]
+#[test]
+fn invalid_utf8_name_helpers_work_without_creating_the_file() {
+    use std::os::unix::ffi::OsStrExt;
+    let mut raw = encode_text("中国", TextEncoding::Gbk, false).unwrap();
+    raw.extend_from_slice(b".txt");
+    let source = PathBuf::from("tmp").join(std::ffi::OsStr::from_bytes(&raw));
+    assert!(has_invalid_utf8_name(&source));
+    assert!(!has_invalid_utf8_name(Path::new("中国.txt")));
+
+    let mut output = PathBuf::from("out").join("x.txt");
+    let mut warnings = Vec::new();
+    assert!(keep_invalid_utf8_name(&source, &mut output, &mut warnings));
+    assert_eq!(output, source);
+    assert!(warnings.join("").contains("UTF-8"));
+
+    output = PathBuf::from("tmp").join(std::ffi::OsStr::from_bytes(&raw));
+    warnings.clear();
+    assert!(!keep_invalid_utf8_name(&source, &mut output, &mut warnings));
+    assert_eq!(output, source);
+    assert!(warnings.join("").contains("UTF-8"));
+}
+
+/// macOS／APFS 拒絕非 UTF-8 檔名（errno 92 Illegal byte sequence）。
+/// 非法檔名只在 Linux 上建得成，見 `keep_invalid_utf8_name`。
+#[cfg(all(unix, not(target_os = "macos")))]
 #[tokio::test]
 async fn filename_mode_preview_shows_invalid_utf8_name_instead_of_blank() {
     use std::os::unix::ffi::OsStrExt;
@@ -4255,7 +4280,7 @@ async fn filename_mode_preview_shows_invalid_utf8_name_instead_of_blank() {
     let _ = std::fs::remove_dir_all(&directory);
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 #[tokio::test]
 async fn invalid_utf8_name_is_skipped_when_output_goes_elsewhere() {
     use std::os::unix::ffi::OsStrExt;

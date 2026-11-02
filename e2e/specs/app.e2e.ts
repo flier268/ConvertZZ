@@ -492,7 +492,7 @@ test.describe("ConvertZZ 前端", () => {
       .poll(async () => (await e2eState(page)).confirms ?? [])
       .toEqual(expect.arrayContaining([expect.stringContaining("將寫入")]));
     await expect(page.getByRole("button", { name: "建立標籤預覽" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "重新載入" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "重新掃描" })).toBeVisible();
   });
 
   test("音訊備份覆寫需要額外確認", async ({ page }) => {

@@ -86,8 +86,7 @@ describe("發行工作流程契約", () => {
     expect(workflow).toContain("artifact: macos-universal");
     expect(workflow).toContain("bundles: app,dmg");
     expect(workflow).toContain("target: universal-apple-darwin");
-    expect(workflow).toContain("rust_targets: aarch64-apple-darwin,x86_64-apple-darwin");
-    expect(workflow).toContain("rustup target add ${{ matrix.rust_targets }}");
+    expect(workflow).toContain("rustup target add aarch64-apple-darwin x86_64-apple-darwin");
     expect(workflow).toContain("**/*.dmg");
     expect(workflow).toContain("**/*.app.tar.gz");
     expect(workflow).toContain("verify-macos-app.mjs");

@@ -152,6 +152,8 @@ test.describe("音訊標籤審閱", () => {
     await expect(page.getByRole("radio", { name: "錯誤 0" })).toBeVisible();
     await segment(page, "有變更 234").click();
     await expect(page.getByRole("radio", { name: "有變更 234" })).toBeChecked();
+    await scrollAudioRow(page, "broken.mp3");
+    await page.locator(".audio-name", { hasText: "broken.mp3" }).click();
     await expect(page.locator(".audio-detail")).toContainText("夜曲繁");
     await expect(page.locator(".audio-detail")).not.toContainText("不能勾選");
     await page.screenshot({ path: join(shots, "audio-after-rescan.png") });

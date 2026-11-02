@@ -38,7 +38,6 @@ jobs:
             artifact: macos-universal
             bundles: app,dmg
             target: universal-apple-darwin
-            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -52,7 +51,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: 加入 macOS Universal 編譯目標
         if: runner.os == 'macOS'
-        run: rustup target add ${{ matrix.rust_targets }}
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri

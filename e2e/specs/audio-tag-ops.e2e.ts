@@ -19,7 +19,7 @@ test("標籤操作規則、詳細來源與警告", async ({ page }) => {
   await page.getByRole("button", { name: "清理多餘標籤" }).click();
   await expect(page.getByText("以 ID3v2 為主合併到 ID3v1")).toBeVisible();
   await expect(page.getByText("有的播放器偏好 APEv2")).toBeVisible();
-  await expect(page.getByText("標籤操作 2 條")).toBeVisible();
+  await expect(page.locator(".audio-rule")).toHaveCount(2);
   await expect(page.getByText("規則由上到下執行")).toBeVisible();
   await page.screenshot({ path: join(shots, "ops-rules-drawer.png") });
   await expect(page.getByText("移除標籤").first()).toBeVisible();
@@ -65,7 +65,9 @@ test("音訊頁沒有並排標籤欄與複製標籤", async ({ page }) => {
   await expect(page.getByText("並排標籤欄")).toHaveCount(0);
   await expect(page.locator(".audio-view-switch")).toHaveCount(0);
   await expect(page.getByRole("menuitem", { name: /複製到/ })).toHaveCount(0);
-  await expect(page.getByText("標題").first()).toBeVisible();
+  await expect(
+    page.locator(".audio-detail").getByRole("cell", { name: "標題" }).first(),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "標籤操作" }).click();
   await page.getByRole("button", { name: "清理多餘標籤" }).click();

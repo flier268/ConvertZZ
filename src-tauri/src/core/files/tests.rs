@@ -3004,7 +3004,7 @@ fn sparse_binary(path: &Path, size: u64) {
 async fn large_binary_is_skipped_from_header_and_renamed_without_copy() {
     let directory = temp_dir();
     let source = directory.join("简体影片.bin");
-    // 遠大於文字上限；若整檔讀入會非常慢且吃大量記憶體。
+    // 遠大於一般檔案；若整檔讀入會非常慢且吃大量記憶體。
     sparse_binary(&source, 4 * 1024 * 1024 * 1024);
     #[cfg(unix)]
     let inode = {
@@ -3048,31 +3048,260 @@ async fn large_binary_is_skipped_from_header_and_renamed_without_copy() {
 }
 
 #[tokio::test]
-async fn text_over_size_cap_is_skipped_with_warning() {
+async fn text_larger_than_inspect_head_is_converted() {
     let directory = temp_dir();
     let source = directory.join("大檔.txt");
-    {
-        use std::io::Write;
-        let mut file = std::io::BufWriter::new(std::fs::File::create(&source).unwrap());
-        let line = "软件开发测试\n".repeat(1024);
-        while file.get_ref().metadata().unwrap().len() <= MAX_TEXT_FILE_BYTES {
-            file.write_all(line.as_bytes()).unwrap();
-            file.flush().unwrap();
-        }
-    }
-    let size = std::fs::metadata(&source).unwrap().len();
+    // 超過檔頭長度，確認讀完檔頭後仍會整檔轉換，而不是略過。
+    let body = format!(
+        "{}开发",
+        "软件".repeat(INSPECT_HEAD_BYTES / "软件".len() + 1)
+    );
+    std::fs::write(&source, &body).unwrap();
     let (result, item) = preview_and_apply(&source, FileMode::Content).await;
-    assert!(result.succeeded.is_empty(), "{result:?}");
-    assert!(item
-        .warning
-        .as_deref()
-        .unwrap_or_default()
-        .contains("64 MiB"));
-    assert!(result
-        .warnings
-        .iter()
-        .any(|warning| warning.contains("64 MiB")));
-    assert_eq!(std::fs::metadata(&source).unwrap().len(), size);
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert_eq!(result.succeeded.len(), 1, "{result:?}");
+    assert!(
+        item.warning.as_deref().unwrap_or_default().is_empty(),
+        "{:?}",
+        item.warning
+    );
+    assert_eq!(
+        std::fs::read_to_string(&source).unwrap(),
+        format!(
+            "{}開發",
+            "軟件".repeat(INSPECT_HEAD_BYTES / "软件".len() + 1)
+        )
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn stream_segmented_matches_in_memory_across_window() {
+    let directory = temp_dir();
+    let source = directory.join("長文.txt");
+    let cut = super::stream::STREAM_FLUSH_CHARS - super::stream::STREAM_OVERLAP_CHARS;
+    let prefix = "软件".repeat((cut - 2) / 2);
+    let body = format!("{}冲上前发起{}", prefix, "开发".repeat(64));
+    std::fs::write(&source, &body).unwrap();
+    let expected = shared_conversion()
+        .convert(conversion_s2t().with_text(body.clone()))
+        .await
+        .unwrap()
+        .text;
+    assert!(expected.contains("衝上前發起"), "{expected}");
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            FilePlanRequest {
+                paths: vec![source.to_string_lossy().into_owned()],
+                output_path: None,
+                output_directory: None,
+                mode: FileMode::Content,
+                recursive: false,
+                input_encoding: TextEncoding::Utf8,
+                output_encoding: TextEncoding::Utf8,
+                add_bom: false,
+                fix_charset_declaration: false,
+                fix_charset_extensions: None,
+                allowed_extensions: None,
+                extension_filter: None,
+                preview_max_bytes: Some(1024),
+                conflict_policy: ConflictPolicy::Skip,
+                backup: Some(false),
+                include_ignored: false,
+                conversion: conversion_s2t(),
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert_eq!(std::fs::read_to_string(&source).unwrap(), expected);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn glyph_only_stream_keeps_conversion_warning() {
+    let directory = temp_dir();
+    let source = directory.join("字.txt");
+    std::fs::write(&source, "开发").unwrap();
+    let service = FileService::new();
+    let request = FilePlanRequest {
+        paths: vec![source.to_string_lossy().into_owned()],
+        output_path: None,
+        output_directory: None,
+        mode: FileMode::Content,
+        recursive: false,
+        input_encoding: TextEncoding::Utf8,
+        output_encoding: TextEncoding::Utf8,
+        add_bom: false,
+        fix_charset_declaration: false,
+        fix_charset_extensions: None,
+        allowed_extensions: None,
+        extension_filter: None,
+        preview_max_bytes: Some(1024),
+        conflict_policy: ConflictPolicy::Skip,
+        backup: Some(false),
+        include_ignored: false,
+        conversion: ConversionOptions {
+            vocabulary_correction: Some(false),
+            ..conversion_s2t()
+        },
+    };
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("詞彙修正已停用")),
+        "{result:?}"
+    );
+    assert_eq!(std::fs::read_to_string(&source).unwrap(), "開發");
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn stream_progress_uses_file_bytes() {
+    let directory = temp_dir();
+    let source = directory.join("進度.txt");
+    let body = "软件".repeat(20_000);
+    std::fs::write(&source, &body).unwrap();
+    let size = std::fs::metadata(&source).unwrap().len();
+    assert!(size > super::STREAM_CHUNK_BYTES as u64);
+    let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let progress = {
+        let events = std::sync::Arc::clone(&events);
+        Arc::new(move |event: super::super::types::ProgressEvent| {
+            events.lock().unwrap().push(event);
+        })
+    };
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            FilePlanRequest {
+                paths: vec![source.to_string_lossy().into_owned()],
+                output_path: None,
+                output_directory: None,
+                mode: FileMode::Content,
+                recursive: false,
+                input_encoding: TextEncoding::Utf8,
+                output_encoding: TextEncoding::Utf8,
+                add_bom: false,
+                fix_charset_declaration: false,
+                fix_charset_extensions: None,
+                allowed_extensions: None,
+                extension_filter: None,
+                preview_max_bytes: Some(1024),
+                conflict_policy: ConflictPolicy::Skip,
+                backup: Some(false),
+                include_ignored: false,
+                conversion: conversion_s2t(),
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            progress,
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    let events = events.lock().unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|event| event.total == size && event.current < event.total),
+        "{events:?}"
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| event.total == size && event.current == size),
+        "{events:?}"
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn zhconvert_stream_apply_on_current_thread() {
+    let (url, state) = crate::core::zhconvert::start_mock();
+    let mut conversion = super::super::conversion::ConversionService::new(Some(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/Dictionary.csv"),
+    ))
+    .unwrap();
+    conversion.zhconvert = crate::core::zhconvert::ZhConvertClient::with_base_url(url);
+    let directory = temp_dir();
+    let source = directory.join("雲端.txt");
+    std::fs::write(&source, "里面。开发").unwrap();
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            &conversion,
+            FilePlanRequest {
+                paths: vec![source.to_string_lossy().into_owned()],
+                output_path: None,
+                output_directory: None,
+                mode: FileMode::Content,
+                recursive: false,
+                input_encoding: TextEncoding::Utf8,
+                output_encoding: TextEncoding::Utf8,
+                add_bom: false,
+                fix_charset_declaration: false,
+                fix_charset_extensions: None,
+                allowed_extensions: None,
+                extension_filter: None,
+                preview_max_bytes: Some(1024),
+                conflict_policy: ConflictPolicy::Skip,
+                backup: Some(false),
+                include_ignored: false,
+                conversion: ConversionOptions {
+                    engine: EngineKind::Zhconvert,
+                    ..conversion_s2t()
+                },
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    let result = service
+        .apply(&conversion, &plan.plan_id, None, noop(), never_cancel())
+        .await
+        .unwrap();
+    state.lock().unwrap().stop = true;
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert_eq!(std::fs::read_to_string(&source).unwrap(), "裡面。开发");
     let _ = std::fs::remove_dir_all(&directory);
 }
 
@@ -3139,6 +3368,7 @@ fn prepared_unchanged_file(source: &Path, output: &Path, policy: ConflictPolicy)
             warning: None,
         },
         content: None,
+        convert_content: false,
         conflict_policy: policy,
     }
 }

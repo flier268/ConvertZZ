@@ -95,6 +95,88 @@ fn reinterpret_roundtrips_shared_cjk() {
 }
 
 #[test]
+fn stream_decode_matches_full_across_chunk_boundaries() {
+    let source = "中文測試ABC~軟體裡面開發";
+    for encoding in [
+        TextEncoding::Utf8,
+        TextEncoding::Utf8Bom,
+        TextEncoding::Utf16le,
+        TextEncoding::Utf16be,
+        TextEncoding::Big5,
+        TextEncoding::Gbk,
+        TextEncoding::HzGb2312,
+    ] {
+        let encoded = encode_text(source, encoding, encoding == TextEncoding::Utf8Bom).unwrap();
+        let full = decode_text(&encoded, encoding).unwrap().0;
+        for split in 0..=encoded.len() {
+            let mut decoder = StreamDecoder::new(encoding).unwrap();
+            let (head, head_errors) = decoder.push(&encoded[..split], false).unwrap();
+            let (tail, tail_errors) = decoder.push(&encoded[split..], true).unwrap();
+            assert!(!head_errors && !tail_errors, "{encoding:?} split {split}");
+            assert_eq!(format!("{head}{tail}"), full, "{encoding:?} split {split}");
+        }
+    }
+}
+
+#[test]
+fn stream_decode_utf16_keeps_surrogate_pair_across_byte_splits() {
+    let source = "A𠀀B";
+    for encoding in [TextEncoding::Utf16le, TextEncoding::Utf16be] {
+        let encoded = encode_text(source, encoding, false).unwrap();
+        for split in 0..=encoded.len() {
+            let mut decoder = StreamDecoder::new(encoding).unwrap();
+            let (head, head_errors) = decoder.push(&encoded[..split], false).unwrap();
+            let (tail, tail_errors) = decoder.push(&encoded[split..], true).unwrap();
+            assert!(
+                !head_errors && !tail_errors,
+                "{encoding:?} split {split} errors"
+            );
+            assert_eq!(
+                format!("{head}{tail}"),
+                source,
+                "{encoding:?} split {split}"
+            );
+        }
+        let mut decoder = StreamDecoder::new(encoding).unwrap();
+        let mut joined = String::new();
+        for (index, byte) in encoded.iter().enumerate() {
+            let last = index + 1 == encoded.len();
+            let (piece, errors) = decoder.push(&[*byte], last).unwrap();
+            assert!(!errors, "{encoding:?} byte {index}");
+            joined.push_str(&piece);
+        }
+        assert_eq!(joined, source, "{encoding:?} one-byte chunks");
+    }
+}
+
+#[test]
+fn stream_encode_matches_full_across_char_boundaries() {
+    let source = "中文測試ABC~軟體裡面開發";
+    for encoding in [
+        TextEncoding::Utf8,
+        TextEncoding::Utf8Bom,
+        TextEncoding::Utf16le,
+        TextEncoding::Gbk,
+        TextEncoding::Big5,
+        TextEncoding::HzGb2312,
+    ] {
+        let add_bom = encoding == TextEncoding::Utf8Bom;
+        let full = encode_text(source, encoding, add_bom).unwrap();
+        let chars: Vec<char> = source.chars().collect();
+        for split in 0..=chars.len() {
+            let mut encoder = StreamEncoder::new(encoding, add_bom).unwrap();
+            let head: String = chars[..split].iter().collect();
+            let tail: String = chars[split..].iter().collect();
+            let first = encoder.push(&head, false).unwrap();
+            let second = encoder.push(&tail, true).unwrap();
+            let mut joined = first;
+            joined.extend(second);
+            assert_eq!(joined, full, "{encoding:?} split {split}");
+        }
+    }
+}
+
+#[test]
 fn detects_bom() {
     assert_eq!(
         detect_encoding(&encode_text("測試", TextEncoding::Utf8Bom, true).unwrap()),

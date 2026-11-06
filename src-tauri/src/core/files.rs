@@ -1,10 +1,8 @@
 use super::backup::{
     create_user_backups, resolve_backup_roots, resolve_path, wildcard_matcher, BackupRoot,
 };
-use super::conversion::{base_convert, ConversionService};
-use super::encoding::{
-    can_roundtrip, decode_text_detailed, detect_encoding, encode_text, reinterpret_text,
-};
+use super::conversion::{base_convert, uses_zhconvert, ConversionService};
+use super::encoding::{can_roundtrip, decode_text_detailed, detect_encoding, reinterpret_text};
 use super::error::CoreError;
 use super::parallelism::default_convert_jobs;
 use super::types::{
@@ -14,7 +12,7 @@ use super::types::{
     ProgressReporter, ScanExtensionStatsRequest, TextEncoding,
 };
 use chrono::Utc;
-use futures::stream::{self, StreamExt};
+use futures::stream::StreamExt;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::fs;
@@ -24,6 +22,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
+mod stream;
+
 type ConvertHook = Arc<dyn Fn(&str) -> String + Send + Sync>;
 type StageValidator =
     Arc<dyn Fn(&Path, Option<&[u8]>, &Path) -> Result<(), CoreError> + Send + Sync>;
@@ -31,6 +31,7 @@ type StageValidator =
 struct PreparedFile {
     item: FilePlanItem,
     content: Option<Vec<u8>>,
+    convert_content: bool,
     conflict_policy: ConflictPolicy,
 }
 
@@ -210,6 +211,7 @@ impl FileService {
                         warning: Some(error.message),
                     },
                     content: None,
+                    convert_content: false,
                     conflict_policy: request.conflict_policy,
                 }),
             }
@@ -288,6 +290,7 @@ impl FileService {
                         ),
                     },
                     content: None,
+                    convert_content: false,
                     conflict_policy: request.conflict_policy,
                 });
             }
@@ -357,7 +360,8 @@ impl FileService {
             .preview_max_bytes
             .unwrap_or(6 * 1024)
             .clamp(1024, 1024 * 1024) as usize;
-        let inspected = inspect_file(&source_path, plan_request.input_encoding)?;
+        let inspected =
+            inspect_preview(&source_path, plan_request.input_encoding, preview_max_bytes)?;
         let (source_preview, output_preview, detected_encoding, content_warning) = match inspected {
             InspectedBytes::Skip(reason) => (String::new(), String::new(), None, Some(reason)),
             InspectedBytes::Text { text, encoding } => {
@@ -487,6 +491,7 @@ impl FileService {
                     ),
                 },
                 content: None,
+                convert_content: request.mode != FileMode::Filename,
                 conflict_policy: request.conflict_policy,
             },
             name_warnings,
@@ -537,182 +542,6 @@ impl FileService {
             converted.text
         };
         Ok((text, warnings))
-    }
-
-    async fn prepare_file(
-        &self,
-        conversion: &ConversionService,
-        request: &FilePlanRequest,
-        source_path: &Path,
-        selected: bool,
-        existing_item: Option<&FilePlanItem>,
-        progress: Option<ProgressReporter>,
-        is_cancelled: Option<CancelCheck>,
-    ) -> Result<(PreparedFile, Vec<String>), CoreError> {
-        assert_source_writable(source_path)?;
-        if is_cancelled.as_ref().is_some_and(|check| check()) {
-            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
-        }
-        let inspected = if request.mode == FileMode::Filename {
-            None
-        } else {
-            Some(inspect_file(source_path, request.input_encoding)?)
-        };
-        let content_skip = match &inspected {
-            Some(InspectedBytes::Skip(reason)) => Some(*reason),
-            _ => None,
-        };
-        let decoded = match inspected {
-            Some(InspectedBytes::Text { text, encoding }) => Some((text, encoding)),
-            _ => None,
-        };
-        let converted_content = if let Some((text, _)) = &decoded {
-            Some(
-                self.convert_text(
-                    conversion,
-                    &request.conversion,
-                    text.clone(),
-                    progress.clone(),
-                    is_cancelled.clone(),
-                )
-                .await?,
-            )
-        } else {
-            None
-        };
-        let (converted_name, name_warnings) = if request.mode == FileMode::Content {
-            (file_name(source_path), Vec::new())
-        } else {
-            self.convert_entry_name(
-                conversion,
-                &request.conversion,
-                request.input_encoding,
-                request.output_encoding,
-                &file_name(source_path),
-                is_cancelled.clone(),
-            )
-            .await?
-        };
-        let (mut output_path, path_warnings) = self
-            .resolve_item_output_path(conversion, request, source_path, &converted_name)
-            .await?;
-        let mut name_warnings = name_warnings;
-        name_warnings.extend(path_warnings);
-        if content_skip.is_some() && request.mode == FileMode::Content {
-            output_path = source_path.to_path_buf();
-        }
-        let skip_invalid_name =
-            keep_invalid_utf8_name(source_path, &mut output_path, &mut name_warnings);
-        let output_encoding =
-            resolve_output_encoding(request.output_encoding, decoded.as_ref().map(|item| item.1));
-        let mut output_text = converted_content
-            .as_ref()
-            .map(|item| item.text.clone())
-            .unwrap_or_default();
-        if converted_content.is_some() && request.fix_charset_declaration {
-            output_text = fix_charset_declaration(
-                &output_text,
-                output_encoding,
-                source_path
-                    .extension()
-                    .and_then(|value| value.to_str())
-                    .unwrap_or(""),
-                request.fix_charset_extensions.as_deref(),
-            );
-        }
-        if converted_content.is_some()
-            && request.conversion.direction == super::types::Direction::None
-            && output_encoding == TextEncoding::Big5
-        {
-            output_text = repair_unrepresentable_big5(&output_text);
-        }
-        let conflict = output_path != source_path && output_path.exists();
-        let mut warnings = converted_content
-            .as_ref()
-            .map(|item| item.warnings.clone())
-            .unwrap_or_default();
-        warnings.extend(name_warnings);
-        if let Some(reason) = content_skip {
-            warnings.push(content_skip_message(reason).to_string());
-        }
-        let content = if content_skip.is_some() {
-            None
-        } else if converted_content.is_some() {
-            Some(encode_text(&output_text, output_encoding, request.add_bom)?)
-        } else {
-            None
-        };
-        let preview_max_bytes = request
-            .preview_max_bytes
-            .unwrap_or(6 * 1024)
-            .clamp(1024, 1024 * 1024) as usize;
-        let (source_preview, output_preview, preview_loaded) = if content_skip.is_some() {
-            (String::new(), String::new(), true)
-        } else if let Some(item) = existing_item.filter(|item| item.preview_loaded) {
-            (
-                item.source_preview.clone(),
-                item.output_preview.clone(),
-                true,
-            )
-        } else if converted_content.is_some() {
-            (
-                decoded
-                    .as_ref()
-                    .map(|(text, _)| truncate(text, preview_max_bytes))
-                    .unwrap_or_default(),
-                truncate(&output_text, preview_max_bytes),
-                true,
-            )
-        } else {
-            (file_name(source_path), converted_name, true)
-        };
-        let status = if skip_invalid_name {
-            PlanStatus::Skipped
-        } else if let Some(item) = existing_item {
-            if item.status == PlanStatus::Conflict
-                || (conflict && request.conflict_policy == ConflictPolicy::Skip)
-            {
-                PlanStatus::Conflict
-            } else {
-                PlanStatus::Ready
-            }
-        } else if conflict && request.conflict_policy == ConflictPolicy::Skip {
-            PlanStatus::Conflict
-        } else {
-            PlanStatus::Ready
-        };
-        let skipped_content = content_skip.is_some();
-        let warning = merge_warning(
-            content_skip.map(|reason| content_skip_message(reason).to_string()),
-            existing_item.and_then(|item| item.warning.clone()),
-        );
-        let warning = merge_warning(warning, conflict.then(|| "輸出路徑已存在。".into()));
-        Ok((
-            PreparedFile {
-                item: FilePlanItem {
-                    source_path: source_path.to_string_lossy().into_owned(),
-                    output_path: output_path.to_string_lossy().into_owned(),
-                    kind: FileItemKind::File,
-                    selected,
-                    detected_encoding: if skipped_content {
-                        None
-                    } else {
-                        decoded
-                            .as_ref()
-                            .map(|item| item.1)
-                            .or_else(|| existing_item.and_then(|item| item.detected_encoding))
-                    },
-                    source_preview,
-                    output_preview,
-                    preview_loaded,
-                    status,
-                    warning,
-                },
-                content,
-                conflict_policy: request.conflict_policy,
-            },
-            warnings,
-        ))
     }
 
     async fn resolve_item_output_path(
@@ -1137,7 +966,7 @@ impl FileService {
             batch: None,
         });
         let completed = Arc::new(AtomicU64::new(0));
-        let outcomes = stream::iter(pending_files.into_iter())
+        let outcomes = futures::stream::iter(pending_files.into_iter())
             .map(|file| {
                 let progress = Arc::clone(&progress);
                 let is_cancelled = Arc::clone(&is_cancelled);
@@ -1218,50 +1047,17 @@ impl FileService {
     ) -> Result<OverlapBatchResult, CoreError> {
         let mut batch = OverlapBatchResult::default();
         let mut prepared_files = Vec::with_capacity(pending_files.len());
-        for (offset, file) in pending_files.into_iter().enumerate() {
+        for file in pending_files {
             if is_cancelled() {
                 batch.skipped.push(file.item.source_path);
                 batch.stopped = true;
                 break;
             }
-            let source_path = file.item.source_path.clone();
-            let file_label = file_name(Path::new(&source_path));
-            let progress_label = file_label.clone();
-            let file_progress = map_progress(
-                Arc::clone(&progress),
-                offset as u64,
-                total,
-                move |current, local_total, _message| {
-                    format!(
-                        "正在轉換：{progress_label}（檔案 {}/{total}，內容 {current}/{local_total}）",
-                        offset + 1
-                    )
-                },
-            );
-            match self
-                .materialize_file(
-                    conversion,
-                    request,
-                    file,
-                    Some(file_progress),
-                    Arc::clone(&is_cancelled),
-                )
-                .await
-            {
-                Ok(Some(prepared)) => prepared_files.push(prepared),
-                Ok(None) => batch.skipped.push(source_path),
-                Err(error)
-                    if error.code == "PLAN_CANCELLED" || error.code == "CONVERT_CANCELLED" =>
-                {
-                    batch.skipped.push(source_path);
-                    batch.stopped = true;
-                    break;
-                }
-                Err(error) => batch.failed.push(ApplyFailure {
-                    path: source_path,
-                    message: error.message,
-                }),
+            if file.item.status != PlanStatus::Ready {
+                batch.skipped.push(file.item.source_path);
+                continue;
             }
+            prepared_files.push(file);
         }
         if batch.stopped {
             return Ok(batch);
@@ -1271,8 +1067,8 @@ impl FileService {
         let mut skipped_during_commit = Vec::new();
         let mut unchanged_during_commit = Vec::new();
         let mut skipped_warnings = Vec::new();
-        let stage_result = (|| -> Result<(), CoreError> {
-            for file in prepared_files {
+        let stage_result: Result<(), CoreError> = async {
+            for (offset, mut file) in prepared_files.into_iter().enumerate() {
                 if is_cancelled() {
                     return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
                 }
@@ -1291,12 +1087,65 @@ impl FileService {
                 if let Some(parent) = stage_path.parent() {
                     fs::create_dir_all(parent)?;
                 }
-                if let Some(content) = &file.content {
+                if file.convert_content {
+                    let progress_label = file_name(&source);
+                    let file_progress = map_progress(
+                        Arc::clone(&progress),
+                        offset as u64,
+                        total,
+                        move |current, local_total, _message| {
+                            format!(
+                                "正在轉換：{progress_label}（檔案 {}/{total}，內容 {current}/{local_total}）",
+                                offset + 1
+                            )
+                        },
+                    );
+                    let streamed = self
+                        .stream_file_to_stage(
+                            conversion,
+                            request,
+                            &source,
+                            &stage_path,
+                            Some(file_progress),
+                            Arc::clone(&is_cancelled),
+                        )
+                        .await?;
+                    match streamed {
+                        stream::StreamResult::Skip(reason) => {
+                            let _ = fs::remove_file(&stage_path);
+                            file.item.warning = merge_warning(
+                                Some(content_skip_message(reason).to_string()),
+                                file.item.warning.clone(),
+                            );
+                            if request.mode == FileMode::Content || output == source {
+                                skipped_warnings.extend(content_skip_warnings(&file));
+                                skipped_during_commit.push(file.item.source_path);
+                                continue;
+                            }
+                            fs::copy(&source, &stage_path)?;
+                            verify_stage(&stage_path, None, &source)?;
+                        }
+                        stream::StreamResult::Written(written) => {
+                            file.item.detected_encoding = Some(written.encoding);
+                            skipped_warnings.extend(written.warnings.iter().map(|warning| {
+                                format!("{}：{warning}", file.item.source_path)
+                            }));
+                            file.item.warning = merge_warning(
+                                written
+                                    .warnings
+                                    .into_iter()
+                                    .reduce(|a, b| format!("{a} {b}")),
+                                file.item.warning.clone(),
+                            );
+                        }
+                    }
+                } else if let Some(content) = &file.content {
                     write_stage(&stage_path, content, &source)?;
+                    verify_stage(&stage_path, file.content.as_deref(), &source)?;
                 } else {
                     fs::copy(&source, &stage_path)?;
+                    verify_stage(&stage_path, None, &source)?;
                 }
-                verify_stage(&stage_path, file.content.as_deref(), &source)?;
                 if let Some(validator) = &self.stage_validator {
                     if let Err(error) = validator(&stage_path, file.content.as_deref(), &source) {
                         let _ = fs::remove_file(&stage_path);
@@ -1360,7 +1209,8 @@ impl FileService {
                 });
             }
             Ok(())
-        })();
+        }
+        .await;
 
         batch.skipped.extend(skipped_during_commit);
         batch.unchanged.extend(unchanged_during_commit);
@@ -1403,38 +1253,6 @@ impl FileService {
         Ok(batch)
     }
 
-    async fn materialize_file(
-        &self,
-        conversion: &ConversionService,
-        request: &FilePlanRequest,
-        mut file: PreparedFile,
-        progress: Option<ProgressReporter>,
-        is_cancelled: CancelCheck,
-    ) -> Result<Option<PreparedFile>, CoreError> {
-        if is_cancelled() {
-            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
-        }
-        if request.mode != FileMode::Filename && file.content.is_none() {
-            let item = file.item.clone();
-            let (prepared, _) = self
-                .prepare_file(
-                    conversion,
-                    request,
-                    Path::new(&item.source_path),
-                    item.selected,
-                    Some(&item),
-                    progress,
-                    Some(Arc::clone(&is_cancelled)),
-                )
-                .await?;
-            file = prepared;
-        }
-        if file.item.status != PlanStatus::Ready {
-            return Ok(None);
-        }
-        Ok(Some(file))
-    }
-
     async fn materialize_and_commit_file(
         &self,
         conversion: &ConversionService,
@@ -1444,37 +1262,193 @@ impl FileService {
         is_cancelled: CancelCheck,
     ) -> Result<FileCommitOutcome, CoreError> {
         let source_path = file.item.source_path.clone();
-        let Some(file) = self
-            .materialize_file(
-                conversion,
-                request,
-                file,
-                progress,
-                Arc::clone(&is_cancelled),
-            )
-            .await?
-        else {
+        if is_cancelled() {
+            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+        }
+        if file.item.status != PlanStatus::Ready {
             return Ok(FileCommitOutcome::Skipped {
                 path: source_path,
                 warnings: Vec::new(),
             });
-        };
-        if is_cancelled() {
-            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
         }
         if is_truly_unchanged(request, &file) {
             return Ok(FileCommitOutcome::Unchanged {
                 path: file.item.source_path,
             });
         }
-        if leaves_source_unchanged(request, &file) {
-            let warnings = content_skip_warnings(&file);
-            return Ok(FileCommitOutcome::Skipped {
-                path: file.item.source_path,
-                warnings,
-            });
+        if !file.convert_content {
+            if leaves_source_unchanged(request, &file) {
+                let warnings = content_skip_warnings(&file);
+                return Ok(FileCommitOutcome::Skipped {
+                    path: file.item.source_path,
+                    warnings,
+                });
+            }
+            return commit_prepared_file(file, self.stage_validator.as_ref(), Some(&is_cancelled));
         }
-        commit_prepared_file(file, self.stage_validator.as_ref(), Some(&is_cancelled))
+        self.stream_convert_and_commit(conversion, request, file, progress, is_cancelled)
+            .await
+    }
+
+    async fn stream_convert_and_commit(
+        &self,
+        conversion: &ConversionService,
+        request: &FilePlanRequest,
+        mut file: PreparedFile,
+        progress: Option<ProgressReporter>,
+        is_cancelled: CancelCheck,
+    ) -> Result<FileCommitOutcome, CoreError> {
+        let source = PathBuf::from(&file.item.source_path);
+        let output = PathBuf::from(&file.item.output_path);
+        let stage_path = transaction_path(&output, "stage");
+        if let Some(parent) = stage_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let outcome = self
+            .stream_file_to_stage(
+                conversion,
+                request,
+                &source,
+                &stage_path,
+                progress,
+                Arc::clone(&is_cancelled),
+            )
+            .await?;
+        match outcome {
+            stream::StreamResult::Skip(reason) => {
+                let _ = fs::remove_file(&stage_path);
+                file.item.warning = merge_warning(
+                    Some(content_skip_message(reason).to_string()),
+                    file.item.warning.clone(),
+                );
+                if output == source || request.mode == FileMode::Content {
+                    let warnings = content_skip_warnings(&file);
+                    return Ok(FileCommitOutcome::Skipped {
+                        path: file.item.source_path,
+                        warnings,
+                    });
+                }
+                commit_unchanged_content(file, self.stage_validator.as_ref(), Some(&is_cancelled))
+            }
+            stream::StreamResult::Written(written) => {
+                file.item.detected_encoding = Some(written.encoding);
+                let convert_warnings = written.warnings.clone();
+                file.item.warning = merge_warning(
+                    written
+                        .warnings
+                        .into_iter()
+                        .reduce(|a, b| format!("{a} {b}")),
+                    file.item.warning.clone(),
+                );
+                commit_written_stage(
+                    file,
+                    stage_path,
+                    self.stage_validator.as_ref(),
+                    Some(&is_cancelled),
+                    convert_warnings,
+                )
+            }
+        }
+    }
+
+    async fn stream_file_to_stage(
+        &self,
+        conversion: &ConversionService,
+        request: &FilePlanRequest,
+        source: &Path,
+        stage: &Path,
+        progress: Option<ProgressReporter>,
+        is_cancelled: CancelCheck,
+    ) -> Result<stream::StreamResult, CoreError> {
+        let output_encoding = request.output_encoding;
+        let extension = source
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or("")
+            .to_string();
+        let fix_charset = request.fix_charset_declaration;
+        let fix_exts = request.fix_charset_extensions.clone();
+        let direction = request.conversion.direction;
+        let convert_hook = self.convert_hook.clone();
+        let options = request.conversion.clone();
+        let window = if uses_zhconvert(&options.with_text(".")) {
+            stream::WindowKind::Sentence
+        } else {
+            stream::WindowKind::CjkOverlap
+        };
+        let file_label = file_name(source);
+        stream::stream_convert_path(
+            source,
+            stage,
+            request.input_encoding,
+            output_encoding,
+            request.add_bom,
+            window,
+            |text, skip, hold| {
+                let text = text.to_string();
+                let options = options.clone();
+                let is_cancelled = Arc::clone(&is_cancelled);
+                let convert_hook = convert_hook.clone();
+                async move {
+                    if let Some(hook) = &convert_hook {
+                        return Ok(stream::ConvertedPiece {
+                            text: stream::slice_chars(&hook(&text), skip, hold),
+                            warnings: Vec::new(),
+                        });
+                    }
+                    if uses_zhconvert(&options.with_text(text.as_str())) {
+                        let result = conversion
+                            .convert_with_progress(
+                                options.with_text(text),
+                                None,
+                                Some(is_cancelled),
+                            )
+                            .await?;
+                        return Ok(stream::ConvertedPiece {
+                            text: result.text,
+                            warnings: result.warnings,
+                        });
+                    }
+                    conversion
+                        .convert_window(
+                            options.with_text(text),
+                            skip,
+                            hold,
+                            None,
+                            Some(is_cancelled),
+                        )
+                        .map(|result| stream::ConvertedPiece {
+                            text: result.text,
+                            warnings: result.warnings,
+                        })
+                }
+            },
+            |text, is_head| {
+                if is_head && fix_charset {
+                    *text = fix_charset_declaration(
+                        text,
+                        output_encoding,
+                        &extension,
+                        fix_exts.as_deref(),
+                    );
+                }
+                if direction == Direction::None && output_encoding == TextEncoding::Big5 {
+                    *text = repair_unrepresentable_big5(text);
+                }
+            },
+            |current, total| {
+                if let Some(progress) = &progress {
+                    progress(ProgressEvent {
+                        current,
+                        total: total.max(1),
+                        message: format!("正在轉換並寫入：{file_label}"),
+                        batch: None,
+                    });
+                }
+            },
+            Some(&is_cancelled),
+        )
+        .await
     }
 
     fn clear_cancelled(&self, plan_id: &str) {
@@ -1527,35 +1501,45 @@ fn commit_prepared_file(
     stage_validator: Option<&StageValidator>,
     is_cancelled: Option<&CancelCheck>,
 ) -> Result<FileCommitOutcome, CoreError> {
-    if file.item.output_path == file.item.source_path && file.content.is_none() {
-        let warnings = content_skip_warnings(&file);
-        if file.item.status == PlanStatus::Ready && warnings.is_empty() {
-            return Ok(FileCommitOutcome::Unchanged {
+    if !file.convert_content {
+        if file.item.output_path == file.item.source_path {
+            let warnings = content_skip_warnings(&file);
+            if file.item.status == PlanStatus::Ready && warnings.is_empty() {
+                return Ok(FileCommitOutcome::Unchanged {
+                    path: file.item.source_path,
+                });
+            }
+            return Ok(FileCommitOutcome::Skipped {
                 path: file.item.source_path,
+                warnings,
             });
         }
-        return Ok(FileCommitOutcome::Skipped {
-            path: file.item.source_path,
-            warnings,
-        });
-    }
-    let Some(content) = file.content.as_deref() else {
         return commit_unchanged_content(file, stage_validator, is_cancelled);
-    };
+    }
+    Err(CoreError::new(
+        "FILE_STREAM",
+        "內容轉換必須走串流寫入暫存檔。",
+    ))
+}
+
+fn commit_written_stage(
+    file: PreparedFile,
+    stage_path: PathBuf,
+    stage_validator: Option<&StageValidator>,
+    is_cancelled: Option<&CancelCheck>,
+    convert_warnings: Vec<String>,
+) -> Result<FileCommitOutcome, CoreError> {
     let source = PathBuf::from(&file.item.source_path);
     assert_source_writable(&source)?;
-    let output = PathBuf::from(&file.item.output_path);
-    let stage_path = transaction_path(&output, "stage");
-    if let Some(parent) = stage_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    write_stage(&stage_path, content, &source)?;
-    verify_stage(&stage_path, file.content.as_deref(), &source)?;
     if let Some(validator) = stage_validator {
-        if let Err(error) = validator(&stage_path, file.content.as_deref(), &source) {
+        if let Err(error) = validator(&stage_path, None, &source) {
             let _ = fs::remove_file(&stage_path);
             return Err(error);
         }
+    }
+    if is_cancelled.is_some_and(|check| check()) {
+        let _ = fs::remove_file(&stage_path);
+        return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
     }
 
     let mut entry = TransactionEntry {
@@ -1589,9 +1573,14 @@ fn commit_prepared_file(
         }
         fs::rename(&entry.stage_path, &output)?;
         entry.committed = true;
+        let mut warnings = convert_warnings
+            .into_iter()
+            .map(|warning| format!("{}：{warning}", entry.file.item.source_path))
+            .collect::<Vec<_>>();
+        warnings.extend(content_skip_warnings(&entry.file));
         Ok(FileCommitOutcome::Succeeded {
             output_path: output,
-            warnings: content_skip_warnings(&entry.file),
+            warnings,
         })
     })();
 
@@ -2846,11 +2835,8 @@ fn resolve_committed_directory_path(
 
 const BINARY_CONTENT_WARNING: &str = "此檔案為二進位內容，已略過內容轉換。";
 const DECODE_ERROR_WARNING: &str = "解碼時發生錯誤，已略過內容轉換。";
-const TOO_LARGE_WARNING: &str = "文字檔超過 64 MiB，已略過內容轉換。";
 /// 二進位判斷只讀檔頭這麼多位元組（檔頭 magic、MPEG 下一幀、NUL）。
 const INSPECT_HEAD_BYTES: usize = 64 * 1024;
-/// 內容轉換會把整個文字檔讀進記憶體並解碼；超過此大小直接略過，避免大型檔案吃光記憶體。
-const MAX_TEXT_FILE_BYTES: u64 = 64 * 1024 * 1024;
 /// 串流比對與複製的區塊大小。
 const STREAM_CHUNK_BYTES: usize = 64 * 1024;
 const COPY_CHUNK_BYTES: usize = 1024 * 1024;
@@ -2863,7 +2849,6 @@ const REPLACEMENT_RATIO: f64 = 0.02;
 enum ContentSkip {
     Binary,
     DecodeError,
-    TooLarge,
 }
 
 #[derive(Debug)]
@@ -2879,14 +2864,11 @@ fn content_skip_message(reason: ContentSkip) -> &'static str {
     match reason {
         ContentSkip::Binary => BINARY_CONTENT_WARNING,
         ContentSkip::DecodeError => DECODE_ERROR_WARNING,
-        ContentSkip::TooLarge => TOO_LARGE_WARNING,
     }
 }
 
 fn is_content_skip_warning(warning: &str) -> bool {
-    warning.contains(BINARY_CONTENT_WARNING)
-        || warning.contains(DECODE_ERROR_WARNING)
-        || warning.contains(TOO_LARGE_WARNING)
+    warning.contains(BINARY_CONTENT_WARNING) || warning.contains(DECODE_ERROR_WARNING)
 }
 
 fn content_skip_warnings(file: &PreparedFile) -> Vec<String> {
@@ -2898,7 +2880,7 @@ fn content_skip_warnings(file: &PreparedFile) -> Vec<String> {
         .collect()
 }
 
-/// 來源保持不變且不是因為讀取失敗（二進位、解碼失敗、過大）或非 Ready。
+/// 來源保持不變且不是因為讀取失敗（二進位、解碼失敗）或非 Ready。
 fn is_truly_unchanged(request: &FilePlanRequest, file: &PreparedFile) -> bool {
     file.item.status == PlanStatus::Ready
         && leaves_source_unchanged(request, file)
@@ -2906,7 +2888,8 @@ fn is_truly_unchanged(request: &FilePlanRequest, file: &PreparedFile) -> bool {
 }
 
 fn leaves_source_unchanged(request: &FilePlanRequest, file: &PreparedFile) -> bool {
-    file.content.is_none()
+    !file.convert_content
+        && file.content.is_none()
         && (request.mode == FileMode::Content || file.item.output_path == file.item.source_path)
 }
 
@@ -2932,34 +2915,14 @@ fn merge_warning(incoming: Option<String>, existing: Option<String>) -> Option<S
     }
 }
 
-/// 先只讀檔頭判斷二進位，是二進位或超過大小上限就不再讀整個檔案。
-/// 只有通過檢查的文字檔（不超過 `MAX_TEXT_FILE_BYTES`）才整檔讀入解碼。
-fn inspect_file(path: &Path, requested: TextEncoding) -> Result<InspectedBytes, CoreError> {
-    use std::io::Read;
+fn inspect_preview(
+    path: &Path,
+    requested: TextEncoding,
+    max_chars: usize,
+) -> Result<InspectedBytes, CoreError> {
     let mut file = fs::File::open(path)?;
     let size = file.metadata()?.len();
-    let mut head = Vec::with_capacity(INSPECT_HEAD_BYTES.min(size as usize));
-    (&mut file)
-        .take(INSPECT_HEAD_BYTES as u64)
-        .read_to_end(&mut head)?;
-    if let Some(reason) = inspect_head(&head, requested) {
-        return Ok(InspectedBytes::Skip(reason));
-    }
-    if size > MAX_TEXT_FILE_BYTES {
-        return Ok(InspectedBytes::Skip(ContentSkip::TooLarge));
-    }
-    if (head.len() as u64) < size {
-        // 檔案可能在讀檔頭後變大；最多讀到上限加一個位元組，超過就略過。
-        let mut buffer = head;
-        (&mut file)
-            .take(MAX_TEXT_FILE_BYTES + 1 - buffer.len() as u64)
-            .read_to_end(&mut buffer)?;
-        if buffer.len() as u64 > MAX_TEXT_FILE_BYTES {
-            return Ok(InspectedBytes::Skip(ContentSkip::TooLarge));
-        }
-        return inspect_file_bytes(&buffer, requested);
-    }
-    inspect_file_bytes(&head, requested)
+    stream::inspect_preview_from_reader(&mut file, size, requested, max_chars)
 }
 
 /// 只看檔頭的快速判斷：檔頭 magic，以及非 UTF-16 時的 NUL。

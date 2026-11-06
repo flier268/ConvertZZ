@@ -1,6 +1,9 @@
 use super::error::CoreError;
 use super::types::TextEncoding;
-use encoding_rs::{Encoding, BIG5, EUC_JP, GBK, ISO_2022_JP, SHIFT_JIS, UTF_16BE, UTF_16LE, UTF_8};
+use encoding_rs::{
+    CoderResult, Decoder, Encoder, Encoding, BIG5, EUC_JP, GBK, ISO_2022_JP, SHIFT_JIS, UTF_16BE,
+    UTF_16LE, UTF_8,
+};
 use regex::Regex;
 use std::sync::OnceLock;
 
@@ -291,56 +294,76 @@ fn prepend_bom(output: &mut Vec<u8>, encoding: TextEncoding) {
 }
 
 fn decode_hz(buffer: &[u8]) -> Result<(String, bool), CoreError> {
-    let mut bytes = Vec::new();
-    let mut ascii = Vec::new();
-    let mut chinese = false;
-    let mut index = 0;
-    let flush_ascii = |ascii: &mut Vec<u8>, bytes: &mut Vec<u8>| {
-        bytes.append(ascii);
-    };
-    while index < buffer.len() {
-        let value = buffer[index];
-        if value == b'~' && index + 1 < buffer.len() {
-            match buffer[index + 1] {
-                b'{' => {
-                    flush_ascii(&mut ascii, &mut bytes);
-                    chinese = true;
-                    index += 2;
-                    continue;
-                }
-                b'}' => {
-                    chinese = false;
-                    index += 2;
-                    continue;
-                }
-                b'~' => {
-                    ascii.push(b'~');
-                    index += 2;
-                    continue;
-                }
-                b'\n' => {
-                    index += 2;
-                    continue;
-                }
-                _ => {}
-            }
-        }
-        if chinese {
-            if index + 1 >= buffer.len() {
-                break;
-            }
-            flush_ascii(&mut ascii, &mut bytes);
-            bytes.push(value | 0x80);
-            bytes.push(buffer[index + 1] | 0x80);
-            index += 2;
-        } else {
-            ascii.push(value);
-            index += 1;
+    HzDecoder::new().push(buffer, true)
+}
+
+struct HzDecoder {
+    chinese: bool,
+    pending: Option<u8>,
+    gbk: Decoder,
+}
+
+impl HzDecoder {
+    fn new() -> Self {
+        Self {
+            chinese: false,
+            pending: None,
+            gbk: GBK.new_decoder_without_bom_handling(),
         }
     }
-    flush_ascii(&mut ascii, &mut bytes);
-    let (text, _, had_errors) = encoding_rs::GBK.decode(&bytes);
-    Ok((text.into_owned(), had_errors))
+
+    fn push(&mut self, bytes: &[u8], last: bool) -> Result<(String, bool), CoreError> {
+        let mut framed = Vec::with_capacity(bytes.len() + 1);
+        for &byte in bytes {
+            self.push_byte(byte, &mut framed);
+        }
+        if last {
+            if let Some(pending) = self.pending.take() {
+                if pending == b'~' && !self.chinese {
+                    framed.push(b'~');
+                }
+            }
+        }
+        decode_codec(&mut self.gbk, &framed, last)
+    }
+
+    fn push_byte(&mut self, byte: u8, framed: &mut Vec<u8>) {
+        if let Some(first) = self.pending.take() {
+            self.push_pair(first, byte, framed);
+            return;
+        }
+        if byte == b'~' {
+            self.pending = Some(b'~');
+            return;
+        }
+        if self.chinese {
+            self.pending = Some(byte);
+            return;
+        }
+        framed.push(byte);
+    }
+
+    fn push_pair(&mut self, first: u8, second: u8, framed: &mut Vec<u8>) {
+        if first == b'~' {
+            match second {
+                b'{' => self.chinese = true,
+                b'}' => self.chinese = false,
+                b'~' => framed.push(b'~'),
+                b'\n' => {}
+                _ if self.chinese => {
+                    framed.push(first | 0x80);
+                    framed.push(second | 0x80);
+                }
+                _ => {
+                    framed.push(first);
+                    self.push_byte(second, framed);
+                }
+            }
+            return;
+        }
+        framed.push(first | 0x80);
+        framed.push(second | 0x80);
+    }
 }
 
 fn encode_hz(text: &str) -> Result<Vec<u8>, CoreError> {
@@ -378,6 +401,227 @@ fn encode_hz(text: &str) -> Result<Vec<u8>, CoreError> {
     }
     if chinese {
         output.push_str("~}");
+    }
+    Ok(output.into_bytes())
+}
+
+/// Incremental decoder. BOM is stripped from the first bytes of the first `push`.
+pub struct StreamDecoder {
+    inner: DecoderInner,
+    bom_expected: &'static [u8],
+    bom_buf: Vec<u8>,
+}
+
+enum DecoderInner {
+    Codec(Decoder),
+    Hz(HzDecoder),
+}
+
+impl StreamDecoder {
+    pub fn new(encoding: TextEncoding) -> Result<Self, CoreError> {
+        let bom_expected: &'static [u8] = match encoding {
+            TextEncoding::Utf8 | TextEncoding::Utf8Bom => &[0xef, 0xbb, 0xbf],
+            TextEncoding::Utf16le => &[0xff, 0xfe],
+            TextEncoding::Utf16be => &[0xfe, 0xff],
+            _ => &[],
+        };
+        let inner = match encoding {
+            TextEncoding::HzGb2312 => DecoderInner::Hz(HzDecoder::new()),
+            other => {
+                let codec = encoding_codec(other).ok_or_else(|| {
+                    CoreError::new("ENCODING_UNSUPPORTED", format!("不支援編碼 {other:?}。"))
+                })?;
+                DecoderInner::Codec(codec.new_decoder_without_bom_handling())
+            }
+        };
+        Ok(Self {
+            inner,
+            bom_expected,
+            bom_buf: Vec::new(),
+        })
+    }
+
+    pub fn push(&mut self, mut bytes: &[u8], last: bool) -> Result<(String, bool), CoreError> {
+        if !self.bom_expected.is_empty() {
+            let need = self.bom_expected.len().saturating_sub(self.bom_buf.len());
+            if need > 0 && !bytes.is_empty() {
+                let take = need.min(bytes.len());
+                self.bom_buf.extend_from_slice(&bytes[..take]);
+                bytes = &bytes[take..];
+            }
+            if self.bom_buf.len() < self.bom_expected.len() && !last {
+                return Ok((String::new(), false));
+            }
+            let expected = self.bom_expected;
+            self.bom_expected = &[];
+            if self.bom_buf == expected {
+                self.bom_buf.clear();
+            }
+            if !self.bom_buf.is_empty() {
+                let prefix = std::mem::take(&mut self.bom_buf);
+                let (mut text, mut errors) =
+                    self.decode_inner(&prefix, last && bytes.is_empty())?;
+                if !bytes.is_empty() || last {
+                    let (more, more_errors) = self.decode_inner(bytes, last)?;
+                    text.push_str(&more);
+                    errors |= more_errors;
+                }
+                return Ok((text, errors));
+            }
+        }
+        self.decode_inner(bytes, last)
+    }
+
+    fn decode_inner(&mut self, bytes: &[u8], last: bool) -> Result<(String, bool), CoreError> {
+        match &mut self.inner {
+            DecoderInner::Codec(decoder) => decode_codec(decoder, bytes, last),
+            DecoderInner::Hz(hz) => hz.push(bytes, last),
+        }
+    }
+}
+
+fn decode_codec(
+    decoder: &mut Decoder,
+    bytes: &[u8],
+    last: bool,
+) -> Result<(String, bool), CoreError> {
+    let mut output = String::new();
+    let mut offset = 0;
+    let mut had_errors = false;
+    loop {
+        let remaining = bytes.len() - offset;
+        if let Some(needed) = decoder.max_utf8_buffer_length(remaining) {
+            output.reserve(needed);
+        }
+        let (result, read, errors) = decoder.decode_to_string(
+            &bytes[offset..],
+            &mut output,
+            last && offset + remaining == bytes.len(),
+        );
+        had_errors |= errors;
+        offset += read;
+        match result {
+            CoderResult::InputEmpty => break,
+            CoderResult::OutputFull => continue,
+        }
+    }
+    Ok((output, had_errors))
+}
+
+/// Incremental encoder. Writes BOM on the first non-empty output when requested.
+pub struct StreamEncoder {
+    encoding: TextEncoding,
+    add_bom: bool,
+    bom_done: bool,
+    inner: EncoderInner,
+}
+
+enum EncoderInner {
+    Codec(Encoder),
+    Utf16 { little: bool },
+    Hz { chinese: bool },
+}
+
+impl StreamEncoder {
+    pub fn new(encoding: TextEncoding, add_bom: bool) -> Result<Self, CoreError> {
+        if encoding == TextEncoding::Auto {
+            return Err(CoreError::new(
+                "ENCODING_AUTO_OUTPUT",
+                "輸出編碼不能使用自動偵測。",
+            ));
+        }
+        let inner = match encoding {
+            TextEncoding::HzGb2312 => EncoderInner::Hz { chinese: false },
+            TextEncoding::Utf16le => EncoderInner::Utf16 { little: true },
+            TextEncoding::Utf16be => EncoderInner::Utf16 { little: false },
+            other => {
+                let codec = encoding_codec(other).ok_or_else(|| {
+                    CoreError::new("ENCODING_UNSUPPORTED", format!("不支援編碼 {other:?}。"))
+                })?;
+                EncoderInner::Codec(codec.new_encoder())
+            }
+        };
+        Ok(Self {
+            encoding,
+            add_bom: add_bom || encoding == TextEncoding::Utf8Bom,
+            bom_done: false,
+            inner,
+        })
+    }
+
+    pub fn push(&mut self, text: &str, last: bool) -> Result<Vec<u8>, CoreError> {
+        let mut output = match &mut self.inner {
+            EncoderInner::Codec(encoder) => encode_codec(encoder, text, last)?,
+            EncoderInner::Utf16 { little } => encode_utf16(text, *little),
+            EncoderInner::Hz { chinese } => encode_hz_push(text, last, chinese)?,
+        };
+        if !self.bom_done {
+            if self.add_bom && (!output.is_empty() || last) {
+                prepend_bom(&mut output, self.encoding);
+                self.bom_done = true;
+            } else if !output.is_empty() {
+                self.bom_done = true;
+            }
+        }
+        Ok(output)
+    }
+}
+
+fn encode_codec(encoder: &mut Encoder, text: &str, last: bool) -> Result<Vec<u8>, CoreError> {
+    let mut output = Vec::new();
+    let mut offset = 0;
+    loop {
+        let remaining = text.len() - offset;
+        if let Some(needed) = encoder.max_buffer_length_from_utf8_if_no_unmappables(remaining) {
+            output.reserve(needed);
+        }
+        let (result, read, had_errors) =
+            encoder.encode_from_utf8_to_vec(&text[offset..], &mut output, last);
+        let _ = had_errors;
+        offset += read;
+        match result {
+            CoderResult::InputEmpty => break,
+            CoderResult::OutputFull => continue,
+        }
+    }
+    Ok(output)
+}
+
+fn encode_hz_push(text: &str, last: bool, chinese: &mut bool) -> Result<Vec<u8>, CoreError> {
+    let mut output = String::new();
+    for character in text.chars() {
+        let mut buf = [0; 4];
+        let encoded_char = character.encode_utf8(&mut buf);
+        let (encoded, _, _) = encoding_rs::GBK.encode(encoded_char);
+        let is_ascii = encoded.len() == 1 && encoded[0] < 0x80;
+        if is_ascii {
+            if *chinese {
+                output.push_str("~}");
+                *chinese = false;
+            }
+            if character == '~' {
+                output.push_str("~~");
+            } else {
+                output.push(character);
+            }
+            continue;
+        }
+        if encoded.len() != 2 {
+            return Err(CoreError::new(
+                "HZ_CHARACTER",
+                format!("字元「{character}」無法使用 HZ-GB-2312 表示。"),
+            ));
+        }
+        if !*chinese {
+            output.push_str("~{");
+            *chinese = true;
+        }
+        output.push((encoded[0] & 0x7f) as char);
+        output.push((encoded[1] & 0x7f) as char);
+    }
+    if last && *chinese {
+        output.push_str("~}");
+        *chinese = false;
     }
     Ok(output.into_bytes())
 }

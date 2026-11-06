@@ -316,3 +316,5 @@ fn split_utf8(text: &str, maximum_bytes: usize) -> Vec<String> {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+pub(crate) use tests::start_mock;

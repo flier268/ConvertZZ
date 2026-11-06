@@ -24,6 +24,10 @@ async fn convert(text: &str, direction: Direction, engine: EngineKind) -> String
 async fn segmented_s2t_golden_cases() {
     let service = service();
     for (source, expected) in [
+        (
+            "之前一直觉得自己碍事的外围士兵们不顾死活地冲上前发起进攻。",
+            "之前一直覺得自己礙事的外圍士兵們不顧死活地衝上前發起進攻。",
+        ),
         ("里面", "裡面"),
         ("個別選手表現觀察週報", "個別選手表現觀察週報"),
         ("選手表現", "選手表現"),
@@ -354,6 +358,16 @@ fn convert_segmented_inside_rayon_pool_does_not_deadlock() {
     assert!(results
         .iter()
         .all(|item| item.contains("這裡") && item.contains("里辦")));
+}
+
+#[test]
+fn long_clause_keeps_chong_shang_qian_and_fa_qi() {
+    let source = "之前一直觉得自己碍事的外围士兵们不顾死活地冲上前发起进攻。";
+    let tokens = service().segment_tokens_align(source);
+    assert!(
+        tokens.windows(2).any(|pair| pair == ["冲上前", "发起"]),
+        "long-clause beam should keep 冲上前／发起, got {tokens:?}"
+    );
 }
 
 #[test]
@@ -915,6 +929,42 @@ fn glyph_s2t_min_leaves_fan_as_fan() {
     assert_eq!(super::glyph_s2t("范围"), "范圍");
     assert_eq!(super::glyph_s2t("範圍"), "範圍");
     assert_eq!(super::glyph_s2t("范圍"), "范圍");
+}
+
+#[test]
+fn convert_window_defers_token_that_reaches_hold() {
+    let request = ConversionRequest {
+        text: "冲上前发起".into(),
+        direction: Direction::S2t,
+        engine: EngineKind::Segmented,
+        dictionary_path: None,
+        zhconvert: None,
+        vocabulary_correction: None,
+    };
+    let tokens = service().segment_tokens_align("冲上前发起");
+    assert_eq!(
+        tokens,
+        vec!["冲上前".to_string(), "发起".to_string()],
+        "{tokens:?}"
+    );
+    let full = service()
+        .convert_sync(request.clone(), None, None)
+        .unwrap()
+        .text;
+    assert_eq!(full, "衝上前發起");
+    let sliced_1to1: String = full.chars().skip(2).collect();
+    assert_eq!(sliced_1to1, "前發起");
+    let held = service()
+        .convert_window(request.clone(), 0, 3, None, None)
+        .unwrap()
+        .text;
+    assert_eq!(held, "");
+    let last = service()
+        .convert_window(request, 2, 0, None, None)
+        .unwrap()
+        .text;
+    assert_eq!(last, "衝上前發起");
+    assert_ne!(last, sliced_1to1);
 }
 
 #[tokio::test]

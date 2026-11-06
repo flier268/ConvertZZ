@@ -6339,9 +6339,9 @@ dependencies = [
 
 [[package]]
 name = "ws-segment-rs"
-version = "0.1.4"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d66fd129b937781c85b22bcf5a281314b4ce6dd52b569df358136395a68239f4"
+checksum = "80f76631cc0cbd252dc12f67a2ffc0e775dc113ab8bc7d68cc873af26bc97d94"
 dependencies = [
  "once_cell",
  "regex",
@@ -6352,9 +6352,9 @@ dependencies = [
 
 [[package]]
 name = "ws-segment-rs-dict"
-version = "0.1.4"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f2122cc8d3f07478bb150a49c299240b4e46de82c337ce2925ca2f0a4b39d74"
+checksum = "312e3462dd1db2afbcb93ae7b1f96527142f922e21ae9b2008ec84dc4b417beb"
 dependencies = [
  "serde_json",
 ]

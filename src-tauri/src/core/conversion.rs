@@ -425,7 +425,68 @@ impl ConversionService {
         self.convert_with_progress(request, None, None).await
     }
 
+    pub fn convert_sync(
+        &self,
+        request: ConversionRequest,
+        progress: Option<ProgressReporter>,
+        is_cancelled: Option<CancelCheck>,
+    ) -> Result<ConversionResult, CoreError> {
+        if uses_zhconvert(&request) {
+            return Err(CoreError::new("CONVERT_SYNC", "ZhConvert 需要非同步執行。"));
+        }
+        self.convert_local(request, progress, is_cancelled)
+    }
+
+    /// Convert a stream window. `skip_chars` / `hold_chars` are original scalar counts:
+    /// emit tokens whose original start is in `[skip, window_chars - hold)`.
+    pub fn convert_window(
+        &self,
+        request: ConversionRequest,
+        skip_chars: usize,
+        hold_chars: usize,
+        progress: Option<ProgressReporter>,
+        is_cancelled: Option<CancelCheck>,
+    ) -> Result<ConversionResult, CoreError> {
+        if uses_zhconvert(&request) {
+            return Err(CoreError::new("CONVERT_SYNC", "ZhConvert 需要非同步執行。"));
+        }
+        if skip_chars == 0 && hold_chars == 0 {
+            return self.convert_local(request, progress, is_cancelled);
+        }
+        self.convert_local_window(request, skip_chars, hold_chars, progress, is_cancelled)
+    }
+
     pub async fn convert_with_progress(
+        &self,
+        request: ConversionRequest,
+        progress: Option<ProgressReporter>,
+        is_cancelled: Option<CancelCheck>,
+    ) -> Result<ConversionResult, CoreError> {
+        if uses_zhconvert(&request) {
+            let started = Instant::now();
+            throw_if_cancelled(&is_cancelled)?;
+            let text = self
+                .zhconvert
+                .convert_with_progress(
+                    &request.text,
+                    request.direction,
+                    request.zhconvert.as_ref(),
+                    progress,
+                    is_cancelled,
+                )
+                .await?;
+            return Ok(ConversionResult {
+                text,
+                engine: request.engine,
+                direction: request.direction,
+                warnings: Vec::new(),
+                duration_ms: (started.elapsed().as_secs_f64() * 10_000.0).round() / 100.0,
+            });
+        }
+        self.convert_local(request, progress, is_cancelled)
+    }
+
+    fn convert_local(
         &self,
         request: ConversionRequest,
         progress: Option<ProgressReporter>,
@@ -442,7 +503,6 @@ impl ConversionService {
                 })?;
                 warnings.push("詞彙修正已停用。本次只執行 cjk-convert-rs 字形轉換。".into());
             } else if request.engine == super::types::EngineKind::Segmented {
-                // Segmenting is CPU-bound; keep multi-thread runtimes responsive.
                 text = run_cpu_bound(|| {
                     self.segmented_convert_with_progress(
                         &text,
@@ -472,18 +532,77 @@ impl ConversionService {
                     "未命中字元使用跨平台 cjk-convert-rs，結果可能與舊版 Windows 映射略有差異。"
                         .into(),
                 );
-            } else {
-                text = self
-                    .zhconvert
-                    .convert_with_progress(
+            }
+        }
+        Ok(ConversionResult {
+            text,
+            engine: request.engine,
+            direction: request.direction,
+            warnings,
+            duration_ms: (started.elapsed().as_secs_f64() * 10_000.0).round() / 100.0,
+        })
+    }
+
+    fn convert_local_window(
+        &self,
+        request: ConversionRequest,
+        skip_chars: usize,
+        hold_chars: usize,
+        progress: Option<ProgressReporter>,
+        is_cancelled: Option<CancelCheck>,
+    ) -> Result<ConversionResult, CoreError> {
+        let started = Instant::now();
+        let mut warnings = Vec::new();
+        let mut text = request.text;
+        if request.direction != Direction::None && !text.is_empty() {
+            throw_if_cancelled(&is_cancelled)?;
+            if request.vocabulary_correction == Some(false) {
+                text = run_cpu_bound(|| {
+                    convert_glyphs_chunked(
+                        &slice_chars(&text, skip_chars, hold_chars),
+                        request.direction,
+                        &progress,
+                        &is_cancelled,
+                    )
+                })?;
+                warnings.push("詞彙修正已停用。本次只執行 cjk-convert-rs 字形轉換。".into());
+            } else if request.engine == super::types::EngineKind::Segmented {
+                text = run_cpu_bound(|| {
+                    self.segmented_convert_range(
                         &text,
                         request.direction,
-                        request.zhconvert.as_ref(),
-                        progress.clone(),
-                        is_cancelled.clone(),
+                        skip_chars,
+                        hold_chars,
+                        &progress,
+                        &is_cancelled,
                     )
-                    .await?;
+                })?;
+            } else if request.engine == super::types::EngineKind::Legacy {
+                let path = request
+                    .dictionary_path
+                    .as_deref()
+                    .map(PathBuf::from)
+                    .or_else(|| self.default_dictionary.clone())
+                    .ok_or_else(|| CoreError::new("DICTIONARY_MISSING", "找不到舊版字典。"))?;
+                let dictionary = self.dictionary(&path)?;
+                text = run_cpu_bound(|| {
+                    convert_legacy_chunked(
+                        &dictionary,
+                        &slice_chars(&text, skip_chars, hold_chars),
+                        request.direction,
+                        &progress,
+                        &is_cancelled,
+                    )
+                })?;
+                warnings.push(
+                    "未命中字元使用跨平台 cjk-convert-rs，結果可能與舊版 Windows 映射略有差異。"
+                        .into(),
+                );
+            } else {
+                text = slice_chars(&text, skip_chars, hold_chars);
             }
+        } else {
+            text = slice_chars(&text, skip_chars, hold_chars);
         }
         Ok(ConversionResult {
             text,
@@ -537,6 +656,52 @@ impl ConversionService {
         )
     }
 
+    fn segmented_convert_range(
+        &self,
+        text: &str,
+        direction: Direction,
+        skip_chars: usize,
+        hold_chars: usize,
+        progress: &Option<ProgressReporter>,
+        is_cancelled: &Option<CancelCheck>,
+    ) -> Result<String, CoreError> {
+        let units = collect_segment_units(text);
+        let total_chars = text.chars().count();
+        let emit_end = total_chars.saturating_sub(hold_chars);
+        let mut origin = 0usize;
+        let mut output = String::with_capacity(text.len());
+        let mut done = 0u64;
+        let total = total_chars.max(1) as u64;
+        for unit in units {
+            throw_if_cancelled(is_cancelled)?;
+            let unit_chars = unit.chars as usize;
+            match unit.kind {
+                UnitKind::Plain => {
+                    let converted = base_convert(&text[unit.start..unit.end], direction);
+                    output.push_str(&take_overlap_1to1(
+                        &converted, origin, unit_chars, skip_chars, emit_end,
+                    ));
+                }
+                UnitKind::Cjk => {
+                    let local_skip = skip_chars.saturating_sub(origin).min(unit_chars);
+                    let local_hold = (origin + unit_chars)
+                        .saturating_sub(emit_end)
+                        .min(unit_chars);
+                    output.push_str(&self.segmented_convert_chunk_range(
+                        &text[unit.start..unit.end],
+                        direction,
+                        local_skip,
+                        local_hold,
+                    ));
+                }
+            }
+            origin += unit_chars;
+            done += unit.chars;
+            report_convert_progress(progress, done, total);
+        }
+        Ok(output)
+    }
+
     fn segmented_convert_chunk(&self, chunk: &str, direction: Direction) -> String {
         // 只分詞一次。extra 同義詞依整詞詞性拉回（胜肽、膿疱、錶現），不再跑第二次分詞。
         let words = self
@@ -545,27 +710,68 @@ impl ConversionService {
         words
             .iter()
             .enumerate()
-            .map(|(index, word)| {
-                let pos = word.pos();
-                let prev_pos = index
-                    .checked_sub(1)
-                    .map(|prev| words[prev].pos())
-                    .unwrap_or(0);
-                let from_extra = lookup_extra_synonym(&self.extra_synonym, &word.w, pos, prev_pos)
-                    .unwrap_or(&word.w)
-                    .to_string();
-                let glyph = base_convert(&from_extra, direction);
-                let pulled = if direction == Direction::S2t {
-                    lookup_extra_synonym(&self.extra_synonym, &glyph, pos, prev_pos)
-                        .map(str::to_string)
-                        .unwrap_or(glyph)
-                } else {
-                    glyph
-                };
-                let next = words.get(index + 1).map(|item| item.w.as_str());
-                specials::current().apply_token(&pulled, next, direction, pos, prev_pos)
-            })
+            .map(|(index, _)| self.convert_segment_token(&words, index, direction))
             .collect()
+    }
+
+    fn segmented_convert_chunk_range(
+        &self,
+        chunk: &str,
+        direction: Direction,
+        skip_chars: usize,
+        hold_chars: usize,
+    ) -> String {
+        if skip_chars == 0 && hold_chars == 0 {
+            return self.segmented_convert_chunk(chunk, direction);
+        }
+        let total = chunk.chars().count();
+        let emit_end = total.saturating_sub(hold_chars);
+        let words = self
+            .segmenter
+            .do_segment(chunk, segment_plain_options(direction == Direction::S2t));
+        let last = hold_chars == 0;
+        let mut origin = 0usize;
+        let mut output = String::new();
+        for (index, word) in words.iter().enumerate() {
+            let orig_chars = original_token_chars(word);
+            let start = origin;
+            origin += orig_chars;
+            if token_overlaps_emit(start, orig_chars, skip_chars, emit_end, last) {
+                output.push_str(&self.convert_segment_token(&words, index, direction));
+            }
+        }
+        if origin != total {
+            return self
+                .segmented_convert_chunk(&slice_chars(chunk, skip_chars, hold_chars), direction);
+        }
+        output
+    }
+
+    fn convert_segment_token(
+        &self,
+        words: &[novel_segment::Word],
+        index: usize,
+        direction: Direction,
+    ) -> String {
+        let word = &words[index];
+        let pos = word.pos();
+        let prev_pos = index
+            .checked_sub(1)
+            .map(|prev| words[prev].pos())
+            .unwrap_or(0);
+        let from_extra = lookup_extra_synonym(&self.extra_synonym, &word.w, pos, prev_pos)
+            .unwrap_or(&word.w)
+            .to_string();
+        let glyph = base_convert(&from_extra, direction);
+        let pulled = if direction == Direction::S2t {
+            lookup_extra_synonym(&self.extra_synonym, &glyph, pos, prev_pos)
+                .map(str::to_string)
+                .unwrap_or(glyph)
+        } else {
+            glyph
+        };
+        let next = words.get(index + 1).map(|item| item.w.as_str());
+        specials::current().apply_token(&pulled, next, direction, pos, prev_pos)
     }
 
     fn dictionary(&self, path: &Path) -> Result<Arc<LegacyDictionary>, CoreError> {
@@ -621,6 +827,13 @@ pub fn base_convert(text: &str, direction: Direction) -> String {
         Direction::T2s => tw2cn_with(text, &specials::current().t2s_options()),
         Direction::None => text.to_string(),
     }
+}
+
+pub(crate) fn uses_zhconvert(request: &ConversionRequest) -> bool {
+    request.engine == super::types::EngineKind::Zhconvert
+        && request.direction != Direction::None
+        && !request.text.is_empty()
+        && request.vocabulary_correction != Some(false)
 }
 
 fn run_cpu_bound<R>(work: impl FnOnce() -> R) -> R {
@@ -893,6 +1106,57 @@ fn group_units(units: &[TextUnit], jobs: usize) -> Vec<Vec<TextUnit>> {
 enum TextRun<'a> {
     Plain(&'a str),
     Cjk(&'a str),
+}
+
+fn original_token_chars(word: &novel_segment::Word) -> usize {
+    word.ow.as_deref().unwrap_or(&word.w).chars().count()
+}
+
+fn token_overlaps_emit(
+    start: usize,
+    orig_chars: usize,
+    skip: usize,
+    emit_end: usize,
+    last: bool,
+) -> bool {
+    let end = start + orig_chars;
+    if orig_chars == 0 || end <= skip || start >= emit_end {
+        return false;
+    }
+    last || end < emit_end
+}
+
+fn slice_chars(text: &str, skip: usize, hold: usize) -> String {
+    let total = text.chars().count();
+    let start = skip.min(total);
+    let end = total.saturating_sub(hold).max(start);
+    take_n_chars(skip_n_chars(text, start), end - start)
+}
+
+fn skip_n_chars(text: &str, chars: usize) -> &str {
+    match text.char_indices().nth(chars) {
+        Some((index, _)) => &text[index..],
+        None => "",
+    }
+}
+
+fn take_n_chars(text: &str, chars: usize) -> String {
+    text.chars().take(chars).collect()
+}
+
+fn take_overlap_1to1(
+    converted: &str,
+    origin: usize,
+    unit_chars: usize,
+    skip: usize,
+    emit_end: usize,
+) -> String {
+    let start = skip.max(origin);
+    let end = emit_end.min(origin + unit_chars);
+    if start >= end {
+        return String::new();
+    }
+    take_n_chars(skip_n_chars(converted, start - origin), end - start)
 }
 
 pub(crate) fn is_cjk_char(character: char) -> bool {

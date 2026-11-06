@@ -2,10 +2,8 @@
 
 use crate::core::roundtrip_dict::{default_sampler, MemorySample, MemorySampler};
 
-/// Conservative peak working set per concurrent segmented convert worker.
-const EST_BYTES_PER_WORKER: u64 = 96 * 1024 * 1024;
-/// Hard ceiling so huge machines do not pin every core into DictTokenizer peaks.
-const MAX_CONVERT_JOBS: usize = 8;
+/// Peak working set per streaming convert worker (window + encode + segmenter scratch).
+const EST_BYTES_PER_WORKER: u64 = 8 * 1024 * 1024;
 /// Floor for auto budget when host sample is unavailable.
 const FALLBACK_BUDGET_BYTES: u64 = 1536 * 1024 * 1024;
 
@@ -21,7 +19,7 @@ pub fn default_convert_jobs() -> usize {
         .unwrap_or(2)
         .max(1);
     let sample = MemorySampler::sample(default_sampler().as_ref());
-    convert_jobs_for(cpus, &sample, MAX_CONVERT_JOBS)
+    convert_jobs_for(cpus, &sample, cpus)
 }
 
 pub fn convert_jobs_for(cpus: usize, sample: &MemorySample, max_jobs: usize) -> usize {
@@ -63,7 +61,22 @@ mod tests {
             mem_available: Some(200 * 1024 * 1024),
             mem_total: Some(1024 * 1024 * 1024),
         };
-        // headroom from cgroup: 512 MiB → half 256 MiB → 2 workers at 96 MiB
+        // headroom from cgroup: 512 MiB → half 256 MiB → 32 workers at 8 MiB, capped by CPU 8
+        assert_eq!(convert_jobs_for(8, &sample, 8), 8);
+    }
+
+    #[test]
+    fn jobs_shrink_when_cgroup_headroom_is_small() {
+        let sample = MemorySample {
+            rss_bytes: Some(96 * 1024 * 1024),
+            cgroup_current: Some(96 * 1024 * 1024),
+            cgroup_max: Some(128 * 1024 * 1024),
+            aggregator_est: 0,
+            inflight_est: 0,
+            mem_available: Some(20 * 1024 * 1024),
+            mem_total: Some(128 * 1024 * 1024),
+        };
+        // headroom 32 MiB → half 16 MiB → 2 workers at 8 MiB
         assert_eq!(convert_jobs_for(8, &sample, 8), 2);
     }
 
@@ -78,8 +91,9 @@ mod tests {
             mem_available: Some(16 * 1024 * 1024 * 1024),
             mem_total: Some(32 * 1024 * 1024 * 1024),
         };
-        assert_eq!(convert_jobs_for(4, &sample, 8), 4);
-        assert_eq!(convert_jobs_for(16, &sample, 8), 8);
+        assert_eq!(convert_jobs_for(4, &sample, 4), 4);
+        assert_eq!(convert_jobs_for(16, &sample, 16), 16);
+        assert_eq!(convert_jobs_for(32, &sample, 32), 32);
     }
 
     #[test]

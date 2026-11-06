@@ -7,15 +7,15 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 #[derive(Default)]
-struct MockState {
+pub(crate) struct MockState {
     service_info: u32,
     convert: u32,
     fail: bool,
     last_body: HashMap<String, String>,
-    stop: bool,
+    pub(crate) stop: bool,
 }
 
-fn start_mock() -> (String, Arc<Mutex<MockState>>) {
+pub(crate) fn start_mock() -> (String, Arc<Mutex<MockState>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let address = listener.local_addr().unwrap();

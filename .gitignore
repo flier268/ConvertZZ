@@ -279,3 +279,4 @@ blob-report/
 playwright/.cache/
 *.log
 data/roundtrip-correction/
+.DS_Store

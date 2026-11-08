@@ -1384,6 +1384,31 @@ impl FileService {
             stream::WindowKind::CjkOverlap
         };
         let file_label = file_name(source);
+        let sync_options = options.clone();
+        let sync_cancelled = Arc::clone(&is_cancelled);
+        let sync_convert = |text: &str, skip: usize, hold: usize| {
+            conversion
+                .convert_window(
+                    sync_options.with_text(text.to_string()),
+                    skip,
+                    hold,
+                    None,
+                    Some(Arc::clone(&sync_cancelled)),
+                )
+                .map(|result| stream::ConvertedPiece {
+                    text: result.text,
+                    warnings: result.warnings,
+                })
+        };
+        let parallel: Option<stream::ParallelConvert<'_>> =
+            if self.convert_hook.is_none() && !uses_zhconvert(&options.with_text(".")) {
+                Some(stream::ParallelConvert {
+                    convert: &sync_convert,
+                    runtime: stream::ConvertRuntime::global()?,
+                })
+            } else {
+                None
+            };
         stream::stream_convert_path(
             source,
             stage,
@@ -1454,6 +1479,7 @@ impl FileService {
                 }
             },
             Some(&is_cancelled),
+            parallel,
         )
         .await
     }

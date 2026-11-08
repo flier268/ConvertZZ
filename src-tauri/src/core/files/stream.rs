@@ -30,6 +30,99 @@ pub(super) struct ConvertedPiece {
     pub warnings: Vec<String>,
 }
 
+/// 純 CPU 的視窗轉換，可由多個執行緒同時呼叫。
+pub(super) type SyncConvert<'a> =
+    dyn Fn(&str, usize, usize) -> Result<ConvertedPiece, CoreError> + Sync + 'a;
+
+/// 平行轉換的輸入。`runtime` 在同時轉換的多個檔案之間共用，記憶體上限因此是全域的。
+pub(super) struct ParallelConvert<'a> {
+    pub convert: &'a SyncConvert<'a>,
+    pub runtime: &'a ConvertRuntime,
+}
+
+/// 重新取樣記憶體上限的最短間隔。
+const LIMIT_RESAMPLE_INTERVAL: std::time::Duration = std::time::Duration::from_millis(250);
+/// 等待放行時的喚醒間隔，用來重新取樣上限與檢查取消。
+const ADMISSION_WAIT: std::time::Duration = std::time::Duration::from_millis(50);
+
+struct GateState {
+    active: usize,
+    limit: usize,
+    sampled: std::time::Instant,
+}
+
+/// 共用的轉換執行緒池與放行閘門。新視窗開工前先檢查目前允許的工作數；
+/// 已在執行的不受影響，也不會被中斷。沒有任何工作在執行時一定放行，避免記憶體吃緊時卡死。
+pub(super) struct ConvertRuntime {
+    pool: rayon::ThreadPool,
+    batch: usize,
+    limit: Box<dyn Fn() -> usize + Send + Sync>,
+    state: std::sync::Mutex<GateState>,
+    ready: std::sync::Condvar,
+}
+
+impl ConvertRuntime {
+    pub(super) fn new(
+        limit: impl Fn() -> usize + Send + Sync + 'static,
+    ) -> Result<Self, CoreError> {
+        let cpus = std::thread::available_parallelism().map_or(2, |value| value.get());
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(cpus)
+            .build()
+            .map_err(|error| CoreError::new("CONVERT_POOL", error.to_string()))?;
+        let initial = limit().max(1);
+        Ok(Self {
+            pool,
+            batch: cpus,
+            limit: Box::new(limit),
+            state: std::sync::Mutex::new(GateState {
+                active: 0,
+                limit: initial,
+                sampled: std::time::Instant::now(),
+            }),
+            ready: std::sync::Condvar::new(),
+        })
+    }
+
+    /// 全程式共用，上限來自 `default_convert_jobs()`。
+    pub(super) fn global() -> Result<&'static Self, CoreError> {
+        static RUNTIME: std::sync::OnceLock<ConvertRuntime> = std::sync::OnceLock::new();
+        if let Some(runtime) = RUNTIME.get() {
+            return Ok(runtime);
+        }
+        let runtime = Self::new(crate::core::parallelism::default_convert_jobs)?;
+        Ok(RUNTIME.get_or_init(|| runtime))
+    }
+
+    fn enter(&self, cancelled: &dyn Fn() -> bool) -> bool {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            if state.sampled.elapsed() >= LIMIT_RESAMPLE_INTERVAL {
+                state.limit = (self.limit)().max(1);
+                state.sampled = std::time::Instant::now();
+            }
+            if state.active == 0 || state.active < state.limit {
+                state.active += 1;
+                return true;
+            }
+            if cancelled() {
+                return false;
+            }
+            state = self
+                .ready
+                .wait_timeout(state, ADMISSION_WAIT)
+                .unwrap_or_else(|e| e.into_inner())
+                .0;
+        }
+    }
+
+    fn leave(&self) {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        state.active -= 1;
+        self.ready.notify_one();
+    }
+}
+
 pub(super) struct Emit {
     pub text: String,
     /// Already-emitted lookbehind at the start of `text`, in original chars.
@@ -300,6 +393,7 @@ pub(super) async fn stream_convert_path<C, Fut>(
     mut polish: impl FnMut(&mut String, bool),
     mut progress: impl FnMut(u64, u64),
     is_cancelled: Option<&CancelCheck>,
+    parallel: Option<ParallelConvert<'_>>,
 ) -> Result<StreamResult, CoreError>
 where
     C: FnMut(&str, usize, usize) -> Fut,
@@ -359,6 +453,8 @@ where
         progress: &mut progress,
         warnings: Vec::new(),
         is_cancelled,
+        parallel,
+        pending: Vec::new(),
     };
     let result = job.run(&mut file, &head, source, stage).await;
     if matches!(&result, Ok(StreamResult::Skip(_)) | Err(_)) {
@@ -387,6 +483,8 @@ struct StreamJob<'a, C, P, R> {
     progress: &'a mut R,
     warnings: Vec<String>,
     is_cancelled: Option<&'a CancelCheck>,
+    parallel: Option<ParallelConvert<'a>>,
+    pending: Vec<Emit>,
 }
 
 impl<C, Fut, P, R> StreamJob<'_, C, P, R>
@@ -501,39 +599,90 @@ where
     }
 
     async fn consume(&mut self, emits: Vec<Emit>, last: bool) -> Result<(), CoreError> {
-        for emit in emits {
-            let piece = (self.convert)(&emit.text, emit.skip_chars, emit.hold_chars).await?;
-            for warning in piece.warnings {
-                if !self.warnings.contains(&warning) {
-                    self.warnings.push(warning);
-                }
+        if self.parallel.is_none() {
+            for emit in emits {
+                let piece = (self.convert)(&emit.text, emit.skip_chars, emit.hold_chars).await?;
+                self.write_piece(piece, last)?;
             }
-            let mut converted = piece.text;
-            if !self.head_done {
-                self.head_text.push_str(&converted);
-                let ready = last || self.head_text.chars().count() >= CHARSET_HEAD_CHARS;
-                if ready {
-                    (self.polish)(&mut self.head_text, true);
-                    let head = std::mem::take(&mut self.head_text);
-                    write_encoded(
-                        &mut self.writer,
-                        &mut self.encoder,
-                        &mut self.written,
-                        &head,
-                        false,
-                    )?;
-                    self.head_done = true;
-                }
-            } else {
-                (self.polish)(&mut converted, false);
+            return Ok(());
+        }
+        self.pending.extend(emits);
+        let batch = self
+            .parallel
+            .as_ref()
+            .map_or(1, |parallel| parallel.runtime.batch);
+        // 每批最多 `batch` 個視窗；未滿且不是最後一次就先累積。
+        while self.pending.len() >= batch || (last && !self.pending.is_empty()) {
+            let take = batch.min(self.pending.len());
+            let emits: Vec<Emit> = self.pending.drain(..take).collect();
+            let pieces = self.convert_batch(&emits)?;
+            let final_batch = last && self.pending.is_empty();
+            let count = pieces.len();
+            for (index, piece) in pieces.into_iter().enumerate() {
+                self.write_piece(piece, final_batch && index + 1 == count)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn convert_batch(&self, emits: &[Emit]) -> Result<Vec<ConvertedPiece>, CoreError> {
+        use rayon::prelude::*;
+        let parallel = self.parallel.as_ref().expect("parallel convert");
+        let convert = parallel.convert;
+        let runtime = parallel.runtime;
+        let is_cancelled = self.is_cancelled;
+        let cancelled = || is_cancelled.is_some_and(|check| check());
+        let cancel_error = || CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。");
+        runtime.pool.install(|| {
+            emits
+                .par_iter()
+                .map(|emit| {
+                    if !runtime.enter(&cancelled) {
+                        return Err(cancel_error());
+                    }
+                    let result = if cancelled() {
+                        Err(cancel_error())
+                    } else {
+                        convert(&emit.text, emit.skip_chars, emit.hold_chars)
+                    };
+                    runtime.leave();
+                    result
+                })
+                .collect()
+        })
+    }
+
+    fn write_piece(&mut self, piece: ConvertedPiece, last: bool) -> Result<(), CoreError> {
+        for warning in piece.warnings {
+            if !self.warnings.contains(&warning) {
+                self.warnings.push(warning);
+            }
+        }
+        let mut converted = piece.text;
+        if !self.head_done {
+            self.head_text.push_str(&converted);
+            let ready = last || self.head_text.chars().count() >= CHARSET_HEAD_CHARS;
+            if ready {
+                (self.polish)(&mut self.head_text, true);
+                let head = std::mem::take(&mut self.head_text);
                 write_encoded(
                     &mut self.writer,
                     &mut self.encoder,
                     &mut self.written,
-                    &converted,
+                    &head,
                     false,
                 )?;
+                self.head_done = true;
             }
+        } else {
+            (self.polish)(&mut converted, false);
+            write_encoded(
+                &mut self.writer,
+                &mut self.encoder,
+                &mut self.written,
+                &converted,
+                false,
+            )?;
         }
         Ok(())
     }
@@ -660,6 +809,152 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn parallel_batches_keep_order_and_use_several_threads() {
+        use std::collections::HashSet;
+        use std::sync::Mutex;
+        let dir = std::env::temp_dir().join(format!("convertzz-stream-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("in.txt");
+        let stage = dir.join("out.txt");
+        let text: String = (0..400_000)
+            .map(|index| char::from_u32(0x4E00 + (index % 3_000) as u32).unwrap())
+            .collect();
+        std::fs::write(&source, &text).unwrap();
+        let threads = Mutex::new(HashSet::new());
+        let convert = |piece: &str, skip: usize, hold: usize| {
+            threads.lock().unwrap().insert(std::thread::current().id());
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            Ok(ConvertedPiece {
+                text: slice_chars(piece, skip, hold),
+                warnings: Vec::new(),
+            })
+        };
+        let result = stream_convert_path(
+            &source,
+            &stage,
+            TextEncoding::Utf8,
+            TextEncoding::Utf8,
+            false,
+            WindowKind::CjkOverlap,
+            |_, _, _| async { unreachable!("parallel path must not use the async converter") },
+            |_, _| {},
+            |_, _| {},
+            None,
+            Some(ParallelConvert {
+                convert: &convert,
+                runtime: &ConvertRuntime::new(|| 4).unwrap(),
+            }),
+        )
+        .await
+        .unwrap();
+        assert!(matches!(result, StreamResult::Written(_)), "{result:?}");
+        assert_eq!(std::fs::read_to_string(&stage).unwrap(), text);
+        if std::thread::available_parallelism().map_or(1, |n| n.get()) > 1 {
+            assert!(threads.lock().unwrap().len() > 1);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn admission_follows_shrinking_limit_without_killing_running_work() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let dir = std::env::temp_dir().join(format!("convertzz-stream-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("in.txt");
+        let stage = dir.join("out.txt");
+        let text: String = (0..1_200_000)
+            .map(|index| char::from_u32(0x4E00 + (index % 3_000) as u32).unwrap())
+            .collect();
+        std::fs::write(&source, &text).unwrap();
+        let started = std::sync::Arc::new(AtomicUsize::new(0));
+        let running = AtomicUsize::new(0);
+        let peak_after_drop = AtomicUsize::new(0);
+        let convert = |piece: &str, skip: usize, hold: usize| {
+            let now = running.fetch_add(1, Ordering::SeqCst) + 1;
+            if started.fetch_add(1, Ordering::SeqCst) > 80 {
+                peak_after_drop.fetch_max(now, Ordering::SeqCst);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(30));
+            running.fetch_sub(1, Ordering::SeqCst);
+            Ok(ConvertedPiece {
+                text: slice_chars(piece, skip, hold),
+                warnings: Vec::new(),
+            })
+        };
+        // 前 20 個視窗允許 4 個，之後記憶體吃緊降為 1。
+        let limit_started = std::sync::Arc::clone(&started);
+        let runtime = ConvertRuntime::new(move || {
+            if limit_started.load(Ordering::SeqCst) < 20 {
+                4
+            } else {
+                1
+            }
+        })
+        .unwrap();
+        let result = stream_convert_path(
+            &source,
+            &stage,
+            TextEncoding::Utf8,
+            TextEncoding::Utf8,
+            false,
+            WindowKind::CjkOverlap,
+            |_, _, _| async { unreachable!() },
+            |_, _| {},
+            |_, _| {},
+            None,
+            Some(ParallelConvert {
+                convert: &convert,
+                runtime: &runtime,
+            }),
+        )
+        .await
+        .unwrap();
+        assert!(matches!(result, StreamResult::Written(_)), "{result:?}");
+        assert_eq!(std::fs::read_to_string(&stage).unwrap(), text);
+        // 取樣有 250 ms 延遲；降載稍後新開工的視窗必須是單一工作。
+        assert_eq!(peak_after_drop.load(Ordering::SeqCst), 1);
+        assert_eq!(running.load(Ordering::SeqCst), 0);
+        assert!(started.load(Ordering::SeqCst) > 40);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn parallel_batches_stop_on_cancel() {
+        let dir = std::env::temp_dir().join(format!("convertzz-stream-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("in.txt");
+        let stage = dir.join("out.txt");
+        std::fs::write(&source, "里面开发".repeat(50_000)).unwrap();
+        let cancel: CancelCheck = std::sync::Arc::new(|| true);
+        let convert = |piece: &str, skip: usize, hold: usize| {
+            Ok(ConvertedPiece {
+                text: slice_chars(piece, skip, hold),
+                warnings: Vec::new(),
+            })
+        };
+        let result = stream_convert_path(
+            &source,
+            &stage,
+            TextEncoding::Utf8,
+            TextEncoding::Utf8,
+            false,
+            WindowKind::CjkOverlap,
+            |_, _, _| async { unreachable!() },
+            |_, _| {},
+            |_, _| {},
+            Some(&cancel),
+            Some(ParallelConvert {
+                convert: &convert,
+                runtime: &ConvertRuntime::new(|| 4).unwrap(),
+            }),
+        )
+        .await;
+        assert!(result.is_err());
+        assert!(!stage.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
     async fn stream_identity_roundtrip_long_mixed() {
         let dir = std::env::temp_dir().join(format!("convertzz-stream-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -689,6 +984,7 @@ mod tests {
             },
             |_, _| {},
             |_, _| {},
+            None,
             None,
         )
         .await

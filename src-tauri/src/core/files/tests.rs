@@ -436,6 +436,54 @@ async fn expands_wildcards_and_output_pattern() {
 }
 
 #[tokio::test]
+async fn content_mode_output_pattern_keeps_sources() {
+    let directory = temp_dir();
+    std::fs::write(directory.join("a.txt"), "里面").unwrap();
+    std::fs::write(directory.join("xa.txt"), "开发").unwrap();
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            FilePlanRequest {
+                paths: vec![directory.join("*.txt").to_string_lossy().into_owned()],
+                output_path: Some(directory.join("x*.txt").to_string_lossy().into_owned()),
+                output_directory: None,
+                mode: FileMode::Content,
+                recursive: false,
+                input_encoding: TextEncoding::Utf8,
+                output_encoding: TextEncoding::Utf8,
+                add_bom: false,
+                fix_charset_declaration: false,
+                fix_charset_extensions: None,
+                allowed_extensions: None,
+                extension_filter: None,
+                preview_max_bytes: None,
+                conflict_policy: ConflictPolicy::Overwrite,
+                backup: Some(false),
+                include_ignored: false,
+                conversion: conversion_s2t(),
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{:?}", result.failed);
+    assert!(directory.join("a.txt").exists(), "來源 a.txt 被移除");
+    assert!(directory.join("xa.txt").exists());
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
 async fn rejects_mismatched_wildcard_counts() {
     let directory = temp_dir();
     let service = FileService::new();

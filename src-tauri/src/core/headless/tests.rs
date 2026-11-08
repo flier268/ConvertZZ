@@ -100,6 +100,36 @@ fn rejects_explicit_vocabulary_settings_without_config() {
 }
 
 #[test]
+fn headless_output_path_with_no_backup_keeps_source() {
+    let dir = temp_dir("keep-source");
+    let input = dir.join("in.txt");
+    let output = dir.join("out.txt");
+    fs::write(&input, "简体字测试").expect("write input");
+
+    let code = run(
+        &args(&[
+            "--output",
+            "utf8",
+            "--direction",
+            "s2t",
+            "--vocabulary",
+            "off",
+            "--engine",
+            "segmented",
+            "--no-backup",
+            "--yes",
+            input.to_str().unwrap(),
+            output.to_str().unwrap(),
+        ]),
+        None,
+    );
+    assert_eq!(code, 0);
+    assert_eq!(fs::read_to_string(&output).unwrap().trim(), "簡體字測試");
+    assert!(input.exists(), "指定輸出路徑時不得移除來源檔");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn headless_file_convert_with_yes() {
     let dir = temp_dir("file");
     let input = dir.join("in.txt");

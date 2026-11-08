@@ -1172,6 +1172,11 @@ impl FileService {
                 if is_cancelled() {
                     return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
                 }
+                if request.mode == FileMode::Content
+                    && entry.file.item.output_path != entry.file.item.source_path
+                {
+                    continue;
+                }
                 let original =
                     transaction_path(Path::new(&entry.file.item.source_path), "original");
                 fs::rename(&entry.file.item.source_path, &original)?;
@@ -1346,6 +1351,8 @@ impl FileService {
                     self.stage_validator.as_ref(),
                     Some(&is_cancelled),
                     convert_warnings,
+                    // 內容模式不改檔名；輸出路徑不同於來源時是另存新檔，來源必須保留。
+                    request.mode == FileMode::Content && output != source,
                 )
             }
         }
@@ -1528,6 +1535,7 @@ fn commit_written_stage(
     stage_validator: Option<&StageValidator>,
     is_cancelled: Option<&CancelCheck>,
     convert_warnings: Vec<String>,
+    keep_source: bool,
 ) -> Result<FileCommitOutcome, CoreError> {
     let source = PathBuf::from(&file.item.source_path);
     assert_source_writable(&source)?;
@@ -1550,12 +1558,13 @@ fn commit_written_stage(
         committed: false,
     };
     let commit_result = (|| -> Result<FileCommitOutcome, CoreError> {
-        let original = transaction_path(Path::new(&entry.file.item.source_path), "original");
-        fs::rename(&entry.file.item.source_path, &original)?;
-        entry.original_backup = Some(original);
-
         let output = PathBuf::from(&entry.file.item.output_path);
         let source = PathBuf::from(&entry.file.item.source_path);
+        if !keep_source {
+            let original = transaction_path(&source, "original");
+            fs::rename(&source, &original)?;
+            entry.original_backup = Some(original);
+        }
         if output != source && output.exists() {
             if entry.file.conflict_policy == ConflictPolicy::Skip {
                 let _ = fs::remove_file(&entry.stage_path);

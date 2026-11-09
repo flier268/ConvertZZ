@@ -1,0 +1,205 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AUDIO_PREVIEW_DEBOUNCE_MS, createAudioPreviewController } from "./audioReview";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe("音訊預覽自動重建", () => {
+  it("防抖把連續變更收成一次，後完成的舊要求不會蓋過新結果", async () => {
+    vi.useFakeTimers();
+    const resolvers: Array<(value: { planId: string }) => void> = [];
+    const applied: string[] = [];
+    const cancels: number[] = [];
+    const controller = createAudioPreviewController({
+      plan: () =>
+        new Promise((resolve) => {
+          resolvers.push(resolve);
+        }),
+      cancelInFlight: async () => {
+        cancels.push(cancels.length + 1);
+      },
+      apply: (value) => {
+        applied.push((value as { planId: string }).planId);
+      },
+    });
+
+    controller.schedule();
+    controller.schedule();
+    await vi.advanceTimersByTimeAsync(AUDIO_PREVIEW_DEBOUNCE_MS - 1);
+    expect(resolvers).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(resolvers).toHaveLength(1);
+    expect(cancels).toHaveLength(1);
+
+    controller.schedule();
+    await vi.advanceTimersByTimeAsync(AUDIO_PREVIEW_DEBOUNCE_MS);
+    expect(resolvers).toHaveLength(2);
+    expect(cancels).toHaveLength(2);
+
+    resolvers[1]!({ planId: "new" });
+    resolvers[0]!({ planId: "old" });
+    await vi.runAllTimersAsync();
+    await Promise.resolve();
+    expect(applied).toEqual(["new"]);
+  });
+
+  it("排程後開始套用時，不得再取消進行中的套用", async () => {
+    vi.useFakeTimers();
+    const cancels: number[] = [];
+    const plans: number[] = [];
+    const controller = createAudioPreviewController({
+      plan: async () => {
+        plans.push(plans.length + 1);
+        return { planId: "preview" };
+      },
+      cancelInFlight: async () => {
+        cancels.push(cancels.length + 1);
+      },
+      apply: () => undefined,
+    });
+
+    controller.schedule();
+    // 套用開始：進行中的 audio.apply 不可被稍後觸發的預覽取消。
+    controller.invalidate();
+    await vi.advanceTimersByTimeAsync(AUDIO_PREVIEW_DEBOUNCE_MS);
+    expect(cancels).toEqual([]);
+    expect(plans).toEqual([]);
+  });
+
+  it("作廢的預覽結束時，若已有更新的工作世代，不得 onSettled", async () => {
+    let release: (value: { planId: string }) => void = () => undefined;
+    let markStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const settled: number[] = [];
+    const controller = createAudioPreviewController({
+      plan: () => {
+        markStarted();
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      },
+      cancelInFlight: async () => undefined,
+      apply: () => undefined,
+      onSettled: () => {
+        settled.push(settled.length + 1);
+      },
+    });
+
+    const running = controller.run();
+    await started;
+    controller.invalidate();
+    controller.claimJob();
+    release({ planId: "stale" });
+    await running;
+    expect(settled).toEqual([]);
+  });
+
+  it("進行中的預覽被 invalidate 且沒有新一輪接手時，仍會 onSettled", async () => {
+    let release: (value: { planId: string }) => void = () => undefined;
+    let markStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const settled: number[] = [];
+    const controller = createAudioPreviewController({
+      plan: () => {
+        markStarted();
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      },
+      cancelInFlight: async () => undefined,
+      apply: () => undefined,
+      onSettled: () => {
+        settled.push(settled.length + 1);
+      },
+    });
+
+    const running = controller.run();
+    await started;
+    controller.invalidate();
+    release({ planId: "stale" });
+    await running;
+    expect(settled).toEqual([1]);
+  });
+
+  it("run 通過開頭檢查後、呼叫 cancelInFlight 前才進入套用時，不得取消", async () => {
+    const cancels: number[] = [];
+    const plans: number[] = [];
+    const controller = createAudioPreviewController({
+      plan: async () => {
+        plans.push(plans.length + 1);
+        return { planId: "preview" };
+      },
+      cancelInFlight: async () => {
+        cancels.push(cancels.length + 1);
+      },
+      apply: () => undefined,
+      // onStart 在開頭的 applying 檢查之後、cancelInFlight 之前。
+      onStart: () => {
+        controller.setApplying(true);
+      },
+    });
+
+    await controller.run();
+    expect(cancels).toEqual([]);
+    expect(plans).toEqual([]);
+  });
+
+  it("flush 會等已經在跑的 run 結束才 resolve", async () => {
+    let release: (value: { planId: string }) => void = () => undefined;
+    let markStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const controller = createAudioPreviewController({
+      plan: () => {
+        markStarted();
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      },
+      cancelInFlight: async () => undefined,
+      apply: () => undefined,
+    });
+
+    const running = controller.run();
+    await started;
+    let flushed = false;
+    const flushing = controller.flush().then(() => {
+      flushed = true;
+    });
+    await Promise.resolve();
+    expect(flushed).toBe(false);
+    release({ planId: "done" });
+    await flushing;
+    await running;
+    expect(flushed).toBe(true);
+  });
+
+  it("套用進行中呼叫 schedule 不得取消 apply", async () => {
+    vi.useFakeTimers();
+    const cancels: number[] = [];
+    const plans: number[] = [];
+    const controller = createAudioPreviewController({
+      plan: async () => {
+        plans.push(plans.length + 1);
+        return { planId: "preview" };
+      },
+      cancelInFlight: async () => {
+        cancels.push(cancels.length + 1);
+      },
+      apply: () => undefined,
+    });
+
+    controller.setApplying(true);
+    controller.schedule();
+    await controller.run();
+    await vi.advanceTimersByTimeAsync(AUDIO_PREVIEW_DEBOUNCE_MS);
+    expect(cancels).toEqual([]);
+    expect(plans).toEqual([]);
+  });
+});

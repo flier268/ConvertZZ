@@ -55,7 +55,8 @@ struct GateState {
 /// 已在執行的不受影響，也不會被中斷。沒有任何工作在執行時一定放行，避免記憶體吃緊時卡死。
 pub(super) struct ConvertRuntime {
     pool: rayon::ThreadPool,
-    batch: usize,
+    /// 記憶體中同時存在（執行中、等待合併）的視窗數上限。
+    window_cap: usize,
     limit: Box<dyn Fn() -> usize + Send + Sync>,
     state: std::sync::Mutex<GateState>,
     ready: std::sync::Condvar,
@@ -73,7 +74,7 @@ impl ConvertRuntime {
         let initial = limit().max(1);
         Ok(Self {
             pool,
-            batch: cpus,
+            window_cap: cpus * 4,
             limit: Box::new(limit),
             state: std::sync::Mutex::new(GateState {
                 active: 0,
@@ -390,7 +391,7 @@ pub(super) async fn stream_convert_path<C, Fut>(
     add_bom: bool,
     window: WindowKind,
     mut convert: C,
-    mut polish: impl FnMut(&mut String, bool),
+    mut polish: impl FnMut(&mut String, bool) + Send,
     mut progress: impl FnMut(u64, u64),
     is_cancelled: Option<&CancelCheck>,
     parallel: Option<ParallelConvert<'_>>,
@@ -430,31 +431,36 @@ where
 
     let utf16 = matches!(encoding, TextEncoding::Utf16le | TextEncoding::Utf16be);
     let mut job = StreamJob {
-        encoding,
-        utf16,
-        decoder: StreamDecoder::new(encoding)?,
-        encoder: StreamEncoder::new(output_encoding, add_bom)?,
-        windows: Windows::new(window),
-        writer: fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(stage)
-            .map_err(|error| CoreError::new("FILE_STAGE", format!("無法建立暫存檔：{error}")))?,
-        written: RollingHash::new(),
-        decoded_errors: false,
-        decoded_chars: 0,
-        replacements: 0,
-        read_bytes: 0,
-        size,
-        head_text: String::new(),
-        head_done: false,
+        front: Front {
+            encoding,
+            utf16,
+            decoder: StreamDecoder::new(encoding)?,
+            windows: Windows::new(window),
+            decoded_errors: false,
+            decoded_chars: 0,
+            replacements: 0,
+            read_bytes: 0,
+            size,
+            progress: &mut progress,
+            is_cancelled,
+        },
+        sink: Sink {
+            encoder: StreamEncoder::new(output_encoding, add_bom)?,
+            writer: fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(stage)
+                .map_err(|error| {
+                    CoreError::new("FILE_STAGE", format!("無法建立暫存檔：{error}"))
+                })?,
+            written: RollingHash::new(),
+            head_text: String::new(),
+            head_done: false,
+            polish: &mut polish,
+            warnings: Vec::new(),
+        },
         convert: &mut convert,
-        polish: &mut polish,
-        progress: &mut progress,
-        warnings: Vec::new(),
-        is_cancelled,
         parallel,
-        pending: Vec::new(),
     };
     let result = job.run(&mut file, &head, source, stage).await;
     if matches!(&result, Ok(StreamResult::Skip(_)) | Err(_)) {
@@ -463,116 +469,51 @@ where
     result
 }
 
-struct StreamJob<'a, C, P, R> {
+/// 讀取、解碼並切成視窗的一端。
+struct Front<'a, R> {
     encoding: TextEncoding,
     utf16: bool,
     decoder: StreamDecoder,
-    encoder: StreamEncoder,
     windows: Windows,
-    writer: File,
-    written: RollingHash,
     decoded_errors: bool,
     decoded_chars: usize,
     replacements: usize,
     read_bytes: u64,
     size: u64,
-    head_text: String,
-    head_done: bool,
-    convert: &'a mut C,
-    polish: &'a mut P,
     progress: &'a mut R,
-    warnings: Vec<String>,
     is_cancelled: Option<&'a CancelCheck>,
-    parallel: Option<ParallelConvert<'a>>,
-    pending: Vec<Emit>,
 }
 
-impl<C, Fut, P, R> StreamJob<'_, C, P, R>
-where
-    C: FnMut(&str, usize, usize) -> Fut,
-    Fut: Future<Output = Result<ConvertedPiece, CoreError>>,
-    P: FnMut(&mut String, bool),
-    R: FnMut(u64, u64),
-{
-    async fn run(
-        &mut self,
-        file: &mut File,
-        head: &[u8],
-        source: &Path,
-        stage: &Path,
-    ) -> Result<StreamResult, CoreError> {
-        let size = self.size;
-        if let Some(skip) = self.feed(head, size as usize <= head.len()).await? {
-            return Ok(StreamResult::Skip(skip));
-        }
-        if (head.len() as u64) < size {
-            let mut buffer = vec![0u8; STREAM_CHUNK_BYTES];
-            loop {
-                let read = super::read_chunk(file, &mut buffer)?;
-                if read == 0 {
-                    break;
-                }
-                if let Some(skip) = self.feed(&buffer[..read], false).await? {
-                    return Ok(StreamResult::Skip(skip));
-                }
-            }
-            if let Some(skip) = self.feed(&[], true).await? {
-                return Ok(StreamResult::Skip(skip));
-            }
-        }
-        if self.decoded_errors {
-            return Ok(StreamResult::Skip(ContentSkip::DecodeError));
-        }
-        if self.utf16
-            && self.decoded_chars > 0
-            && self.replacements >= super::REPLACEMENT_MIN_COUNT
-            && (self.replacements as f64) / (self.decoded_chars as f64) >= super::REPLACEMENT_RATIO
-        {
-            return Ok(StreamResult::Skip(ContentSkip::Binary));
-        }
-        if !self.head_done {
-            (self.polish)(&mut self.head_text, true);
-            let head = std::mem::take(&mut self.head_text);
-            write_encoded(
-                &mut self.writer,
-                &mut self.encoder,
-                &mut self.written,
-                &head,
-                true,
-            )?;
-        } else {
-            write_encoded(
-                &mut self.writer,
-                &mut self.encoder,
-                &mut self.written,
-                "",
-                true,
-            )?;
-        }
-        self.writer.sync_all()?;
-        if let Ok(source_meta) = fs::metadata(source) {
-            let _ = self.writer.set_permissions(source_meta.permissions());
-        }
-        let on_disk = hash_file(stage)?;
-        if on_disk != self.written {
-            return Err(CoreError::with_details(
-                "FILE_VERIFY",
-                "暫存檔寫入驗證失敗。",
-                serde_json::json!({ "path": stage }),
-            ));
-        }
-        Ok(StreamResult::Written(StreamWrite {
-            encoding: self.encoding,
-            warnings: std::mem::take(&mut self.warnings),
-        }))
-    }
+/// 依序編碼、寫入並雜湊的一端。
+struct Sink<'a, P> {
+    encoder: StreamEncoder,
+    writer: File,
+    written: RollingHash,
+    head_text: String,
+    head_done: bool,
+    polish: &'a mut P,
+    warnings: Vec<String>,
+}
 
-    async fn feed(&mut self, bytes: &[u8], last: bool) -> Result<Option<ContentSkip>, CoreError> {
+struct StreamJob<'a, C, P, R> {
+    front: Front<'a, R>,
+    sink: Sink<'a, P>,
+    convert: &'a mut C,
+    parallel: Option<ParallelConvert<'a>>,
+}
+
+impl<R: FnMut(u64, u64)> Front<'_, R> {
+    /// 解碼一段位元組並切出可轉換的視窗。回傳 `Err(skip)` 代表整個檔案應略過。
+    fn decode(
+        &mut self,
+        bytes: &[u8],
+        last: bool,
+    ) -> Result<Result<Vec<Emit>, ContentSkip>, CoreError> {
         if self.is_cancelled.is_some_and(|check| check()) {
             return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
         }
         if !self.utf16 && bytes.contains(&0) {
-            return Ok(Some(ContentSkip::Binary));
+            return Ok(Err(ContentSkip::Binary));
         }
         self.read_bytes = self
             .read_bytes
@@ -594,64 +535,52 @@ where
         } else {
             self.windows.push(&text)
         };
-        self.consume(emits, last).await?;
+        Ok(Ok(emits))
+    }
+
+    /// 依序餵入檔頭與其餘內容；`submit` 收到每個視窗與「是否為最後一個視窗」。
+    fn read_all(
+        &mut self,
+        file: &mut File,
+        head: &[u8],
+        mut submit: impl FnMut(Vec<Emit>, bool) -> Result<(), CoreError>,
+    ) -> Result<Option<ContentSkip>, CoreError> {
+        let size = self.size;
+        let mut feed = |front: &mut Self,
+                        bytes: &[u8],
+                        last: bool|
+         -> Result<Option<ContentSkip>, CoreError> {
+            match front.decode(bytes, last)? {
+                Err(skip) => Ok(Some(skip)),
+                Ok(emits) => {
+                    submit(emits, last)?;
+                    Ok(None)
+                }
+            }
+        };
+        if let Some(skip) = feed(self, head, size as usize <= head.len())? {
+            return Ok(Some(skip));
+        }
+        if (head.len() as u64) < size {
+            let mut buffer = vec![0u8; STREAM_CHUNK_BYTES];
+            loop {
+                let read = super::read_chunk(file, &mut buffer)?;
+                if read == 0 {
+                    break;
+                }
+                if let Some(skip) = feed(self, &buffer[..read], false)? {
+                    return Ok(Some(skip));
+                }
+            }
+            if let Some(skip) = feed(self, &[], true)? {
+                return Ok(Some(skip));
+            }
+        }
         Ok(None)
     }
+}
 
-    async fn consume(&mut self, emits: Vec<Emit>, last: bool) -> Result<(), CoreError> {
-        if self.parallel.is_none() {
-            for emit in emits {
-                let piece = (self.convert)(&emit.text, emit.skip_chars, emit.hold_chars).await?;
-                self.write_piece(piece, last)?;
-            }
-            return Ok(());
-        }
-        self.pending.extend(emits);
-        let batch = self
-            .parallel
-            .as_ref()
-            .map_or(1, |parallel| parallel.runtime.batch);
-        // 每批最多 `batch` 個視窗；未滿且不是最後一次就先累積。
-        while self.pending.len() >= batch || (last && !self.pending.is_empty()) {
-            let take = batch.min(self.pending.len());
-            let emits: Vec<Emit> = self.pending.drain(..take).collect();
-            let pieces = self.convert_batch(&emits)?;
-            let final_batch = last && self.pending.is_empty();
-            let count = pieces.len();
-            for (index, piece) in pieces.into_iter().enumerate() {
-                self.write_piece(piece, final_batch && index + 1 == count)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn convert_batch(&self, emits: &[Emit]) -> Result<Vec<ConvertedPiece>, CoreError> {
-        use rayon::prelude::*;
-        let parallel = self.parallel.as_ref().expect("parallel convert");
-        let convert = parallel.convert;
-        let runtime = parallel.runtime;
-        let is_cancelled = self.is_cancelled;
-        let cancelled = || is_cancelled.is_some_and(|check| check());
-        let cancel_error = || CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。");
-        runtime.pool.install(|| {
-            emits
-                .par_iter()
-                .map(|emit| {
-                    if !runtime.enter(&cancelled) {
-                        return Err(cancel_error());
-                    }
-                    let result = if cancelled() {
-                        Err(cancel_error())
-                    } else {
-                        convert(&emit.text, emit.skip_chars, emit.hold_chars)
-                    };
-                    runtime.leave();
-                    result
-                })
-                .collect()
-        })
-    }
-
+impl<P: FnMut(&mut String, bool)> Sink<'_, P> {
     fn write_piece(&mut self, piece: ConvertedPiece, last: bool) -> Result<(), CoreError> {
         for warning in piece.warnings {
             if !self.warnings.contains(&warning) {
@@ -685,6 +614,287 @@ where
             )?;
         }
         Ok(())
+    }
+}
+
+/// 視窗完成順序不定；結果先留在這裡，由「剛好補上下一個序號」的執行緒負責依序合併寫入。
+struct Coordinator {
+    state: std::sync::Mutex<CoordState>,
+    changed: std::sync::Condvar,
+}
+
+struct CoordState {
+    next: u64,
+    ready: std::collections::BTreeMap<u64, (Result<ConvertedPiece, CoreError>, bool)>,
+    /// 已送出但尚未寫入的視窗數，限制記憶體中同時存在的視窗。
+    in_flight: usize,
+    merging: bool,
+    aborted: bool,
+    error: Option<CoreError>,
+}
+
+impl Coordinator {
+    fn new() -> Self {
+        Self {
+            state: std::sync::Mutex::new(CoordState {
+                next: 0,
+                ready: std::collections::BTreeMap::new(),
+                in_flight: 0,
+                merging: false,
+                aborted: false,
+                error: None,
+            }),
+            changed: std::sync::Condvar::new(),
+        }
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, CoordState> {
+        self.state.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn failed(&self) -> bool {
+        let state = self.lock();
+        state.aborted || state.error.is_some()
+    }
+
+    /// 讀取端失敗：讓尚未開工的視窗直接略過。
+    fn abort(&self) {
+        self.lock().aborted = true;
+        self.changed.notify_all();
+    }
+
+    /// 等到在途視窗數低於上限才放行；已有錯誤或取消則回傳錯誤。
+    fn reserve(&self, cap: usize, cancelled: &dyn Fn() -> bool) -> Result<(), CoreError> {
+        let mut state = self.lock();
+        loop {
+            if let Some(error) = state.error.take() {
+                return Err(error);
+            }
+            if cancelled() {
+                return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+            }
+            if state.in_flight < cap {
+                state.in_flight += 1;
+                return Ok(());
+            }
+            state = self
+                .changed
+                .wait_timeout(state, ADMISSION_WAIT)
+                .unwrap_or_else(|e| e.into_inner())
+                .0;
+        }
+    }
+
+    fn finish<P: FnMut(&mut String, bool)>(
+        &self,
+        seq: u64,
+        result: Result<ConvertedPiece, CoreError>,
+        is_final: bool,
+        sink: &std::sync::Mutex<&mut Sink<'_, P>>,
+    ) {
+        let mut state = self.lock();
+        state.ready.insert(seq, (result, is_final));
+        if state.merging {
+            return;
+        }
+        state.merging = true;
+        loop {
+            let next = state.next;
+            let Some((result, is_final)) = state.ready.remove(&next) else {
+                break;
+            };
+            state.next += 1;
+            let write = if state.aborted || state.error.is_some() {
+                Ok(())
+            } else {
+                drop(state);
+                let write = result.and_then(|piece| {
+                    sink.lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .write_piece(piece, is_final)
+                });
+                state = self.lock();
+                write
+            };
+            state.in_flight -= 1;
+            if let Err(error) = write {
+                state.error.get_or_insert(error);
+            }
+            self.changed.notify_all();
+        }
+        state.merging = false;
+    }
+}
+
+impl<C, Fut, P, R> StreamJob<'_, C, P, R>
+where
+    C: FnMut(&str, usize, usize) -> Fut,
+    Fut: Future<Output = Result<ConvertedPiece, CoreError>>,
+    P: FnMut(&mut String, bool) + Send,
+    R: FnMut(u64, u64),
+{
+    async fn serial_feed(
+        &mut self,
+        bytes: &[u8],
+        last: bool,
+    ) -> Result<Option<ContentSkip>, CoreError> {
+        match self.front.decode(bytes, last)? {
+            Err(skip) => Ok(Some(skip)),
+            Ok(emits) => {
+                for emit in emits {
+                    let piece =
+                        (self.convert)(&emit.text, emit.skip_chars, emit.hold_chars).await?;
+                    self.sink.write_piece(piece, last)?;
+                }
+                Ok(None)
+            }
+        }
+    }
+
+    async fn read_serial(
+        &mut self,
+        file: &mut File,
+        head: &[u8],
+    ) -> Result<Option<ContentSkip>, CoreError> {
+        let size = self.front.size;
+        if let Some(skip) = self.serial_feed(head, size as usize <= head.len()).await? {
+            return Ok(Some(skip));
+        }
+        if (head.len() as u64) < size {
+            let mut buffer = vec![0u8; STREAM_CHUNK_BYTES];
+            loop {
+                let read = super::read_chunk(file, &mut buffer)?;
+                if read == 0 {
+                    break;
+                }
+                if let Some(skip) = self.serial_feed(&buffer[..read], false).await? {
+                    return Ok(Some(skip));
+                }
+            }
+            if let Some(skip) = self.serial_feed(&[], true).await? {
+                return Ok(Some(skip));
+            }
+        }
+        Ok(None)
+    }
+
+    fn read_parallel(
+        &mut self,
+        parallel: &ParallelConvert<'_>,
+        file: &mut File,
+        head: &[u8],
+    ) -> Result<Option<ContentSkip>, CoreError> {
+        let runtime = parallel.runtime;
+        let convert = parallel.convert;
+        let is_cancelled = self.front.is_cancelled;
+        let cancelled = || is_cancelled.is_some_and(|check| check());
+        let cap = runtime.window_cap;
+        let coordinator = Coordinator::new();
+        let sink = std::sync::Mutex::new(&mut self.sink);
+        let front = &mut self.front;
+        let outcome = runtime.pool.in_place_scope(|scope| {
+            let mut seq = 0u64;
+            let result = front.read_all(file, head, |emits, last| {
+                let count = emits.len();
+                for (index, emit) in emits.into_iter().enumerate() {
+                    coordinator.reserve(cap, &cancelled)?;
+                    let this = seq;
+                    seq += 1;
+                    let is_final = last && index + 1 == count;
+                    let (coordinator, sink) = (&coordinator, &sink);
+                    scope.spawn(move |_| {
+                        let result = if coordinator.failed() {
+                            Err(CoreError::new("CONVERT_ABORTED", "轉換已中止。"))
+                        } else if !runtime.enter(&cancelled) {
+                            Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"))
+                        } else {
+                            let result = if cancelled() {
+                                Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"))
+                            } else {
+                                convert(&emit.text, emit.skip_chars, emit.hold_chars)
+                            };
+                            runtime.leave();
+                            result
+                        };
+                        coordinator.finish(this, result, is_final, sink);
+                    });
+                }
+                Ok(())
+            });
+            if result.is_err() {
+                coordinator.abort();
+            }
+            result
+        });
+        // 寫入端的錯誤優先；否則回報讀取端的結果。
+        if let Some(error) = coordinator.lock().error.take() {
+            return Err(error);
+        }
+        outcome
+    }
+
+    async fn run(
+        &mut self,
+        file: &mut File,
+        head: &[u8],
+        source: &Path,
+        stage: &Path,
+    ) -> Result<StreamResult, CoreError> {
+        let skipped = match self.parallel.take() {
+            Some(parallel) => self.read_parallel(&parallel, file, head)?,
+            None => self.read_serial(file, head).await?,
+        };
+        if let Some(skip) = skipped {
+            return Ok(StreamResult::Skip(skip));
+        }
+        let front = &self.front;
+        if front.decoded_errors {
+            return Ok(StreamResult::Skip(ContentSkip::DecodeError));
+        }
+        if front.utf16
+            && front.decoded_chars > 0
+            && front.replacements >= super::REPLACEMENT_MIN_COUNT
+            && (front.replacements as f64) / (front.decoded_chars as f64)
+                >= super::REPLACEMENT_RATIO
+        {
+            return Ok(StreamResult::Skip(ContentSkip::Binary));
+        }
+        let sink = &mut self.sink;
+        if !sink.head_done {
+            (sink.polish)(&mut sink.head_text, true);
+            let head = std::mem::take(&mut sink.head_text);
+            write_encoded(
+                &mut sink.writer,
+                &mut sink.encoder,
+                &mut sink.written,
+                &head,
+                true,
+            )?;
+        } else {
+            write_encoded(
+                &mut sink.writer,
+                &mut sink.encoder,
+                &mut sink.written,
+                "",
+                true,
+            )?;
+        }
+        sink.writer.sync_all()?;
+        if let Ok(source_meta) = fs::metadata(source) {
+            let _ = sink.writer.set_permissions(source_meta.permissions());
+        }
+        let on_disk = hash_file(stage)?;
+        if on_disk != sink.written {
+            return Err(CoreError::with_details(
+                "FILE_VERIFY",
+                "暫存檔寫入驗證失敗。",
+                serde_json::json!({ "path": stage }),
+            ));
+        }
+        Ok(StreamResult::Written(StreamWrite {
+            encoding: front.encoding,
+            warnings: std::mem::take(&mut sink.warnings),
+        }))
     }
 }
 
@@ -915,6 +1125,90 @@ mod tests {
         assert_eq!(peak_after_drop.load(Ordering::SeqCst), 1);
         assert_eq!(running.load(Ordering::SeqCst), 0);
         assert!(started.load(Ordering::SeqCst) > 40);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn out_of_order_completion_is_merged_in_sequence() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let dir = std::env::temp_dir().join(format!("convertzz-stream-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("in.txt");
+        let stage = dir.join("out.txt");
+        let text: String = (0..400_000)
+            .map(|index| char::from_u32(0x4E00 + (index % 3_000) as u32).unwrap())
+            .collect();
+        std::fs::write(&source, &text).unwrap();
+        let calls = AtomicUsize::new(0);
+        // 越早的視窗越慢，使完成順序與序號相反。
+        let convert = |piece: &str, skip: usize, hold: usize| {
+            let n = calls.fetch_add(1, Ordering::SeqCst);
+            std::thread::sleep(std::time::Duration::from_millis(((n * 7) % 5) as u64 * 6));
+            Ok(ConvertedPiece {
+                text: slice_chars(piece, skip, hold),
+                warnings: Vec::new(),
+            })
+        };
+        let result = stream_convert_path(
+            &source,
+            &stage,
+            TextEncoding::Utf8,
+            TextEncoding::Utf8,
+            false,
+            WindowKind::CjkOverlap,
+            |_, _, _| async { unreachable!() },
+            |_, _| {},
+            |_, _| {},
+            None,
+            Some(ParallelConvert {
+                convert: &convert,
+                runtime: &ConvertRuntime::new(|| 8).unwrap(),
+            }),
+        )
+        .await
+        .unwrap();
+        assert!(matches!(result, StreamResult::Written(_)), "{result:?}");
+        assert_eq!(std::fs::read_to_string(&stage).unwrap(), text);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn convert_error_stops_pipeline_and_removes_stage() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let dir = std::env::temp_dir().join(format!("convertzz-stream-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("in.txt");
+        let stage = dir.join("out.txt");
+        std::fs::write(&source, "里面开发".repeat(100_000)).unwrap();
+        let calls = AtomicUsize::new(0);
+        let convert = |piece: &str, skip: usize, hold: usize| {
+            if calls.fetch_add(1, Ordering::SeqCst) == 5 {
+                return Err(CoreError::new("TEST_FAIL", "boom"));
+            }
+            Ok(ConvertedPiece {
+                text: slice_chars(piece, skip, hold),
+                warnings: Vec::new(),
+            })
+        };
+        let result = stream_convert_path(
+            &source,
+            &stage,
+            TextEncoding::Utf8,
+            TextEncoding::Utf8,
+            false,
+            WindowKind::CjkOverlap,
+            |_, _, _| async { unreachable!() },
+            |_, _| {},
+            |_, _| {},
+            None,
+            Some(ParallelConvert {
+                convert: &convert,
+                runtime: &ConvertRuntime::new(|| 4).unwrap(),
+            }),
+        )
+        .await;
+        assert_eq!(result.unwrap_err().code, "TEST_FAIL");
+        assert!(!stage.exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

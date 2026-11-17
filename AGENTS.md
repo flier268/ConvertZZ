@@ -37,7 +37,7 @@ ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程
 
 ## 建置與檢查
 
-需要 Node.js 24、Rust stable，以及 `package.json` 的 `packageManager` 所指定的 pnpm。Linux 建置套件見 README，不要自行加入 `libxdo-dev` 或 `libssl-dev`。
+需要 Node.js 24、Rust stable（`rust-version` 1.100 以上），以及 `package.json` 的 `packageManager` 所指定的 pnpm。Linux 建置套件見 README，不要自行加入 `libxdo-dev` 或 `libssl-dev`。
 
 ```bash
 git submodule update --init --recursive

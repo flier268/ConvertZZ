@@ -8,18 +8,18 @@ ConvertZZ 2.0 包含第三方自由軟體。
 | --- | --- | --- |
 | Vue | 3.5.41 | MIT |
 | Element Plus | 2.14.4 | MIT |
-| Tauri | 2.11 | Apache-2.0 OR MIT |
-| tauri-plugin-updater | 2.10.1 | Apache-2.0 OR MIT |
-| tauri-plugin-process | 2.3.1 | Apache-2.0 OR MIT |
+| Tauri | 2.12 | Apache-2.0 OR MIT |
+| tauri-plugin-updater | 2.14.1 | Apache-2.0 OR MIT |
+| tauri-plugin-process | 2.4.0 | Apache-2.0 OR MIT |
 | cjk-convert-rs | 0.1.0 | ISC |
 | ws-segment-rs | 0.1.6 | MIT |
-| encoding_rs | 0.8.35 | Apache-2.0 OR MIT |
+| encoding_rs | 0.8.44 | Apache-2.0 OR MIT |
 | chardetng | 1.0.0 | Apache-2.0 OR MIT |
 | id3 | 1.17 | MPL-2.0 |
 | lofty | 0.25 | MIT OR Apache-2.0 |
 | reqwest | 0.13 | Apache-2.0 OR MIT |
 | enigo | 0.6.1 | MIT |
-| arboard | 3.6.1 | Apache-2.0 OR MIT |
+| arboard | 3.7.0 | Apache-2.0 OR MIT |
 | keyring | 4 | Apache-2.0 OR MIT |
 
 完整 JavaScript 相依版本記錄於 `pnpm-lock.yaml`。

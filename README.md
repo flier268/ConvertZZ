@@ -298,7 +298,7 @@ git clone --recurse-submodules https://github.com/flier268/ConvertZZ.git
 
 需要 pnpm 10.26.1。
 
-需要 Rust stable。
+需要 Rust stable（1.100 以上，見 `src-tauri/Cargo.toml` 的 `rust-version`）。
 
 Windows 需要 WebView2。
 

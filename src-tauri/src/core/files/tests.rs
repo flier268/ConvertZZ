@@ -4813,3 +4813,69 @@ async fn plan_marks_in_batch_duplicate_outputs_as_conflict_even_when_overwriting
     assert_eq!(remaining, 2, "兩個檔案都必須保留");
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+async fn convert_with_existing_bak(policy: ConflictPolicy) -> (Vec<u8>, String) {
+    let directory = temp_dir();
+    let path = directory.join("note.txt");
+    let bak = directory.join("note.txt.bak");
+    std::fs::write(&path, "里面").unwrap();
+    std::fs::write(&bak, "old-backup").unwrap();
+    let service = FileService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            FilePlanRequest {
+                paths: vec![path.to_string_lossy().into_owned()],
+                output_path: None,
+                output_directory: None,
+                mode: FileMode::Content,
+                recursive: false,
+                input_encoding: TextEncoding::Utf8,
+                output_encoding: TextEncoding::Utf8,
+                add_bom: false,
+                fix_charset_declaration: false,
+                fix_charset_extensions: None,
+                allowed_extensions: None,
+                extension_filter: None,
+                preview_max_bytes: None,
+                conflict_policy: policy,
+                backup: Some(true),
+                include_ignored: false,
+                conversion: conversion_s2t(),
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    let output = (
+        std::fs::read(&bak).unwrap(),
+        std::fs::read_to_string(&path).unwrap(),
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+    output
+}
+
+#[tokio::test]
+async fn bak_conflict_skip_keeps_existing_file_backup() {
+    let (bak, converted) = convert_with_existing_bak(ConflictPolicy::Skip).await;
+    assert_eq!(bak, b"old-backup");
+    assert_eq!(converted, "裡面");
+}
+
+#[tokio::test]
+async fn bak_conflict_overwrite_replaces_file_backup() {
+    let (bak, converted) = convert_with_existing_bak(ConflictPolicy::Overwrite).await;
+    assert_eq!(bak, "里面".as_bytes());
+    assert_eq!(converted, "裡面");
+}

@@ -283,7 +283,7 @@ test.describe("ConvertZZ 前端", () => {
       .toEqual(
         expect.arrayContaining([
           expect.stringContaining("將執行"),
-          "覆寫會取代既有的同名檔案。是否確定繼續？",
+          "覆寫會取代既有的同名檔案與 .bak 備份。是否確定繼續？",
         ]),
       );
   });

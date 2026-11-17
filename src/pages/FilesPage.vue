@@ -618,7 +618,7 @@ async function applyPlan() {
   if (!accepted) return;
   if (
     options.conflictPolicy === "overwrite" &&
-    !(await confirm("覆寫會取代既有的同名檔案。是否確定繼續？", {
+    !(await confirm("覆寫會取代既有的同名檔案與 .bak 備份。是否確定繼續？", {
       title: "確認覆寫",
       kind: "warning",
     }))

@@ -681,7 +681,7 @@ impl FileService {
                     .chain(pending_directories.iter())
                     .map(|file| PathBuf::from(&file.item.source_path))
                     .collect::<Vec<_>>(),
-                ConflictPolicy::Overwrite,
+                plan.request.conflict_policy,
             ) {
                 result.failed.push(ApplyFailure {
                     path: "備份".into(),

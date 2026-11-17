@@ -10,7 +10,9 @@ import {
   modeLabel,
   parseImportedProfiles,
   summarizeProfile,
+  profileDisplayName,
 } from "../lib/filterProfiles";
+import { t, tn } from "@/i18n";
 import ProfileEditorDialog from "./ProfileEditorDialog.vue";
 
 /** 直接修改傳入的 `settings.files`；儲存由設定頁的儲存列負責。 */
@@ -65,9 +67,9 @@ function openImport(): void {
 async function copyExport(): Promise<void> {
   try {
     await navigator.clipboard.writeText(transferText.value);
-    ElMessage.success("已複製到剪貼簿。");
+    ElMessage.success(t("components.filterProfiles.copied"));
   } catch {
-    ElMessage.warning("無法寫入剪貼簿，請手動選取文字複製。");
+    ElMessage.warning(t("components.filterProfiles.copyFailed"));
   }
 }
 
@@ -86,7 +88,7 @@ function runImport(): void {
   }
   for (const profile of result.profiles) upsertProfile(props.files, profile);
   transferVisible.value = false;
-  ElMessage.success(`已匯入 ${result.profiles.length} 個 profile。`);
+  ElMessage.success(tn("components.filterProfiles.imported", result.profiles.length));
 }
 
 function setBehavior(value: unknown): void {
@@ -97,34 +99,36 @@ function setBehavior(value: unknown): void {
 <template>
   <div class="filter-profiles" data-testid="filter-profiles">
     <div class="profiles-head">
-      <div class="section-title">副檔名篩選 profile</div>
+      <div class="section-title">{{ t("components.filterProfiles.title") }}</div>
       <div class="profiles-actions">
-        <el-button @click="create">新增</el-button>
-        <el-button @click="openImport">匯入</el-button>
-        <el-button @click="openExport">匯出</el-button>
+        <el-button @click="create">{{ t("components.filterProfiles.create") }}</el-button>
+        <el-button @click="openImport">{{ t("components.filterProfiles.import") }}</el-button>
+        <el-button @click="openExport">{{ t("components.filterProfiles.export") }}</el-button>
       </div>
     </div>
     <el-table :data="profiles" row-key="id" class="profiles-table" size="small">
-      <el-table-column label="預設" width="70">
+      <el-table-column :label="t('components.filterProfiles.default')" width="70">
         <template #default="{ row }">
           <el-radio
             :model-value="files.defaultFilterProfileId"
             :value="row.id"
-            :aria-label="`設 ${row.name} 為預設`"
+            :aria-label="
+              t('components.filterProfiles.setDefaultAria', { name: profileDisplayName(row) })
+            "
             @update:model-value="setDefault(row)"
-            ><span class="sr-only">預設</span></el-radio
+            ><span class="sr-only">{{ t("components.filterProfiles.default") }}</span></el-radio
           >
         </template>
       </el-table-column>
-      <el-table-column label="名稱" min-width="140">
+      <el-table-column :label="t('components.filterProfiles.name')" min-width="140">
         <template #default="{ row }"
-          >{{ row.name
-          }}<el-tag disable-transitions v-if="row.builtin" size="small" class="builtin-tag"
-            >內建</el-tag
-          >
+          >{{ profileDisplayName(row)
+          }}<el-tag disable-transitions v-if="row.builtin" size="small" class="builtin-tag">{{
+            t("components.filterProfiles.builtin")
+          }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="模式" width="90">
+      <el-table-column :label="t('components.filterProfiles.mode')" width="90">
         <template #default="{ row }"
           ><el-tag
             disable-transitions
@@ -134,26 +138,32 @@ function setBehavior(value: unknown): void {
           ></template
         >
       </el-table-column>
-      <el-table-column label="副檔名" min-width="200">
+      <el-table-column :label="t('components.filterProfiles.extensions')" min-width="200">
         <template #default="{ row }">{{ summarizeProfile(row) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="180">
+      <el-table-column :label="t('components.filterProfiles.actions')" width="180">
         <template #default="{ row }">
-          <el-button text type="primary" @click="edit(row)">編輯</el-button>
-          <el-button text type="primary" @click="copy(row)">複製</el-button>
-          <el-button v-if="!row.builtin" text type="danger" @click="remove(row)">刪除</el-button>
+          <el-button text type="primary" @click="edit(row)">{{
+            t("components.filterProfiles.edit")
+          }}</el-button>
+          <el-button text type="primary" @click="copy(row)">{{
+            t("components.filterProfiles.copy")
+          }}</el-button>
+          <el-button v-if="!row.builtin" text type="danger" @click="remove(row)">{{
+            t("common.delete")
+          }}</el-button>
         </template>
       </el-table-column>
     </el-table>
     <div class="settings-section">
-      <div class="section-title">選取來源資料夾的流程</div>
+      <div class="section-title">{{ t("components.filterProfiles.folderPickTitle") }}</div>
       <el-radio-group
         :model-value="files.folderPickBehavior"
-        aria-label="選取資料夾流程"
+        :aria-label="t('components.filterProfiles.folderPickAria')"
         @update:model-value="setBehavior"
       >
-        <el-radio value="rememberLast">記住上次的 profile，選完資料夾直接到預覽</el-radio>
-        <el-radio value="alwaysWizard">每次都走完整流程</el-radio>
+        <el-radio value="rememberLast">{{ t("components.filterProfiles.rememberLast") }}</el-radio>
+        <el-radio value="alwaysWizard">{{ t("components.filterProfiles.alwaysWizard") }}</el-radio>
       </el-radio-group>
     </div>
     <ProfileEditorDialog
@@ -164,15 +174,19 @@ function setBehavior(value: unknown): void {
     />
     <el-dialog
       v-model="transferVisible"
-      :title="transferKind === 'export' ? '匯出 profile' : '匯入 profile'"
+      :title="
+        transferKind === 'export'
+          ? t('components.filterProfiles.exportTitle')
+          : t('components.filterProfiles.importTitle')
+      "
       width="560px"
       append-to-body
     >
       <p class="muted">
         {{
           transferKind === "export"
-            ? "自訂 profile 的 JSON。內建 profile 不會匯出。"
-            : "貼上匯出的 JSON，或選擇檔案載入。同名 profile 會自動改名。"
+            ? t("components.filterProfiles.exportHint")
+            : t("components.filterProfiles.importHint")
         }}
       </p>
       <el-input
@@ -180,7 +194,7 @@ function setBehavior(value: unknown): void {
         type="textarea"
         :rows="10"
         :readonly="transferKind === 'export'"
-        aria-label="profile JSON"
+        :aria-label="t('components.filterProfiles.jsonAria')"
       />
       <input
         v-if="transferKind === 'import'"
@@ -190,13 +204,13 @@ function setBehavior(value: unknown): void {
         @change="onImportFile"
       />
       <template #footer>
-        <el-button @click="transferVisible = false">關閉</el-button>
-        <el-button v-if="transferKind === 'export'" type="primary" @click="copyExport"
-          >複製</el-button
-        >
-        <el-button v-else type="primary" :disabled="!transferText.trim()" @click="runImport"
-          >匯入</el-button
-        >
+        <el-button @click="transferVisible = false">{{ t("common.close") }}</el-button>
+        <el-button v-if="transferKind === 'export'" type="primary" @click="copyExport">{{
+          t("components.filterProfiles.copy")
+        }}</el-button>
+        <el-button v-else type="primary" :disabled="!transferText.trim()" @click="runImport">{{
+          t("components.filterProfiles.import")
+        }}</el-button>
       </template>
     </el-dialog>
   </div>

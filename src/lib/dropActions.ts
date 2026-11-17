@@ -1,4 +1,5 @@
 import type { Direction, LastDropActionSettings, ParsedCli, SettingsV2 } from "@shared/contracts";
+import { t } from "@/i18n";
 
 export type DropActionKind = "file" | "audio";
 
@@ -68,11 +69,12 @@ export function dropTargetPage(kind: DropActionKind): "files" | "audio" {
 
 /** 對話框路徑摘要；過多時截斷。 */
 export function summarizeDropPaths(paths: string[], limit = 3): string {
-  if (!paths.length) return "未選取檔案";
+  if (!paths.length) return t("lib.dropActions.noFiles");
   const shown = paths.slice(0, limit).map((path) => {
     const parts = path.split(/[/\\]/u).filter(Boolean);
     return parts[parts.length - 1] ?? path;
   });
   const extra = paths.length - shown.length;
-  return extra > 0 ? `${shown.join("、")} 等 ${paths.length} 項` : shown.join("、");
+  const names = shown.join(t("lib.dropActions.separator"));
+  return extra > 0 ? t("lib.dropActions.more", { names, count: paths.length }) : names;
 }

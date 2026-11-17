@@ -96,7 +96,7 @@ describe("Tauri desktop shell", () => {
 
     expect(component).toContain("pointerIntent");
     expect(component).toContain("popupAppMenu");
-    expect(component).toContain("FLOATING_CONTEXT_MENU");
+    expect(component).toContain("floatingContextMenu()");
     expect(component).not.toContain("dblclick");
     expect(component).not.toContain('run("s2t")');
     expect(component).not.toContain('run("t2s")');
@@ -116,9 +116,10 @@ describe("Tauri desktop shell", () => {
     expect(app).toContain('listen<FileDropPayload>("app://file-drop"');
     expect(app).toContain("DropActionDialog");
     expect(app).toContain("buildDropCliInvocation");
-    expect(dialog).toContain("檔案與檔名轉換");
-    expect(dialog).toContain("音訊標籤");
-    expect(dialog).toContain("轉換內容");
+    expect(dialog).toContain('t("components.dropAction.file")');
+    expect(readProjectFile("src/i18n/zh-TW/components.ts")).toContain('file: "檔案與檔名轉換"');
+    expect(dialog).toContain('t("components.dropAction.audio")');
+    expect(dialog).toContain('t("components.dropAction.content")');
     expect(dialog).toContain("lastChoice");
     expect(actions).toContain("buildDropCliInvocation");
     expect(actions).toContain("normalizeDropActionChoice");
@@ -139,7 +140,10 @@ describe("Tauri desktop shell", () => {
     expect(app).toContain("isOnboardingComplete");
     expect(app).toContain("args.length > 0");
     expect(settings).toContain("showMainWindowOnStart");
-    expect(settings).toContain("啟動時顯示主視窗");
+    expect(settings).toContain('t("settings.general.showMainWindowOnStart")');
+    expect(readProjectFile("src/i18n/zh-TW/settings.ts")).toContain(
+      'showMainWindowOnStart: "啟動時顯示主視窗"',
+    );
     expect(tour).toContain('invoke("show_main_window")');
     expect(rust).toContain("fn hide_startup_windows");
     expect(rust).toContain('"floating", "toast"');
@@ -238,7 +242,8 @@ describe("Tauri desktop shell", () => {
     expect(app).toContain("skippedVersion: settings.skippedUpdateVersion");
     expect(app).toContain("includePreRelease: settings.checkPreReleaseUpdates");
     expect(app).toContain("app_log_path");
-    expect(app).toContain("記錄檔：");
+    expect(app).toContain('t("app.logFile"');
+    expect(readProjectFile("src/i18n/zh-TW/app.ts")).toContain("記錄檔：");
     expect(about).toContain("promptForAppUpdate");
     expect(about).not.toContain("github.com/flier268/ConvertZZ/releases");
   });
@@ -262,10 +267,15 @@ describe("Tauri desktop shell", () => {
     expect(rust).toContain("fn app_log(");
     expect(rust).toContain("(empty message)");
     expect(readProjectFile("src/App.vue")).toContain('invoke("app_log"');
-    expect(readProjectFile("src/App.vue")).toContain("啟動失敗於");
+    expect(readProjectFile("src/App.vue")).toContain('t("app.startupFailed"');
+    expect(readProjectFile("src/i18n/zh-TW/app.ts")).toContain("啟動失敗於");
     expect(readProjectFile("src/App.vue")).toContain("formatUnknownError");
-    expect(readProjectFile("src/lib/desktop.ts")).toContain("無法註冊全域快捷鍵");
-    expect(readProjectFile("src/lib/desktop.ts")).toContain("無法套用浮動球");
+    expect(readProjectFile("src/lib/desktop.ts")).toContain(
+      't("lib.desktop.globalShortcutsFailed"',
+    );
+    expect(readProjectFile("src/lib/desktop.ts")).toContain('t("lib.desktop.floatingBallFailed"');
+    expect(readProjectFile("src/i18n/zh-TW/lib.ts")).toContain("無法註冊全域快捷鍵");
+    expect(readProjectFile("src/i18n/zh-TW/lib.ts")).toContain("無法套用浮動球");
   });
 
   it("raises the production chunk size warning for Element Plus", () => {
@@ -333,16 +343,20 @@ describe("Tauri desktop shell", () => {
     const loader = readProjectFile("src/lib/settings.ts");
     const about = readProjectFile("src/pages/AboutPage.vue");
 
-    expect(settings).toContain("匯入 ConvertZZ.json");
+    expect(settings).toContain('t("settings.importLegacy")');
+    expect(readProjectFile("src/i18n/zh-TW/settings.ts")).toContain(
+      'importLegacy: "匯入 ConvertZZ.json"',
+    );
     expect(settings).toContain("importLegacySettings");
     expect(settings).toContain("onSettingsReplaced");
     expect(settings).toContain("settings-save-bar");
     expect(settings).toContain("header-actions");
     expect(loader).toContain("notifySettingsReplaced");
     expect(loader).not.toContain("找到舊版 ConvertZZ.json");
-    expect(tour).toContain("匯入舊版設定");
+    expect(readProjectFile("src/i18n/zh-TW/app.ts")).toContain("匯入舊版設定");
     expect(tour).toContain("importLegacySettings");
-    expect(about).toContain("重看系統導覽");
+    expect(about).toContain('t("about.replayOnboarding")');
+    expect(readProjectFile("src/i18n/zh-TW/about.ts")).toContain("重看系統導覽");
   });
 
   it("builds the Windows MSI as a Traditional Chinese installer", () => {
@@ -369,13 +383,13 @@ describe("Tauri desktop shell", () => {
     expect(rust).toContain("show_menu_on_left_click(false)");
     expect(rust).toContain("WindowEvent::CloseRequested");
     expect(rust).toContain('app.emit("app://legacy-action", id)');
-    expect(rust).toContain('.text("a3", "Unicode 簡 → Unicode 繁")');
-    expect(rust).toContain('.text("b1", "文件/檔名轉換")');
-    expect(rust).toContain('.text("settings", "設定")');
-    expect(rust).toContain('.text("c1", "Audio 標籤轉換")');
+    expect(rust).toMatch(/\.text\(\s*"a3",\s*tr_static!\(\s*"Unicode 簡 → Unicode 繁",/);
+    expect(rust).toMatch(/\.text\(\s*"b1",\s*tr_static!\(\s*"文件\/檔名轉換",/);
+    expect(rust).toContain('.text("settings", tr_static!("設定", "Settings"))');
+    expect(rust).toContain('.text("c1", tr_static!("Audio 標籤轉換", "Convert audio tags"))');
     expect(rust).not.toContain('"c2"');
     for (const actionId of ["a1", "a4", "b2", "c1", "za1", "ze2", "1", "about", "report", "quit"]) {
-      expect(rust).toContain(`.text("${actionId}"`);
+      expect(rust).toMatch(new RegExp(`\\.text\\(\\s*"${actionId}"`));
     }
     expect(config.bundle?.icon).toEqual(
       expect.arrayContaining(["icons/icon.png", "icons/icon.ico"]),

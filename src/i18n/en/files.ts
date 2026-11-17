@@ -1,6 +1,102 @@
 import type source from "../zh-TW/files";
 import type { LocaleMessages } from "../types";
 
-const messages: LocaleMessages<typeof source> = {};
+const messages: LocaleMessages<typeof source> = {
+  eyebrow: "BATCH",
+  title: "Files and file names",
+  subtitle:
+    "Build the file list first; content previews load when you click an item, and only checked items are converted and written.",
+  chooseOutputFolder: "Choose output folder",
+  chooseSourceFolder: "Choose source folder",
+  chooseFiles: "Choose files",
+  mode: {
+    label: "Operation",
+    content: "Convert content",
+    filename: "Convert file names",
+    both: "Content and file names",
+  },
+  direction: {
+    label: "Direction",
+    none: "No conversion",
+  },
+  engine: {
+    label: "Engine",
+    segmented: "Segmentation engine",
+  },
+  inputEncoding: "Source encoding",
+  outputEncoding: "Output encoding",
+  conflict: {
+    label: "On conflict",
+    skip: "Skip",
+    overwrite: "Overwrite",
+  },
+  vocabularyCorrection: "Vocabulary correction",
+  recursive: "Include subfolders",
+  fixCharsetDeclaration: "Fix charset declarations",
+  addBom: "Add BOM",
+  backup: "Back up before converting (.bak)",
+  filter: {
+    label: "Extension filter",
+    selectAria: "Current filter profile",
+    option: "{name} ({mode})",
+    edit: "Edit filter",
+    deleteTitle: "Delete filter profile",
+    deleteConfirm: "Delete profile “{name}”?",
+  },
+  noPaths: "No paths selected",
+  pathSeparator: ", ",
+  pathsMore: "{paths} ({count} items)",
+  createPreview: "Create preview",
+  stopJob: "Stop",
+  cancelPlan: "Cancel plan",
+  outputDirectory: "Output folder: {path}",
+  useSourceDirectory: "Use source folder",
+  planTitle: "Change preview ({count})",
+  selectAll: "Select all",
+  selectNone: "Select none",
+  applyPlan: "Apply",
+  column: {
+    resize: "Drag to resize column",
+    selected: "Run",
+    kind: "Type",
+    status: "Status",
+    name: "File name",
+    source: "Source",
+    output: "Output",
+    encoding: "Encoding",
+    warning: "Warning",
+  },
+  preview: {
+    title: "File preview",
+    loading: "Loading…",
+    fullscreen: "Full-window preview",
+    selectItem: "Select a file on the left to load its preview",
+    preparing: "Preparing content preview…",
+    rendering: "Rendering differences…",
+    empty: "No differences to show",
+    dialogTitle: "File diff preview",
+  },
+  message: {
+    optionsChanged: "Options changed. Create the preview again.",
+    previewCancelled: "Preview cancelled.",
+    selectFirst: "Choose files or a folder first.",
+    filterEmpty: "The current filter matches no files. Edit or change the filter.",
+    ignoredTitle: "Convert version control folders?",
+    noFiles: "No convertible files found.",
+    planCancelled: "Preview creation cancelled.",
+    applyConfirm:
+      "{count} file operation will be performed. | {count} file operations will be performed.",
+    applyTitle: "Confirm file conversion",
+    overwriteConfirm:
+      "Overwriting replaces existing files with the same name and existing .bak backups. Continue?",
+    overwriteTitle: "Confirm overwrite",
+    doneWithSkipped: "Completed {done} file(s); {skipped} not processed (stopped or skipped).",
+    done: "Completed {count} file. | Completed {count} files.",
+    stoppedNothingWritten: "File conversion stopped; no files were written.",
+    skipped: "Skipped {count} file. | Skipped {count} files.",
+    failure: "{path}: {message}",
+    applyCancelled: "File conversion cancelled.",
+  },
+};
 
 export default messages;

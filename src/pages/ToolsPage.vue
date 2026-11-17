@@ -3,6 +3,7 @@ import { ref } from "vue";
 import { ElMessage } from "element-plus";
 import type { TextEncoding, UtilityConvertRequest } from "@shared/contracts";
 import { core } from "../lib/coreClient";
+import { t } from "@/i18n";
 
 defineOptions({ name: "ToolsPage" });
 
@@ -43,27 +44,31 @@ async function run() {
     <header class="page-header">
       <div>
         <p class="eyebrow">UTILITIES</p>
-        <h1>文字工具</h1>
-        <p>保留舊版的實體字元、編碼與全半形工具。</p>
+        <h1>{{ t("tools.title") }}</h1>
+        <p>{{ t("tools.subtitle") }}</p>
       </div>
     </header>
     <el-card shadow="never"
       ><div class="control-row">
         <el-select v-model="kind" style="width: 220px"
-          ><el-option label="HTML 十進位編碼" value="html-decimal-encode" /><el-option
-            label="HTML 十進位解碼"
+          ><el-option
+            :label="t('tools.kind.htmlDecimalEncode')"
+            value="html-decimal-encode" /><el-option
+            :label="t('tools.kind.htmlDecimalDecode')"
             value="html-decimal-decode" /><el-option
-            label="HTML 十六進位編碼"
+            :label="t('tools.kind.htmlHexEncode')"
             value="html-hex-encode" /><el-option
-            label="HTML 十六進位解碼"
+            :label="t('tools.kind.htmlHexDecode')"
             value="html-hex-decode" /><el-option
-            label="Unicode 跳脫編碼"
+            :label="t('tools.kind.unicodeEscapeEncode')"
             value="unicode-escape-encode" /><el-option
-            label="Unicode 跳脫解碼"
+            :label="t('tools.kind.unicodeEscapeDecode')"
             value="unicode-escape-decode" /><el-option
-            label="重新解讀文字編碼"
-            value="encoding" /><el-option label="轉為全形" value="fullwidth" /><el-option
-            label="轉為半形"
+            :label="t('tools.kind.encoding')"
+            value="encoding" /><el-option
+            :label="t('tools.kind.fullwidth')"
+            value="fullwidth" /><el-option
+            :label="t('tools.kind.halfwidth')"
             value="halfwidth" /></el-select
         ><template v-if="kind === 'encoding'"
           ><el-select v-model="sourceEncoding" style="width: 150px"
@@ -79,15 +84,15 @@ async function run() {
               :key="value"
               :label="value"
               :value="value" /></el-select></template
-        ><el-button type="primary" @click="run">執行</el-button>
+        ><el-button type="primary" @click="run">{{ t("tools.run") }}</el-button>
       </div></el-card
     >
     <div class="editor-grid page-fill-main">
       <el-card shadow="never" class="editor-card"
-        ><template #header>輸入</template
+        ><template #header>{{ t("tools.input") }}</template
         ><el-input v-model="source" type="textarea" :rows="8" resize="none" /></el-card
       ><el-card shadow="never" class="editor-card result-card"
-        ><template #header>輸出</template
+        ><template #header>{{ t("tools.output") }}</template
         ><el-input v-model="output" type="textarea" :rows="8" resize="none"
       /></el-card>
     </div>

@@ -20,6 +20,7 @@ import {
   mergeImport,
   type DictionaryFilter,
 } from "../lib/userDictionary";
+import { locale, t, tn } from "@/i18n";
 
 defineOptions({ name: "DictionaryPage" });
 
@@ -27,20 +28,19 @@ interface Row extends UserDictionaryEntry {
   key: number;
 }
 
-const directionLabels: Record<UserDictionaryDirection, string> = {
-  both: "雙向",
-  s2t: "只用於簡轉繁",
-  t2s: "只用於繁轉簡",
-};
+const directions: UserDictionaryDirection[] = ["both", "s2t", "t2s"];
 
-const statusLabels: Record<DictionaryImportRow["status"], string> = {
-  importable: "可匯入",
-  disabled: "已停用",
-  invalid: "無法匯入",
-  duplicate: "重複",
-};
+function directionLabel(direction: UserDictionaryDirection): string {
+  return t(`dictionary.direction.${direction}`);
+}
 
-const fileFilters = [{ name: "字典檔", extensions: DICTIONARY_FILE_EXTENSIONS }];
+function statusLabel(status: DictionaryImportRow["status"]): string {
+  return t(`dictionary.status.${status}`);
+}
+
+function fileFilters() {
+  return [{ name: t("dictionary.fileFilterName"), extensions: DICTIONARY_FILE_EXTENSIONS }];
+}
 
 const path = ref("");
 const loadError = ref("");
@@ -113,7 +113,9 @@ function touch() {
 function formatImportedAt(value?: string): string {
   if (!value) return "";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-TW", { hour12: false });
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString(locale.value, { hour12: false });
 }
 
 function setAllVisibleSelected(value: boolean) {
@@ -126,10 +128,10 @@ function setSelected(row: Row, value: boolean) {
   else selected.delete(row.key);
 }
 
-const columns: Column<Row>[] = [
+const columns = computed<Column<Row>[]>(() => [
   {
     key: "selected",
-    title: "選取",
+    title: t("dictionary.column.selected"),
     width: 48,
     align: "center",
     headerCellRenderer: () =>
@@ -137,19 +139,19 @@ const columns: Column<Row>[] = [
         modelValue: allVisibleSelected.value,
         indeterminate: selected.size > 0 && !allVisibleSelected.value,
         disabled: visibleRows.value.length === 0,
-        "aria-label": "全選篩選結果",
+        "aria-label": t("dictionary.column.selectAllVisible"),
         "onUpdate:modelValue": (value: CheckboxValueType) => setAllVisibleSelected(Boolean(value)),
       }),
     cellRenderer: ({ rowData }) =>
       h(ElCheckbox, {
         modelValue: selected.has(rowData.key),
-        "aria-label": "選取此列",
+        "aria-label": t("dictionary.column.selectRow"),
         "onUpdate:modelValue": (value: CheckboxValueType) => setSelected(rowData, Boolean(value)),
       }),
   },
   {
     key: "simplified",
-    title: "簡體",
+    title: t("dictionary.column.simplified"),
     width: 200,
     flexGrow: 1,
     cellRenderer: ({ rowData }) =>
@@ -163,7 +165,7 @@ const columns: Column<Row>[] = [
   },
   {
     key: "traditional",
-    title: "繁體",
+    title: t("dictionary.column.traditional"),
     width: 200,
     flexGrow: 1,
     cellRenderer: ({ rowData }) =>
@@ -177,7 +179,7 @@ const columns: Column<Row>[] = [
   },
   {
     key: "direction",
-    title: "方向",
+    title: t("dictionary.column.direction"),
     width: 150,
     cellRenderer: ({ rowData }) =>
       h(
@@ -190,14 +192,14 @@ const columns: Column<Row>[] = [
           },
         },
         () =>
-          Object.entries(directionLabels).map(([value, label]) =>
-            h(ElOption, { key: value, value, label }),
+          directions.map((value) =>
+            h(ElOption, { key: value, value, label: directionLabel(value) }),
           ),
       ),
   },
   {
     key: "source",
-    title: "匯入來源",
+    title: t("dictionary.column.source"),
     width: 220,
     flexGrow: 1,
     cellRenderer: ({ rowData }) =>
@@ -206,20 +208,18 @@ const columns: Column<Row>[] = [
             h("span", rowData.sourceFile),
             h("small", formatImportedAt(rowData.importedAt)),
           ])
-        : h("span", { class: "dictionary-source-manual" }, "手動加入"),
+        : h("span", { class: "dictionary-source-manual" }, t("dictionary.manualSource")),
   },
   {
     key: "actions",
-    title: "操作",
+    title: t("dictionary.column.actions"),
     width: 72,
     cellRenderer: ({ rowData }) =>
-      h(
-        ElButton,
-        { link: true, type: "danger", onClick: () => void removeEntry(rowData) },
-        () => "刪除",
+      h(ElButton, { link: true, type: "danger", onClick: () => void removeEntry(rowData) }, () =>
+        t("common.delete"),
       ),
   },
-];
+]);
 
 async function load() {
   busy.value = true;
@@ -249,15 +249,17 @@ function addEntry() {
 }
 
 async function confirmRemoval(message: string): Promise<boolean> {
-  return confirm(`${message}按「儲存」後才會寫入詞典；儲存前可按「重設未儲存變更」復原。`, {
-    title: "確認刪除詞條",
+  return confirm(message, {
+    title: t("dictionary.removal.title"),
     kind: "warning",
   });
 }
 
 async function removeEntry(row: Row) {
-  const label = [row.simplified, row.traditional].filter(Boolean).join("／") || "空白詞條";
-  if (!(await confirmRemoval(`要從表格刪除「${label}」嗎？`))) return;
+  const label =
+    [row.simplified, row.traditional].filter(Boolean).join("／") ||
+    t("dictionary.removal.emptyEntry");
+  if (!(await confirmRemoval(t("dictionary.removal.confirmOne", { label })))) return;
   selected.delete(row.key);
   replaceRows(
     rows.value.filter((candidate) => candidate.key !== row.key),
@@ -268,20 +270,25 @@ async function removeEntry(row: Row) {
 async function removeSelected() {
   const count = selected.size;
   if (!count) return;
-  if (!(await confirmRemoval(`要從表格刪除選取的 ${count.toLocaleString()} 筆詞條嗎？`))) return;
+  const message = tn("dictionary.removal.confirmSelected", count, {
+    count: count.toLocaleString(),
+  });
+  if (!(await confirmRemoval(message))) return;
   const keys = new Set(selected);
   selected.clear();
   replaceRows(
     rows.value.filter((row) => !keys.has(row.key)),
     true,
   );
-  ElMessage.success(`已從表格刪除 ${count} 筆，按「儲存」後才會生效。`);
+  ElMessage.success(tn("dictionary.removal.removed", count));
 }
 
 function conflictMessage(values: UserDictionaryEntry[]): string | undefined {
   const conflicts = findConflicts(values);
   if (!conflicts.length) return undefined;
-  return `同一方向的來源詞對應到不同詞：${conflicts.slice(0, 5).join("、")}`;
+  return t("dictionary.conflict", {
+    list: conflicts.slice(0, 5).join(t("dictionary.listSeparator")),
+  });
 }
 
 /** 寫入 user-dictionary.txt 並重新載入轉換引擎；呼叫前須已取得使用者確認。 */
@@ -309,17 +316,17 @@ async function save() {
     return;
   }
   if (
-    !(await confirm(`將寫入 ${values.length} 筆詞彙並重新載入轉換引擎。是否繼續？`, {
-      title: "確認儲存使用者詞典",
+    !(await confirm(tn("dictionary.save.confirm", values.length), {
+      title: t("dictionary.save.confirmTitle"),
       kind: "warning",
     }))
   )
     return;
-  if (await persist(values)) ElMessage.success(`已儲存 ${values.length} 筆詞彙。`);
+  if (await persist(values)) ElMessage.success(tn("dictionary.save.saved", values.length));
 }
 
 async function chooseImportFile() {
-  const selected = await open({ multiple: false, filters: fileFilters });
+  const selected = await open({ multiple: false, filters: fileFilters() });
   if (!selected || Array.isArray(selected)) return;
   busy.value = true;
   let preview: DictionaryImportPreview;
@@ -336,8 +343,8 @@ async function chooseImportFile() {
   if (
     preview.format === "legacy" &&
     !(await confirm(
-      `「${preview.sourceFile}」是 1.x 的舊版字典，不建議直接匯入：舊版內建詞條品質參差，部分詞 2.0 的轉法已經比較好，直接匯入反而會蓋掉。建議只挑自己加過的詞手動新增。仍要匯入嗎？`,
-      { title: "不建議直接匯入舊版字典", kind: "warning" },
+      t("dictionary.importDialog.legacyConfirm", { sourceFile: preview.sourceFile }),
+      { title: t("dictionary.importDialog.legacyTitle"), kind: "warning" },
     ))
   )
     return;
@@ -351,21 +358,25 @@ async function applyImport() {
   const result = mergeImport(entries(), preview);
   const conflict = conflictMessage(result.entries);
   if (conflict) {
-    ElMessage.error(`${conflict}。請先修正表格再匯入。`);
+    ElMessage.error(t("dictionary.importDialog.conflict", { conflict }));
     return;
   }
   const savingEdits = dirty.value;
   replaceRows(toRows(result.entries), true);
   importVisible.value = false;
   if (!(await persist(result.entries))) {
-    ElMessage.warning("匯入的詞條已加入表格，但尚未儲存。");
+    ElMessage.warning(t("dictionary.importDialog.notSaved"));
     return;
   }
-  const notes = [`加入 ${result.added} 筆`];
-  if (result.existing) notes.push(`${result.existing} 筆已在表格中，改標為這次匯入`);
-  if (result.conflicts) notes.push(`${result.conflicts} 筆與表格既有詞條衝突，保留既有詞條`);
-  if (savingEdits) notes.push("表格中原本未儲存的變更也一併儲存");
-  ElMessage.success(`${notes.join("，")}。已轉存為使用者詞典。`);
+  const notes = [tn("dictionary.importDialog.added", result.added)];
+  if (result.existing) notes.push(tn("dictionary.importDialog.existing", result.existing));
+  if (result.conflicts) notes.push(tn("dictionary.importDialog.conflicts", result.conflicts));
+  if (savingEdits) notes.push(t("dictionary.importDialog.savedEdits"));
+  ElMessage.success(
+    t("dictionary.importDialog.done", {
+      notes: notes.join(t("dictionary.importDialog.noteSeparator")),
+    }),
+  );
 }
 
 async function exportDictionary() {
@@ -376,15 +387,15 @@ async function exportDictionary() {
     return;
   }
   const target = await chooseSavePath({
-    defaultPath: "ConvertZZ-使用者詞典.txt",
-    filters: fileFilters,
+    defaultPath: t("dictionary.defaultExportName"),
+    filters: fileFilters(),
   });
   if (!target) return;
   busy.value = true;
   try {
     await core.request("userDictionary.export", { path: target, entries: values });
     ElMessage.success(
-      `已匯出 ${values.length} 筆詞彙${dirty.value ? "（含尚未儲存的變更）" : ""}。`,
+      tn(dirty.value ? "dictionary.exportedWithUnsaved" : "dictionary.exported", values.length),
     );
   } catch (error) {
     ElMessage.error(formatUnknownError(error));
@@ -401,52 +412,66 @@ void load();
     <header class="page-header">
       <div>
         <p class="eyebrow">USER DICTIONARY</p>
-        <h1>使用者詞典</h1>
-        <p>自訂整詞對應。詞彙會加入分詞，轉換時整詞套用，不做全文直接取代。</p>
+        <h1>{{ t("dictionary.title") }}</h1>
+        <p>{{ t("dictionary.subtitle") }}</p>
       </div>
       <div class="header-actions">
-        <el-button :loading="busy" @click="chooseImportFile">匯入</el-button
-        ><el-button :disabled="busy" @click="exportDictionary">匯出</el-button
-        ><el-button @click="addEntry">新增</el-button
-        ><el-button type="danger" plain :disabled="!selectedCount" @click="removeSelected"
-          >刪除選取{{ selectedCount ? `（${selectedCount.toLocaleString()}）` : "" }}</el-button
-        ><el-button :disabled="!dirty" @click="load">重設未儲存變更</el-button
-        ><el-button type="primary" :disabled="!dirty" :loading="busy" @click="save">儲存</el-button>
+        <el-button :loading="busy" @click="chooseImportFile">{{ t("dictionary.import") }}</el-button
+        ><el-button :disabled="busy" @click="exportDictionary">{{
+          t("dictionary.export")
+        }}</el-button
+        ><el-button @click="addEntry">{{ t("dictionary.add") }}</el-button
+        ><el-button type="danger" plain :disabled="!selectedCount" @click="removeSelected">{{
+          selectedCount
+            ? t("dictionary.deleteSelectedCount", { count: selectedCount.toLocaleString() })
+            : t("dictionary.deleteSelected")
+        }}</el-button
+        ><el-button :disabled="!dirty" @click="load">{{ t("dictionary.resetChanges") }}</el-button
+        ><el-button type="primary" :disabled="!dirty" :loading="busy" @click="save">{{
+          t("common.save")
+        }}</el-button>
       </div>
     </header>
-    <el-alert
-      title="簡轉繁時以簡體為來源詞、繁轉簡時以繁體為來源詞；來源詞只能是中日韓文字。匯入接受 .txt、.tsv、.csv，會自動判斷是本程式匯出的詞典或 1.x 舊版字典；匯入後轉存成使用者詞典，不會修改或再讀取原檔。"
-      type="info"
-      :closable="false"
-    />
+    <el-alert :title="t('dictionary.info')" type="info" :closable="false" />
     <el-alert
       v-if="loadError"
-      :title="`無法讀取使用者詞典，目前以空詞典轉換：${loadError}`"
+      :title="t('dictionary.loadError', { error: loadError })"
       type="error"
       :closable="false"
     />
     <el-card shadow="never"
       ><div class="dictionary-toolbar">
-        <el-input v-model="filter.keyword" clearable placeholder="搜尋簡體或繁體" /><el-select
+        <el-input
+          v-model="filter.keyword"
+          clearable
+          :placeholder="t('dictionary.filter.search')"
+        /><el-select
           v-model="filter.direction"
-          aria-label="方向篩選"
-          placeholder="全部方向"
-          ><el-option label="全部方向" value="" /><el-option
-            v-for="(label, value) in directionLabels"
+          :aria-label="t('dictionary.filter.directionLabel')"
+          :placeholder="t('dictionary.filter.allDirections')"
+          ><el-option :label="t('dictionary.filter.allDirections')" value="" /><el-option
+            v-for="value in directions"
             :key="value"
-            :label="label"
+            :label="directionLabel(value)"
             :value="value" /></el-select
-        ><el-select v-model="filter.source" aria-label="來源篩選" placeholder="全部來源" filterable
-          ><el-option label="全部來源" value="" /><el-option
-            label="手動加入"
+        ><el-select
+          v-model="filter.source"
+          :aria-label="t('dictionary.filter.sourceLabel')"
+          :placeholder="t('dictionary.filter.allSources')"
+          filterable
+          ><el-option :label="t('dictionary.filter.allSources')" value="" /><el-option
+            :label="t('dictionary.manualSource')"
             :value="MANUAL_SOURCE" /><el-option
             v-for="source in sourceOptions"
             :key="source"
             :label="source"
             :value="source" /></el-select
-        ><span
-          >{{ visibleRows.length.toLocaleString() }} / {{ rows.length.toLocaleString() }} 筆</span
-        >
+        ><span>{{
+          t("dictionary.filter.rowCount", {
+            visible: visibleRows.length.toLocaleString(),
+            total: rows.length.toLocaleString(),
+          })
+        }}</span>
       </div>
       <div class="path-label">{{ path }}</div></el-card
     >
@@ -467,44 +492,58 @@ void load();
           </template>
         </el-auto-resizer></div
     ></el-card>
-    <el-dialog v-model="importVisible" title="匯入詞典" width="720px">
+    <el-dialog v-model="importVisible" :title="t('dictionary.importDialog.title')" width="720px">
       <template v-if="importPreview">
         <p class="path-label">{{ importPreview.path }}</p>
         <p>
-          {{ importPreview.format === "legacy" ? "1.x 舊版字典" : "使用者詞典" }}，共
-          {{ importPreview.total }} 列：可匯入 {{ importPreview.importable }}、已停用
-          {{ importPreview.disabled }}、無法匯入 {{ importPreview.invalid }}、重複
-          {{ importPreview.duplicate }}。
+          {{
+            t("dictionary.importDialog.summary", {
+              format:
+                importPreview.format === "legacy"
+                  ? t("dictionary.importDialog.formatLegacy")
+                  : t("dictionary.importDialog.formatUser"),
+              total: importPreview.total,
+              importable: importPreview.importable,
+              disabled: importPreview.disabled,
+              invalid: importPreview.invalid,
+              duplicate: importPreview.duplicate,
+            })
+          }}
         </p>
         <p>
-          匯入的詞條會標記來源「{{ importPreview.sourceFile }}」與匯入時間，併入目前表格後立即儲存。
+          {{ t("dictionary.importDialog.note", { sourceFile: importPreview.sourceFile }) }}
         </p>
         <el-alert
           v-if="dirty"
-          title="表格中尚未儲存的變更也會一併儲存。"
+          :title="t('dictionary.importDialog.unsavedWarning')"
           type="warning"
           :closable="false"
         />
         <el-table v-if="skippedImportRows.length" :data="skippedImportRows" max-height="320"
-          ><el-table-column prop="line" label="列" width="70" /><el-table-column
+          ><el-table-column
+            prop="line"
+            :label="t('dictionary.column.line')"
+            width="70" /><el-table-column
             prop="simplified"
-            label="簡體" /><el-table-column prop="traditional" label="繁體" /><el-table-column
-            label="狀態"
+            :label="t('dictionary.column.simplified')" /><el-table-column
+            prop="traditional"
+            :label="t('dictionary.column.traditional')" /><el-table-column
+            :label="t('dictionary.column.status')"
             width="100"
             ><template #default="scope">{{
-              statusLabels[scope.row.status as DictionaryImportRow["status"]]
+              statusLabel(scope.row.status as DictionaryImportRow["status"])
             }}</template></el-table-column
-          ><el-table-column prop="reason" label="原因" min-width="200"
+          ><el-table-column prop="reason" :label="t('dictionary.column.reason')" min-width="200"
         /></el-table>
       </template>
       <template #footer
-        ><el-button @click="importVisible = false">取消</el-button
+        ><el-button @click="importVisible = false">{{ t("common.cancel") }}</el-button
         ><el-button
           type="primary"
           :loading="busy"
           :disabled="!importPreview?.importable"
           @click="applyImport"
-          >匯入並儲存</el-button
+          >{{ t("dictionary.importDialog.confirm") }}</el-button
         ></template
       >
     </el-dialog>

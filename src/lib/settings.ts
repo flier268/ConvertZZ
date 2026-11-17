@@ -11,6 +11,7 @@ import type {
 import { formatUnknownError } from "./errors";
 import { ONBOARDING_STORE_KEY } from "./onboarding";
 import { core } from "./coreClient";
+import { t } from "@/i18n";
 
 const state = reactive<{ ready: boolean; value?: SettingsV2 }>({ ready: false });
 let store: Store | undefined;
@@ -150,8 +151,8 @@ export async function importLegacySettings(
 ): Promise<SettingsV2 | undefined> {
   if (
     options.confirmReplace !== false &&
-    !(await confirm("匯入會取代目前的 2.0 設定。是否繼續？", {
-      title: "確認匯入",
+    !(await confirm(t("lib.settings.importConfirm.message"), {
+      title: t("lib.settings.importConfirm.title"),
       kind: "warning",
     }))
   )

@@ -17,6 +17,7 @@ import {
   sideBySideToHtml,
   type DiffPage,
 } from "../lib/textDiff";
+import { t, tn } from "@/i18n";
 
 const props = withDefaults(
   defineProps<{
@@ -37,16 +38,12 @@ const props = withDefaults(
     outputPlaceholder?: string;
   }>(),
   {
-    sourceLabel: "來源",
-    outputLabel: "輸出",
     compact: false,
     editable: false,
     paginated: false,
     pageSize: DEFAULT_DIFF_PAGE_SIZE,
     showNav: false,
     fillHeight: false,
-    sourcePlaceholder: "在此輸入或貼上文字",
-    outputPlaceholder: "結果會顯示於此",
   },
 );
 
@@ -86,7 +83,7 @@ const leftHtml = computed(() => sideBySideToHtml(activePage.value.left, "diff-re
 const rightHtml = computed(() =>
   props.output || pagingEnabled.value
     ? sideBySideToHtml(activePage.value.right, "diff-add")
-    : `<span class="preview-diff-placeholder">${escapeHtml(props.outputPlaceholder)}</span>`,
+    : `<span class="preview-diff-placeholder">${escapeHtml(props.outputPlaceholder ?? t("components.diffView.outputPlaceholder"))}</span>`,
 );
 const sourceCount = computed(() => Array.from(props.source ?? "").length);
 const outputCount = computed(() => Array.from(props.output ?? "").length);
@@ -315,7 +312,7 @@ watch(pageCount, (count) => {
 </script>
 
 <template>
-  <el-empty v-if="empty" description="沒有可顯示的差異內容" />
+  <el-empty v-if="empty" :description="t('components.diffView.empty')" />
   <div
     v-else
     class="preview-diff-root"
@@ -324,10 +321,10 @@ watch(pageCount, (count) => {
     <div v-if="showToolbar" class="preview-diff-toolbar">
       <div class="preview-diff-toolbar-group">
         <el-button size="small" :disabled="!hasChanges" :icon="ArrowUp" @click="goToChange(-1)">
-          上一個差異
+          {{ t("components.diffView.previousChange") }}
         </el-button>
         <el-button size="small" :disabled="!hasChanges" :icon="ArrowDown" @click="goToChange(1)">
-          下一個差異
+          {{ t("components.diffView.nextChange") }}
         </el-button>
       </div>
       <div v-if="pagingEnabled && pageCount > 1" class="preview-diff-toolbar-group">
@@ -340,22 +337,24 @@ watch(pageCount, (count) => {
           :pager-count="5"
           @current-change="(page: number) => goToPage(page)"
         />
-        <span class="preview-diff-page-label">{{ currentPage }} / {{ pageCount }} 頁</span>
+        <span class="preview-diff-page-label">{{
+          t("components.diffView.page", { current: currentPage, total: pageCount })
+        }}</span>
       </div>
     </div>
     <el-splitter class="preview-diff-grid" @resize-end="rememberPaneSizes">
       <el-splitter-panel v-model:size="leftSize" min="20%" max="80%">
         <section class="preview-diff-pane">
           <header>
-            <span>{{ sourceLabel }}</span>
-            <small>{{ sourceCount }} 字</small>
+            <span>{{ sourceLabel ?? t("components.diffView.sourceLabel") }}</span>
+            <small>{{ tn("components.diffView.characters", sourceCount) }}</small>
           </header>
           <textarea
             v-if="editable"
             ref="leftPane"
             class="preview-diff-body preview-diff-input"
             :value="source"
-            :placeholder="sourcePlaceholder"
+            :placeholder="sourcePlaceholder ?? t('components.diffView.sourcePlaceholder')"
             spellcheck="false"
             @input="emit('update:source', ($event.target as HTMLTextAreaElement).value)"
             @scroll="syncScroll('left')"
@@ -372,8 +371,8 @@ watch(pageCount, (count) => {
       <el-splitter-panel v-model:size="rightSize" min="20%" max="80%">
         <section class="preview-diff-pane">
           <header>
-            <span>{{ outputLabel }}</span>
-            <small>{{ outputCount }} 字</small>
+            <span>{{ outputLabel ?? t("components.diffView.outputLabel") }}</span>
+            <small>{{ tn("components.diffView.characters", outputCount) }}</small>
           </header>
           <pre
             ref="rightPane"

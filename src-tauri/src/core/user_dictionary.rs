@@ -116,38 +116,89 @@ pub struct ImportPreview {
 
 /// 詞條檢查錯誤訊息；`None` 表示可用。
 pub fn entry_problem(entry: &UserDictionaryEntry) -> Option<String> {
-    for (label, word) in [("簡體", &entry.simplified), ("繁體", &entry.traditional)] {
+    for (simplified, word) in [(true, &entry.simplified), (false, &entry.traditional)] {
         if word.is_empty() {
-            return Some(format!("{label}詞不可空白。"));
+            return Some(if simplified {
+                tr!("簡體詞不可空白。", "The simplified word cannot be empty.")
+            } else {
+                tr!("繁體詞不可空白。", "The traditional word cannot be empty.")
+            });
         }
         if word.trim() != word.as_str() {
-            return Some(format!("{label}詞前後不可有空白。"));
+            return Some(if simplified {
+                tr!(
+                    "簡體詞前後不可有空白。",
+                    "The simplified word cannot start or end with whitespace."
+                )
+            } else {
+                tr!(
+                    "繁體詞前後不可有空白。",
+                    "The traditional word cannot start or end with whitespace."
+                )
+            });
         }
         if word.chars().count() > MAX_WORD_CHARS {
-            return Some(format!("{label}詞超過 {MAX_WORD_CHARS} 字。"));
+            return Some(if simplified {
+                tr!(
+                    "簡體詞超過 {MAX_WORD_CHARS} 字。",
+                    "The simplified word exceeds {MAX_WORD_CHARS} characters."
+                )
+            } else {
+                tr!(
+                    "繁體詞超過 {MAX_WORD_CHARS} 字。",
+                    "The traditional word exceeds {MAX_WORD_CHARS} characters."
+                )
+            });
         }
         if word.chars().any(|ch| ch.is_control() || ch == '|') {
-            return Some(format!("{label}詞不可含定位字元、換行或「|」。"));
+            return Some(if simplified {
+                tr!(
+                    "簡體詞不可含定位字元、換行或「|」。",
+                    "The simplified word cannot contain tabs, line breaks, or \"|\"."
+                )
+            } else {
+                tr!(
+                    "繁體詞不可含定位字元、換行或「|」。",
+                    "The traditional word cannot contain tabs, line breaks, or \"|\"."
+                )
+            });
         }
     }
-    for (label, value) in [
-        ("匯入時間", &entry.imported_at),
-        ("來源檔名", &entry.source_file),
-    ] {
+    for (imported_at, value) in [(true, &entry.imported_at), (false, &entry.source_file)] {
         if let Some(value) = value {
             if value.is_empty() || value.chars().count() > MAX_LABEL_CHARS {
-                return Some(format!("{label}不可空白或超過 {MAX_LABEL_CHARS} 字。"));
+                return Some(if imported_at {
+                    tr!(
+                        "匯入時間不可空白或超過 {MAX_LABEL_CHARS} 字。",
+                        "The import time cannot be empty or exceed {MAX_LABEL_CHARS} characters."
+                    )
+                } else {
+                    tr!(
+                        "來源檔名不可空白或超過 {MAX_LABEL_CHARS} 字。",
+                        "The source file name cannot be empty or exceed {MAX_LABEL_CHARS} characters."
+                    )
+                });
             }
             if value.chars().any(char::is_control) {
-                return Some(format!("{label}不可含定位字元或換行。"));
+                return Some(if imported_at {
+                    tr!(
+                        "匯入時間不可含定位字元或換行。",
+                        "The import time cannot contain tabs or line breaks."
+                    )
+                } else {
+                    tr!(
+                        "來源檔名不可含定位字元或換行。",
+                        "The source file name cannot contain tabs or line breaks."
+                    )
+                });
             }
         }
     }
     if entry.direction.s2t() && !matchable(&entry.simplified) {
-        return Some("簡轉繁的來源詞只能包含中文字（轉換時只在中文片段內分詞比對）。".into());
+        return Some(tr_static!("簡轉繁的來源詞只能包含中文字（轉換時只在中文片段內分詞比對）。", "Source words for Simplified → Traditional may contain only Chinese characters (matching happens only within Chinese text).").into());
     }
     if entry.direction.t2s() && !matchable(&entry.traditional) {
-        return Some("繁轉簡的來源詞只能包含中文字（轉換時只在中文片段內分詞比對）。".into());
+        return Some(tr_static!("繁轉簡的來源詞只能包含中文字（轉換時只在中文片段內分詞比對）。", "Source words for Traditional → Simplified may contain only Chinese characters (matching happens only within Chinese text).").into());
     }
     None
 }
@@ -172,8 +223,8 @@ pub fn check_conflicts(entries: &[UserDictionaryEntry]) -> Result<(), CoreError>
                 if existing != entry.traditional {
                     return Err(CoreError::new(
                         "USER_DICTIONARY_CONFLICT",
-                        format!(
-                            "簡轉繁「{}」同時對到「{existing}」與「{}」。",
+                        tr!(
+                            "簡轉繁「{}」同時對到「{existing}」與「{}」。", "Simplified → Traditional \"{}\" maps to both \"{existing}\" and \"{}\".",
                             entry.simplified, entry.traditional
                         ),
                     ));
@@ -185,8 +236,8 @@ pub fn check_conflicts(entries: &[UserDictionaryEntry]) -> Result<(), CoreError>
                 if existing != entry.simplified {
                     return Err(CoreError::new(
                         "USER_DICTIONARY_CONFLICT",
-                        format!(
-                            "繁轉簡「{}」同時對到「{existing}」與「{}」。",
+                        tr!(
+                            "繁轉簡「{}」同時對到「{existing}」與「{}」。", "Traditional → Simplified \"{}\" maps to both \"{existing}\" and \"{}\".",
                             entry.traditional, entry.simplified
                         ),
                     ));
@@ -212,7 +263,11 @@ pub fn parse(text: &str) -> Result<Vec<UserDictionaryEntry>, CoreError> {
         let (Some(direction), true) = (direction, (2..=5).contains(&columns.len())) else {
             return Err(CoreError::new(
                 "USER_DICTIONARY_INVALID",
-                format!("使用者詞典第 {} 行格式錯誤。", index + 1),
+                tr!(
+                    "使用者詞典第 {} 行格式錯誤。",
+                    "Invalid format on line {} of the user dictionary.",
+                    index + 1
+                ),
             ));
         };
         entries.push(UserDictionaryEntry {
@@ -281,7 +336,7 @@ fn write_verified(path: &Path, entries: &[UserDictionaryEntry]) -> Result<(), Co
     let (Some(directory), Some(name)) = (path.parent(), path.file_name()) else {
         return Err(CoreError::new(
             "USER_DICTIONARY_PATH",
-            "使用者詞典路徑無效。",
+            tr_static!("使用者詞典路徑無效。", "Invalid user dictionary path."),
         ));
     };
     fs::create_dir_all(directory)?;
@@ -299,7 +354,10 @@ fn write_verified(path: &Path, entries: &[UserDictionaryEntry]) -> Result<(), Co
     if parse(&fs::read_to_string(&stage)?)? != entries {
         return Err(CoreError::new(
             "USER_DICTIONARY_VERIFY",
-            "使用者詞典暫存檔驗證失敗。",
+            tr_static!(
+                "使用者詞典暫存檔驗證失敗。",
+                "User dictionary temporary file verification failed."
+            ),
         ));
     }
     fs::rename(&stage, path)?;
@@ -316,7 +374,10 @@ fn check_extension(path: &Path) -> Result<(), CoreError> {
     } else {
         Err(CoreError::new(
             "USER_DICTIONARY_EXTENSION",
-            "字典檔副檔名須為 .txt、.tsv 或 .csv。",
+            tr_static!(
+                "字典檔副檔名須為 .txt、.tsv 或 .csv。",
+                "The dictionary file extension must be .txt, .tsv, or .csv."
+            ),
         ))
     }
 }
@@ -341,7 +402,10 @@ pub fn preview_import(path: &Path) -> Result<ImportPreview, CoreError> {
     let text = String::from_utf8(bytes).map_err(|_| {
         CoreError::new(
             "USER_DICTIONARY_ENCODING",
-            "字典檔不是 UTF-8 編碼；請以 UTF-8 另存後再匯入。",
+            tr_static!(
+                "字典檔不是 UTF-8 編碼；請以 UTF-8 另存後再匯入。",
+                "The dictionary file is not UTF-8; save it as UTF-8 and import again."
+            ),
         )
     })?;
     let text = text.trim_start_matches('\u{feff}');
@@ -430,7 +494,7 @@ fn preview_native_rows(text: &str, preview: &mut ImportPreview) {
             Some(value) => UserDictionaryDirection::parse(value),
         };
         let Some(direction) = direction.filter(|_| (2..=5).contains(&columns.len())) else {
-            row.reason = Some("格式錯誤：應為「簡體詞、繁體詞、方向」以定位字元分隔。".into());
+            row.reason = Some(tr_static!("格式錯誤：應為「簡體詞、繁體詞、方向」以定位字元分隔。", "Invalid format: expected \"simplified word, traditional word, direction\" separated by tabs.").into());
             preview.invalid += 1;
             preview.rows.push(row);
             continue;
@@ -458,14 +522,14 @@ fn preview_native_rows(text: &str, preview: &mut ImportPreview) {
         });
         let known = [s2t_known, t2s_known];
         if known.iter().flatten().any(|same| *same == Some(false)) {
-            row.reason = Some("同方向的來源詞已由前面的列對應到別的詞。".into());
+            row.reason = Some(tr_static!("同方向的來源詞已由前面的列對應到別的詞。", "An earlier row already maps this source word to a different word in the same direction.").into());
             preview.invalid += 1;
             preview.rows.push(row);
             continue;
         }
         if known.iter().flatten().all(|same| *same == Some(true)) {
             row.status = ImportStatus::Duplicate;
-            row.reason = Some("與前面的列相同。".into());
+            row.reason = Some(tr_static!("與前面的列相同。", "Same as an earlier row.").into());
             preview.duplicate += 1;
             preview.rows.push(row);
             continue;
@@ -509,14 +573,14 @@ fn preview_legacy_rows(text: &str, preview: &mut ImportPreview) {
             reason: None,
         };
         if columns.len() < 6 {
-            row.reason = Some("不是六欄格式。".into());
+            row.reason = Some(tr_static!("不是六欄格式。", "Not in six-column format.").into());
             preview.invalid += 1;
             preview.rows.push(row);
             continue;
         }
         if !matches!(columns[0].to_ascii_lowercase().as_str(), "true" | "1") {
             row.status = ImportStatus::Disabled;
-            row.reason = Some("詞條已停用。".into());
+            row.reason = Some(tr_static!("詞條已停用。", "Entry is disabled.").into());
             preview.disabled += 1;
             preview.rows.push(row);
             continue;
@@ -556,7 +620,13 @@ fn preview_legacy_rows(text: &str, preview: &mut ImportPreview) {
             (true, false) => UserDictionaryDirection::T2s,
             (true, true) => {
                 row.status = ImportStatus::Duplicate;
-                row.reason = Some("兩個方向都已由前面的列使用。".into());
+                row.reason = Some(
+                    tr_static!(
+                        "兩個方向都已由前面的列使用。",
+                        "Both directions are already used by earlier rows."
+                    )
+                    .into(),
+                );
                 preview.duplicate += 1;
                 preview.rows.push(row);
                 continue;
@@ -566,7 +636,7 @@ fn preview_legacy_rows(text: &str, preview: &mut ImportPreview) {
             && t2s_sources.get(&row.traditional) == Some(&row.simplified)
         {
             row.status = ImportStatus::Duplicate;
-            row.reason = Some("與前面的列相同。".into());
+            row.reason = Some(tr_static!("與前面的列相同。", "Same as an earlier row.").into());
             preview.duplicate += 1;
             preview.rows.push(row);
             continue;
@@ -584,12 +654,12 @@ fn preview_legacy_rows(text: &str, preview: &mut ImportPreview) {
                 !matchable(&row.simplified)
             };
             row.reason = Some(match (direction, other_is_text) {
-                (UserDictionaryDirection::S2t, true) => "繁體詞含非中文字，只匯入簡轉繁。".into(),
+                (UserDictionaryDirection::S2t, true) => tr_static!("繁體詞含非中文字，只匯入簡轉繁。", "The traditional word contains non-Chinese characters; importing Simplified → Traditional only.").into(),
                 (UserDictionaryDirection::S2t, false) => {
-                    "繁體詞已由前面的列使用，只匯入簡轉繁。".into()
+                    tr_static!("繁體詞已由前面的列使用，只匯入簡轉繁。", "The traditional word is already used by an earlier row; importing Simplified → Traditional only.").into()
                 }
-                (_, true) => "簡體詞含非中文字，只匯入繁轉簡。".into(),
-                (_, false) => "簡體詞已由前面的列使用，只匯入繁轉簡。".into(),
+                (_, true) => tr_static!("簡體詞含非中文字，只匯入繁轉簡。", "The simplified word contains non-Chinese characters; importing Traditional → Simplified only.").into(),
+                (_, false) => tr_static!("簡體詞已由前面的列使用，只匯入繁轉簡。", "The simplified word is already used by an earlier row; importing Traditional → Simplified only.").into(),
             });
         }
         row.status = ImportStatus::Importable;

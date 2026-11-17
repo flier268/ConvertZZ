@@ -1,3 +1,5 @@
+import { t } from "@/i18n";
+
 export interface ReleaseUpdate {
   currentVersion: string;
   latestVersion: string;
@@ -185,7 +187,7 @@ export async function resolveUpdate(
   if (!release) {
     throw releaseError instanceof Error
       ? releaseError
-      : new Error(releaseError ? String(releaseError) : "GitHub Release 檢查失敗。");
+      : new Error(releaseError ? String(releaseError) : t("lib.update.releaseCheckFailed"));
   }
 
   const resolvedCurrent = normalizeVersion(release.currentVersion || current);
@@ -239,7 +241,7 @@ async function fetchNewestRelease(
 ): Promise<{ version: string; url: string }> {
   if (!includePreRelease) {
     const official = await fetchOfficialRelease(fetcher, { allowMissing: false });
-    if (!official) throw new Error("GitHub Release 未提供有效正式版本。");
+    if (!official) throw new Error(t("lib.update.noStableVersion"));
     return official;
   }
 
@@ -255,7 +257,7 @@ async function fetchNewestRelease(
       best = candidate;
     }
   }
-  if (!best) throw new Error("GitHub Release 未提供有效版本號。");
+  if (!best) throw new Error(t("lib.update.noVersion"));
   return best;
 }
 
@@ -266,7 +268,7 @@ async function fetchOfficialRelease(
   const result = await githubJson(fetcher, LATEST_RELEASE_API);
   if (!result.ok) {
     if (options.allowMissing && result.status === 404) return null;
-    throw new Error(`GitHub Release 檢查失敗：HTTP ${result.status}`);
+    throw new Error(t("lib.update.releaseCheckFailedHttp", { status: result.status }));
   }
   const payload = result.data as {
     tag_name?: unknown;
@@ -276,12 +278,12 @@ async function fetchOfficialRelease(
   };
   if (payload.draft === true || payload.prerelease === true) {
     if (options.allowMissing) return null;
-    throw new Error("GitHub Release 未提供有效正式版本。");
+    throw new Error(t("lib.update.noStableVersion"));
   }
   const version = normalizeVersion(typeof payload.tag_name === "string" ? payload.tag_name : "");
   if (!version || !parseVersion(version) || isPreReleaseVersion(version)) {
     if (options.allowMissing) return null;
-    throw new Error("GitHub Release 未提供有效版本號。");
+    throw new Error(t("lib.update.noVersion"));
   }
   return { version, url: releasePageUrl(payload.html_url) };
 }
@@ -314,7 +316,8 @@ async function githubJson(
 ): Promise<{ ok: true; data: unknown } | { ok: false; status: number }> {
   const response = await fetcher(url, GITHUB_HEADERS);
   if (response.status === 404) return { ok: false, status: 404 };
-  if (!response.ok) throw new Error(`GitHub Release 檢查失敗：HTTP ${response.status}`);
+  if (!response.ok)
+    throw new Error(t("lib.update.releaseCheckFailedHttp", { status: response.status }));
   return { ok: true, data: await response.json() };
 }
 

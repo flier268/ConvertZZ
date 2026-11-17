@@ -319,15 +319,20 @@ fn expand_remove(
     warnings: &mut Vec<String>,
 ) {
     let Some(container) = operation.source.or(operation.target) else {
-        warnings.push(format!("{}：移除規則沒有指定標籤。", file.path));
+        warnings.push(tr!(
+            "{}：移除規則沒有指定標籤。",
+            "{}: the remove rule does not specify a tag.",
+            file.path
+        ));
         return;
     };
     if !matches!(
         container,
         AudioContainer::Id3v1 | AudioContainer::Id3v2 | AudioContainer::Apev2
     ) {
-        warnings.push(format!(
+        warnings.push(tr!(
             "{}：第一版不能移除 {}。",
+            "{}: removing {} is not supported yet.",
             file.path,
             container_token(container)
         ));
@@ -342,15 +347,22 @@ fn expand_remove(
         .filter(|item| touches.get(item) != Some(&Touch::Remove))
         .count();
     let only_tag = remaining <= 1;
-    let refused = only_tag.then(|| "這是檔案唯一的標籤，已拒絕移除。".to_string());
+    let refused = only_tag.then(|| {
+        tr_static!(
+            "這是檔案唯一的標籤，已拒絕移除。",
+            "This is the file's only tag; removal refused."
+        )
+        .to_string()
+    });
     if let Some(message) = &refused {
         warnings.push(format!("{}：{message}", file.path));
     } else {
         touches.insert(container, Touch::Remove);
     }
     if hidden > 0 {
-        warnings.push(format!(
+        warnings.push(tr!(
             "{}：移除 {} 含 {hidden} 個隱藏欄位。",
+            "{}: removing {} includes {hidden} hidden fields.",
             file.path,
             container_token(container)
         ));
@@ -376,12 +388,17 @@ fn expand_transfer(
     warnings: &mut Vec<String>,
 ) -> Result<(), super::super::error::CoreError> {
     let (Some(source), Some(target)) = (operation.source, operation.target) else {
-        warnings.push(format!("{}：合併規則需要來源和目標。", file.path));
+        warnings.push(tr!(
+            "{}：合併規則需要來源和目標。",
+            "{}: the merge rule needs a source and a target.",
+            file.path
+        ));
         return Ok(());
     };
     if !transfer_supported(source, target) {
-        warnings.push(format!(
+        warnings.push(tr!(
             "{}：第一版不能從 {} 合併到 {}。",
+            "{}: merging from {} to {} is not supported yet.",
             file.path,
             container_token(source),
             container_token(target)
@@ -440,8 +457,9 @@ fn expand_transfer(
             if fit.unrepresentable > 0 {
                 field_warnings.push(AudioFieldWarning {
                     code: AudioFieldWarningCode::Unrepresentable,
-                    message: format!(
+                    message: tr!(
                         "{} 字 {} 無法表示",
+                        "{} characters cannot be represented in {}",
                         fit.unrepresentable,
                         encoding_label(request.id3v1_output_encoding)
                     ),
@@ -453,7 +471,12 @@ fn expand_transfer(
             if fit.truncated {
                 field_warnings.push(AudioFieldWarning {
                     code: AudioFieldWarningCode::Truncated,
-                    message: format!("截斷 {}→{} B", fit.from_bytes, fit.to_bytes),
+                    message: tr!(
+                        "截斷 {}→{} B",
+                        "Truncated {}→{} B",
+                        fit.from_bytes,
+                        fit.to_bytes
+                    ),
                     from_bytes: Some(fit.from_bytes),
                     to_bytes: Some(fit.to_bytes),
                     count: None,
@@ -494,8 +517,9 @@ fn note_unmappable(
     origin: &str,
     warnings: &mut Vec<String>,
 ) {
-    let message = format!(
+    let message = tr!(
         "「{}」無法對應到 {}",
+        "\"{}\" cannot be mapped to {}",
         label_for(key),
         container_token(target)
     );
@@ -617,14 +641,20 @@ fn map_genre(source: AudioContainer, target: AudioContainer, value: &str) -> Gen
         if let Some(code) = genre_code(value) {
             return GenreMap::Value(code.to_string());
         }
-        return GenreMap::Unmappable(format!("類型「{value}」沒有對應的 ID3v1 代碼"));
+        return GenreMap::Unmappable(tr!(
+            "類型「{value}」沒有對應的 ID3v1 代碼",
+            "Genre \"{value}\" has no matching ID3v1 code"
+        ));
     }
     if source == AudioContainer::Id3v1 {
         if let Ok(code) = value.trim().parse::<u8>() {
             if let Some(name) = ID3V1_GENRES.get(code as usize) {
                 return GenreMap::Value((*name).to_string());
             }
-            return GenreMap::Unmappable(format!("ID3v1 類型代碼 {code} 沒有名稱"));
+            return GenreMap::Unmappable(tr!(
+                "ID3v1 類型代碼 {code} 沒有名稱",
+                "ID3v1 genre code {code} has no name"
+            ));
         }
     }
     GenreMap::Value(value.to_string())
@@ -650,7 +680,7 @@ fn encoding_label(encoding: TextEncoding) -> &'static str {
         TextEncoding::Gbk => "GBK",
         TextEncoding::ShiftJis => "Shift-JIS",
         TextEncoding::Utf8 | TextEncoding::Utf8Bom => "UTF-8",
-        _ => "目標編碼",
+        _ => tr_static!("目標編碼", "the target encoding"),
     }
 }
 

@@ -2,7 +2,16 @@
 
 ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程見 [README.md](README.md)。使用者與開發 Wiki 掛在 [wiki/](wiki/)（git submodule，遠端為 `ConvertZZ.wiki.git`）。遷移範圍與未完成驗收條件見 [docs/MIGRATION_PLAN.md](docs/MIGRATION_PLAN.md)；已通過項目見 [docs/MIGRATION_COMPLETED.md](docs/MIGRATION_COMPLETED.md)。
 
-使用繁體中文與使用者溝通。使用者介面字串也使用繁體中文。
+使用繁體中文與使用者溝通。
+
+## 介面語系
+
+介面支援繁體中文與英文，設定欄位 `language`（`system`／`zh-TW`／`en`；`system` 依作業系統語言，中文系統用繁中，其餘英文）。
+
+- 前端字串放 `src/i18n/zh-TW/<區塊>.ts`（來源）與 `src/i18n/en/<區塊>.ts`，以 `t()`／`tn()` 取用；兩邊鍵與 `{參數}` 必須一致（型別與 `src/i18n/index.test.ts` 把關）。新增介面字串時兩種語言同時補上，不要在 Vue 或 `src/lib/` 直接寫中文字面值。
+- 要隨語系切換的標籤不得在模組頂層存成常數，改用函式或 computed。存進設定的資料（例如內建篩選設定檔名稱）於顯示時翻譯，不改寫儲存值。
+- Rust 端會顯示在 GUI 的訊息用 `tr!`／`tr_static!`（`src-tauri/src/core/locale.rs`）。主視窗以 `set_ui_language` 指令切換核心訊息與托盤選單；無頭 CLI 不設定語系，維持繁體中文。
+- 預設語系為繁體中文；Vitest、Rust 測試與 e2e（Playwright `locale: "zh-TW"`）以繁中斷言。
 
 ## 目錄與責任
 
@@ -18,6 +27,7 @@ ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程
 | `data/roundtrip-correction/` | 回環工具產出（產生檔，不進 git、不進套件字典） |
 | `wiki/` | GitHub Wiki submodule（`ConvertZZ.wiki.git`）；教學與開發文件 |
 | `src-tauri/` | 視窗、托盤、快捷鍵、憑證庫、轉換核心與平台能力 |
+| `src/i18n/` | 介面語系：`t()`、繁中來源訊息與英文翻譯 |
 | `shared/contracts.ts` | 前後端共用的操作與型別 |
 | `scripts/` | git hook、發行輔助與 Linux／macOS 驗證 |
 | `tests/fixtures/` | 音訊與發行驗證樣本 |

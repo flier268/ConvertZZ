@@ -67,4 +67,41 @@ mod tests {
         assert_eq!(fixed, "Cancel");
         assert_eq!(tr!("正在掃描：{}", "Scanning: {}", name), "正在掃描：a.txt");
     }
+
+    #[test]
+    fn english_locale_translates_user_dictionary_problem() {
+        use crate::core::user_dictionary::{
+            entry_problem, UserDictionaryDirection, UserDictionaryEntry,
+        };
+        let entry = UserDictionaryEntry {
+            simplified: String::new(),
+            traditional: "軟體".into(),
+            direction: UserDictionaryDirection::Both,
+            imported_at: None,
+            source_file: None,
+        };
+        set_ui_locale("en");
+        let english = entry_problem(&entry);
+        set_ui_locale("zh-TW");
+        assert_eq!(
+            english.as_deref(),
+            Some("The simplified word cannot be empty.")
+        );
+        assert_eq!(entry_problem(&entry).as_deref(), Some("簡體詞不可空白。"));
+    }
+
+    #[test]
+    fn english_locale_translates_cli_parse_error() {
+        let args = vec!["--engine".to_string(), "legacy".to_string()];
+        set_ui_locale("en");
+        let english = crate::core::cli::parse_cli(&args, None).parse_errors;
+        set_ui_locale("zh-TW");
+        assert_eq!(
+            english,
+            vec![
+                "The legacy dictionary engine was removed in 2.0. Import Dictionary.csv as a user dictionary on the User dictionary page, then use the segmented engine."
+                    .to_string()
+            ]
+        );
+    }
 }

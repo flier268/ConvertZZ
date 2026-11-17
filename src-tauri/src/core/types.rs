@@ -438,8 +438,14 @@ impl<'de> Deserialize<'de> for TagAction {
         match value.as_str() {
             "remove" => Ok(Self::Remove),
             "merge" => Ok(Self::Merge),
-            "copy" => Err(serde::de::Error::custom("已不支援 copy")),
-            other => Err(serde::de::Error::custom(format!("未知的標籤動作：{other}"))),
+            "copy" => Err(serde::de::Error::custom(tr_static!(
+                "已不支援 copy",
+                "copy is no longer supported"
+            ))),
+            other => Err(serde::de::Error::custom(tr!(
+                "未知的標籤動作：{other}",
+                "Unknown tag action: {other}"
+            ))),
         }
     }
 }

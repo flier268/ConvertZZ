@@ -10,7 +10,7 @@ import {
   basenameLooksLikeDirectory,
   folderScanExtensions,
   parseLegacyFileFilters,
-  SUPPORTED_FILES_FILTER_NAME,
+  supportedFilesFilterName,
 } from "./fileFilters";
 
 describe("舊版檔案篩選器", () => {
@@ -66,7 +66,7 @@ describe("舊版檔案篩選器", () => {
     const filters = parseLegacyFileFilters(DEFAULT_FILE_TYPE_FILTER);
     expect(filters.map((filter) => filter.name)).toEqual(["常用文字檔案", "常用網頁文件"]);
     expect(DEFAULT_FILE_TYPE_FILTER).not.toMatch(/mp3|flac|ogg|wav|m4a|ape|opus/iu);
-    expect(ensureSupportedFilesFilter(filters)[0]?.name).toBe(SUPPORTED_FILES_FILTER_NAME);
+    expect(ensureSupportedFilesFilter(filters)[0]?.name).toBe(supportedFilesFilterName());
   });
 
   it("在既有分類前插入支援的檔案聯集作為預設", () => {
@@ -76,7 +76,7 @@ describe("舊版檔案篩選器", () => {
         { name: "網頁", extensions: ["html", "HTML"] },
       ]),
     ).toEqual([
-      { name: SUPPORTED_FILES_FILTER_NAME, extensions: ["txt", "log", "html"] },
+      { name: supportedFilesFilterName(), extensions: ["txt", "log", "html"] },
       { name: "文字", extensions: ["txt", "log"] },
       { name: "網頁", extensions: ["html", "HTML"] },
     ]);
@@ -85,17 +85,17 @@ describe("舊版檔案篩選器", () => {
   it("已有支援的檔案時以分類副檔名重建並維持在最前", () => {
     expect(
       ensureSupportedFilesFilter([
-        { name: SUPPORTED_FILES_FILTER_NAME, extensions: ["txt"] },
+        { name: supportedFilesFilterName(), extensions: ["txt"] },
         { name: "文字", extensions: ["txt", "log"] },
       ]),
     ).toEqual([
-      { name: SUPPORTED_FILES_FILTER_NAME, extensions: ["txt", "log"] },
+      { name: supportedFilesFilterName(), extensions: ["txt", "log"] },
       { name: "文字", extensions: ["txt", "log"] },
     ]);
   });
 
   it("僅有支援的檔案時保留原清單", () => {
-    const onlySupported = [{ name: SUPPORTED_FILES_FILTER_NAME, extensions: ["txt", "md"] }];
+    const onlySupported = [{ name: supportedFilesFilterName(), extensions: ["txt", "md"] }];
     expect(ensureSupportedFilesFilter(onlySupported)).toEqual(onlySupported);
   });
 
@@ -106,7 +106,7 @@ describe("舊版檔案篩選器", () => {
         { name: "全部", extensions: [ALL_FILES_EXTENSION] },
       ]),
     ).toEqual([
-      { name: SUPPORTED_FILES_FILTER_NAME, extensions: ["txt"] },
+      { name: supportedFilesFilterName(), extensions: ["txt"] },
       { name: "文字", extensions: ["txt", ALL_FILES_EXTENSION] },
       { name: "全部", extensions: [ALL_FILES_EXTENSION] },
     ]);
@@ -114,7 +114,7 @@ describe("舊版檔案篩選器", () => {
 
   it("對話框在支援的檔案之後固定附上所有檔案", () => {
     const dialog = dialogFileFilters(parseLegacyFileFilters(DEFAULT_FILE_TYPE_FILTER));
-    const supportedAt = dialog.findIndex((filter) => filter.name === SUPPORTED_FILES_FILTER_NAME);
+    const supportedAt = dialog.findIndex((filter) => filter.name === supportedFilesFilterName());
     const allAt = dialog.findIndex((filter) => filter.name === ALL_FILES_FILTER_NAME);
     expect(supportedAt).toBeGreaterThanOrEqual(0);
     expect(allAt).toBeGreaterThan(supportedAt);
@@ -134,7 +134,7 @@ describe("舊版檔案篩選器", () => {
       { name: ALL_FILES_FILTER_NAME, extensions: [ALL_FILES_EXTENSION] },
     ]);
     expect(dialog.filter((filter) => filter.name === ALL_FILES_FILTER_NAME)).toHaveLength(1);
-    const supportedAt = dialog.findIndex((filter) => filter.name === SUPPORTED_FILES_FILTER_NAME);
+    const supportedAt = dialog.findIndex((filter) => filter.name === supportedFilesFilterName());
     const allAt = dialog.findIndex((filter) => filter.name === ALL_FILES_FILTER_NAME);
     expect(allAt).toBeGreaterThan(supportedAt);
   });
@@ -142,13 +142,13 @@ describe("舊版檔案篩選器", () => {
   it("資料夾掃描把 * 當成所有檔案，空結果不是所有檔案", () => {
     expect(
       folderScanExtensions([
-        { name: SUPPORTED_FILES_FILTER_NAME, extensions: ["txt", "log"] },
+        { name: supportedFilesFilterName(), extensions: ["txt", "log"] },
         { name: "文字", extensions: ["TXT"] },
       ]),
     ).toEqual({ kind: "list", extensions: [".txt", ".log"] });
     expect(
       folderScanExtensions([
-        { name: SUPPORTED_FILES_FILTER_NAME, extensions: ["txt"] },
+        { name: supportedFilesFilterName(), extensions: ["txt"] },
         { name: "全部", extensions: [ALL_FILES_EXTENSION] },
       ]),
     ).toEqual({ kind: "all" });

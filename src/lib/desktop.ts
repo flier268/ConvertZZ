@@ -7,6 +7,7 @@ import { formatUnknownError } from "./errors";
 import { executeLegacyAction } from "./legacyActions";
 import { registrableShortcuts, unregisteredAcceleratorWarnings } from "./hotkey";
 import { showAppToast } from "./toast";
+import { t } from "@/i18n";
 
 export function floatingBallPosition(settings: SettingsV2): { x: number; y: number } | undefined {
   const { x, y } = settings.floatingBall;
@@ -50,7 +51,7 @@ export async function applyDesktopSettings(
     await applyFloatingBallWindow(settings, { reveal: options.revealFloating });
   } catch (error) {
     // 首次啟動時浮動視窗可能尚未就緒；不應中止整個主程式啟動。
-    warnings.push(`無法套用浮動球：${formatUnknownError(error)}`);
+    warnings.push(t("lib.desktop.floatingBallFailed", { error: formatUnknownError(error) }));
   }
 
   const capabilities = await invoke<PlatformCapabilities>("platform_capabilities");
@@ -59,7 +60,7 @@ export async function applyDesktopSettings(
   try {
     await unregisterAll();
   } catch (error) {
-    warnings.push(`無法註冊全域快捷鍵：${formatUnknownError(error)}`);
+    warnings.push(t("lib.desktop.globalShortcutsFailed", { error: formatUnknownError(error) }));
     return warnings;
   }
   for (const shortcut of registrableShortcuts(settings.hotkeys.shortcuts)) {
@@ -76,7 +77,12 @@ export async function applyDesktopSettings(
         }
       });
     } catch (error) {
-      warnings.push(`無法註冊快捷鍵 ${shortcut.accelerator}：${formatUnknownError(error)}`);
+      warnings.push(
+        t("lib.desktop.shortcutFailed", {
+          accelerator: shortcut.accelerator,
+          error: formatUnknownError(error),
+        }),
+      );
     }
   }
   return warnings;

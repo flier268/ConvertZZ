@@ -41,6 +41,13 @@ describe("開發／預發佈更新預設", () => {
     expect(defaultSettings("2.0.0-beta5").checkPreReleaseUpdates).toBe(true);
   });
 
+  it("介面語言缺欄時跟隨系統，已選的語言維持不變", () => {
+    expect(defaultSettings("2.0.0").language).toBe("system");
+    expect(migrateSettings({ version: 2 }, "2.0.0").language).toBe("system");
+    expect(migrateSettings({ version: 2, language: "en" }, "2.0.0").language).toBe("en");
+    expect(migrateSettings({ version: 2, language: "zh-TW" }, "2.0.0").language).toBe("zh-TW");
+  });
+
   it("缺少欄位時依目前版本補預設，已寫入的選擇維持不變", () => {
     expect(
       migrateSettings({ version: 2, engine: "zhconvert" }, "2.0.0").checkPreReleaseUpdates,

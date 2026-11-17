@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, provide, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
 import { ElNotification } from "element-plus";
 import { invoke } from "@tauri-apps/api/core";
+import { t } from "@/i18n";
 import {
   Collection,
   Document,
@@ -63,9 +64,8 @@ async function openDropActionDialog(paths: string[]): Promise<void> {
 
 function showLegacyDictionaryNotice(): void {
   const notification = ElNotification({
-    title: "舊版字典已改為使用者詞典",
-    message:
-      "2.0 移除了以 Dictionary.csv 全文直接取代的舊版字典引擎。若曾自訂詞彙，請到「使用者詞典」頁匯入。點此前往。",
+    title: t("app.legacyDictionaryNotice.title"),
+    message: t("app.legacyDictionaryNotice.message"),
     type: "info",
     duration: 0,
     onClick: () => {
@@ -117,7 +117,7 @@ async function applyIncomingCli(parsed: ParsedCli): Promise<void> {
     return;
   }
   if (navigation.filenamePreviewQueued) {
-    await showAppToast("已同時建立檔名轉換預覽，可至「檔案與檔名」查看。");
+    await showAppToast(t("app.filenamePreviewQueued"));
   }
 }
 
@@ -201,10 +201,10 @@ onMounted(async () => {
     if (settings.legacyDictionaryNotice) showLegacyDictionaryNotice();
   } catch (error) {
     const detail = formatUnknownError(error);
-    const message = `啟動失敗於 ${step}：${detail}`;
+    const message = t("app.startupFailed", { step, detail });
     await invoke("app_log", { source: "startup", message }).catch(() => undefined);
     const logPath = await invoke<string | null>("app_log_path").catch(() => null);
-    startupError.value = logPath ? `${message}\n記錄檔：${logPath}` : message;
+    startupError.value = logPath ? `${message}\n${t("app.logFile", { path: logPath })}` : message;
     await invoke("show_main_window").catch(() => undefined);
   }
 });
@@ -219,39 +219,39 @@ onBeforeUnmount(() => unlisten.forEach((dispose) => dispose()));
         <div id="tour-brand" class="brand-mark"><BrandMark /></div>
         <div>
           <strong>ConvertZZ</strong>
-          <small>跨平台中文轉換</small>
+          <small>{{ t("app.tagline") }}</small>
         </div>
       </div>
       <el-menu :default-active="active" @select="active = $event">
         <el-menu-item id="tour-quick" index="quick"
-          ><el-icon><Switch /></el-icon><span>快速轉換</span></el-menu-item
+          ><el-icon><Switch /></el-icon><span>{{ t("app.nav.quick") }}</span></el-menu-item
         >
         <el-menu-item id="tour-files" index="files"
-          ><el-icon><Files /></el-icon><span>檔案與檔名</span></el-menu-item
+          ><el-icon><Files /></el-icon><span>{{ t("app.nav.files") }}</span></el-menu-item
         >
         <el-menu-item id="tour-clipboard" index="clipboard"
-          ><el-icon><Memo /></el-icon><span>剪貼簿</span></el-menu-item
+          ><el-icon><Memo /></el-icon><span>{{ t("app.nav.clipboard") }}</span></el-menu-item
         >
         <el-menu-item id="tour-audio" index="audio"
-          ><el-icon><Headset /></el-icon><span>音訊標籤</span></el-menu-item
+          ><el-icon><Headset /></el-icon><span>{{ t("app.nav.audio") }}</span></el-menu-item
         >
         <el-menu-item id="tour-tools" index="tools"
-          ><el-icon><Operation /></el-icon><span>文字工具</span></el-menu-item
+          ><el-icon><Operation /></el-icon><span>{{ t("app.nav.tools") }}</span></el-menu-item
         >
         <el-menu-item id="tour-dictionary" index="dictionary"
-          ><el-icon><Collection /></el-icon><span>使用者詞典</span></el-menu-item
+          ><el-icon><Collection /></el-icon><span>{{ t("app.nav.dictionary") }}</span></el-menu-item
         >
         <el-menu-item id="tour-settings" index="settings"
-          ><el-icon><Setting /></el-icon><span>設定</span></el-menu-item
+          ><el-icon><Setting /></el-icon><span>{{ t("app.nav.settings") }}</span></el-menu-item
         >
         <el-menu-item id="tour-about" index="about"
-          ><el-icon><InfoFilled /></el-icon><span>關於與差異</span></el-menu-item
+          ><el-icon><InfoFilled /></el-icon><span>{{ t("app.nav.about") }}</span></el-menu-item
         >
       </el-menu>
       <div class="runtime-status">
         <span class="status-dot" :class="{ online: health }"></span>
-        <span v-if="health">核心 {{ health.version }} · Rust</span>
-        <span v-else>核心啟動中</span>
+        <span v-if="health">{{ t("app.coreVersion", { version: health.version }) }}</span>
+        <span v-else>{{ t("app.coreStarting") }}</span>
       </div>
     </el-aside>
     <el-main class="content">
@@ -264,14 +264,14 @@ onBeforeUnmount(() => unlisten.forEach((dispose) => dispose()));
       </template>
       <el-alert
         v-else-if="startupError"
-        title="ConvertZZ 無法啟動"
+        :title="t('app.startupErrorTitle')"
         :description="startupError"
         type="error"
         :closable="false"
         show-icon
       />
       <div v-else class="loading-state">
-        <el-icon class="is-loading"><Document /></el-icon><span>正在載入轉換核心</span>
+        <el-icon class="is-loading"><Document /></el-icon><span>{{ t("app.loadingCore") }}</span>
       </div>
     </el-main>
     <OnboardingTour

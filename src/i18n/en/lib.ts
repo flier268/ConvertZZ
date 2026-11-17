@@ -1,6 +1,164 @@
 import type source from "../zh-TW/lib";
 import type { LocaleMessages } from "../types";
 
-const messages: LocaleMessages<typeof source> = {};
+const messages: LocaleMessages<typeof source> = {
+  appMenu: {
+    a3: "Unicode Simplified → Traditional",
+    a4: "Unicode Traditional → Simplified",
+    b1: "Convert files / filenames",
+    b2: "Convert clipboard",
+    c1: "Convert audio tags",
+    others: "Other",
+    za1: "Unicode → HTML decimal",
+    za2: "Unicode → HTML hexadecimal",
+    ze1: "Half-width → Full-width",
+    ze2: "Full-width → Half-width",
+    toggleFloatingBall: "Show or hide floating ball",
+    settings: "Settings",
+    help: "Help",
+    about: "About ConvertZZ",
+    report: "Report an issue",
+    quit: "Quit ConvertZZ",
+  },
+  legacyActions: {
+    none: "None",
+    toggleFloatingBall: "Show or hide floating ball",
+    a1: "GBK → Big5 with Simplified → Traditional",
+    a2: "Big5 → GBK with Traditional → Simplified",
+    a3: "Unicode Simplified → Traditional",
+    a4: "Unicode Traditional → Simplified",
+    za1: "Unicode → HTML decimal",
+    za2: "Unicode → HTML hexadecimal",
+    zb1: "Unicode → GBK (reinterpret)",
+    zb2: "Unicode → Big5 (reinterpret)",
+    zb3: "Unicode → Shift-JIS (reinterpret)",
+    zb4: "GBK → Unicode (reinterpret)",
+    zb5: "Big5 → Unicode (reinterpret)",
+    zb6: "Shift-JIS → Unicode (reinterpret)",
+    ze1: "Half-width → Full-width",
+    ze2: "Full-width → Half-width",
+    unsupported: "Unsupported legacy action: {action}",
+    done: "Conversion complete\nTime: {duration} ms",
+  },
+  onboarding: {
+    steps: {
+      welcome: "Welcome to ConvertZZ 2.0",
+      quick: "Quick convert",
+      files: "Files & filenames",
+      clipboard: "Clipboard",
+      audio: "Audio tags",
+      tools: "Text tools",
+      desktop: "Floating ball & tray",
+      import: "Import legacy settings",
+      settings: "Settings & shortcuts",
+    },
+    next: "Next",
+    skipImport: "Skip import",
+  },
+  appUpdate: {
+    upToDate: "You are using the latest version.",
+    installPrompt:
+      "A new version {latest} is available (current: {current}). Download and install it? The app will restart after installation.",
+    install: "Download and install",
+    unavailable: "The update is no longer available.",
+    installing: "Downloading and installing update…",
+    downloadPrompt:
+      "A new version {latest} is available (current: {current}). This installation cannot update automatically. Open the download page?",
+    openDownloadPage: "Open download page",
+    title: "Update available",
+    later: "Later",
+    skipped: "Skipped {version}. You won't be asked about this version at startup again.",
+    skipThisVersion: "Don't ask about this version again",
+  },
+  update: {
+    releaseCheckFailed: "GitHub Release check failed.",
+    releaseCheckFailedHttp: "GitHub Release check failed: HTTP {status}",
+    noStableVersion: "GitHub Release did not provide a valid stable version.",
+    noVersion: "GitHub Release did not provide a valid version number.",
+  },
+  errors: {
+    unserializable: "[unserializable]",
+    nullValue: "Unknown error (null)",
+    emptyString: "Unknown error (empty string)",
+    emptyMessage: "Unknown error (empty message)",
+    emptyObject: "Unknown error (empty object)",
+  },
+  progress: {
+    hms: "{hours} h {minutes} min {seconds} s",
+    ms: "{minutes} min {seconds} s",
+    s: "{seconds} s",
+    processing: "Processing…",
+    almostDone: "{base} (almost done)",
+    remaining: "{base} (about {duration} left)",
+  },
+  fileDiff: {
+    filename: { title: "Filename", sourceLabel: "Source filename", outputLabel: "Output filename" },
+    content: { title: "Content", sourceLabel: "Source preview", outputLabel: "Output preview" },
+  },
+  desktop: {
+    floatingBallFailed: "Could not apply floating ball: {error}",
+    globalShortcutsFailed: "Could not register global shortcuts: {error}",
+    shortcutFailed: "Could not register shortcut {accelerator}: {error}",
+  },
+  dropActions: {
+    noFiles: "No files selected",
+    separator: ", ",
+    more: "{names} and {count} items in total",
+  },
+  fileApply: {
+    contentSkipMark: "content conversion skipped",
+    contentSkipped: "Content conversion skipped for {count} files.",
+  },
+  ignoredInputs: {
+    warningPrefix: "Skipped path inside a version control folder: ",
+    more: "\n… {count} items in total",
+    confirm:
+      "The following paths are inside a version control folder (.git, .svn, .hg, .bzr):\n{paths}{more}\n\nConverting these files may corrupt the repository. Convert them anyway? Choose “Cancel” to remove these paths from the source list.",
+  },
+  hotkey: {
+    notEnabled: "Shortcut {accelerator} is set but not enabled, so it has not been registered.",
+  },
+  coreClient: {
+    timeout: "Conversion core request timed out: {operation}",
+  },
+  settings: {
+    importConfirm: {
+      message: "Importing will replace your current 2.0 settings. Continue?",
+      title: "Confirm import",
+    },
+    importFailed: "Import failed. Current settings were not changed. {error}",
+  },
+  fileFilters: {
+    supportedFiles: "Supported files",
+    allFiles: "All files",
+  },
+  filterProfiles: {
+    builtinText: "Common text files",
+    builtinAll: "All files",
+    noExtension: "(no extension)",
+    mode: { allow: "Allow list", deny: "Block list", all: "All" },
+    nameRequired: "Enter a profile name.",
+    duplicateName: "A profile named “{name}” already exists.",
+    allowEmpty:
+      "An allow list needs at least one extension, or include files without an extension.",
+    denyEmpty: "The block list is empty, which matches all files.",
+    summary: {
+      all: "All files",
+      more: " …{count} in total",
+      excludeNoExtension: ", excluding no extension",
+      includeNoExtension: ", including no extension",
+      onlyNoExtension: "Only files without an extension",
+      empty: "(empty)",
+      excludeOnlyNoExtension: "Excludes only files without an extension",
+      emptyDeny: "(empty, matches all files)",
+    },
+    copyName: "{name} copy",
+    newName: "Custom filter",
+    importedName: "Imported filter",
+    invalidJson: "Not a valid JSON file.",
+    invalidFormat: "Not a ConvertZZ extension filter profile file.",
+    nothingToImport: "The file contains no profiles that can be imported.",
+  },
+};
 
 export default messages;

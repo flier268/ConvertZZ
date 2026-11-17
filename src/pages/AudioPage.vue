@@ -2,6 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { open, confirm } from "@tauri-apps/plugin-dialog";
 import { ElMessage } from "element-plus";
+import { t, tn } from "@/i18n";
 import type {
   AudioTagField,
   AudioTagFile,
@@ -23,7 +24,7 @@ import type { Progress } from "../lib/coreClient";
 import {
   applyBulkSelection,
   audioBaseName,
-  AUDIO_TAG_READ_ERROR,
+  audioTagReadError,
   audioWarningDetail,
   id3v1TruncationNotes,
   clearWarningSelection,
@@ -61,8 +62,7 @@ import {
   tagRuleSummary,
   toTagOperations,
   fromTagOperations,
-  TAG_RULE_FIELDS,
-  CLEANUP_APE_NOTE,
+  tagRuleFields,
   containerName,
   detailContainerNotices,
   type AudioListFilter,
@@ -176,7 +176,7 @@ const listRows = computed(() => buildAudioListRows(sortedFiles.value, collapsedF
 const selectedFile = computed(() => files.value.find((file) => file.path === selectedPath.value));
 const fieldDiffs = computed(() => buildFieldDiffs(plan.value ? selectedFile.value : undefined));
 const pageSubtitle = computed(() => {
-  if (!files.value.length) return "ID3、APEv2 與 Vorbis Comment 都會保留未選欄位與封面。";
+  if (!files.value.length) return t("audio.subtitle.empty");
   if (focusKind.value === "folder" && focusFolder.value) {
     const folder = focusFolder.value.replaceAll("\\", "/");
     const folderKey = audioPathKey(focusFolder.value);
@@ -185,9 +185,12 @@ const pageSubtitle = computed(() => {
       const path = audioPathKey(file.path);
       return path === folderKey || path.startsWith(prefix);
     }).length;
-    return `${folder} · ${count} 個檔案`;
+    return t("audio.subtitle.folder", { folder, files: tn("audio.count.files", count) });
   }
-  return `${paths.value.length} 個路徑 · 全部 ${files.value.length} 個檔案`;
+  return t("audio.subtitle.all", {
+    paths: tn("audio.count.paths", paths.value.length),
+    files: tn("audio.count.files", files.value.length),
+  });
 });
 const visibleFields = computed(() => {
   const file = selectedFile.value;
@@ -362,7 +365,9 @@ async function choose() {
   if (applying.value) return;
   const selected = await open({
     multiple: true,
-    filters: [{ name: "音訊標籤", extensions: ["mp3", "ape", "ogg", "oga", "opus"] }],
+    filters: [
+      { name: t("audio.fileDialogFilter"), extensions: ["mp3", "ape", "ogg", "oga", "opus"] },
+    ],
   });
   if (!selected || applying.value) return;
   await addPaths(Array.isArray(selected) ? selected : [selected]);
@@ -553,7 +558,7 @@ async function scan(onlyPaths?: readonly string[], extras?: { preview?: boolean 
       }
       restoreSelection(files.value, pendingFullSnapshot.snapshot);
     }
-    if (isCancellationError(error)) ElMessage.info("已取消掃描。");
+    if (isCancellationError(error)) ElMessage.info(t("audio.messages.scanCancelled"));
     else {
       operationError.value = error instanceof Error ? error.message : String(error);
       ElMessage.error(operationError.value);
@@ -703,24 +708,33 @@ async function applyPlan() {
   if (!plan.value || busy.value || totals.value.files === 0) return;
   const planId = plan.value.planId;
   if (
-    !(await confirm(`將寫入 ${totals.value.files} 個音訊檔案的已選標籤。`, {
-      title: "確認標籤轉換",
+    !(await confirm(tn("audio.messages.confirmApply", totals.value.files), {
+      title: t("audio.messages.confirmApplyTitle"),
+      okLabel: t("common.ok"),
+      cancelLabel: t("common.cancel"),
       kind: "warning",
     }))
   )
     return;
   if (busy.value || plan.value?.planId !== planId) return;
   const overwritten = [
-    backup.value ? "既有的 .bak 備份" : "",
-    options.convertFilename ? "改名後撞名的既有檔案" : "",
+    backup.value ? t("audio.messages.existingBackup") : "",
+    options.convertFilename ? t("audio.messages.renamedConflict") : "",
   ].filter(Boolean);
   if (
     conflictPolicy.value === "overwrite" &&
     overwritten.length &&
-    !(await confirm(`覆寫會取代${overwritten.join("與")}。是否確定繼續？`, {
-      title: "確認覆寫",
-      kind: "warning",
-    }))
+    !(await confirm(
+      t("audio.messages.confirmOverwrite", {
+        targets: overwritten.join(t("audio.messages.overwriteJoiner")),
+      }),
+      {
+        title: t("audio.messages.confirmOverwriteTitle"),
+        okLabel: t("common.ok"),
+        cancelLabel: t("common.cancel"),
+        kind: "warning",
+      },
+    ))
   )
     return;
   if (busy.value || plan.value?.planId !== planId) return;
@@ -752,22 +766,26 @@ async function applyPlan() {
     const warnings = result.warnings ?? [];
     if (warnings.length)
       ElMessage.warning(
-        warnings.length > 1 ? `${warnings[0]}（另有 ${warnings.length - 1} 則）` : warnings[0]!,
+        warnings.length > 1
+          ? t("audio.messages.moreWarnings", { first: warnings[0]!, count: warnings.length - 1 })
+          : warnings[0]!,
       );
     if (result.failed.length) {
       const detail = result.failed[0]?.message ?? "";
       ElMessage.warning(
         detail
-          ? `${result.failed.length} 個檔案失敗：${detail}`
-          : `${result.failed.length} 個檔案失敗。`,
+          ? tn("audio.messages.failedWithDetail", result.failed.length, { detail })
+          : tn("audio.messages.failed", result.failed.length),
       );
     }
     if (result.succeeded.length) {
       if (promptAfterConversion.value)
-        ElMessage.success(`已完成 ${result.succeeded.length} 個音訊檔案。`);
+        ElMessage.success(tn("audio.messages.completed", result.succeeded.length));
     } else if (!result.failed.length) {
       ElMessage.warning(
-        skipped > 0 ? `沒有寫入任何檔案（${skipped} 個略過）。` : "沒有寫入任何檔案。",
+        skipped > 0
+          ? t("audio.messages.nothingWrittenSkipped", { count: skipped })
+          : t("audio.messages.nothingWritten"),
       );
     }
     if (result.succeeded.length && !result.failed.length) {
@@ -777,7 +795,7 @@ async function applyPlan() {
       rescanPaths = result.succeeded;
     }
   } catch (error) {
-    if (isCancellationError(error)) ElMessage.info("已取消音訊轉換。");
+    if (isCancellationError(error)) ElMessage.info(t("audio.messages.applyCancelled"));
     else ElMessage.error(error instanceof Error ? error.message : String(error));
     dropPlan = !isCancellationError(error);
     if (dropPlan && paths.value.length) rescanPaths = undefined;
@@ -840,14 +858,14 @@ async function rescanFile(file: AudioTagFile) {
     updated = { ...updated, path: file.path, selected: updated.warning ? false : updated.selected };
     if (updated.missing || isMissingAudioWarning(updated.warning)) {
       removeFileFromList(file);
-      ElMessage.info(`${audioBaseName(file.path)} 已不存在，已從列表移除。`);
+      ElMessage.info(t("audio.messages.fileGone", { name: audioBaseName(file.path) }));
       return;
     }
     adoptRescannedFile(updated);
     selectedPath.value = file.path;
     focusKind.value = "file";
     if (updated.warning) ElMessage.warning(updated.warning);
-    else ElMessage.success(`已重新掃描 ${audioBaseName(file.path)}。`);
+    else ElMessage.success(t("audio.messages.rescanned", { name: audioBaseName(file.path) }));
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
@@ -979,39 +997,52 @@ watch(
     <header class="page-header">
       <div>
         <p class="eyebrow">AUDIO TAGS</p>
-        <h1>音訊標籤</h1>
+        <h1>{{ t("audio.title") }}</h1>
         <p>{{ pageSubtitle }}</p>
       </div>
       <div class="card-actions">
-        <el-button :disabled="applying" @click="chooseFolder">選取資料夾</el-button>
-        <el-button type="primary" :disabled="applying" @click="choose">選取音訊檔案</el-button>
+        <el-button :disabled="applying" @click="chooseFolder">{{
+          t("audio.chooseFolder")
+        }}</el-button>
+        <el-button type="primary" :disabled="applying" @click="choose">{{
+          t("audio.chooseFiles")
+        }}</el-button>
       </div>
     </header>
 
     <div class="page-fill-main audio-body">
       <el-card shadow="never" class="audio-settings-card">
         <el-form label-position="top" class="option-grid audio-options" :disabled="busy">
-          <el-form-item label="APEv2／Vorbis 方向">
+          <el-form-item :label="t('audio.options.apeVorbisDirection')">
             <el-select v-model="options.direction">
-              <el-option label="不轉換" value="none" />
-              <el-option label="簡轉繁" value="s2t" />
-              <el-option label="繁轉簡" value="t2s" />
+              <el-option :label="t('audio.options.noConversion')" value="none" />
+              <el-option :label="t('common.direction.s2t')" value="s2t" />
+              <el-option :label="t('common.direction.t2s')" value="t2s" />
             </el-select>
           </el-form-item>
-          <el-form-item label="引擎">
+          <el-form-item :label="t('audio.options.engine')">
             <el-select v-model="options.engine">
-              <el-option label="新式分詞" value="segmented" />
+              <el-option :label="t('audio.options.segmented')" value="segmented" />
 
               <el-option label="ZhConvert" value="zhconvert" />
             </el-select>
           </el-form-item>
-          <el-form-item :label="options.convertFilename ? '備份與檔名衝突' : '備份衝突'">
+          <el-form-item
+            :label="
+              options.convertFilename
+                ? t('audio.options.backupAndFilenameConflict')
+                : t('audio.options.backupConflict')
+            "
+          >
             <el-select v-model="conflictPolicy" :disabled="!backup && !options.convertFilename">
-              <el-option label="略過" value="skip" />
-              <el-option label="覆寫" value="overwrite" />
+              <el-option :label="t('audio.options.skip')" value="skip" />
+              <el-option :label="t('audio.options.overwrite')" value="overwrite" />
             </el-select>
           </el-form-item>
-          <el-form-item v-if="options.convertFilename" label="檔名來源編碼">
+          <el-form-item
+            v-if="options.convertFilename"
+            :label="t('audio.options.filenameInputEncoding')"
+          >
             <el-select v-model="options.filenameInputEncoding">
               <el-option
                 v-for="value in filenameEncodings"
@@ -1021,7 +1052,10 @@ watch(
               />
             </el-select>
           </el-form-item>
-          <el-form-item v-if="options.convertFilename" label="檔名輸出編碼">
+          <el-form-item
+            v-if="options.convertFilename"
+            :label="t('audio.options.filenameOutputEncoding')"
+          >
             <el-select v-model="options.filenameOutputEncoding">
               <el-option
                 v-for="value in filenameEncodings"
@@ -1031,14 +1065,14 @@ watch(
               />
             </el-select>
           </el-form-item>
-          <el-form-item label="MP3／ID3v1 方向">
+          <el-form-item :label="t('audio.options.id3v1Direction')">
             <el-select v-model="options.id3v1Direction" :disabled="!options.id3v1Enabled">
-              <el-option label="不轉換" value="none" />
-              <el-option label="簡轉繁" value="s2t" />
-              <el-option label="繁轉簡" value="t2s" />
+              <el-option :label="t('audio.options.noConversion')" value="none" />
+              <el-option :label="t('common.direction.s2t')" value="s2t" />
+              <el-option :label="t('common.direction.t2s')" value="t2s" />
             </el-select>
           </el-form-item>
-          <el-form-item label="MP3／ID3v1 來源">
+          <el-form-item :label="t('audio.options.id3v1Source')">
             <el-select v-model="options.id3v1SourceEncoding" :disabled="!options.id3v1Enabled">
               <el-option label="GBK" value="gbk" />
               <el-option label="Big5" value="big5" />
@@ -1046,7 +1080,7 @@ watch(
               <el-option label="UTF-8" value="utf8" />
             </el-select>
           </el-form-item>
-          <el-form-item label="MP3／ID3v1 輸出">
+          <el-form-item :label="t('audio.options.id3v1Output')">
             <el-select v-model="options.id3v1OutputEncoding" :disabled="!options.id3v1Enabled">
               <el-option label="Big5" value="big5" />
               <el-option label="GBK" value="gbk" />
@@ -1054,20 +1088,20 @@ watch(
               <el-option label="UTF-8" value="utf8" />
             </el-select>
           </el-form-item>
-          <el-form-item label="MP3／ID3v2 方向">
+          <el-form-item :label="t('audio.options.id3v2Direction')">
             <el-select v-model="options.id3v2Direction" :disabled="!options.id3v2Enabled">
-              <el-option label="不轉換" value="none" />
-              <el-option label="簡轉繁" value="s2t" />
-              <el-option label="繁轉簡" value="t2s" />
+              <el-option :label="t('audio.options.noConversion')" value="none" />
+              <el-option :label="t('common.direction.s2t')" value="s2t" />
+              <el-option :label="t('common.direction.t2s')" value="t2s" />
             </el-select>
           </el-form-item>
-          <el-form-item label="ID3v2 版本">
+          <el-form-item :label="t('audio.options.id3v2Version')">
             <el-select v-model="options.id3v2Version" :disabled="!options.id3v2Enabled">
               <el-option label="2.4" :value="4" />
               <el-option label="2.3" :value="3" />
             </el-select>
           </el-form-item>
-          <el-form-item label="ID3v2 編碼">
+          <el-form-item :label="t('audio.options.id3v2Encoding')">
             <el-select v-model="options.id3v2Encoding" :disabled="!options.id3v2Enabled">
               <el-option label="UTF-8" value="utf8" />
               <el-option label="UTF-16" value="utf16" />
@@ -1075,7 +1109,7 @@ watch(
               <el-option label="Latin-1" value="latin1" />
             </el-select>
           </el-form-item>
-          <el-form-item label="ID3v2 錯碼來源編碼">
+          <el-form-item :label="t('audio.options.id3v2RepairSource')">
             <el-select
               v-model="options.id3v2SourceEncoding"
               :disabled="!options.id3v2Enabled || !options.id3v2RepairSourceEncoding"
@@ -1088,22 +1122,26 @@ watch(
           </el-form-item>
         </el-form>
         <div class="switch-row">
-          <el-checkbox v-model="options.vocabularyCorrection">詞彙修正</el-checkbox>
-          <el-checkbox v-model="options.recursive">包含子資料夾</el-checkbox>
-          <el-checkbox v-model="backup">轉換前備份（.bak）</el-checkbox>
-          <el-checkbox v-model="options.convertFilename">轉換檔名</el-checkbox>
+          <el-checkbox v-model="options.vocabularyCorrection">{{
+            t("audio.options.vocabularyCorrection")
+          }}</el-checkbox>
+          <el-checkbox v-model="options.recursive">{{ t("audio.options.recursive") }}</el-checkbox>
+          <el-checkbox v-model="backup">{{ t("audio.options.backup") }}</el-checkbox>
+          <el-checkbox v-model="options.convertFilename">{{
+            t("audio.options.convertFilename")
+          }}</el-checkbox>
           <el-checkbox v-model="options.id3v1Enabled">ID3v1</el-checkbox>
           <el-checkbox v-model="options.id3v2Enabled">ID3v2</el-checkbox>
           <el-checkbox
             v-model="options.id3v2RepairSourceEncoding"
             :disabled="!options.id3v1Enabled && !options.id3v2Enabled"
-            >嘗試修復錯碼</el-checkbox
+            >{{ t("audio.options.repairEncoding") }}</el-checkbox
           >
         </div>
         <el-collapse class="audio-rules-collapse">
-          <el-collapse-item title="標籤操作" name="rules">
+          <el-collapse-item :title="t('audio.rules.title')" name="rules">
             <p class="audio-rule-lead">
-              規則由上到下執行，套用到所有已勾選的檔案。來源一律用讀到的原始標籤。結果一樣先進預覽。
+              {{ t("audio.rules.lead") }}
             </p>
             <div
               v-for="(rule, index) in options.tagOperations"
@@ -1113,51 +1151,57 @@ watch(
             >
               <span class="audio-rule-index">{{ index + 1 }}</span>
               <button type="button" class="audio-rule-name" @click="editingRuleId = rule.id">
-                <span v-if="rule.action === 'remove'" class="audio-remove">移除</span>
+                <span v-if="rule.action === 'remove'" class="audio-remove">{{
+                  t("audio.rules.remove")
+                }}</span>
                 {{ tagRuleSummary(rule) }}
               </button>
-              <el-switch v-model="rule.enabled" :aria-label="`啟用規則 ${index + 1}`" />
-              <el-button link :disabled="index === 0" @click="moveTagRule(index, -1)"
-                >上移</el-button
-              >
+              <el-switch
+                v-model="rule.enabled"
+                :aria-label="t('audio.rules.enableRule', { index: index + 1 })"
+              />
+              <el-button link :disabled="index === 0" @click="moveTagRule(index, -1)">{{
+                t("audio.rules.moveUp")
+              }}</el-button>
               <el-button
                 link
                 :disabled="index === options.tagOperations.length - 1"
                 @click="moveTagRule(index, 1)"
-                >下移</el-button
+                >{{ t("audio.rules.moveDown") }}</el-button
               >
-              <el-button link type="danger" @click="deleteTagRule(index)">刪除</el-button>
+              <el-button link type="danger" @click="deleteTagRule(index)">{{
+                t("common.delete")
+              }}</el-button>
             </div>
-            <el-button @click="addTagRule">＋ 新增規則</el-button>
-            <el-button link @click="addCleanupRule">清理多餘標籤</el-button>
-            <p class="audio-rule-lead">{{ CLEANUP_APE_NOTE }}</p>
+            <el-button @click="addTagRule">{{ t("audio.rules.add") }}</el-button>
+            <el-button link @click="addCleanupRule">{{ t("audio.rules.cleanup") }}</el-button>
+            <p class="audio-rule-lead">{{ t("audio.rules.cleanupApeNote") }}</p>
             <div v-if="editingRule" class="audio-rule-editor">
-              <strong
-                >編輯規則
-                {{
-                  options.tagOperations.findIndex((rule) => rule.id === editingRule?.id) + 1
-                }}</strong
-              >
+              <strong>{{
+                t("audio.rules.editRule", {
+                  index: options.tagOperations.findIndex((rule) => rule.id === editingRule?.id) + 1,
+                })
+              }}</strong>
               <div class="audio-rule-grid">
                 <label
-                  >動作
+                  >{{ t("audio.rules.action") }}
                   <el-select v-model="editingRule.action">
-                    <el-option label="合併" value="merge" />
-                    <el-option label="移除" value="remove" />
+                    <el-option :label="t('audio.rules.merge')" value="merge" />
+                    <el-option :label="t('audio.rules.remove')" value="remove" />
                   </el-select>
                 </label>
                 <label
-                  >衝突時
+                  >{{ t("audio.rules.onConflict") }}
                   <el-select
                     v-model="editingRule.onConflict"
                     :disabled="editingRule.action === 'remove'"
                   >
-                    <el-option label="覆蓋目標" value="overwrite" />
-                    <el-option label="只補空白" value="fillEmpty" />
+                    <el-option :label="t('audio.rules.overwriteTarget')" value="overwrite" />
+                    <el-option :label="t('audio.rules.fillEmpty')" value="fillEmpty" />
                   </el-select>
                 </label>
                 <label
-                  >來源
+                  >{{ t("audio.rules.source") }}
                   <el-select v-model="editingRule.source">
                     <el-option label="ID3v2" value="id3v2" />
                     <el-option label="ID3v1" value="id3v1" />
@@ -1165,7 +1209,7 @@ watch(
                   </el-select>
                 </label>
                 <label
-                  >目標
+                  >{{ t("audio.rules.target") }}
                   <el-select
                     v-model="editingRule.target"
                     :disabled="editingRule.action === 'remove'"
@@ -1176,10 +1220,10 @@ watch(
                   </el-select>
                 </label>
               </div>
-              <p v-if="editingRule.action !== 'remove'">欄位</p>
+              <p v-if="editingRule.action !== 'remove'">{{ t("audio.rules.fields") }}</p>
               <div v-if="editingRule.action !== 'remove'" class="audio-rule-fields">
                 <el-checkbox
-                  v-for="[key, label] in TAG_RULE_FIELDS"
+                  v-for="[key, label] in tagRuleFields()"
                   :key="key"
                   :model-value="editingRule.fields.includes(key)"
                   @change="
@@ -1198,26 +1242,31 @@ watch(
           v-model="query"
           clearable
           class="audio-search"
-          placeholder="搜尋檔名、專輯、標題"
+          :placeholder="t('audio.toolbar.search')"
           :disabled="!files.length"
         />
-        <el-select v-model="sortKey" class="audio-sort" :disabled="!files.length" aria-label="排序">
-          <el-option label="檔名" value="name" />
-          <el-option label="變更數" value="changed" />
-          <el-option label="格式" value="format" />
+        <el-select
+          v-model="sortKey"
+          class="audio-sort"
+          :disabled="!files.length"
+          :aria-label="t('audio.toolbar.sort')"
+        >
+          <el-option :label="t('audio.toolbar.sortName')" value="name" />
+          <el-option :label="t('audio.toolbar.sortChanged')" value="changed" />
+          <el-option :label="t('audio.toolbar.sortFormat')" value="format" />
         </el-select>
         <el-radio-group
           v-model="listFilter"
           class="audio-segments"
           :disabled="!files.length"
-          aria-label="檔案篩選"
+          :aria-label="t('audio.toolbar.filter')"
         >
-          <el-radio-button value="changed" :aria-pressed="listFilter === 'changed'"
-            >有變更 {{ segments.changed }}</el-radio-button
-          >
-          <el-radio-button value="unchanged" :aria-pressed="listFilter === 'unchanged'"
-            >不變 {{ segments.unchanged }}</el-radio-button
-          >
+          <el-radio-button value="changed" :aria-pressed="listFilter === 'changed'">{{
+            t("audio.toolbar.changed", { count: segments.changed })
+          }}</el-radio-button>
+          <el-radio-button value="unchanged" :aria-pressed="listFilter === 'unchanged'">{{
+            t("audio.toolbar.unchanged", { count: segments.unchanged })
+          }}</el-radio-button>
           <el-radio-button
             value="warnings"
             :aria-pressed="listFilter === 'warnings'"
@@ -1225,7 +1274,7 @@ watch(
               'is-warn': segments.warnings > 0,
               'is-filled': listFilter === 'warnings' && segments.warnings > 0,
             }"
-            >警告 {{ segments.warnings }}</el-radio-button
+            >{{ t("audio.toolbar.warnings", { count: segments.warnings }) }}</el-radio-button
           >
           <el-radio-button
             value="errors"
@@ -1234,26 +1283,26 @@ watch(
               'is-alert': segments.errors > 0,
               'is-filled': listFilter === 'errors' && segments.errors > 0,
             }"
-            >錯誤 {{ segments.errors }}</el-radio-button
+            >{{ t("audio.toolbar.errors", { count: segments.errors }) }}</el-radio-button
           >
-          <el-radio-button value="all" :aria-pressed="listFilter === 'all'"
-            >全部 {{ segments.all }}</el-radio-button
-          >
+          <el-radio-button value="all" :aria-pressed="listFilter === 'all'">{{
+            t("audio.toolbar.all", { count: segments.all })
+          }}</el-radio-button>
         </el-radio-group>
       </div>
 
       <div class="page-fill-main audio-review">
         <div v-if="operationError && !files.length" class="audio-empty">
-          <el-result icon="error" title="掃描失敗" :sub-title="operationError">
+          <el-result icon="error" :title="t('audio.list.scanFailed')" :sub-title="operationError">
             <template #extra>
-              <el-button type="primary" :disabled="!paths.length || busy" @click="scan()"
-                >再試一次</el-button
-              >
+              <el-button type="primary" :disabled="!paths.length || busy" @click="scan()">{{
+                t("audio.list.retry")
+              }}</el-button>
             </template>
           </el-result>
         </div>
         <div v-else-if="!files.length" class="audio-empty">
-          <el-empty description="尚未掃描音訊檔案。請選取 MP3、APE、OGG 或 Opus。" />
+          <el-empty :description="t('audio.list.empty')" />
         </div>
         <template v-else>
           <el-splitter class="audio-review-splitter">
@@ -1263,15 +1312,15 @@ watch(
                   v-if="operationError"
                   class="audio-inline-error"
                   icon="warning"
-                  title="建立預覽失敗"
+                  :title="t('audio.list.previewFailed')"
                   :sub-title="operationError"
                 />
-                <el-empty v-if="!listRows.length" description="沒有符合的檔案" />
+                <el-empty v-if="!listRows.length" :description="t('audio.list.noMatch')" />
                 <VirtualList
                   v-else
                   ref="listRef"
                   role="listbox"
-                  aria-label="音訊檔案"
+                  :aria-label="t('audio.list.ariaLabel')"
                   tabindex="0"
                   :aria-activedescendant="activeRowId"
                   :count="listRows.length"
@@ -1290,7 +1339,7 @@ watch(
                         type="checkbox"
                         class="audio-folder-check"
                         tabindex="-1"
-                        :aria-label="`選取資料夾 ${folderPath(index)}`"
+                        :aria-label="t('audio.list.selectFolder', { path: folderPath(index) })"
                         :disabled="
                           busy || folderSelectionState(filteredFiles, folderPath(index)) === 'empty'
                         "
@@ -1308,9 +1357,13 @@ watch(
                       <span class="audio-caret">{{ folderAt(index)!.collapsed ? "▸" : "▾" }}</span>
                       <span class="audio-folder-path">{{ folderAt(index)!.path }}</span>
                       <span class="audio-folder-counts">
-                        {{ folderAt(index)!.counts.files }} 檔 · 變更
-                        {{ folderAt(index)!.counts.changed }} · 錯誤
-                        {{ folderAt(index)!.counts.errors }}
+                        {{
+                          t("audio.list.folderCounts", {
+                            files: folderAt(index)!.counts.files,
+                            changed: folderAt(index)!.counts.changed,
+                            errors: folderAt(index)!.counts.errors,
+                          })
+                        }}
                       </span>
                     </div>
                   </template>
@@ -1329,7 +1382,7 @@ watch(
                         type="checkbox"
                         class="audio-folder-check"
                         tabindex="-1"
-                        :aria-label="`選取資料夾 ${folderPath(index)}`"
+                        :aria-label="t('audio.list.selectFolder', { path: folderPath(index) })"
                         :disabled="
                           busy || folderSelectionState(filteredFiles, folderPath(index)) === 'empty'
                         "
@@ -1347,9 +1400,13 @@ watch(
                       <span class="audio-caret">{{ listRows[index].collapsed ? "▸" : "▾" }}</span>
                       <span class="audio-folder-path">{{ listRows[index].path }}</span>
                       <span class="audio-folder-counts">
-                        {{ listRows[index].counts.files }} 檔 · 變更
-                        {{ listRows[index].counts.changed }} · 錯誤
-                        {{ listRows[index].counts.errors }}
+                        {{
+                          t("audio.list.folderCounts", {
+                            files: listRows[index].counts.files,
+                            changed: listRows[index].counts.changed,
+                            errors: listRows[index].counts.errors,
+                          })
+                        }}
                       </span>
                     </div>
                     <div
@@ -1380,7 +1437,7 @@ watch(
                       <span
                         v-if="listRows[index].file.warning"
                         class="audio-bang"
-                        title="此檔案有錯誤"
+                        :title="t('audio.list.fileHasError')"
                         >!</span
                       >
                       <span
@@ -1393,7 +1450,11 @@ watch(
                         type="button"
                         class="audio-remove-file"
                         :disabled="busy"
-                        :aria-label="`從列表移除 ${audioBaseName(listRows[index].file.path)}`"
+                        :aria-label="
+                          t('audio.list.removeFromList', {
+                            name: audioBaseName(listRows[index].file.path),
+                          })
+                        "
                         @click.stop="removeFileFromList(listRows[index].file)"
                       >
                         ×
@@ -1411,44 +1472,51 @@ watch(
                       <strong>{{ audioBaseName(selectedFile.path) }}</strong>
                       <p>
                         {{ selectedFile.path }} · {{ selectedFile.format.toUpperCase() }} ·
-                        {{ selectedFile.hasCoverArt ? "含封面" : "無封面" }}
+                        {{
+                          selectedFile.hasCoverArt
+                            ? t("audio.detail.hasCover")
+                            : t("audio.detail.noCover")
+                        }}
                       </p>
                       <p v-if="filenameChanged(selectedFile)" class="audio-filename-preview">
-                        檔名 → {{ audioBaseName(selectedFile.convertedPath ?? selectedFile.path) }}
+                        {{
+                          t("audio.detail.filenamePreview", {
+                            name: audioBaseName(selectedFile.convertedPath ?? selectedFile.path),
+                          })
+                        }}
                       </p>
                     </div>
                     <el-tooltip placement="bottom-end">
                       <template #content>
                         <div class="audio-shortcut-tip">
-                          <div>↑/↓ 切換檔案</div>
-                          <div>Enter / ←→ 摺疊或展開資料夾</div>
-                          <div>空白 勾選</div>
+                          <div>{{ t("audio.detail.shortcutSwitch") }}</div>
+                          <div>{{ t("audio.detail.shortcutFolder") }}</div>
+                          <div>{{ t("audio.detail.shortcutCheck") }}</div>
                         </div>
                       </template>
-                      <el-button class="audio-help" circle size="small" aria-label="快捷鍵說明"
+                      <el-button
+                        class="audio-help"
+                        circle
+                        size="small"
+                        :aria-label="t('audio.detail.shortcutHelp')"
                         >?</el-button
                       >
                     </el-tooltip>
                   </div>
                   <template v-if="selectedFile.warning">
-                    <el-alert
-                      type="error"
-                      :title="AUDIO_TAG_READ_ERROR"
-                      show-icon
-                      :closable="false"
-                    >
+                    <el-alert type="error" :title="audioTagReadError()" show-icon :closable="false">
                       <p v-if="audioWarningDetail(selectedFile.warning)" class="audio-error-reason">
                         {{ audioWarningDetail(selectedFile.warning) }}
                       </p>
                       <p class="audio-error-path">{{ selectedFile.path }}</p>
-                      <p>這個檔案不能勾選，也不會寫入。修復後可按「重新掃描這個檔案」。</p>
+                      <p>{{ t("audio.detail.errorHint") }}</p>
                     </el-alert>
                     <el-button
                       class="audio-rescan"
                       :loading="rescanningPath === selectedFile.path"
                       :disabled="busy"
                       @click="rescanFile(selectedFile)"
-                      >重新掃描這個檔案</el-button
+                      >{{ t("audio.detail.rescanFile") }}</el-button
                     >
                   </template>
                   <div v-else class="audio-detail-tools">
@@ -1470,25 +1538,25 @@ watch(
                       show-icon
                       :closable="false"
                     />
-                    <el-tag type="success" effect="plain"
-                      >{{ changedFieldCount(selectedFile) }} 個變更</el-tag
-                    >
+                    <el-tag type="success" effect="plain">{{
+                      tn("audio.detail.changes", changedFieldCount(selectedFile))
+                    }}</el-tag>
                     <button
                       type="button"
                       class="audio-hide-unchanged"
                       :aria-pressed="hideUnchanged"
                       @click="hideUnchanged = !hideUnchanged"
                     >
-                      隱藏不變欄位
+                      {{ t("audio.detail.hideUnchanged") }}
                     </button>
                   </div>
                   <el-table
                     v-if="!selectedFile.warning"
                     :key="hideUnchanged ? 'hide-unchanged' : 'show-all'"
                     :data="detailRows"
-                    empty-text="沒有可顯示的欄位"
+                    :empty-text="t('audio.detail.noFields')"
                   >
-                    <el-table-column label="轉換" width="70">
+                    <el-table-column :label="t('audio.detail.columnConvert')" width="70">
                       <template #default="scope">
                         <el-checkbox
                           v-if="scope.row.kind === 'removal'"
@@ -1498,7 +1566,7 @@ watch(
                         <el-checkbox v-else v-model="scope.row.field.selected" :disabled="busy" />
                       </template>
                     </el-table-column>
-                    <el-table-column label="標籤" width="110">
+                    <el-table-column :label="t('audio.detail.columnTag')" width="110">
                       <template #default="scope">{{
                         containerLabel(
                           scope.row.kind === "removal"
@@ -1507,15 +1575,17 @@ watch(
                         )
                       }}</template>
                     </el-table-column>
-                    <el-table-column label="欄位" width="120">
+                    <el-table-column :label="t('audio.detail.columnField')" width="120">
                       <template #default="scope">{{
-                        scope.row.kind === "removal" ? "整個標籤" : scope.row.field.label
+                        scope.row.kind === "removal"
+                          ? t("audio.detail.wholeTag")
+                          : scope.row.field.label
                       }}</template>
                     </el-table-column>
-                    <el-table-column label="目前內容" min-width="160">
+                    <el-table-column :label="t('audio.detail.columnCurrent')" min-width="160">
                       <template #default="scope">
                         <template v-if="scope.row.kind === 'removal'">
-                          含 {{ scope.row.removal.hiddenFieldCount }} 個隱藏欄位
+                          {{ tn("audio.detail.hiddenFields", scope.row.removal.hiddenFieldCount) }}
                           <span v-if="scope.row.removal.refused"
                             >・{{ scope.row.removal.refused }}</span
                           >
@@ -1533,10 +1603,14 @@ watch(
                         <template v-else>{{ scope.row.field.values.join(" / ") }}</template>
                       </template>
                     </el-table-column>
-                    <el-table-column v-if="plan" label="轉換預覽" min-width="160">
+                    <el-table-column
+                      v-if="plan"
+                      :label="t('audio.detail.columnPreview')"
+                      min-width="160"
+                    >
                       <template #default="scope">
                         <template v-if="scope.row.kind === 'removal'">
-                          <span class="audio-remove">移除標籤</span>
+                          <span class="audio-remove">{{ t("audio.detail.removeTag") }}</span>
                         </template>
                         <template v-else>
                           <template v-if="fieldDiffs.get(fieldDiffKey(scope.row.field))">
@@ -1559,7 +1633,7 @@ watch(
                         </template>
                       </template>
                     </el-table-column>
-                    <el-table-column v-if="plan" label="來源" width="90">
+                    <el-table-column v-if="plan" :label="t('audio.detail.columnOrigin')" width="90">
                       <template #default="scope">
                         <span v-if="scope.row.kind === 'removal'" class="audio-remove">{{
                           fieldOriginLabel(scope.row.removal.origin)
@@ -1569,7 +1643,7 @@ watch(
                     </el-table-column>
                   </el-table>
                 </template>
-                <el-empty v-else description="沒有符合的檔案" />
+                <el-empty v-else :description="t('audio.list.noMatch')" />
               </div>
             </el-splitter-panel>
           </el-splitter>
@@ -1583,46 +1657,53 @@ watch(
           :percentage="progressPercentage(progress)"
           :format="() => formatProgressLabel(progress, progressStartedAt)"
         />
-        <span>已勾選 {{ totals.files }} 個檔案・{{ totals.fields }} 個欄位</span>
-        <span v-if="lossyFileCount" class="audio-lossy"
-          >{{ lossyFileCount }} 個檔案有截斷或缺字</span
-        >
+        <span>{{
+          t("audio.footer.selected", {
+            files: tn("audio.count.files", totals.files),
+            fields: tn("audio.count.fields", totals.fields),
+          })
+        }}</span>
+        <span v-if="lossyFileCount" class="audio-lossy">{{
+          tn("audio.footer.lossy", lossyFileCount)
+        }}</span>
         <el-button
           link
           :disabled="!filteredFiles.length || busy"
-          title="作用於目前篩選的全部檔案，包含已摺疊資料夾裡的檔案"
+          :title="t('audio.footer.bulkHint')"
           @click="applyBulkSelection(files, filteredFiles, 'all')"
-          >全選</el-button
+          >{{ t("audio.footer.selectAll") }}</el-button
         >
         <el-button
           link
           :disabled="!filteredFiles.length || busy"
-          title="作用於目前篩選的全部檔案，包含已摺疊資料夾裡的檔案"
+          :title="t('audio.footer.bulkHint')"
           @click="applyBulkSelection(files, filteredFiles, 'none')"
-          >全不選</el-button
+          >{{ t("audio.footer.selectNone") }}</el-button
         >
         <el-button
           link
           :disabled="!filteredFiles.length || busy"
-          title="作用於目前篩選的全部檔案，包含已摺疊資料夾裡的檔案"
+          :title="t('audio.footer.bulkHint')"
           @click="applyBulkSelection(files, filteredFiles, 'invert')"
-          >反選目前篩選</el-button
+          >{{ t("audio.footer.invert") }}</el-button
         >
         <span class="audio-action-spacer" />
-        <el-button v-if="busy" @click="cancelPlan">停止作業</el-button>
-        <el-button v-if="plan" :disabled="busy || !totals.files" @click="createPlan"
-          >重新載入</el-button
-        >
-        <el-button v-else :disabled="!paths.length || busy" :loading="busy" @click="scan()"
-          >重新掃描</el-button
-        >
+        <el-button v-if="busy" @click="cancelPlan">{{ t("audio.footer.stop") }}</el-button>
+        <el-button v-if="plan" :disabled="busy || !totals.files" @click="createPlan">{{
+          t("audio.footer.reload")
+        }}</el-button>
+        <el-button v-else :disabled="!paths.length || busy" :loading="busy" @click="scan()">{{
+          t("audio.footer.rescan")
+        }}</el-button>
         <el-button
           v-if="plan"
           type="primary"
           :disabled="busy || totals.files === 0"
           :loading="busy"
           @click="applyPlan"
-          >確認寫入 {{ totals.files }} 個檔案</el-button
+          >{{
+            t("audio.footer.apply", { files: tn("audio.count.files", totals.files) })
+          }}</el-button
         >
       </footer>
     </div>

@@ -147,7 +147,10 @@ fn add_user_words(
         segmenter.add_word(&spec, None, None).map_err(|error| {
             CoreError::new(
                 "USER_DICTIONARY",
-                format!("無法加入使用者詞「{word}」：{error}"),
+                tr!(
+                    "無法加入使用者詞「{word}」：{error}",
+                    "Could not add user word \"{word}\": {error}"
+                ),
             )
         })?;
     }
@@ -257,13 +260,17 @@ fn apply_extra_correction(
     if is_package_data_path(root) {
         return Err(CoreError::new(
             "EXTRA_CORRECTION",
-            "額外修正目錄不可位於分詞或簡轉繁套件資料內。",
+            tr_static!("額外修正目錄不可位於分詞或簡轉繁套件資料內。", "The extra correction folder cannot be inside the segmentation or conversion package data."),
         ));
     }
     if !root.is_dir() {
         return Err(CoreError::new(
             "EXTRA_CORRECTION",
-            format!("額外修正目錄不存在：{}", root.display()),
+            tr!(
+                "額外修正目錄不存在：{}",
+                "The extra correction folder does not exist: {}",
+                root.display()
+            ),
         ));
     }
     let dict = root.join("zht.corpus.dict.txt");
@@ -271,20 +278,33 @@ fn apply_extra_correction(
     if required && !synonym.is_file() {
         return Err(CoreError::new(
             "EXTRA_CORRECTION",
-            format!(
+            tr!(
                 "額外修正目錄缺少 zht.corpus.synonym.txt：{}",
+                "The extra correction folder is missing zht.corpus.synonym.txt: {}",
                 root.display()
             ),
         ));
     }
     if dict.is_file() {
         segmenter.load_dict_file(&dict).map_err(|error| {
-            CoreError::new("EXTRA_CORRECTION", format!("無法載入額外分詞表：{error}"))
+            CoreError::new(
+                "EXTRA_CORRECTION",
+                tr!(
+                    "無法載入額外分詞表：{error}",
+                    "Could not load the extra segmentation table: {error}"
+                ),
+            )
         })?;
     }
     if synonym.is_file() {
         let text = std::fs::read_to_string(&synonym).map_err(|error| {
-            CoreError::new("EXTRA_CORRECTION", format!("無法讀取額外同義詞：{error}"))
+            CoreError::new(
+                "EXTRA_CORRECTION",
+                tr!(
+                    "無法讀取額外同義詞：{error}",
+                    "Could not read the extra synonyms: {error}"
+                ),
+            )
         })?;
         for line in text.lines() {
             let Some(entry) = parse_synonym_entry(line) else {
@@ -332,7 +352,10 @@ fn apply_specials_pins(segmenter: &mut Segment) -> Result<(), CoreError> {
         segmenter.add_word(&spec, None, None).map_err(|error| {
             CoreError::new(
                 "CONVERSION_SPECIALS",
-                format!("無法釘入分詞詞「{word}」：{error}"),
+                tr!(
+                    "無法釘入分詞詞「{word}」：{error}",
+                    "Could not pin segmentation word \"{word}\": {error}"
+                ),
             )
         })?;
     }
@@ -392,9 +415,15 @@ impl SegmentEngine {
             all_mod: true,
             ..SegmentOptions::default()
         });
-        segmenter
-            .use_default()
-            .map_err(|error| CoreError::new("SEGMENTER", format!("無法初始化分詞引擎：{error}")))?;
+        segmenter.use_default().map_err(|error| {
+            CoreError::new(
+                "SEGMENTER",
+                tr!(
+                    "無法初始化分詞引擎：{error}",
+                    "Could not initialize the segmentation engine: {error}"
+                ),
+            )
+        })?;
         let mut extra_synonym = ExtraSynonymMap::new();
         match extra {
             ExtraLoad::Skip => {}
@@ -553,7 +582,13 @@ impl ConversionService {
         is_cancelled: Option<CancelCheck>,
     ) -> Result<ConversionResult, CoreError> {
         if uses_zhconvert(&request) {
-            return Err(CoreError::new("CONVERT_SYNC", "ZhConvert 需要非同步執行。"));
+            return Err(CoreError::new(
+                "CONVERT_SYNC",
+                tr_static!(
+                    "ZhConvert 需要非同步執行。",
+                    "ZhConvert must run asynchronously."
+                ),
+            ));
         }
         self.convert_local(request, progress, is_cancelled)
     }
@@ -569,7 +604,13 @@ impl ConversionService {
         is_cancelled: Option<CancelCheck>,
     ) -> Result<ConversionResult, CoreError> {
         if uses_zhconvert(&request) {
-            return Err(CoreError::new("CONVERT_SYNC", "ZhConvert 需要非同步執行。"));
+            return Err(CoreError::new(
+                "CONVERT_SYNC",
+                tr_static!(
+                    "ZhConvert 需要非同步執行。",
+                    "ZhConvert must run asynchronously."
+                ),
+            ));
         }
         if skip_chars == 0 && hold_chars == 0 {
             return self.convert_local(request, progress, is_cancelled);
@@ -622,7 +663,7 @@ impl ConversionService {
                 text = run_cpu_bound(|| {
                     convert_glyphs_chunked(&text, request.direction, &progress, &is_cancelled)
                 })?;
-                warnings.push("詞彙修正已停用。本次只執行 cjk-convert-rs 字形轉換。".into());
+                warnings.push(tr_static!("詞彙修正已停用。本次只執行 cjk-convert-rs 字形轉換。", "Vocabulary correction is off. Only cjk-convert-rs character conversion was applied.").into());
             } else if request.engine == super::types::EngineKind::Segmented {
                 text = run_cpu_bound(|| {
                     self.segmented_convert_with_progress(
@@ -665,7 +706,7 @@ impl ConversionService {
                         &is_cancelled,
                     )
                 })?;
-                warnings.push("詞彙修正已停用。本次只執行 cjk-convert-rs 字形轉換。".into());
+                warnings.push(tr_static!("詞彙修正已停用。本次只執行 cjk-convert-rs 字形轉換。", "Vocabulary correction is off. Only cjk-convert-rs character conversion was applied.").into());
             } else if request.engine == super::types::EngineKind::Segmented {
                 text = run_cpu_bound(|| {
                     self.segmented_convert_range(
@@ -840,7 +881,10 @@ fn run_cpu_bound<R>(work: impl FnOnce() -> R) -> R {
 
 fn throw_if_cancelled(is_cancelled: &Option<CancelCheck>) -> Result<(), CoreError> {
     if is_cancelled.as_ref().is_some_and(|check| check()) {
-        return Err(CoreError::new("CONVERT_CANCELLED", "轉換已由使用者取消。"));
+        return Err(CoreError::new(
+            "CONVERT_CANCELLED",
+            tr_static!("轉換已由使用者取消。", "Conversion cancelled by the user."),
+        ));
     }
     Ok(())
 }
@@ -850,7 +894,12 @@ fn report_convert_progress(progress: &Option<ProgressReporter>, current: u64, to
         progress(ProgressEvent {
             current: current.min(total),
             total: total.max(1),
-            message: format!("正在轉換文字… {}/{}", current.min(total), total.max(1)),
+            message: tr!(
+                "正在轉換文字… {}/{}",
+                "Converting text… {}/{}",
+                current.min(total),
+                total.max(1)
+            ),
 
             batch: None,
         });

@@ -60,7 +60,10 @@ impl ZhConvertClient {
         if !status.is_success() {
             return Err(CoreError::new(
                 "ZHCONVERT_SERVICE_INFO",
-                format!("ZhConvert 服務資訊讀取失敗。HTTP {status}"),
+                tr!(
+                    "ZhConvert 服務資訊讀取失敗。HTTP {status}",
+                    "Failed to read ZhConvert service info. HTTP {status}"
+                ),
             ));
         }
         let value = response.json::<Value>().await.map_err(network_error)?;
@@ -92,7 +95,10 @@ impl ZhConvertClient {
             return Ok(text.to_string());
         }
         if is_cancelled.as_ref().is_some_and(|check| check()) {
-            return Err(CoreError::new("CONVERT_CANCELLED", "轉換已由使用者取消。"));
+            return Err(CoreError::new(
+                "CONVERT_CANCELLED",
+                tr_static!("轉換已由使用者取消。", "Conversion cancelled by the user."),
+            ));
         }
         let options = options.cloned().unwrap_or_default();
         let info = self.service_info(false).await?;
@@ -106,7 +112,7 @@ impl ZhConvertClient {
         if budget < MIN_CHUNK_COST {
             return Err(CoreError::new(
                 "ZHCONVERT_BODY",
-                "ZhConvert 的自訂取代規則等參數太長，超過服務允許的請求大小。",
+                tr_static!("ZhConvert 的自訂取代規則等參數太長，超過服務允許的請求大小。", "ZhConvert parameters such as custom replacement rules are too long and exceed the request size the service allows."),
             ));
         }
         let total = text.chars().count().max(1) as u64;
@@ -114,7 +120,10 @@ impl ZhConvertClient {
         let mut converted = String::new();
         for chunk in split_form_encoded(text, budget) {
             if is_cancelled.as_ref().is_some_and(|check| check()) {
-                return Err(CoreError::new("CONVERT_CANCELLED", "轉換已由使用者取消。"));
+                return Err(CoreError::new(
+                    "CONVERT_CANCELLED",
+                    tr_static!("轉換已由使用者取消。", "Conversion cancelled by the user."),
+                ));
             }
             converted.push_str(&self.convert_chunk(&chunk, direction, &options).await?);
             done += chunk.chars().count() as u64;
@@ -122,7 +131,11 @@ impl ZhConvertClient {
                 progress(ProgressEvent {
                     current: done.min(total),
                     total,
-                    message: format!("正在呼叫 ZhConvert… {}/{total}", done.min(total)),
+                    message: tr!(
+                        "正在呼叫 ZhConvert… {}/{total}",
+                        "Calling ZhConvert… {}/{total}",
+                        done.min(total)
+                    ),
 
                     batch: None,
                 });
@@ -154,7 +167,10 @@ impl ZhConvertClient {
             let detail = response.text().await.unwrap_or_default();
             return Err(CoreError::with_details(
                 "ZHCONVERT_CONVERT",
-                format!("ZhConvert 轉換失敗。HTTP {status}"),
+                tr!(
+                    "ZhConvert 轉換失敗。HTTP {status}",
+                    "ZhConvert conversion failed. HTTP {status}"
+                ),
                 detail,
             ));
         }
@@ -162,7 +178,10 @@ impl ZhConvertClient {
         extract_text(&payload).ok_or_else(|| {
             CoreError::with_details(
                 "ZHCONVERT_RESPONSE",
-                "ZhConvert 回應不含文字結果。",
+                tr_static!(
+                    "ZhConvert 回應不含文字結果。",
+                    "The ZhConvert response contains no text result."
+                ),
                 payload,
             )
         })

@@ -332,6 +332,17 @@ test.describe("ConvertZZ 前端", () => {
       .toBe("https://github.com/flier268/ConvertZZ/releases/tag/v2.1.0");
   });
 
+  test("設定頁切換介面語言為英文後畫面立即改用英文並儲存", async ({ page }) => {
+    await openApp(page);
+    await openPage(page, "#nav-settings", "設定");
+    await page.locator(".el-form-item", { hasText: "介面語言" }).locator(".el-select").click();
+    await page.getByRole("option", { name: "English" }).click();
+    await expect(page.getByRole("menuitem", { name: "Settings" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Quick convert" })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect.poll(async () => (await e2eState(page)).savedSettings?.language).toBe("en");
+  });
+
   test("可略過此版本並在設定頁看到紀錄", async ({ page }) => {
     await openApp(page, { update: "install" });
     await openPage(page, "#tour-about", "ConvertZZ 2.0");

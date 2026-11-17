@@ -218,7 +218,7 @@ impl FileService {
             progress(super::types::ProgressEvent {
                 current: (index + 1) as u64,
                 total: paths.len() as u64,
-                message: format!("正在掃描：{}", file_name(source_path)),
+                message: tr!("正在掃描：{}", "Scanning: {}", file_name(source_path)),
 
                 batch: None,
             });
@@ -287,7 +287,13 @@ impl FileService {
                             name_warnings
                                 .into_iter()
                                 .reduce(|left, right| format!("{left} {right}")),
-                            conflict.then(|| "輸出資料夾已存在。".into()),
+                            conflict.then(|| {
+                                tr_static!(
+                                    "輸出資料夾已存在。",
+                                    "The output folder already exists."
+                                )
+                                .into()
+                            }),
                         ),
                     },
                     content: None,
@@ -328,12 +334,23 @@ impl FileService {
         request_cancelled: CancelCheck,
     ) -> Result<FilePlanItem, CoreError> {
         let (plan_request, source_path, existing) = {
-            let plans = self
-                .plans
-                .lock()
-                .map_err(|_| CoreError::new("PLAN_LOCK", "無法讀取檔案轉換計畫。"))?;
+            let plans = self.plans.lock().map_err(|_| {
+                CoreError::new(
+                    "PLAN_LOCK",
+                    tr_static!(
+                        "無法讀取檔案轉換計畫。",
+                        "Could not read the file conversion plan."
+                    ),
+                )
+            })?;
             let plan = plans.get(&request.plan_id).ok_or_else(|| {
-                CoreError::new("PLAN_NOT_FOUND", "檔案轉換計畫已失效。請重新預覽。")
+                CoreError::new(
+                    "PLAN_NOT_FOUND",
+                    tr_static!(
+                        "檔案轉換計畫已失效。請重新預覽。",
+                        "The file conversion plan has expired. Please preview again."
+                    ),
+                )
             })?;
             let file = plan
                 .files
@@ -341,7 +358,15 @@ impl FileService {
                 .find(|file| {
                     resolve_path(&file.item.source_path) == resolve_path(&request.source_path)
                 })
-                .ok_or_else(|| CoreError::new("PLAN_PATH", "預覽路徑不在目前的檔案轉換計畫內。"))?;
+                .ok_or_else(|| {
+                    CoreError::new(
+                        "PLAN_PATH",
+                        tr_static!(
+                            "預覽路徑不在目前的檔案轉換計畫內。",
+                            "The preview path is not in the current file conversion plan."
+                        ),
+                    )
+                })?;
             (
                 plan.request.clone(),
                 PathBuf::from(&file.item.source_path),
@@ -355,7 +380,13 @@ impl FileService {
 
         let is_cancelled = self.combined_cancel_check(&request.plan_id, request_cancelled);
         if is_cancelled() {
-            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+            return Err(CoreError::new(
+                "PLAN_CANCELLED",
+                tr_static!(
+                    "檔案作業已由使用者取消。",
+                    "File operation cancelled by the user."
+                ),
+            ));
         }
 
         let preview_max_bytes = plan_request
@@ -372,7 +403,10 @@ impl FileService {
                 let file_label = file_name(&source_path);
                 let convert_progress =
                     map_progress(progress, 0, 1, move |current, total, _message| {
-                        format!("正在預覽：{file_label}（{current}/{total}）")
+                        tr!(
+                            "正在預覽：{file_label}（{current}/{total}）",
+                            "Previewing: {file_label} ({current}/{total})"
+                        )
                     });
                 let converted = self
                     .convert_text(
@@ -407,18 +441,37 @@ impl FileService {
             }
         };
 
-        let mut plans = self
-            .plans
-            .lock()
-            .map_err(|_| CoreError::new("PLAN_LOCK", "無法更新檔案轉換計畫。"))?;
-        let plan = plans
-            .get_mut(&request.plan_id)
-            .ok_or_else(|| CoreError::new("PLAN_NOT_FOUND", "檔案轉換計畫已失效。請重新預覽。"))?;
+        let mut plans = self.plans.lock().map_err(|_| {
+            CoreError::new(
+                "PLAN_LOCK",
+                tr_static!(
+                    "無法更新檔案轉換計畫。",
+                    "Could not update the file conversion plan."
+                ),
+            )
+        })?;
+        let plan = plans.get_mut(&request.plan_id).ok_or_else(|| {
+            CoreError::new(
+                "PLAN_NOT_FOUND",
+                tr_static!(
+                    "檔案轉換計畫已失效。請重新預覽。",
+                    "The file conversion plan has expired. Please preview again."
+                ),
+            )
+        })?;
         let file = plan
             .files
             .iter_mut()
             .find(|file| resolve_path(&file.item.source_path) == resolve_path(&request.source_path))
-            .ok_or_else(|| CoreError::new("PLAN_PATH", "預覽路徑不在目前的檔案轉換計畫內。"))?;
+            .ok_or_else(|| {
+                CoreError::new(
+                    "PLAN_PATH",
+                    tr_static!(
+                        "預覽路徑不在目前的檔案轉換計畫內。",
+                        "The preview path is not in the current file conversion plan."
+                    ),
+                )
+            })?;
         file.item.detected_encoding = detected_encoding;
         file.item.source_preview = source_preview;
         file.item.output_preview = output_preview;
@@ -492,7 +545,9 @@ impl FileService {
                             .iter()
                             .cloned()
                             .reduce(|left, right| format!("{left} {right}")),
-                        conflict.then(|| "輸出路徑已存在。".into()),
+                        conflict.then(|| {
+                            tr_static!("輸出路徑已存在。", "The output path already exists.").into()
+                        }),
                     ),
                 },
                 content: None,
@@ -547,7 +602,10 @@ impl FileService {
             converted.text
         };
         if let Some(problem) = entry_name_problem(&text, cfg!(windows)) {
-            warnings.push(format!("轉換後的名稱「{text}」{problem}，已保留原名稱。"));
+            warnings.push(tr!(
+                "轉換後的名稱「{text}」{problem}，已保留原名稱。",
+                "The converted name \"{text}\" {problem}; the original name was kept."
+            ));
             return Ok((name.to_string(), warnings));
         }
         Ok((text, warnings))
@@ -607,10 +665,24 @@ impl FileService {
             .lock()
             .ok()
             .and_then(|mut plans| plans.remove(plan_id))
-            .ok_or_else(|| CoreError::new("PLAN_NOT_FOUND", "檔案轉換計畫已失效。請重新預覽。"))?;
+            .ok_or_else(|| {
+                CoreError::new(
+                    "PLAN_NOT_FOUND",
+                    tr_static!(
+                        "檔案轉換計畫已失效。請重新預覽。",
+                        "The file conversion plan has expired. Please preview again."
+                    ),
+                )
+            })?;
         let is_cancelled = self.combined_cancel_check(plan_id, request_cancelled);
         if is_cancelled() {
-            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+            return Err(CoreError::new(
+                "PLAN_CANCELLED",
+                tr_static!(
+                    "檔案作業已由使用者取消。",
+                    "File operation cancelled by the user."
+                ),
+            ));
         }
         let mut result = ApplyResult {
             succeeded: Vec::new(),
@@ -677,7 +749,7 @@ impl FileService {
             progress(ProgressEvent {
                 current: 0,
                 total: (pending_files.len() + pending_directories.len()).max(1) as u64,
-                message: "正在建立備份…".into(),
+                message: tr_static!("正在建立備份…", "Creating backups…").into(),
 
                 batch: None,
             });
@@ -691,7 +763,7 @@ impl FileService {
                 plan.request.conflict_policy,
             ) {
                 result.failed.push(ApplyFailure {
-                    path: "備份".into(),
+                    path: tr_static!("備份", "Backup").into(),
                     message: error.message,
                 });
                 self.clear_cancelled(plan_id);
@@ -736,7 +808,7 @@ impl FileService {
                     }
                     Err(error) => {
                         result.failed.push(ApplyFailure {
-                            path: "重新命名".into(),
+                            path: tr_static!("重新命名", "Rename").into(),
                             message: error.message,
                         });
                     }
@@ -783,7 +855,13 @@ impl FileService {
             }
             self.clear_cancelled(plan_id);
             if committed_outputs.is_empty() && result.failed.is_empty() {
-                return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+                return Err(CoreError::new(
+                    "PLAN_CANCELLED",
+                    tr_static!(
+                        "檔案作業已由使用者取消。",
+                        "File operation cancelled by the user."
+                    ),
+                ));
             }
             result.succeeded.extend(
                 committed_outputs
@@ -823,8 +901,9 @@ impl FileService {
                     progress(ProgressEvent {
                         current: (file_total + offset + 1) as u64,
                         total,
-                        message: format!(
+                        message: tr!(
                             "正在重新命名資料夾：{}",
+                            "Renaming folder: {}",
                             file_name(Path::new(&entry.item.output_path))
                         ),
 
@@ -865,7 +944,7 @@ impl FileService {
                 if let Err(error) = fs::remove_dir_all(&backup) {
                     result.failed.push(ApplyFailure {
                         path: backup.to_string_lossy().into_owned(),
-                        message: format!("已完成轉換，但無法清除復原暫存資料夾。{error}"),
+                        message: tr!("已完成轉換，但無法清除復原暫存資料夾。{error}", "Conversion finished, but the recovery temporary folder could not be removed. {error}"),
                     });
                 }
             }
@@ -873,7 +952,13 @@ impl FileService {
 
         self.clear_cancelled(plan_id);
         if stopped && result.succeeded.is_empty() && result.failed.is_empty() {
-            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+            return Err(CoreError::new(
+                "PLAN_CANCELLED",
+                tr_static!(
+                    "檔案作業已由使用者取消。",
+                    "File operation cancelled by the user."
+                ),
+            ));
         }
         Ok(finalize_apply(result))
     }
@@ -910,8 +995,8 @@ impl FileService {
                     offset as u64,
                     total,
                     move |current, local_total, _message| {
-                        format!(
-                            "正在轉換並寫入：{progress_label}（檔案 {}/{total}，內容 {current}/{local_total}）",
+                        tr!(
+                            "正在轉換並寫入：{progress_label}（檔案 {}/{total}，內容 {current}/{local_total}）", "Converting and writing: {progress_label} (file {}/{total}, content {current}/{local_total})",
                             offset + 1
                         )
                     },
@@ -935,7 +1020,7 @@ impl FileService {
                         progress(ProgressEvent {
                             current: (offset + 1) as u64,
                             total,
-                            message: format!("已寫入：{file_label}"),
+                            message: tr!("已寫入：{file_label}", "Written: {file_label}"),
 
                             batch: None,
                         });
@@ -969,7 +1054,10 @@ impl FileService {
         progress(ProgressEvent {
             current: 0,
             total,
-            message: format!("正在以最多 {jobs} 個並行任務轉換並寫入 {file_total} 個檔案…"),
+            message: tr!(
+                "正在以最多 {jobs} 個並行任務轉換並寫入 {file_total} 個檔案…",
+                "Converting and writing {file_total} files with up to {jobs} parallel jobs…"
+            ),
 
             batch: None,
         });
@@ -980,7 +1068,13 @@ impl FileService {
                 if is_cancelled() {
                     return (
                         source_path,
-                        Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。")),
+                        Err(CoreError::new(
+                            "PLAN_CANCELLED",
+                            tr_static!(
+                                "檔案作業已由使用者取消。",
+                                "File operation cancelled by the user."
+                            ),
+                        )),
                     );
                 }
                 let outcome = self
@@ -993,8 +1087,9 @@ impl FileService {
             progress(ProgressEvent {
                 current: current.min(total),
                 total,
-                message: format!(
+                message: tr!(
                     "正在轉換並寫入：{}（{current}/{file_total}）",
+                    "Converting and writing: {} ({current}/{file_total})",
                     file_name(Path::new(source_path))
                 ),
 
@@ -1120,7 +1215,7 @@ impl FileService {
         let stage_result: Result<(), CoreError> = async {
             for (offset, mut file) in prepared_files.into_iter().enumerate() {
                 if is_cancelled() {
-                    return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+                    return Err(CoreError::new("PLAN_CANCELLED", tr_static!("檔案作業已由使用者取消。", "File operation cancelled by the user.")));
                 }
                 if leaves_source_unchanged(request, &file) {
                     if is_truly_unchanged(request, &file) {
@@ -1144,8 +1239,8 @@ impl FileService {
                         offset as u64,
                         total,
                         move |current, local_total, _message| {
-                            format!(
-                                "正在轉換：{progress_label}（檔案 {}/{total}，內容 {current}/{local_total}）",
+                            tr!(
+                                "正在轉換：{progress_label}（檔案 {}/{total}，內容 {current}/{local_total}）", "Converting: {progress_label} (file {}/{total}, content {current}/{local_total})",
                                 offset + 1
                             )
                         },
@@ -1218,7 +1313,7 @@ impl FileService {
                 progress(ProgressEvent {
                     current: transaction.len() as u64,
                     total,
-                    message: format!("正在準備：{}", file_name(&source)),
+                    message: tr!("正在準備：{}", "Preparing: {}", file_name(&source)),
 
                     batch: None,
                 });
@@ -1226,7 +1321,7 @@ impl FileService {
 
             for entry in &mut transaction {
                 if is_cancelled() {
-                    return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+                    return Err(CoreError::new("PLAN_CANCELLED", tr_static!("檔案作業已由使用者取消。", "File operation cancelled by the user.")));
                 }
                 if request.mode == FileMode::Content
                     && entry.file.item.output_path != entry.file.item.source_path
@@ -1241,7 +1336,7 @@ impl FileService {
 
             for entry in &mut transaction {
                 if is_cancelled() {
-                    return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+                    return Err(CoreError::new("PLAN_CANCELLED", tr_static!("檔案作業已由使用者取消。", "File operation cancelled by the user.")));
                 }
                 let output = PathBuf::from(&entry.file.item.output_path);
                 let source = PathBuf::from(&entry.file.item.source_path);
@@ -1264,7 +1359,7 @@ impl FileService {
                 progress(ProgressEvent {
                     current: total,
                     total,
-                    message: format!("正在寫入：{}", file_name(&output)),
+                    message: tr!("正在寫入：{}", "Writing: {}", file_name(&output)),
 
                     batch: None,
                 });
@@ -1283,7 +1378,7 @@ impl FileService {
                 return Err(error);
             }
             batch.failed.push(ApplyFailure {
-                path: "重新命名".into(),
+                path: tr_static!("重新命名", "Rename").into(),
                 message: error.message,
             });
             return Ok(batch);
@@ -1310,7 +1405,7 @@ impl FileService {
                 {
                     batch.failed.push(ApplyFailure {
                         path: backup.to_string_lossy().into_owned(),
-                        message: format!("已完成轉換，但無法清除復原暫存檔。{error}"),
+                        message: tr!("已完成轉換，但無法清除復原暫存檔。{error}", "Conversion finished, but the recovery temporary file could not be removed. {error}"),
                     });
                 }
             }
@@ -1328,7 +1423,13 @@ impl FileService {
     ) -> Result<FileCommitOutcome, CoreError> {
         let source_path = file.item.source_path.clone();
         if is_cancelled() {
-            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+            return Err(CoreError::new(
+                "PLAN_CANCELLED",
+                tr_static!(
+                    "檔案作業已由使用者取消。",
+                    "File operation cancelled by the user."
+                ),
+            ));
         }
         if file.item.status != PlanStatus::Ready {
             return Ok(FileCommitOutcome::Skipped {
@@ -1546,7 +1647,10 @@ impl FileService {
                     progress(ProgressEvent {
                         current,
                         total: total.max(1),
-                        message: format!("正在轉換並寫入：{file_label}"),
+                        message: tr!(
+                            "正在轉換並寫入：{file_label}",
+                            "Converting and writing: {file_label}"
+                        ),
                         batch: None,
                     });
                 }
@@ -1624,7 +1728,10 @@ fn commit_prepared_file(
     }
     Err(CoreError::new(
         "FILE_STREAM",
-        "內容轉換必須走串流寫入暫存檔。",
+        tr_static!(
+            "內容轉換必須走串流寫入暫存檔。",
+            "Content conversion must stream into a temporary file."
+        ),
     ))
 }
 
@@ -1646,7 +1753,13 @@ fn commit_written_stage(
     }
     if is_cancelled.is_some_and(|check| check()) {
         let _ = fs::remove_file(&stage_path);
-        return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+        return Err(CoreError::new(
+            "PLAN_CANCELLED",
+            tr_static!(
+                "檔案作業已由使用者取消。",
+                "File operation cancelled by the user."
+            ),
+        ));
     }
 
     let mut entry = TransactionEntry {
@@ -1757,7 +1870,13 @@ where
         fs::create_dir_all(parent)?;
     }
     if is_cancelled.is_some_and(|check| check()) {
-        return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+        return Err(CoreError::new(
+            "PLAN_CANCELLED",
+            tr_static!(
+                "檔案作業已由使用者取消。",
+                "File operation cancelled by the user."
+            ),
+        ));
     }
     if is_case_only_rename(&source, &output) {
         return commit_case_only_rename(file, &source, &output);
@@ -1894,7 +2013,13 @@ where
         validator(&stage, None, source)?;
     }
     if is_cancelled.is_some_and(|check| check()) {
-        return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+        return Err(CoreError::new(
+            "PLAN_CANCELLED",
+            tr_static!(
+                "檔案作業已由使用者取消。",
+                "File operation cancelled by the user."
+            ),
+        ));
     }
     let original = transaction_path(source, "original");
     fs::rename(source, &original)?;
@@ -2135,7 +2260,7 @@ pub(crate) fn is_inside_version_control(path: &str) -> bool {
 }
 
 fn ignored_input_warning(path: &str) -> String {
-    format!("已略過版本控制資料夾內的路徑：{path}。轉換可能損壞儲存庫；確定要處理請明確允許。")
+    tr!("已略過版本控制資料夾內的路徑：{path}。轉換可能損壞儲存庫；確定要處理請明確允許。", "Skipped path inside a version control folder: {path}. Converting it may corrupt the repository; explicitly allow it if you are sure.")
 }
 
 /// 直接指定的資料夾掃描後沒有任何檔案時提示，避免畫面只顯示 0 項而沒有原因。
@@ -2156,12 +2281,12 @@ fn empty_folder_warnings(
                 return None;
             }
             Some(if all_files {
-                format!(
-                    "資料夾「{input}」中沒有檔案（隱藏資料夾與版本控制資料夾不會掃描）。"
+                tr!(
+                    "資料夾「{input}」中沒有檔案（隱藏資料夾與版本控制資料夾不會掃描）。", "Folder \"{input}\" contains no files (hidden and version control folders are not scanned)."
                 )
             } else {
-                format!(
-                    "資料夾「{input}」中沒有符合副檔名篩選器的檔案（隱藏資料夾與版本控制資料夾不會掃描）。"
+                tr!(
+                    "資料夾「{input}」中沒有符合副檔名篩選器的檔案（隱藏資料夾與版本控制資料夾不會掃描）。", "Folder \"{input}\" contains no files matching the extension filter (hidden and version control folders are not scanned)."
                 )
             })
         })
@@ -2288,8 +2413,9 @@ fn collect_directories(
     }
     if !skipped.is_empty() {
         let skipped_count = skipped.len();
-        warnings.push(format!(
-            "已略過 {skipped_count} 個不含符合篩選器檔案的資料夾改名"
+        warnings.push(tr!(
+            "已略過 {skipped_count} 個不含符合篩選器檔案的資料夾改名",
+            "Skipped renaming {skipped_count} folders that contain no files matching the filter"
         ));
     }
     Ok((collected.into_iter().collect(), warnings))
@@ -2381,7 +2507,15 @@ pub async fn scan_extension_stats(
         scan_extension_stats_blocking(&request, &progress, &is_cancelled)
     })
     .await
-    .map_err(|error| CoreError::new("SCAN_FAILED", format!("掃描副檔名失敗：{error}")))?
+    .map_err(|error| {
+        CoreError::new(
+            "SCAN_FAILED",
+            tr!(
+                "掃描副檔名失敗：{error}",
+                "Failed to scan extensions: {error}"
+            ),
+        )
+    })?
 }
 
 fn scan_extension_stats_blocking(
@@ -2395,7 +2529,7 @@ fn scan_extension_stats_blocking(
     if !metadata.is_dir() {
         return Err(CoreError::new(
             "INVALID_PAYLOAD",
-            format!("不是資料夾：{}", request.path),
+            tr!("不是資料夾：{}", "Not a folder: {}", request.path),
         ));
     }
     let mut counts = std::collections::BTreeMap::<String, u64>::new();
@@ -2403,7 +2537,10 @@ fn scan_extension_stats_blocking(
     let mut pending = vec![(root, true)];
     while let Some((directory, top_level)) = pending.pop() {
         if is_cancelled() {
-            return Err(CoreError::new("PLAN_CANCELLED", "掃描已由使用者取消。"));
+            return Err(CoreError::new(
+                "PLAN_CANCELLED",
+                tr_static!("掃描已由使用者取消。", "Scan cancelled by the user."),
+            ));
         }
         let entries = match fs::read_dir(&directory) {
             Ok(entries) => entries,
@@ -2436,7 +2573,7 @@ fn scan_extension_stats_blocking(
                     progress(ProgressEvent {
                         current: stats.total_files,
                         total: stats.total_files,
-                        message: format!("已掃描 {} 個檔案", stats.total_files),
+                        message: tr!("已掃描 {} 個檔案", "Scanned {} files", stats.total_files),
 
                         batch: None,
                     });
@@ -2465,7 +2602,11 @@ fn scan_extension_stats_blocking(
 }
 
 fn unreadable_directory_warning(path: &Path) -> String {
-    format!("無法讀取資料夾「{}」，已略過。", path.to_string_lossy())
+    tr!(
+        "無法讀取資料夾「{}」，已略過。",
+        "Could not read folder \"{}\"; skipped.",
+        path.to_string_lossy()
+    )
 }
 
 fn validate_output_pattern(
@@ -2483,14 +2624,20 @@ fn validate_output_pattern(
     if output_wildcards > 0 && output_wildcards != input_wildcards {
         return Err(CoreError::new(
             "CLI_WILDCARD",
-            "輸入與輸出路徑的萬用字元數量不同。",
+            tr_static!(
+                "輸入與輸出路徑的萬用字元數量不同。",
+                "The input and output paths have different numbers of wildcards."
+            ),
         ));
     }
     let resolved = resolve_path(output);
     if output_wildcards == 0 && resolved.is_file() {
         return Err(CoreError::new(
             "CLI_OUTPUT",
-            "多檔輸入的輸出路徑不能是既有檔案。",
+            tr_static!(
+                "多檔輸入的輸出路徑不能是既有檔案。",
+                "The output path for multiple inputs cannot be an existing file."
+            ),
         ));
     }
     Ok(())
@@ -2630,8 +2777,8 @@ fn unrepresentable_warning(text: &str, encoding: TextEncoding) -> Option<String>
         !super::encoding::encode_text_detailed(character.encode_utf8(&mut buffer), encoding, false)
             .is_ok_and(|encoded| !encoded.had_errors)
     })?;
-    Some(format!(
-        "有字元無法以 {} 表示（例如「{first}」），套用時會略過此檔；請改用 UTF-8 等輸出編碼。",
+    Some(tr!(
+        "有字元無法以 {} 表示（例如「{first}」），套用時會略過此檔；請改用 UTF-8 等輸出編碼。", "Some characters cannot be represented in {} (for example \"{first}\"); this file will be skipped when applying. Use an output encoding such as UTF-8.",
         super::encoding::encoding_label(encoding)
     ))
 }
@@ -2728,7 +2875,13 @@ fn copy_file_chunked(
     let mut buffer = vec![0u8; COPY_CHUNK_BYTES];
     loop {
         if is_cancelled.is_some_and(|check| check()) {
-            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+            return Err(CoreError::new(
+                "PLAN_CANCELLED",
+                tr_static!(
+                    "檔案作業已由使用者取消。",
+                    "File operation cancelled by the user."
+                ),
+            ));
         }
         let read = read_chunk(&mut reader, &mut buffer)?;
         if read == 0 {
@@ -2767,7 +2920,10 @@ fn assert_source_writable(path: &Path) -> Result<(), CoreError> {
         if source.permissions().mode() & 0o222 == 0 {
             return Err(CoreError::with_details(
                 "FILE_READONLY",
-                "來源檔案為唯讀，無法安全取代。",
+                tr_static!(
+                    "來源檔案為唯讀，無法安全取代。",
+                    "The source file is read-only and cannot be safely replaced."
+                ),
                 serde_json::json!({ "path": path }),
             ));
         }
@@ -2779,7 +2935,10 @@ fn assert_source_writable(path: &Path) -> Result<(), CoreError> {
         if source.file_attributes() & FILE_ATTRIBUTE_READONLY != 0 {
             return Err(CoreError::with_details(
                 "FILE_READONLY",
-                "來源檔案為唯讀，無法安全取代。",
+                tr_static!(
+                    "來源檔案為唯讀，無法安全取代。",
+                    "The source file is read-only and cannot be safely replaced."
+                ),
                 serde_json::json!({ "path": path }),
             ));
         }
@@ -2797,7 +2956,10 @@ fn verify_stage(path: &Path, expected: Option<&[u8]>, source_path: &Path) -> Res
         let _ = fs::remove_file(path);
         return Err(CoreError::with_details(
             "FILE_VERIFY",
-            "暫存檔寫入驗證失敗。",
+            tr_static!(
+                "暫存檔寫入驗證失敗。",
+                "Temporary file verification failed."
+            ),
             serde_json::json!({ "path": path }),
         ));
     }
@@ -2944,7 +3106,10 @@ fn resolve_committed_directory_path(
 }
 
 const BINARY_CONTENT_WARNING: &str = "此檔案為二進位內容，已略過內容轉換。";
+const BINARY_CONTENT_WARNING_EN: &str = "This file is binary; content conversion was skipped.";
 const DECODE_ERROR_WARNING: &str = "解碼時發生錯誤，已略過內容轉換。";
+const DECODE_ERROR_WARNING_EN: &str =
+    "An error occurred while decoding; content conversion was skipped.";
 /// 二進位判斷只讀檔頭這麼多位元組（檔頭 magic、MPEG 下一幀、NUL）。
 const INSPECT_HEAD_BYTES: usize = 64 * 1024;
 /// 串流比對與複製的區塊大小。
@@ -2972,13 +3137,23 @@ enum InspectedBytes {
 
 fn content_skip_message(reason: ContentSkip) -> &'static str {
     match reason {
+        ContentSkip::Binary if crate::core::locale::is_english() => BINARY_CONTENT_WARNING_EN,
         ContentSkip::Binary => BINARY_CONTENT_WARNING,
+        ContentSkip::DecodeError if crate::core::locale::is_english() => DECODE_ERROR_WARNING_EN,
         ContentSkip::DecodeError => DECODE_ERROR_WARNING,
     }
 }
 
+// 計畫可能在切換介面語言前建立，兩種語言的略過警告都要認得。
 fn is_content_skip_warning(warning: &str) -> bool {
-    warning.contains(BINARY_CONTENT_WARNING) || warning.contains(DECODE_ERROR_WARNING)
+    [
+        BINARY_CONTENT_WARNING,
+        BINARY_CONTENT_WARNING_EN,
+        DECODE_ERROR_WARNING,
+        DECODE_ERROR_WARNING_EN,
+    ]
+    .iter()
+    .any(|message| warning.contains(message))
 }
 
 fn content_skip_warnings(file: &PreparedFile) -> Vec<String> {
@@ -3009,8 +3184,8 @@ fn finalize_apply(mut result: ApplyResult) -> ApplyResult {
 }
 
 fn filename_reinterpret_warning(error: &CoreError) -> String {
-    format!(
-        "檔名無法依指定編碼重新解讀，已略過重新解讀。{}",
+    tr!(
+        "檔名無法依指定編碼重新解讀，已略過重新解讀。{}", "The file name cannot be reinterpreted with the specified encoding; reinterpretation skipped. {}",
         error.message
     )
 }
@@ -3345,7 +3520,13 @@ fn mark_duplicate_outputs(files: &mut [PreparedFile]) {
         if !seen.insert(file.item.output_path.clone()) {
             file.item.status = PlanStatus::Conflict;
             file.item.warning = merge_warning(
-                Some("與本批其他項目輸出到相同路徑。".into()),
+                Some(
+                    tr_static!(
+                        "與本批其他項目輸出到相同路徑。",
+                        "Another item in this batch writes to the same path."
+                    )
+                    .into(),
+                ),
                 file.item.warning.take(),
             );
         }
@@ -3400,7 +3581,7 @@ fn keep_invalid_utf8_name(
     if !has_invalid_utf8_name(source_path) {
         return false;
     }
-    warnings.push("檔名不是有效的 UTF-8，預覽以 � 顯示原始位元組，無法改名，已保留原檔名。".into());
+    warnings.push(tr_static!("檔名不是有效的 UTF-8，預覽以 � 顯示原始位元組，無法改名，已保留原檔名。", "The file name is not valid UTF-8; the preview shows raw bytes as �. It cannot be renamed, so the original name was kept.").into());
     let elsewhere = output_path.as_path() != source_path;
     *output_path = source_path.to_path_buf();
     elsewhere
@@ -3410,10 +3591,10 @@ fn keep_invalid_utf8_name(
 /// 7 位元編碼（HZ、ISO-2022-JP）或 UTF-16 重新解讀可能產生 `/`、`\\` 或 NUL。
 pub(crate) fn entry_name_problem(name: &str, windows: bool) -> Option<&'static str> {
     if name.is_empty() || name == "." || name == ".." {
-        return Some("不是有效的名稱");
+        return Some(tr_static!("不是有效的名稱", "is not a valid name"));
     }
     if name.contains(['/', '\0']) || (windows && name.contains('\\')) {
-        return Some("含路徑分隔字元");
+        return Some(tr_static!("含路徑分隔字元", "contains a path separator"));
     }
     if !windows {
         return None;
@@ -3422,10 +3603,16 @@ pub(crate) fn entry_name_problem(name: &str, windows: bool) -> Option<&'static s
         .chars()
         .any(|ch| ch.is_control() || matches!(ch, '<' | '>' | ':' | '"' | '|' | '?' | '*'))
     {
-        return Some("含 Windows 不允許的字元");
+        return Some(tr_static!(
+            "含 Windows 不允許的字元",
+            "contains characters not allowed on Windows"
+        ));
     }
     if name.ends_with(['.', ' ']) {
-        return Some("在 Windows 上不能以句點或空白結尾");
+        return Some(tr_static!(
+            "在 Windows 上不能以句點或空白結尾",
+            "cannot end with a period or space on Windows"
+        ));
     }
     let stem = name.split('.').next().unwrap_or_default().trim_end();
     let upper = stem.to_ascii_uppercase();
@@ -3434,7 +3621,10 @@ pub(crate) fn entry_name_problem(name: &str, windows: bool) -> Option<&'static s
             && upper.len() == 4
             && upper.as_bytes()[3].is_ascii_digit()
             && upper.as_bytes()[3] != b'0');
-    reserved.then_some("是 Windows 保留名稱")
+    reserved.then_some(tr_static!(
+        "是 Windows 保留名稱",
+        "is a reserved name on Windows"
+    ))
 }
 
 fn extension_of(path: &Path) -> String {

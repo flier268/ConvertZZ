@@ -21,7 +21,10 @@ pub fn user_backup_path(source: &Path) -> Result<PathBuf, CoreError> {
     if normalized.file_name().is_none() {
         return Err(CoreError::with_details(
             "BACKUP_PATH",
-            "無法為沒有檔名的路徑建立備份。",
+            tr_static!(
+                "無法為沒有檔名的路徑建立備份。",
+                "Cannot create a backup for a path without a file name."
+            ),
             serde_json::json!({ "path": source }),
         ));
     }
@@ -125,7 +128,10 @@ pub fn create_user_backup(
     if metadata.file_type().is_symlink() {
         return Err(CoreError::with_details(
             "BACKUP_SYMLINK",
-            "不備份符號連結來源。",
+            tr_static!(
+                "不備份符號連結來源。",
+                "Symbolic link sources are not backed up."
+            ),
             serde_json::json!({ "path": absolute }),
         ));
     }
@@ -136,7 +142,7 @@ pub fn create_user_backup(
     if !metadata.is_dir() && !metadata.is_file() {
         return Err(CoreError::with_details(
             "BACKUP_UNSUPPORTED",
-            "不支援的備份來源類型。",
+            tr_static!("不支援的備份來源類型。", "Unsupported backup source type."),
             serde_json::json!({ "path": absolute }),
         ));
     }

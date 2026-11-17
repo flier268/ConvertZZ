@@ -5,10 +5,12 @@ import type {
   FileFilterProfile,
   SettingsV2,
 } from "@shared/contracts";
+import { t } from "@/i18n";
 import { ALL_FILES_EXTENSION, parseLegacyFileFilters, type LegacyFileFilter } from "./fileFilters";
 
 export const BUILTIN_TEXT_ID = "builtin-text";
 export const BUILTIN_ALL_ID = "builtin-all";
+/** 內建 profile 的儲存名稱（與核心相同，不翻譯）；畫面用 `profileDisplayName`。 */
 export const BUILTIN_TEXT_NAME = "常用文字檔案";
 export const BUILTIN_ALL_NAME = "所有檔案";
 export const BUILTIN_TEXT_EXTENSIONS = [
@@ -23,16 +25,19 @@ export const BUILTIN_TEXT_EXTENSIONS = [
   ".lang",
 ];
 
-export const NO_EXTENSION_LABEL = "（無副檔名）";
-
-const MODE_LABELS: Record<ExtensionFilterMode, string> = {
-  allow: "白名單",
-  deny: "黑名單",
-  all: "全部",
-};
+export function noExtensionLabel(): string {
+  return t("lib.filterProfiles.noExtension");
+}
 
 export function modeLabel(mode: ExtensionFilterMode): string {
-  return MODE_LABELS[mode];
+  return t(`lib.filterProfiles.mode.${mode}`);
+}
+
+/** 顯示用名稱：內建 profile 依 id 翻譯，自訂 profile 用儲存的名稱。 */
+export function profileDisplayName(profile: Pick<FileFilterProfile, "id" | "name">): string {
+  if (profile.id === BUILTIN_TEXT_ID) return t("lib.filterProfiles.builtinText");
+  if (profile.id === BUILTIN_ALL_ID) return t("lib.filterProfiles.builtinAll");
+  return profile.name;
 }
 
 export function builtinTextProfile(): FileFilterProfile {
@@ -125,15 +130,15 @@ export function validateProfile(
   others: readonly Pick<FileFilterProfile, "id" | "name">[],
 ): ProfileValidation {
   const name = profile.name.trim();
-  if (!name) return { error: "請輸入 profile 名稱。" };
+  if (!name) return { error: t("lib.filterProfiles.nameRequired") };
   if (others.some((other) => other.id !== profile.id && other.name.trim() === name)) {
-    return { error: `已有同名的 profile「${name}」。` };
+    return { error: t("lib.filterProfiles.duplicateName", { name }) };
   }
   if (profile.mode === "allow" && !profile.extensions.length && !profile.includeNoExtension) {
-    return { error: "白名單至少要有一個副檔名，或勾選包含無副檔名檔案。" };
+    return { error: t("lib.filterProfiles.allowEmpty") };
   }
   if (profile.mode === "deny" && !profile.extensions.length && !profile.includeNoExtension) {
-    return { warning: "黑名單是空的，等同所有檔案。" };
+    return { warning: t("lib.filterProfiles.denyEmpty") };
   }
   return {};
 }
@@ -191,18 +196,26 @@ export function applyFilterToStats(stats: ExtensionStats, filter: ExtensionFilte
 
 /** 給 profile 列表與目前篩選器顯示的簡短說明。 */
 export function summarizeProfile(profile: ExtensionFilter, maxExtensions = 8): string {
-  if (profile.mode === "all") return "所有檔案";
+  if (profile.mode === "all") return t("lib.filterProfiles.summary.all");
   const shown = profile.extensions.slice(0, maxExtensions).join(" ");
   const more =
-    profile.extensions.length > maxExtensions ? ` …等 ${profile.extensions.length} 種` : "";
+    profile.extensions.length > maxExtensions
+      ? t("lib.filterProfiles.summary.more", { count: profile.extensions.length })
+      : "";
   const noExtension = profile.includeNoExtension
     ? profile.mode === "deny"
-      ? "、排除無副檔名"
-      : "、含無副檔名"
+      ? t("lib.filterProfiles.summary.excludeNoExtension")
+      : t("lib.filterProfiles.summary.includeNoExtension")
     : "";
   if (!profile.extensions.length) {
-    if (profile.mode === "allow") return profile.includeNoExtension ? "只含無副檔名" : "（空）";
-    return profile.includeNoExtension ? "只排除無副檔名" : "（空，等同所有檔案）";
+    if (profile.mode === "allow") {
+      return profile.includeNoExtension
+        ? t("lib.filterProfiles.summary.onlyNoExtension")
+        : t("lib.filterProfiles.summary.empty");
+    }
+    return profile.includeNoExtension
+      ? t("lib.filterProfiles.summary.excludeOnlyNoExtension")
+      : t("lib.filterProfiles.summary.emptyDeny");
   }
   return `${shown}${more}${noExtension}`;
 }
@@ -231,7 +244,10 @@ export function duplicateProfile(
   return {
     ...source,
     id: newProfileId(),
-    name: uniqueProfileName(`${source.name} 副本`, existing),
+    name: uniqueProfileName(
+      t("lib.filterProfiles.copyName", { name: profileDisplayName(source) }),
+      existing,
+    ),
     builtin: false,
     extensions: [...source.extensions],
   };
@@ -240,7 +256,7 @@ export function duplicateProfile(
 export function emptyProfile(existing: readonly FileFilterProfile[]): FileFilterProfile {
   return {
     id: newProfileId(),
-    name: uniqueProfileName("自訂篩選", existing),
+    name: uniqueProfileName(t("lib.filterProfiles.newName"), existing),
     builtin: false,
     mode: "allow",
     extensions: [],
@@ -374,7 +390,7 @@ export function dialogFiltersForProfile(profile: FileFilterProfile): LegacyFileF
   if (profile.mode !== "allow" || !profile.extensions.length) return [];
   return [
     {
-      name: profile.name,
+      name: profileDisplayName(profile),
       extensions: profile.extensions.map((extension) => extension.replace(/^\./u, "")),
     },
   ];
@@ -409,11 +425,11 @@ export function parseImportedProfiles(
   try {
     parsed = JSON.parse(text.replace(/^﻿/u, ""));
   } catch {
-    return { profiles: [], error: "不是有效的 JSON 檔案。" };
+    return { profiles: [], error: t("lib.filterProfiles.invalidJson") };
   }
   const record = parsed as { format?: unknown; profiles?: unknown };
   if (!record || record.format !== EXPORT_FORMAT || !Array.isArray(record.profiles)) {
-    return { profiles: [], error: "不是 ConvertZZ 的副檔名篩選 profile 檔案。" };
+    return { profiles: [], error: t("lib.filterProfiles.invalidFormat") };
   }
   const imported: FileFilterProfile[] = [];
   for (const entry of record.profiles as Array<Record<string, unknown>>) {
@@ -423,10 +439,10 @@ export function parseImportedProfiles(
     const extensions = mergeExtensions([], rawExtensions.join(" ")).extensions;
     const candidate: FileFilterProfile = {
       id: newProfileId(),
-      name: uniqueProfileName(String(entry.name ?? "").trim() || "匯入的篩選", [
-        ...existing,
-        ...imported,
-      ]),
+      name: uniqueProfileName(
+        String(entry.name ?? "").trim() || t("lib.filterProfiles.importedName"),
+        [...existing, ...imported],
+      ),
       builtin: false,
       mode,
       extensions: mode === "all" ? [] : extensions,
@@ -435,6 +451,6 @@ export function parseImportedProfiles(
     if (validateProfile(candidate, []).error) continue;
     imported.push(candidate);
   }
-  if (!imported.length) return { profiles: [], error: "檔案中沒有可匯入的 profile。" };
+  if (!imported.length) return { profiles: [], error: t("lib.filterProfiles.nothingToImport") };
   return { profiles: imported };
 }

@@ -8,6 +8,7 @@ import { ElLoading, ElMessage, ElMessageBox } from "element-plus";
 import { h } from "vue";
 import { patchSavedSettings } from "./settings";
 import { isUpdateVersionSkipped, resolveUpdate, signedUpdateManifestUrl } from "./update";
+import { t } from "@/i18n";
 
 export function isDialogCancelled(error: unknown): boolean {
   return error === "cancel" || error === "close";
@@ -59,7 +60,7 @@ export async function promptForAppUpdate(
     });
 
     if (resolved.kind === "none") {
-      if (!options.silentWhenCurrent) ElMessage.success("目前已是最新版本。");
+      if (!options.silentWhenCurrent) ElMessage.success(t("lib.appUpdate.upToDate"));
       return;
     }
 
@@ -75,16 +76,19 @@ export async function promptForAppUpdate(
     if (resolved.kind === "install") {
       if (
         !(await confirmAppUpdate(
-          `發現新版本 ${resolved.latestVersion}。目前版本為 ${resolved.currentVersion}。是否下載並安裝？安裝完成後程式會重新啟動。`,
-          "下載並安裝",
+          t("lib.appUpdate.installPrompt", {
+            latest: resolved.latestVersion,
+            current: resolved.currentVersion,
+          }),
+          t("lib.appUpdate.install"),
           skipThisVersion,
         ))
       ) {
         await dismissAppUpdate(skipThisVersion.value, resolved.latestVersion);
         return;
       }
-      if (!pending.update) throw new Error("更新已不可用。");
-      const loading = ElLoading.service({ lock: true, text: "正在下載並安裝更新…" });
+      if (!pending.update) throw new Error(t("lib.appUpdate.unavailable"));
+      const loading = ElLoading.service({ lock: true, text: t("lib.appUpdate.installing") });
       try {
         await pending.update.downloadAndInstall();
       } finally {
@@ -96,8 +100,11 @@ export async function promptForAppUpdate(
 
     if (
       !(await confirmAppUpdate(
-        `發現新版本 ${resolved.latestVersion}。目前版本為 ${resolved.currentVersion}。此安裝方式無法自動更新，是否開啟下載頁面？`,
-        "開啟下載頁",
+        t("lib.appUpdate.downloadPrompt", {
+          latest: resolved.latestVersion,
+          current: resolved.currentVersion,
+        }),
+        t("lib.appUpdate.openDownloadPage"),
         skipThisVersion,
       ))
     ) {
@@ -116,11 +123,15 @@ async function confirmAppUpdate(
   skipThisVersion: { value: boolean },
 ): Promise<boolean> {
   try {
-    await ElMessageBox.confirm(updatePromptMessage(message, skipThisVersion), "發現更新", {
-      type: "info",
-      confirmButtonText,
-      cancelButtonText: "稍後再說",
-    });
+    await ElMessageBox.confirm(
+      updatePromptMessage(message, skipThisVersion),
+      t("lib.appUpdate.title"),
+      {
+        type: "info",
+        confirmButtonText,
+        cancelButtonText: t("lib.appUpdate.later"),
+      },
+    );
     return true;
   } catch (error) {
     if (isDialogCancelled(error)) return false;
@@ -131,7 +142,7 @@ async function confirmAppUpdate(
 async function dismissAppUpdate(skipRequested: boolean, latestVersion: string): Promise<void> {
   if (!skipRequested) return;
   await rememberSkippedUpdateVersion(latestVersion);
-  ElMessage.success(`已略過 ${latestVersion}。啟動時不會再詢問此版本。`);
+  ElMessage.success(t("lib.appUpdate.skipped", { version: latestVersion }));
 }
 
 function updatePromptMessage(text: string, skipThisVersion: { value: boolean }) {
@@ -149,7 +160,7 @@ function updatePromptMessage(text: string, skipThisVersion: { value: boolean }) 
             skipThisVersion.value = (event.target as HTMLInputElement).checked;
           },
         }),
-        "不再詢問此版本",
+        t("lib.appUpdate.skipThisVersion"),
       ],
     ),
   ]);

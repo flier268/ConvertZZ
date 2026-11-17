@@ -42,7 +42,11 @@ pub fn capture() -> Result<String, String> {
         return macos::capture();
     }
     #[allow(unreachable_code)]
-    Err("目前平台不支援讀取選取文字。".into())
+    Err(tr_static!(
+        "目前平台不支援讀取選取文字。",
+        "Reading selected text is not supported on this platform."
+    )
+    .into())
 }
 
 pub fn replace(text: String) -> Result<(), String> {
@@ -59,7 +63,11 @@ pub fn replace(text: String) -> Result<(), String> {
         return macos::replace(&text);
     }
     #[allow(unreachable_code)]
-    Err("目前平台不支援寫回選取文字。".into())
+    Err(tr_static!(
+        "目前平台不支援寫回選取文字。",
+        "Writing back selected text is not supported on this platform."
+    )
+    .into())
 }
 
 fn with_clipboard<T>(
@@ -67,15 +75,19 @@ fn with_clipboard<T>(
 ) -> Result<T, String> {
     static CLIPBOARD: OnceLock<Mutex<Option<Clipboard>>> = OnceLock::new();
     let slot = CLIPBOARD.get_or_init(|| Mutex::new(None));
-    let mut guard = slot.lock().map_err(|_| "無法鎖定剪貼簿。".to_string())?;
+    let mut guard = slot
+        .lock()
+        .map_err(|_| tr_static!("無法鎖定剪貼簿。", "Could not lock the clipboard.").to_string())?;
     if guard.is_none() {
         *guard = Some(Clipboard::new().map_err(|error| error.to_string())?);
     }
-    operation(
-        guard
-            .as_mut()
-            .ok_or_else(|| "剪貼簿尚未初始化。".to_string())?,
-    )
+    operation(guard.as_mut().ok_or_else(|| {
+        tr_static!(
+            "剪貼簿尚未初始化。",
+            "The clipboard is not initialized yet."
+        )
+        .to_string()
+    })?)
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
@@ -122,7 +134,11 @@ fn send_shortcut(modifier: enigo::Key, key: enigo::Key) -> Result<(), String> {
     let mut enigo = Enigo::new(&Settings::default()).map_err(|error| {
         let message = error.to_string();
         if message.contains("permission") {
-            "自動複製貼上需要輔助使用（Accessibility）權限。".into()
+            tr_static!(
+                "自動複製貼上需要輔助使用（Accessibility）權限。",
+                "Automatic copy and paste requires Accessibility permission."
+            )
+            .into()
         } else {
             message
         }
@@ -161,7 +177,9 @@ mod linux {
         }
         let clipboard = read_kind(LinuxClipboardKind::Clipboard)?;
         if clipboard.is_empty() {
-            return Err("沒有可轉換的選取文字。".into());
+            return Err(
+                tr_static!("沒有可轉換的選取文字。", "No selected text to convert.").into(),
+            );
         }
         Ok(clipboard)
     }
@@ -175,16 +193,20 @@ mod linux {
                 .text(owned)
                 .map_err(|error| error.to_string())
         })?;
-        run_with_timeout(PASTE_TIMEOUT, "貼上選取文字逾時。", || {
-            wait_for_modifiers_released()?;
-            send_shortcut(Key::Shift, Key::Insert)
-        })?
+        run_with_timeout(
+            PASTE_TIMEOUT,
+            tr_static!("貼上選取文字逾時。", "Timed out pasting the selected text."),
+            || {
+                wait_for_modifiers_released()?;
+                send_shortcut(Key::Shift, Key::Insert)
+            },
+        )?
     }
 
     fn read_kind(kind: LinuxClipboardKind) -> Result<String, String> {
         run_with_timeout(
             CLIPBOARD_TIMEOUT,
-            "讀取選取文字逾時。",
+            tr_static!("讀取選取文字逾時。", "Timed out reading the selected text."),
             move || {
                 Clipboard::new()
                     .ok()
@@ -208,7 +230,10 @@ mod linux {
                     .map_err(|error| error.to_string())?;
                 Ok(leftover_modifiers(u16::from(reply.mask)))
             },
-            "修飾鍵尚未放開，無法貼上。",
+            tr_static!(
+                "修飾鍵尚未放開，無法貼上。",
+                "Modifier keys are still held; cannot paste."
+            ),
         )
     }
 }
@@ -221,24 +246,34 @@ mod macos {
     use enigo::Key;
 
     pub(super) fn capture() -> Result<String, String> {
-        run_with_timeout(PASTE_TIMEOUT, "讀取選取文字逾時。", || {
-            send_shortcut(Key::Meta, Key::Unicode('c'))?;
-            std::thread::sleep(CLIPBOARD_TIMEOUT);
-            let text = with_clipboard(|clipboard| {
-                clipboard.get_text().map_err(|error| error.to_string())
-            })?;
-            if text.is_empty() {
-                return Err("沒有可轉換的選取文字。".into());
-            }
-            Ok(text)
-        })?
+        run_with_timeout(
+            PASTE_TIMEOUT,
+            tr_static!("讀取選取文字逾時。", "Timed out reading the selected text."),
+            || {
+                send_shortcut(Key::Meta, Key::Unicode('c'))?;
+                std::thread::sleep(CLIPBOARD_TIMEOUT);
+                let text = with_clipboard(|clipboard| {
+                    clipboard.get_text().map_err(|error| error.to_string())
+                })?;
+                if text.is_empty() {
+                    return Err(tr_static!(
+                        "沒有可轉換的選取文字。",
+                        "No selected text to convert."
+                    )
+                    .into());
+                }
+                Ok(text)
+            },
+        )?
     }
 
     pub(super) fn replace(text: &str) -> Result<(), String> {
         with_clipboard(|clipboard| clipboard.set_text(text).map_err(|error| error.to_string()))?;
-        run_with_timeout(PASTE_TIMEOUT, "貼上選取文字逾時。", || {
-            send_shortcut(Key::Meta, Key::Unicode('v'))
-        })?
+        run_with_timeout(
+            PASTE_TIMEOUT,
+            tr_static!("貼上選取文字逾時。", "Timed out pasting the selected text."),
+            || send_shortcut(Key::Meta, Key::Unicode('v')),
+        )?
     }
 }
 
@@ -265,9 +300,15 @@ mod windows {
     pub(super) fn replace(text: &str) -> Result<(), String> {
         prepare_keyboard()?;
         let owned = text.to_string();
-        run_with_timeout(CLIPBOARD_TIMEOUT, "寫入剪貼簿逾時。", move || {
-            with_clipboard(|clipboard| clipboard.set_text(owned).map_err(|error| error.to_string()))
-        })??;
+        run_with_timeout(
+            CLIPBOARD_TIMEOUT,
+            tr_static!("寫入剪貼簿逾時。", "Timed out writing to the clipboard."),
+            move || {
+                with_clipboard(|clipboard| {
+                    clipboard.set_text(owned).map_err(|error| error.to_string())
+                })
+            },
+        )??;
         send_shortcut(Key::Control, Key::V)
     }
 
@@ -276,7 +317,10 @@ mod windows {
             MODIFIER_WAIT,
             MODIFIER_POLL,
             || Ok(any_modifier_down()),
-            "修飾鍵尚未放開，無法複製貼上。",
+            tr_static!(
+                "修飾鍵尚未放開，無法複製貼上。",
+                "Modifier keys are still held; cannot copy and paste."
+            ),
         )
         .is_err()
         {
@@ -298,21 +342,27 @@ mod windows {
                 text = read_clipboard_text()?;
                 Ok(text.is_empty())
             },
-            "沒有可轉換的選取文字。",
+            tr_static!("沒有可轉換的選取文字。", "No selected text to convert."),
         )?;
         if text.is_empty() {
-            return Err("沒有可轉換的選取文字。".into());
+            return Err(
+                tr_static!("沒有可轉換的選取文字。", "No selected text to convert.").into(),
+            );
         }
         Ok(text)
     }
 
     fn read_clipboard_text() -> Result<String, String> {
-        run_with_timeout(CLIPBOARD_TIMEOUT, "讀取選取文字逾時。", || {
-            with_clipboard(|clipboard| match clipboard.get().text() {
-                Ok(value) => Ok(value),
-                Err(_) => Ok(String::new()),
-            })
-        })?
+        run_with_timeout(
+            CLIPBOARD_TIMEOUT,
+            tr_static!("讀取選取文字逾時。", "Timed out reading the selected text."),
+            || {
+                with_clipboard(|clipboard| match clipboard.get().text() {
+                    Ok(value) => Ok(value),
+                    Err(_) => Ok(String::new()),
+                })
+            },
+        )?
     }
 
     fn clipboard_sequence() -> u32 {

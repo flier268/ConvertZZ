@@ -12,6 +12,8 @@ const importLegacySettings = vi.fn();
 const openFile = vi.fn();
 const applyDesktopSettings = vi.fn();
 const onSettingsReplaced = vi.fn((_listener?: () => void) => () => undefined);
+const saveSettings = vi.fn();
+const applyUiLanguage = vi.fn();
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invoke(...args),
@@ -27,9 +29,13 @@ vi.mock("../lib/desktop", () => ({
 vi.mock("../lib/settings", () => ({
   getLoadedSettings: () => getLoadedSettings(),
   loadSettings: (...args: unknown[]) => loadSettings(...args),
-  saveSettings: vi.fn(),
+  saveSettings: (...args: unknown[]) => saveSettings(...args),
   importLegacySettings: (...args: unknown[]) => importLegacySettings(...args),
   onSettingsReplaced: (listener: () => void) => onSettingsReplaced(listener),
+}));
+
+vi.mock("@/lib/uiLanguage", () => ({
+  applyUiLanguage: (...args: unknown[]) => applyUiLanguage(...args),
 }));
 
 import SettingsPage from "./SettingsPage.vue";
@@ -154,6 +160,9 @@ describe("設定分頁", () => {
     openFile.mockReset();
     applyDesktopSettings.mockReset();
     onSettingsReplaced.mockReset();
+    saveSettings.mockReset();
+    applyUiLanguage.mockReset();
+    applyUiLanguage.mockResolvedValue("en");
     onSettingsReplaced.mockReturnValue(() => undefined);
     getLoadedSettings.mockReturnValue(settingsFixture());
     loadSettings.mockResolvedValue(settingsFixture());
@@ -318,6 +327,25 @@ describe("設定分頁", () => {
     wrapper.unmount();
   });
 
+  it("切換介面語言會儲存 language 並立即套用", async () => {
+    const settings = settingsFixture();
+    getLoadedSettings.mockReturnValue(settings);
+    loadSettings.mockResolvedValue(settings);
+    const wrapper = await mountPage();
+    expect(wrapper.text()).toContain("介面語言");
+    await wrapper.get("#pane-general .el-select").trigger("click");
+    await flushPromises();
+    const option = Array.from(document.body.querySelectorAll(".el-select-dropdown__item")).find(
+      (item) => item.textContent?.trim() === "English",
+    ) as HTMLElement;
+    option.click();
+    await flushPromises();
+    expect(settings.language).toBe("en");
+    expect(applyUiLanguage).toHaveBeenCalledWith("en");
+    expect(saveSettings).toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it("可從設定頁匯入 ConvertZZ.json 並套用桌面設定", async () => {
     const imported = settingsFixture();
     imported.engine = "zhconvert";
@@ -335,6 +363,7 @@ describe("設定分頁", () => {
     );
     expect(importLegacySettings).toHaveBeenCalledWith("/tmp/ConvertZZ.json");
     expect(applyDesktopSettings).toHaveBeenCalledWith(imported);
+    expect(applyUiLanguage).toHaveBeenCalledWith(imported.language);
     const previewInput = wrapper.get(".field-with-suffix-row input");
     expect((previewInput.element as HTMLInputElement).value).toBe("12");
     wrapper.unmount();

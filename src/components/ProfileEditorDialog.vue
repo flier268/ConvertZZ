@@ -7,9 +7,11 @@ import { core, isCancellationError } from "../lib/coreClient";
 import {
   mergeExtensions,
   newProfileId,
-  NO_EXTENSION_LABEL,
+  noExtensionLabel as noExtensionRowLabel,
   validateProfile,
+  profileDisplayName,
 } from "../lib/filterProfiles";
+import { t, tn } from "@/i18n";
 
 const props = defineProps<{
   modelValue: boolean;
@@ -56,7 +58,9 @@ watch(
       ...profile,
       extensions: [...profile.extensions],
       // 內建 profile 不可改動：以副本編輯，儲存時另存。
-      name: profile.builtin ? `${profile.name} 副本` : profile.name,
+      name: profile.builtin
+        ? t("components.profileEditor.copyName", { name: profileDisplayName(profile) })
+        : profile.name,
     };
     tab.value = "typed";
     typedText.value = "";
@@ -76,13 +80,18 @@ const validation = computed(() =>
   validateProfile(draft.value, isBuiltinSource.value ? props.existing : others.value),
 );
 const dialogTitle = computed(() => {
-  if (isBuiltinSource.value) return `另存「${props.profile?.name}」為自訂 profile`;
+  if (isBuiltinSource.value)
+    return t("components.profileEditor.saveBuiltinAs", {
+      name: props.profile ? profileDisplayName(props.profile) : "",
+    });
   return props.profile && props.existing.some((item) => item.id === props.profile?.id)
-    ? "編輯 profile"
-    : "新增 profile";
+    ? t("components.profileEditor.editTitle")
+    : t("components.profileEditor.createTitle");
 });
 const noExtensionLabel = computed(() =>
-  draft.value.mode === "deny" ? "同時排除無副檔名檔案" : "包含無副檔名檔案",
+  draft.value.mode === "deny"
+    ? t("components.profileEditor.excludeNoExtension")
+    : t("components.profileEditor.includeNoExtension"),
 );
 
 function commitTyped(): void {
@@ -164,7 +173,7 @@ const scanRows = computed(() => {
   if (stats.noExtensionCount > 0) {
     rows.push({
       key: "",
-      label: NO_EXTENSION_LABEL,
+      label: noExtensionRowLabel(),
       count: stats.noExtensionCount,
       extension: null,
     });
@@ -227,27 +236,31 @@ function save(): void {
     @update:model-value="(value: boolean) => (value ? undefined : close())"
   >
     <el-form label-position="top" @submit.prevent>
-      <el-form-item label="名稱">
-        <el-input v-model="draft.name" aria-label="profile 名稱" maxlength="40" />
+      <el-form-item :label="t('components.profileEditor.name')">
+        <el-input
+          v-model="draft.name"
+          :aria-label="t('components.profileEditor.nameAria')"
+          maxlength="40"
+        />
       </el-form-item>
-      <el-form-item label="模式">
+      <el-form-item :label="t('components.profileEditor.mode')">
         <el-radio-group
           :model-value="draft.mode"
-          aria-label="篩選模式"
+          :aria-label="t('components.profileEditor.modeAria')"
           @update:model-value="(value: unknown) => setMode(value as ExtensionFilterMode)"
         >
-          <el-radio-button value="allow">白名單（只收這些）</el-radio-button>
-          <el-radio-button value="deny">黑名單（排除這些）</el-radio-button>
-          <el-radio-button value="all">全部</el-radio-button>
+          <el-radio-button value="allow">{{ t("components.profileEditor.allow") }}</el-radio-button>
+          <el-radio-button value="deny">{{ t("components.profileEditor.deny") }}</el-radio-button>
+          <el-radio-button value="all">{{ t("components.profileEditor.all") }}</el-radio-button>
         </el-radio-group>
       </el-form-item>
       <p v-if="draft.mode === 'all'" class="profile-hint">
-        所有檔案都會加入，不篩選副檔名（隱藏資料夾與版本控制資料夾仍不會掃描）。
+        {{ t("components.profileEditor.allHint") }}
       </p>
       <template v-else>
         <el-tabs v-model="tab" class="profile-tabs">
-          <el-tab-pane label="手動輸入" name="typed">
-            <div class="ext-tags" aria-label="副檔名清單">
+          <el-tab-pane :label="t('components.profileEditor.typedTab')" name="typed">
+            <div class="ext-tags" :aria-label="t('components.profileEditor.extensionsAria')">
               <el-tag
                 disable-transitions
                 v-for="extension in draft.extensions"
@@ -259,33 +272,53 @@ function save(): void {
               <el-input
                 :model-value="typedText"
                 class="ext-input"
-                placeholder="輸入副檔名，按 Enter、逗號或空白加入；可貼上 *.srt;*.ass"
-                aria-label="新增副檔名"
+                :placeholder="t('components.profileEditor.typedPlaceholder')"
+                :aria-label="t('components.profileEditor.addExtensionAria')"
                 @update:model-value="onTypedInput"
                 @keydown.enter.prevent="commitTyped"
                 @blur="commitTyped"
               />
             </div>
           </el-tab-pane>
-          <el-tab-pane label="掃描目錄勾選" name="scan">
+          <el-tab-pane :label="t('components.profileEditor.scanTab')" name="scan">
             <div class="scan-bar">
-              <el-button :disabled="scanning" @click="chooseScanFolder">選擇目錄…</el-button>
-              <el-checkbox v-model="scanRecursive" :disabled="scanning">含子資料夾</el-checkbox>
-              <el-button v-if="scanPath && !scanning" text type="primary" @click="scan"
-                >重新掃描</el-button
-              >
-              <el-button v-if="scanning" text type="danger" @click="cancelScan">取消</el-button>
-              <span class="scan-path">{{ scanPath || "尚未選擇目錄" }}</span>
+              <el-button :disabled="scanning" @click="chooseScanFolder">{{
+                t("components.profileEditor.chooseFolder")
+              }}</el-button>
+              <el-checkbox v-model="scanRecursive" :disabled="scanning">{{
+                t("components.profileEditor.recursive")
+              }}</el-checkbox>
+              <el-button v-if="scanPath && !scanning" text type="primary" @click="scan">{{
+                t("components.profileEditor.rescan")
+              }}</el-button>
+              <el-button v-if="scanning" text type="danger" @click="cancelScan">{{
+                t("common.cancel")
+              }}</el-button>
+              <span class="scan-path">{{
+                scanPath || t("components.profileEditor.noFolder")
+              }}</span>
             </div>
-            <p v-if="scanning" class="profile-hint">{{ scanProgress || "掃描中…" }}</p>
+            <p v-if="scanning" class="profile-hint">
+              {{ scanProgress || t("components.profileEditor.scanning") }}
+            </p>
             <template v-else-if="scanStats">
               <div class="scan-actions">
-                <el-button size="small" @click="setAllChecked(true)">全選</el-button>
-                <el-button size="small" @click="setAllChecked(false)">全不選</el-button>
-                <el-button size="small" @click="invertChecked">反選</el-button>
-                <span class="profile-hint">共 {{ scanStats.totalFiles }} 個檔案</span>
+                <el-button size="small" @click="setAllChecked(true)">{{
+                  t("components.profileEditor.selectAll")
+                }}</el-button>
+                <el-button size="small" @click="setAllChecked(false)">{{
+                  t("components.profileEditor.selectNone")
+                }}</el-button>
+                <el-button size="small" @click="invertChecked">{{
+                  t("components.profileEditor.invert")
+                }}</el-button>
+                <span class="profile-hint">{{
+                  tn("components.profileEditor.totalFiles", scanStats.totalFiles)
+                }}</span>
               </div>
-              <p v-if="!scanRows.length" class="profile-hint">這個目錄沒有檔案。</p>
+              <p v-if="!scanRows.length" class="profile-hint">
+                {{ t("components.profileEditor.noFiles") }}
+              </p>
               <ul class="scan-list">
                 <li v-for="row in scanRows" :key="row.key">
                   <el-checkbox
@@ -302,20 +335,29 @@ function save(): void {
           </el-tab-pane>
         </el-tabs>
         <p v-if="duplicateNotice.length" class="profile-warning" role="status">
-          已存在，略過：{{ duplicateNotice.join("、") }}
+          {{
+            t("components.profileEditor.duplicates", {
+              items: duplicateNotice.join(t("components.profileEditor.listSeparator")),
+            })
+          }}
         </p>
         <p v-if="invalidNotice.length" class="profile-error" role="alert">
-          無法辨識：{{ invalidNotice.join("、") }}
+          {{
+            t("components.profileEditor.invalid", {
+              items: invalidNotice.join(t("components.profileEditor.listSeparator")),
+            })
+          }}
         </p>
         <p v-if="allFilesNotice" class="profile-warning" role="status">
-          * 與 *.* 不是副檔名；要收所有檔案請改選「全部」模式或「所有檔案」profile。
+          {{ t("components.profileEditor.allFilesToken") }}
         </p>
         <el-checkbox v-model="draft.includeNoExtension">{{ noExtensionLabel }}</el-checkbox>
         <p class="profile-hint">
-          點開頭的檔案（例如 .bashrc）與檔名以點結尾的檔案都算「無副檔名」。{{
+          {{ t("components.profileEditor.noExtensionHint")
+          }}{{
             draft.mode === "deny"
-              ? "黑名單勾選此項代表排除無副檔名檔案。"
-              : "白名單勾選此項代表收進無副檔名檔案。"
+              ? t("components.profileEditor.denyNoExtensionHint")
+              : t("components.profileEditor.allowNoExtensionHint")
           }}
         </p>
       </template>
@@ -324,12 +366,14 @@ function save(): void {
         {{ validation.warning }}
       </p>
       <p v-if="isBuiltinSource" class="profile-hint">
-        內建 profile 不會被修改，儲存後會建立一份自訂 profile。
+        {{ t("components.profileEditor.builtinHint") }}
       </p>
     </el-form>
     <template #footer>
-      <el-button @click="close">取消</el-button>
-      <el-button type="primary" :disabled="Boolean(validation.error)" @click="save">儲存</el-button>
+      <el-button @click="close">{{ t("common.cancel") }}</el-button>
+      <el-button type="primary" :disabled="Boolean(validation.error)" @click="save">{{
+        t("common.save")
+      }}</el-button>
     </template>
   </el-dialog>
 </template>

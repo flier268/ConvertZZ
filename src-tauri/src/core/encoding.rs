@@ -83,7 +83,10 @@ pub fn decode_text_detailed(
     let Some(codec) = encoding_codec(encoding) else {
         return Err(CoreError::new(
             "ENCODING_UNSUPPORTED",
-            format!("不支援編碼 {encoding:?}。"),
+            tr!(
+                "不支援編碼 {encoding:?}。",
+                "Unsupported encoding {encoding:?}."
+            ),
         ));
     };
     let (text, _, had_errors) = codec.decode(without_bom);
@@ -117,7 +120,10 @@ pub fn encode_text_detailed(
     if encoding == TextEncoding::Auto {
         return Err(CoreError::new(
             "ENCODING_AUTO_OUTPUT",
-            "輸出編碼不能使用自動偵測。",
+            tr_static!(
+                "輸出編碼不能使用自動偵測。",
+                "The output encoding cannot be auto-detect."
+            ),
         ));
     }
     if encoding == TextEncoding::HzGb2312 {
@@ -139,7 +145,10 @@ pub fn encode_text_detailed(
     let Some(codec) = encoding_codec(encoding) else {
         return Err(CoreError::new(
             "ENCODING_UNSUPPORTED",
-            format!("不支援編碼 {encoding:?}。"),
+            tr!(
+                "不支援編碼 {encoding:?}。",
+                "Unsupported encoding {encoding:?}."
+            ),
         ));
     };
     let (encoded, _, had_errors) = codec.encode(text);
@@ -161,21 +170,30 @@ pub fn reinterpret_text(
     if source == TextEncoding::Auto || target == TextEncoding::Auto {
         return Err(CoreError::new(
             "ENCODING_REQUIRED",
-            "重新解讀文字時必須指定來源與目標編碼。",
+            tr_static!(
+                "重新解讀文字時必須指定來源與目標編碼。",
+                "Reinterpreting text requires both a source and a target encoding."
+            ),
         ));
     }
     let encoded = encode_text_detailed(text, source, false)?;
     if encoded.had_errors {
         return Err(CoreError::new(
             "ENCODING_UNREPRESENTABLE",
-            format!("有字元無法用 {source:?} 表示，已中止重新解讀。"),
+            tr!(
+                "有字元無法用 {source:?} 表示，已中止重新解讀。",
+                "Some characters cannot be represented in {source:?}; reinterpretation aborted."
+            ),
         ));
     }
     let decoded = decode_text_detailed(&encoded.bytes, target)?;
     if decoded.had_errors {
         return Err(CoreError::new(
             "ENCODING_DECODE_ERROR",
-            format!("以 {target:?} 解碼時遇到無法對應的位元組，已中止重新解讀。"),
+            tr!(
+                "以 {target:?} 解碼時遇到無法對應的位元組，已中止重新解讀。",
+                "Unmappable bytes found while decoding as {target:?}; reinterpretation aborted."
+            ),
         ));
     }
     Ok(decoded.text)
@@ -389,7 +407,10 @@ fn encode_hz(text: &str) -> Result<Vec<u8>, CoreError> {
         if encoded.len() != 2 {
             return Err(CoreError::new(
                 "HZ_CHARACTER",
-                format!("字元「{character}」無法使用 HZ-GB-2312 表示。"),
+                tr!(
+                    "字元「{character}」無法使用 HZ-GB-2312 表示。",
+                    "Character \"{character}\" cannot be represented in HZ-GB-2312."
+                ),
             ));
         }
         if !chinese {
@@ -429,7 +450,10 @@ impl StreamDecoder {
             TextEncoding::HzGb2312 => DecoderInner::Hz(HzDecoder::new()),
             other => {
                 let codec = encoding_codec(other).ok_or_else(|| {
-                    CoreError::new("ENCODING_UNSUPPORTED", format!("不支援編碼 {other:?}。"))
+                    CoreError::new(
+                        "ENCODING_UNSUPPORTED",
+                        tr!("不支援編碼 {other:?}。", "Unsupported encoding {other:?}."),
+                    )
                 })?;
                 DecoderInner::Codec(codec.new_decoder_without_bom_handling())
             }
@@ -527,7 +551,10 @@ impl StreamEncoder {
         if encoding == TextEncoding::Auto {
             return Err(CoreError::new(
                 "ENCODING_AUTO_OUTPUT",
-                "輸出編碼不能使用自動偵測。",
+                tr_static!(
+                    "輸出編碼不能使用自動偵測。",
+                    "The output encoding cannot be auto-detect."
+                ),
             ));
         }
         let inner = match encoding {
@@ -536,7 +563,10 @@ impl StreamEncoder {
             TextEncoding::Utf16be => EncoderInner::Utf16 { little: false },
             other => {
                 let codec = encoding_codec(other).ok_or_else(|| {
-                    CoreError::new("ENCODING_UNSUPPORTED", format!("不支援編碼 {other:?}。"))
+                    CoreError::new(
+                        "ENCODING_UNSUPPORTED",
+                        tr!("不支援編碼 {other:?}。", "Unsupported encoding {other:?}."),
+                    )
                 })?;
                 EncoderInner::Codec(codec.new_encoder())
             }
@@ -591,8 +621,8 @@ fn encode_codec(
             EncoderResult::Unmappable(character) => {
                 return Err(CoreError::with_details(
                     "ENCODING_UNREPRESENTABLE",
-                    format!(
-                        "有字元無法以 {} 表示（例如「{character}」），已略過此檔，原檔未修改。請改用 UTF-8 等可表示的輸出編碼。",
+                    tr!(
+                        "有字元無法以 {} 表示（例如「{character}」），已略過此檔，原檔未修改。請改用 UTF-8 等可表示的輸出編碼。", "Some characters cannot be represented in {} (for example \"{character}\"); this file was skipped and left unchanged. Use an output encoding that can represent them, such as UTF-8.",
                         encoding_label(encoding)
                     ),
                     serde_json::json!({ "character": character.to_string() }),
@@ -611,7 +641,7 @@ pub(crate) fn encoding_label(encoding: TextEncoding) -> &'static str {
         TextEncoding::EucJp => "EUC-JP",
         TextEncoding::Iso2022Jp => "ISO-2022-JP",
         TextEncoding::HzGb2312 => "HZ-GB-2312",
-        _ => "輸出編碼",
+        _ => tr_static!("輸出編碼", "the output encoding"),
     }
 }
 
@@ -637,7 +667,10 @@ fn encode_hz_push(text: &str, last: bool, chinese: &mut bool) -> Result<Vec<u8>,
         if encoded.len() != 2 {
             return Err(CoreError::new(
                 "HZ_CHARACTER",
-                format!("字元「{character}」無法使用 HZ-GB-2312 表示。"),
+                tr!(
+                    "字元「{character}」無法使用 HZ-GB-2312 表示。",
+                    "Character \"{character}\" cannot be represented in HZ-GB-2312."
+                ),
             ));
         }
         if !*chinese {

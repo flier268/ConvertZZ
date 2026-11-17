@@ -36,10 +36,12 @@ import {
   profileFilter,
   resolveProfile,
   summarizeProfile,
+  profileDisplayName,
 } from "../lib/filterProfiles";
 import { fileConversionDefaults } from "../lib/settingsApply";
 import { buildFileDiffSections, nameChangeLabel, type DiffSection } from "../lib/fileDiff";
 import { formatProgressLabel, progressPercentage, type ProgressSnapshot } from "../lib/progressEta";
+import { t, tn } from "@/i18n";
 import PreviewDiffDialog from "../components/PreviewDiffDialog.vue";
 import SideBySideDiffView from "../components/SideBySideDiffView.vue";
 import FolderPickWizard, { type FolderPickResult } from "../components/FolderPickWizard.vue";
@@ -142,7 +144,7 @@ async function invalidatePlan() {
   plan.value = undefined;
   clearPreviewState();
   await core.request("files.cancel", { planId: stale.planId }).catch(() => undefined);
-  ElMessage.info("選項已變更，請重新建立預覽。");
+  ElMessage.info(t("files.message.optionsChanged"));
 }
 
 watch(planInputsKey, (key) => {
@@ -199,15 +201,14 @@ const allReadySelected = computed(
 const someReadySelected = computed(() => selectedCount.value > 0 && !allReadySelected.value);
 
 const pathSummary = computed(() => {
-  if (!paths.value.length) return "尚未選取路徑";
-  if (paths.value.length <= 2) return paths.value.join("、");
-  return `${paths.value.slice(0, 2).join("、")} 等 ${paths.value.length} 項`;
+  if (!paths.value.length) return t("files.noPaths");
+  const separator = t("files.pathSeparator");
+  if (paths.value.length <= 2) return paths.value.join(separator);
+  return t("files.pathsMore", {
+    paths: paths.value.slice(0, 2).join(separator),
+    count: paths.value.length,
+  });
 });
-
-const activeSection = computed(
-  () =>
-    previewSections.value.find((section) => section.title === "內容") ?? previewSections.value[0],
-);
 
 const canOpenFullscreenPreview = computed(
   () =>
@@ -255,7 +256,7 @@ function resizableHeader(key: string, content: string | ReturnType<typeof h>) {
         : content,
       h("span", {
         class: "file-plan-col-resizer",
-        title: "拖曳調整欄寬",
+        title: t("files.column.resize"),
         onMousedown: (event: MouseEvent) => startColumnResize(key, event),
       }),
     ]);
@@ -264,7 +265,7 @@ function resizableHeader(key: string, content: string | ReturnType<typeof h>) {
 const planColumns = computed<Column<FilePlanItem>[]>(() => [
   {
     key: "selected",
-    title: "執行",
+    title: t("files.column.selected"),
     width: columnWidths.selected,
     align: "center",
     cellRenderer: ({ rowData }) =>
@@ -291,22 +292,22 @@ const planColumns = computed<Column<FilePlanItem>[]>(() => [
   {
     key: "kind",
     dataKey: "kind",
-    title: "類型",
+    title: t("files.column.kind"),
     width: columnWidths.kind,
-    headerCellRenderer: resizableHeader("kind", "類型"),
+    headerCellRenderer: resizableHeader("kind", t("files.column.kind")),
   },
   {
     key: "status",
     dataKey: "status",
-    title: "狀態",
+    title: t("files.column.status"),
     width: columnWidths.status,
-    headerCellRenderer: resizableHeader("status", "狀態"),
+    headerCellRenderer: resizableHeader("status", t("files.column.status")),
   },
   {
     key: "nameChange",
-    title: "檔名",
+    title: t("files.column.name"),
     width: columnWidths.nameChange,
-    headerCellRenderer: resizableHeader("nameChange", "檔名"),
+    headerCellRenderer: resizableHeader("nameChange", t("files.column.name")),
     cellRenderer: ({ rowData }) => {
       const label = nameChangeLabel(rowData);
       return h("span", { class: "file-plan-name-change", title: label }, label);
@@ -315,31 +316,31 @@ const planColumns = computed<Column<FilePlanItem>[]>(() => [
   {
     key: "sourcePath",
     dataKey: "sourcePath",
-    title: "來源",
+    title: t("files.column.source"),
     width: columnWidths.sourcePath,
-    headerCellRenderer: resizableHeader("sourcePath", "來源"),
+    headerCellRenderer: resizableHeader("sourcePath", t("files.column.source")),
   },
   {
     key: "outputPath",
     dataKey: "outputPath",
-    title: "輸出",
+    title: t("files.column.output"),
     width: columnWidths.outputPath,
-    headerCellRenderer: resizableHeader("outputPath", "輸出"),
+    headerCellRenderer: resizableHeader("outputPath", t("files.column.output")),
   },
   {
     key: "detectedEncoding",
     dataKey: "detectedEncoding",
-    title: "編碼",
+    title: t("files.column.encoding"),
     width: columnWidths.detectedEncoding,
-    headerCellRenderer: resizableHeader("detectedEncoding", "編碼"),
+    headerCellRenderer: resizableHeader("detectedEncoding", t("files.column.encoding")),
     cellRenderer: ({ cellData }) => h("span", null, cellData ? String(cellData) : ""),
   },
   {
     key: "warning",
     dataKey: "warning",
-    title: "警告",
+    title: t("files.column.warning"),
     width: columnWidths.warning,
-    headerCellRenderer: resizableHeader("warning", "警告"),
+    headerCellRenderer: resizableHeader("warning", t("files.column.warning")),
     cellRenderer: ({ cellData }) =>
       h(
         "span",
@@ -432,7 +433,11 @@ async function onProfileEdited(profile: FileFilterProfile): Promise<void> {
 async function deleteCurrentProfile(): Promise<void> {
   const profile = currentProfile.value;
   if (!profile || profile.builtin) return;
-  if (!(await confirm(`確定刪除 profile「${profile.name}」？`, { title: "刪除篩選 profile" })))
+  if (
+    !(await confirm(t("files.filter.deleteConfirm", { name: profileDisplayName(profile) }), {
+      title: t("files.filter.deleteTitle"),
+    }))
+  )
     return;
   await patchProfiles((files) => {
     removeProfile(files, profile.id);
@@ -466,13 +471,13 @@ function updatePreviewPanel(item: FilePlanItem) {
   currentItem.value = item;
   previewDiffReady.value = false;
   const sections = buildFileDiffSections(item);
-  previewSections.value = item.previewLoaded
-    ? sections
-    : sections.filter((section) => section.title === "檔名");
+  previewSections.value = sections;
   previewMeta.value = [
-    { label: "來源", value: item.sourcePath },
-    { label: "輸出", value: item.outputPath },
-    ...(item.detectedEncoding ? [{ label: "編碼", value: item.detectedEncoding }] : []),
+    { label: t("files.column.source"), value: item.sourcePath },
+    { label: t("files.column.output"), value: item.outputPath },
+    ...(item.detectedEncoding
+      ? [{ label: t("files.column.encoding"), value: item.detectedEncoding }]
+      : []),
   ];
   void nextTick(() => {
     requestAnimationFrame(() => {
@@ -518,10 +523,10 @@ async function loadItemPreview(item: FilePlanItem | undefined) {
   previewDiffReady.value = false;
   currentItem.value = item;
   previewMeta.value = [
-    { label: "來源", value: item.sourcePath },
-    { label: "輸出", value: item.outputPath },
+    { label: t("files.column.source"), value: item.sourcePath },
+    { label: t("files.column.output"), value: item.outputPath },
   ];
-  previewSections.value = buildFileDiffSections(item).filter((section) => section.title === "檔名");
+  previewSections.value = buildFileDiffSections(item);
   progress.value = undefined;
   progressStartedAt.value = Date.now();
   try {
@@ -546,7 +551,7 @@ async function loadItemPreview(item: FilePlanItem | undefined) {
     updatePreviewPanel(plan.value.items[index] ?? previewed);
   } catch (error) {
     if (requestId !== previewRequestId.value) return;
-    if (isCancellationError(error)) ElMessage.info("已取消預覽。");
+    if (isCancellationError(error)) ElMessage.info(t("files.message.previewCancelled"));
     else ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     if (requestId === previewRequestId.value) {
@@ -559,7 +564,7 @@ async function loadItemPreview(item: FilePlanItem | undefined) {
 }
 
 async function createPlan() {
-  if (!paths.value.length) return ElMessage.warning("請先選取檔案或資料夾。");
+  if (!paths.value.length) return ElMessage.warning(t("files.message.selectFirst"));
   busy.value = true;
   progress.value = undefined;
   progressStartedAt.value = Date.now();
@@ -570,7 +575,7 @@ async function createPlan() {
     const settings = await loadSettings();
     const profile = currentProfile.value;
     if (profile && filterCollectsNothing(profile)) {
-      return ElMessage.warning("目前的篩選不收任何檔案，請編輯或更換篩選。");
+      return ElMessage.warning(t("files.message.filterEmpty"));
     }
     const requestPlan = (includeIgnored: boolean) =>
       core.request<FileConversionPlan>(
@@ -612,7 +617,7 @@ async function createPlan() {
     const ignored = created.ignoredInputs ?? [];
     if (ignored.length) {
       const accepted = await confirm(ignoredInputsConfirmMessage(ignored), {
-        title: "確認轉換版本控制資料夾",
+        title: t("files.message.ignoredTitle"),
         kind: "warning",
       });
       if (accepted) {
@@ -635,14 +640,14 @@ async function createPlan() {
       return;
     }
     if (!created.items.length) {
-      ElMessage.warning(created.warnings[0] ?? "沒有找到可轉換的檔案。");
+      ElMessage.warning(created.warnings[0] ?? t("files.message.noFiles"));
     }
     // 大型清單先讓虛擬表格掛上，再載入第一筆預覽，避免主執行緒連續長任務。
     await nextTick();
     const first = plan.value.items.find((item) => item.status === "ready") ?? plan.value.items[0];
     await loadItemPreview(first);
   } catch (error) {
-    if (isCancellationError(error)) ElMessage.info("已取消建立預覽。");
+    if (isCancellationError(error)) ElMessage.info(t("files.message.planCancelled"));
     else ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     busy.value = false;
@@ -654,15 +659,15 @@ async function createPlan() {
 
 async function applyPlan() {
   if (!plan.value) return;
-  const accepted = await confirm(`將執行 ${selectedCount.value} 個檔案操作。`, {
-    title: "確認檔案轉換",
+  const accepted = await confirm(tn("files.message.applyConfirm", selectedCount.value), {
+    title: t("files.message.applyTitle"),
     kind: "warning",
   });
   if (!accepted || !plan.value) return;
   if (
     plannedConflictPolicy.value === "overwrite" &&
-    !(await confirm("覆寫會取代既有的同名檔案與 .bak 備份。是否確定繼續？", {
-      title: "確認覆寫",
+    !(await confirm(t("files.message.overwriteConfirm"), {
+      title: t("files.message.overwriteTitle"),
       kind: "warning",
     }))
   )
@@ -694,26 +699,29 @@ async function applyPlan() {
     if (promptAfterConversion.value) {
       if (result.succeeded.length && skippedCount)
         ElMessage.success(
-          `已完成 ${result.succeeded.length} 個檔案，另有 ${skippedCount} 個未處理（已停止或略過）。`,
+          t("files.message.doneWithSkipped", {
+            done: result.succeeded.length,
+            skipped: skippedCount,
+          }),
         );
       else if (result.succeeded.length)
-        ElMessage.success(`已完成 ${result.succeeded.length} 個檔案。`);
+        ElMessage.success(tn("files.message.done", result.succeeded.length));
       else if (skippedCount && warnings.length === 0)
-        ElMessage.info("已停止檔案轉換；沒有寫入任何檔案。");
-      else if (skippedCount) ElMessage.info(`已略過 ${skippedCount} 個檔案。`);
+        ElMessage.info(t("files.message.stoppedNothingWritten"));
+      else if (skippedCount) ElMessage.info(tn("files.message.skipped", skippedCount));
     }
     if (result.failed.length)
       ElMessage.error(
         result.failed
-          .map(
-            (failure: { path: string; message: string }) => `${failure.path}：${failure.message}`,
+          .map((failure: { path: string; message: string }) =>
+            t("files.message.failure", { path: failure.path, message: failure.message }),
           )
           .join("\n"),
       );
     plan.value = undefined;
     clearPreviewState();
   } catch (error) {
-    if (isCancellationError(error)) ElMessage.info("已取消檔案轉換。");
+    if (isCancellationError(error)) ElMessage.info(t("files.message.applyCancelled"));
     else ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     busy.value = false;
@@ -776,37 +784,37 @@ watch(
   <section class="page-stack">
     <header class="page-header">
       <div>
-        <p class="eyebrow">BATCH</p>
-        <h1>檔案與檔名</h1>
-        <p>先建立檔案清單，點選後才載入內容預覽；勾選後才會轉換寫入。</p>
+        <p class="eyebrow">{{ t("files.eyebrow") }}</p>
+        <h1>{{ t("files.title") }}</h1>
+        <p>{{ t("files.subtitle") }}</p>
       </div>
       <div class="header-actions">
-        <el-button @click="chooseOutputFolder">選取輸出目錄</el-button
-        ><el-button @click="chooseFolder">選取來源資料夾</el-button
-        ><el-button type="primary" @click="chooseFiles">選取檔案</el-button>
+        <el-button @click="chooseOutputFolder">{{ t("files.chooseOutputFolder") }}</el-button
+        ><el-button @click="chooseFolder">{{ t("files.chooseSourceFolder") }}</el-button
+        ><el-button type="primary" @click="chooseFiles">{{ t("files.chooseFiles") }}</el-button>
       </div>
     </header>
     <el-card shadow="never">
       <el-form label-position="top" class="option-grid">
-        <el-form-item label="作業"
+        <el-form-item :label="t('files.mode.label')"
           ><el-select v-model="options.mode"
-            ><el-option label="轉換內容" value="content" /><el-option
-              label="轉換檔名"
-              value="filename" /><el-option label="內容與檔名" value="both" /></el-select
+            ><el-option :label="t('files.mode.content')" value="content" /><el-option
+              :label="t('files.mode.filename')"
+              value="filename" /><el-option :label="t('files.mode.both')" value="both" /></el-select
         ></el-form-item>
-        <el-form-item label="方向"
+        <el-form-item :label="t('files.direction.label')"
           ><el-select v-model="options.direction"
-            ><el-option label="簡轉繁" value="s2t" /><el-option
-              label="繁轉簡"
-              value="t2s" /><el-option label="不轉換" value="none" /></el-select
+            ><el-option :label="t('common.direction.s2t')" value="s2t" /><el-option
+              :label="t('common.direction.t2s')"
+              value="t2s" /><el-option :label="t('files.direction.none')" value="none" /></el-select
         ></el-form-item>
-        <el-form-item label="引擎"
+        <el-form-item :label="t('files.engine.label')"
           ><el-select v-model="options.engine"
-            ><el-option label="新式分詞" value="segmented" /><el-option
+            ><el-option :label="t('files.engine.segmented')" value="segmented" /><el-option
               label="ZhConvert"
               value="zhconvert" /></el-select
         ></el-form-item>
-        <el-form-item label="來源編碼"
+        <el-form-item :label="t('files.inputEncoding')"
           ><el-select v-model="options.inputEncoding"
             ><el-option
               v-for="value in encodings"
@@ -814,7 +822,7 @@ watch(
               :value="value"
               :label="value" /></el-select
         ></el-form-item>
-        <el-form-item label="輸出編碼"
+        <el-form-item :label="t('files.outputEncoding')"
           ><el-select v-model="options.outputEncoding"
             ><el-option
               v-for="value in encodings"
@@ -822,52 +830,69 @@ watch(
               :value="value"
               :label="value" /></el-select
         ></el-form-item>
-        <el-form-item label="衝突策略"
+        <el-form-item :label="t('files.conflict.label')"
           ><el-select v-model="options.conflictPolicy"
-            ><el-option label="略過" value="skip" /><el-option
-              label="覆寫"
+            ><el-option :label="t('files.conflict.skip')" value="skip" /><el-option
+              :label="t('files.conflict.overwrite')"
               value="overwrite" /></el-select
         ></el-form-item>
       </el-form>
       <div class="switch-row">
-        <el-checkbox v-model="options.vocabularyCorrection">詞彙修正</el-checkbox
-        ><el-checkbox v-model="options.recursive">包含子資料夾</el-checkbox
-        ><el-checkbox v-model="options.fixCharsetDeclaration">修正 charset 宣告</el-checkbox
-        ><el-checkbox v-model="options.addBom">加入 BOM</el-checkbox
-        ><el-checkbox v-model="backup">轉換前備份（.bak）</el-checkbox>
+        <el-checkbox v-model="options.vocabularyCorrection">{{
+          t("files.vocabularyCorrection")
+        }}</el-checkbox
+        ><el-checkbox v-model="options.recursive">{{ t("files.recursive") }}</el-checkbox
+        ><el-checkbox v-model="options.fixCharsetDeclaration">{{
+          t("files.fixCharsetDeclaration")
+        }}</el-checkbox
+        ><el-checkbox v-model="options.addBom">{{ t("files.addBom") }}</el-checkbox
+        ><el-checkbox v-model="backup">{{ t("files.backup") }}</el-checkbox>
       </div>
       <div v-if="folderScanMode && currentProfile" class="folder-filter">
-        <span class="folder-filter-label">副檔名篩選</span>
+        <span class="folder-filter-label">{{ t("files.filter.label") }}</span>
         <el-select
           :model-value="currentProfile.id"
           class="folder-filter-select"
-          aria-label="目前篩選 profile"
+          :aria-label="t('files.filter.selectAria')"
           @update:model-value="(value: string) => (currentProfileId = value)"
         >
           <el-option
             v-for="profile in filterProfiles"
             :key="profile.id"
-            :label="`${profile.name}（${modeLabel(profile.mode)}）`"
+            :label="
+              t('files.filter.option', {
+                name: profileDisplayName(profile),
+                mode: modeLabel(profile.mode),
+              })
+            "
             :value="profile.id"
           />
         </el-select>
         <span class="folder-filter-summary">{{ summarizeProfile(currentProfile) }}</span>
         <div class="filter-editor-actions">
-          <el-button @click="openProfileEditor">編輯篩選</el-button>
-          <el-button v-if="!currentProfile.builtin" @click="deleteCurrentProfile">刪除</el-button>
+          <el-button @click="openProfileEditor">{{ t("files.filter.edit") }}</el-button>
+          <el-button v-if="!currentProfile.builtin" @click="deleteCurrentProfile">{{
+            t("common.delete")
+          }}</el-button>
         </div>
       </div>
       <div class="path-summary">
         <span>{{ pathSummary }}</span>
         <div class="path-summary-actions">
-          <el-button :loading="busy" :disabled="busy" @click="createPlan">建立預覽</el-button>
-          <el-button v-if="busy || previewBusy" @click="cancelPlan">停止作業</el-button>
+          <el-button :loading="busy" :disabled="busy" @click="createPlan">{{
+            t("files.createPreview")
+          }}</el-button>
+          <el-button v-if="busy || previewBusy" @click="cancelPlan">{{
+            t("files.stopJob")
+          }}</el-button>
         </div>
       </div>
       <div v-if="outputDirectory" class="path-summary">
-        <span>輸出目錄：{{ outputDirectory }}</span>
+        <span>{{ t("files.outputDirectory", { path: outputDirectory }) }}</span>
         <div class="path-summary-actions">
-          <el-button @click="outputDirectory = undefined">使用原目錄</el-button>
+          <el-button @click="outputDirectory = undefined">{{
+            t("files.useSourceDirectory")
+          }}</el-button>
         </div>
       </div>
       <el-progress
@@ -879,14 +904,16 @@ watch(
     </el-card>
     <section v-if="plan" class="file-plan-panel">
       <header class="file-plan-panel-header">
-        <span>變更預覽（{{ plan.items.length }}）</span>
+        <span>{{ t("files.planTitle", { count: plan.items.length }) }}</span>
         <div class="file-plan-panel-actions">
-          <el-button @click="setAllSelected(true)">全選</el-button>
-          <el-button @click="setAllSelected(false)">取消全選</el-button>
-          <el-button @click="cancelPlan">{{ busy ? "停止作業" : "取消計畫" }}</el-button
-          ><el-button type="primary" :loading="busy" :disabled="busy" @click="applyPlan"
-            >確認執行</el-button
-          >
+          <el-button @click="setAllSelected(true)">{{ t("files.selectAll") }}</el-button>
+          <el-button @click="setAllSelected(false)">{{ t("files.selectNone") }}</el-button>
+          <el-button @click="cancelPlan">{{
+            busy ? t("files.stopJob") : t("files.cancelPlan")
+          }}</el-button
+          ><el-button type="primary" :loading="busy" :disabled="busy" @click="applyPlan">{{
+            t("files.applyPlan")
+          }}</el-button>
         </div>
       </header>
       <el-alert
@@ -922,19 +949,19 @@ watch(
           <el-splitter-panel v-model:size="previewPaneSize" :min="260">
             <aside class="file-plan-preview">
               <div class="file-plan-preview-header">
-                <strong>檔案預覽</strong>
+                <strong>{{ t("files.preview.title") }}</strong>
                 <div class="file-plan-preview-header-actions">
-                  <small v-if="previewBusy">載入中…</small>
+                  <small v-if="previewBusy">{{ t("files.preview.loading") }}</small>
                   <el-button
                     size="small"
                     :disabled="!canOpenFullscreenPreview"
                     @click="openFullscreenPreview"
                   >
-                    全視窗預覽
+                    {{ t("files.preview.fullscreen") }}
                   </el-button>
                 </div>
               </div>
-              <el-empty v-if="!currentItem" description="選取左側檔案以載入預覽" />
+              <el-empty v-if="!currentItem" :description="t('files.preview.selectItem')" />
               <template v-else>
                 <div v-if="previewMeta.length" class="file-plan-preview-meta">
                   <div v-for="entry in previewMeta" :key="entry.label">
@@ -944,13 +971,13 @@ watch(
                 </div>
                 <el-empty
                   v-if="!previewBusy && !currentItem.previewLoaded && options.mode !== 'filename'"
-                  description="正在準備內容預覽…"
+                  :description="t('files.preview.preparing')"
                 />
                 <p
                   v-else-if="previewSections.length && !previewDiffReady"
                   class="file-plan-preview-pending"
                 >
-                  正在繪製差異…
+                  {{ t("files.preview.rendering") }}
                 </p>
                 <div
                   v-for="section in previewDiffReady ? previewSections : []"
@@ -971,10 +998,9 @@ watch(
                     currentItem.previewLoaded &&
                     previewDiffReady &&
                     !previewSections.length &&
-                    !previewBusy &&
-                    !activeSection
+                    !previewBusy
                   "
-                  description="沒有可顯示的差異內容"
+                  :description="t('files.preview.empty')"
                 />
               </template>
             </aside>
@@ -1002,7 +1028,7 @@ watch(
     />
     <PreviewDiffDialog
       v-model="previewFullscreenVisible"
-      title="檔案差異預覽"
+      :title="t('files.preview.dialogTitle')"
       :meta="previewMeta"
       :sections="previewSections"
       fullscreen

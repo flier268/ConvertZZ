@@ -3,9 +3,11 @@ import { onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openFile } from "@tauri-apps/plugin-dialog";
 import { ElMessage } from "element-plus";
+import { t } from "@/i18n";
 import {
   importStepNextLabel,
   ONBOARDING_STEPS,
+  onboardingStepTitle,
   pageForOnboardingStep,
   type OnboardingPage,
 } from "./lib/onboarding";
@@ -75,7 +77,7 @@ async function importFrom(path: string): Promise<void> {
     if (!imported) return;
     await applyDesktopSettings(imported);
     settingsImported.value = true;
-    importResult.value = "已讀取舊設定，並另存為 2.0 設定。";
+    importResult.value = t("app.onboarding.importSuccess");
     ElMessage.success(importResult.value);
   } catch (error) {
     importError.value = importFailureMessage(error);
@@ -92,7 +94,7 @@ async function importDetected(): Promise<void> {
 async function importPicked(): Promise<void> {
   const path = await openFile({
     multiple: false,
-    filters: [{ name: "ConvertZZ 舊版設定", extensions: ["json"] }],
+    filters: [{ name: t("app.onboarding.legacyFilterName"), extensions: ["json"] }],
   });
   if (path) await importFrom(path as string);
 }
@@ -123,39 +125,39 @@ onMounted(async () => {
     <el-tour-step
       v-for="step in ONBOARDING_STEPS"
       :key="step.id"
-      :title="step.title"
+      :title="onboardingStepTitle(step.id)"
       :target="targets[step.id]"
       :next-button-props="
         step.id === 'import' ? { children: importStepNextLabel(settingsImported) } : undefined
       "
     >
       <template v-if="step.id === 'welcome'">
-        <p>這是跨平台的中文轉換工具。接下來會帶你看主要畫面、浮動球，以及是否要匯入舊版設定。</p>
+        <p>{{ t("app.onboarding.welcome") }}</p>
       </template>
       <template v-else-if="step.id === 'quick'">
-        <p>在這裡貼上文字，選擇簡轉繁或繁轉簡，就能立即轉換。</p>
+        <p>{{ t("app.onboarding.quick") }}</p>
       </template>
       <template v-else-if="step.id === 'files'">
-        <p>批次轉換檔案內容或檔名。執行前會先顯示預覽，確認後才寫入。</p>
+        <p>{{ t("app.onboarding.files") }}</p>
       </template>
       <template v-else-if="step.id === 'clipboard'">
-        <p>監看或讀取剪貼簿文字，轉換後可寫回剪貼簿。</p>
+        <p>{{ t("app.onboarding.clipboard") }}</p>
       </template>
       <template v-else-if="step.id === 'audio'">
-        <p>轉換 MP3、APE、OGG 與 Opus 的文字標籤。未選欄位與封面不會被改動。</p>
+        <p>{{ t("app.onboarding.audio") }}</p>
       </template>
       <template v-else-if="step.id === 'tools'">
-        <p>HTML 實體、全半形與 Unicode 跳脫等舊版文字工具都在這裡。</p>
+        <p>{{ t("app.onboarding.tools") }}</p>
       </template>
       <template v-else-if="step.id === 'desktop'">
-        <p>
-          程式預設留在托盤與浮動球。右鍵浮動球可開啟與舊版相同的轉換選單。托盤也可隨時打開主視窗。
-        </p>
+        <p>{{ t("app.onboarding.desktop") }}</p>
       </template>
       <template v-else-if="step.id === 'import'">
-        <p>若你有 1.x 的 ConvertZZ.json，可讀取後另存為 2.0 設定。來源檔不會被修改。</p>
-        <p v-if="legacyPath" class="onboarding-path">已找到：{{ legacyPath }}</p>
-        <p v-else>也可以稍後自行選擇檔案。</p>
+        <p>{{ t("app.onboarding.import") }}</p>
+        <p v-if="legacyPath" class="onboarding-path">
+          {{ t("app.onboarding.foundPath", { path: legacyPath }) }}
+        </p>
+        <p v-else>{{ t("app.onboarding.pickLater") }}</p>
         <el-alert
           v-if="importError"
           class="onboarding-import-error"
@@ -166,14 +168,20 @@ onMounted(async () => {
         />
         <p v-if="importResult" class="onboarding-result">{{ importResult }}</p>
         <div class="onboarding-import-actions">
-          <el-button v-if="legacyPath" type="primary" :loading="importing" @click="importDetected"
-            >匯入找到的設定</el-button
+          <el-button
+            v-if="legacyPath"
+            type="primary"
+            :loading="importing"
+            @click="importDetected"
+            >{{ t("app.onboarding.importFound") }}</el-button
           >
-          <el-button :loading="importing" @click="importPicked">選擇檔案</el-button>
+          <el-button :loading="importing" @click="importPicked">{{
+            t("app.onboarding.pickFile")
+          }}</el-button>
         </div>
       </template>
       <template v-else>
-        <p>可在這裡調整預設引擎與啟動時是否顯示主視窗。全域快捷鍵與浮動球動作在對應分頁。</p>
+        <p>{{ t("app.onboarding.settings") }}</p>
       </template>
     </el-tour-step>
   </el-tour>

@@ -1,1 +1,47 @@
-export default {};
+export default {
+  tagline: "跨平台中文轉換",
+  nav: {
+    quick: "快速轉換",
+    files: "檔案與檔名",
+    clipboard: "剪貼簿",
+    audio: "音訊標籤",
+    tools: "文字工具",
+    dictionary: "使用者詞典",
+    settings: "設定",
+    about: "關於與差異",
+  },
+  coreVersion: "核心 {version} · Rust",
+  coreStarting: "核心啟動中",
+  startupErrorTitle: "ConvertZZ 無法啟動",
+  loadingCore: "正在載入轉換核心",
+  startupFailed: "啟動失敗於 {step}：{detail}",
+  logFile: "記錄檔：{path}",
+  filenamePreviewQueued: "已同時建立檔名轉換預覽，可至「檔案與檔名」查看。",
+  legacyDictionaryNotice: {
+    title: "舊版字典已改為使用者詞典",
+    message:
+      "2.0 移除了以 Dictionary.csv 全文直接取代的舊版字典引擎。若曾自訂詞彙，請到「使用者詞典」頁匯入。點此前往。",
+  },
+  onboarding: {
+    importSuccess: "已讀取舊設定，並另存為 2.0 設定。",
+    legacyFilterName: "ConvertZZ 舊版設定",
+    welcome: "這是跨平台的中文轉換工具。接下來會帶你看主要畫面、浮動球，以及是否要匯入舊版設定。",
+    quick: "在這裡貼上文字，選擇簡轉繁或繁轉簡，就能立即轉換。",
+    files: "批次轉換檔案內容或檔名。執行前會先顯示預覽，確認後才寫入。",
+    clipboard: "監看或讀取剪貼簿文字，轉換後可寫回剪貼簿。",
+    audio: "轉換 MP3、APE、OGG 與 Opus 的文字標籤。未選欄位與封面不會被改動。",
+    tools: "HTML 實體、全半形與 Unicode 跳脫等舊版文字工具都在這裡。",
+    desktop:
+      "程式預設留在托盤與浮動球。右鍵浮動球可開啟與舊版相同的轉換選單。托盤也可隨時打開主視窗。",
+    import: "若你有 1.x 的 ConvertZZ.json，可讀取後另存為 2.0 設定。來源檔不會被修改。",
+    foundPath: "已找到：{path}",
+    pickLater: "也可以稍後自行選擇檔案。",
+    importFound: "匯入找到的設定",
+    pickFile: "選擇檔案",
+    settings: "可在這裡調整預設引擎與啟動時是否顯示主視窗。全域快捷鍵與浮動球動作在對應分頁。",
+  },
+  floatingBall: {
+    title: "拖入檔案轉換 · 拖曳移動 · 右鍵開啟選單 · 輔助鍵加點擊執行設定動作",
+    ariaLabel: "ConvertZZ 浮動球",
+  },
+};

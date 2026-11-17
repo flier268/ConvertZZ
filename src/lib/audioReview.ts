@@ -6,6 +6,7 @@ import type {
   TagOnConflict,
   TagOperation,
 } from "@shared/contracts";
+import { t } from "@/i18n";
 
 export type AudioListFilter = "changed" | "unchanged" | "errors" | "warnings" | "all";
 
@@ -268,9 +269,9 @@ export function fileHasTextLoss(file: AudioTagFile): boolean {
 
 export function fieldOriginLabel(origin: string | undefined): string {
   if (!origin) return "";
-  if (origin === "convert") return "轉換";
+  if (origin === "convert") return t("audio.detail.originConvert");
   const rule = /^rule (\d+)$/.exec(origin);
-  if (rule) return `規則 ${rule[1]}`;
+  if (rule) return t("audio.detail.originRule", { index: rule[1] });
   return origin;
 }
 
@@ -364,8 +365,8 @@ export function matchesAudioQuery(file: AudioTagFile, query: string): boolean {
   if (!needle) return true;
   const haystack = [
     audioBaseName(file.path),
-    fieldBlob(file, TITLE_KEYS, "標題"),
-    fieldBlob(file, ALBUM_KEYS, "專輯"),
+    fieldBlob(file, TITLE_KEYS, t("audio.tagField.title")),
+    fieldBlob(file, ALBUM_KEYS, t("audio.tagField.album")),
   ]
     .join("\n")
     .toLowerCase();
@@ -616,12 +617,14 @@ export function clearWarningSelection(files: readonly AudioTagFile[]): void {
   }
 }
 
-export const AUDIO_TAG_READ_ERROR = "無法讀取標籤";
+export function audioTagReadError(): string {
+  return t("audio.detail.tagReadError");
+}
 
 /** 與標題相同的原因不重複顯示。 */
 export function audioWarningDetail(warning: string | undefined): string | undefined {
   const text = warning?.trim();
-  if (!text || text === AUDIO_TAG_READ_ERROR) return undefined;
+  if (!text || text === audioTagReadError()) return undefined;
   return text;
 }
 
@@ -743,15 +746,20 @@ export function charDiff(
   return { before: mergePieces(oldPieces), after: mergePieces(newPieces) };
 }
 
-export const TAG_RULE_FIELDS: ReadonlyArray<readonly [string, string]> = [
-  ["title", "標題"],
-  ["artist", "演出者"],
-  ["album", "專輯"],
-  ["year", "年份"],
-  ["track", "音軌"],
-  ["comment", "註解"],
-  ["genre", "類型"],
-];
+export const TAG_RULE_FIELD_KEYS = [
+  "title",
+  "artist",
+  "album",
+  "year",
+  "track",
+  "comment",
+  "genre",
+] as const;
+
+/** 規則欄位與目前語系的標籤。 */
+export function tagRuleFields(): ReadonlyArray<readonly [string, string]> {
+  return TAG_RULE_FIELD_KEYS.map((key) => [key, t(`audio.tagField.${key}`)] as const);
+}
 
 export interface TagRule {
   id: string;
@@ -773,14 +781,10 @@ export function createTagRule(partial: Partial<TagRule> & Pick<TagRule, "action"
     action: partial.action,
     source: partial.source ?? "id3v2",
     target: partial.target ?? "id3v1",
-    fields: partial.fields ?? TAG_RULE_FIELDS.map(([key]) => key),
+    fields: partial.fields ?? [...TAG_RULE_FIELD_KEYS],
     onConflict: partial.onConflict ?? (partial.action === "merge" ? "fillEmpty" : "overwrite"),
   };
 }
-
-/** 有的播放器偏好 APEv2，移除後畫面上的標題可能改變。 */
-export const CLEANUP_APE_NOTE =
-  "移除 MP3 上多餘的 APEv2。有的播放器偏好 APEv2，移除後顯示的標題可能會改變。檔案只剩這一個標籤時不會刪。";
 
 export function cleanupApeRule(): TagRule {
   return createTagRule({ action: "remove", source: "apev2", target: "apev2" });
@@ -789,9 +793,11 @@ export function cleanupApeRule(): TagRule {
 export function tagRuleSummary(rule: TagRule): string {
   const source = containerName(rule.source);
   const target = containerName(rule.target);
-  if (rule.action === "remove") return `移除 ${source}（MP3 才執行）`;
-  const how = rule.onConflict === "fillEmpty" ? "只補空白欄位" : "覆蓋目標";
-  return `以 ${source} 為主合併到 ${target}（${how}）`;
+  if (rule.action === "remove") return t("audio.rules.summaryRemove", { source });
+  const how = t(
+    rule.onConflict === "fillEmpty" ? "audio.rules.howFillEmpty" : "audio.rules.howOverwrite",
+  );
+  return t("audio.rules.summaryMerge", { source, target, how });
 }
 
 export function toTagOperations(rules: readonly TagRule[]): TagOperation[] {

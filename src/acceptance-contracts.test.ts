@@ -1,17 +1,17 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { collectMenuActionIds, FLOATING_CONTEXT_MENU } from "./lib/appMenu";
+import { collectMenuActionIds, floatingContextMenu } from "./lib/appMenu";
 
 function readProjectFile(path: string): string {
   return readFileSync(fileURLToPath(new URL(`../${path}`, import.meta.url)), "utf8");
 }
 
 function trayMenuIds(rust: string): string[] {
-  const start = rust.indexOf("fn install_tray");
-  const end = rust.indexOf("fn hide_startup_windows", start);
+  const start = rust.indexOf("fn build_tray_menu");
+  const end = rust.indexOf("fn install_tray", start);
   const body = rust.slice(start, end);
-  return [...body.matchAll(/\.text\("([^"]+)"/g)].map((match) => match[1]!);
+  return [...body.matchAll(/\.text\(\s*"([^"]+)"/g)].map((match) => match[1]!);
 }
 
 describe("驗收項目的自動化契約", () => {
@@ -19,11 +19,18 @@ describe("驗收項目的自動化契約", () => {
     const settings = readProjectFile("src/lib/settings.ts");
     const tour = readProjectFile("src/OnboardingTour.vue");
     const page = readProjectFile("src/pages/SettingsPage.vue");
-    expect(settings).toContain("匯入會取代目前的 2.0 設定。是否繼續？");
-    expect(settings).toContain('title: "確認匯入"');
+    const libMessages = readProjectFile("src/i18n/zh-TW/lib.ts");
+    const appMessages = readProjectFile("src/i18n/zh-TW/app.ts");
+    expect(settings).toContain('t("lib.settings.importConfirm.message")');
+    expect(libMessages).toContain("匯入會取代目前的 2.0 設定。是否繼續？");
+    expect(libMessages).toContain('title: "確認匯入"');
     expect(tour).toContain("importLegacySettings");
-    expect(tour).toContain("匯入找到的設定");
-    expect(page).toContain("匯入 ConvertZZ.json");
+    expect(tour).toContain('t("app.onboarding.importFound")');
+    expect(appMessages).toContain("匯入找到的設定");
+    expect(page).toContain('t("settings.importLegacy")');
+    expect(readProjectFile("src/i18n/zh-TW/settings.ts")).toContain(
+      'importLegacy: "匯入 ConvertZZ.json"',
+    );
     expect(page).toContain("importLegacySettings");
   });
 
@@ -31,7 +38,8 @@ describe("驗收項目的自動化契約", () => {
     const tour = readProjectFile("src/OnboardingTour.vue");
     const settings = readProjectFile("src/lib/settings.ts");
     const page = readProjectFile("src/pages/SettingsPage.vue");
-    expect(tour).toContain("來源檔不會被修改");
+    expect(tour).toContain('t("app.onboarding.import")');
+    expect(readProjectFile("src/i18n/zh-TW/app.ts")).toContain("來源檔不會被修改");
     expect(tour).toContain("onboarding-import-error");
     expect(tour).toContain("importFailureMessage");
     expect(page).toContain("importFailureMessage");
@@ -43,13 +51,17 @@ describe("驗收項目的自動化契約", () => {
 
   it("使用者詞典儲存前會詢問，匯入只經預覽且舊版先警告，清單使用虛擬捲動", () => {
     const page = readProjectFile("src/pages/DictionaryPage.vue");
-    expect(page).toContain("重新載入轉換引擎");
-    expect(page).toContain('title: "確認儲存使用者詞典"');
+    const messages = readProjectFile("src/i18n/zh-TW/dictionary.ts");
+    expect(messages).toContain("重新載入轉換引擎");
+    expect(messages).toContain('confirmTitle: "確認儲存使用者詞典"');
+    expect(page).toContain('title: t("dictionary.save.confirmTitle")');
     expect(page).toContain("userDictionary.save");
     expect(page).toContain("userDictionary.previewImport");
     expect(page).toContain("userDictionary.export");
-    expect(page).toContain('title: "不建議直接匯入舊版字典"');
-    expect(page).toContain('title: "確認刪除詞條"');
+    expect(messages).toContain('legacyTitle: "不建議直接匯入舊版字典"');
+    expect(page).toContain('title: t("dictionary.importDialog.legacyTitle")');
+    expect(messages).toContain('title: "確認刪除詞條"');
+    expect(page).toContain('title: t("dictionary.removal.title")');
     expect(page).toContain("el-table-v2");
     expect(page).not.toContain("dictionary.update");
     expect(page).not.toContain("Dictionary.csv");
@@ -69,7 +81,8 @@ describe("驗收項目的自動化契約", () => {
 
   it("預覽上限以字元計，畫面單位為千字", () => {
     const settings = readProjectFile("src/pages/SettingsPage.vue");
-    expect(settings).toContain(">千字</span");
+    expect(settings).toContain('{{ t("settings.general.previewUnit") }}</span');
+    expect(readProjectFile("src/i18n/zh-TW/settings.ts")).toContain('previewUnit: "千字"');
     expect(settings).not.toContain(">KB</span");
   });
 
@@ -78,10 +91,12 @@ describe("驗收項目的自動化契約", () => {
     const contracts = readProjectFile("shared/contracts.ts");
     const diffView = readProjectFile("src/components/SideBySideDiffView.vue");
     const fileDiff = readProjectFile("src/lib/fileDiff.ts");
-    expect(page).toContain('title: "來源"');
-    expect(page).toContain('title: "輸出"');
-    expect(page).toContain('title: "編碼"');
-    expect(page).toContain('label="轉換檔名"');
+    const filesMessages = readProjectFile("src/i18n/zh-TW/files.ts");
+    expect(page).toContain('title: t("files.column.source")');
+    expect(page).toContain('title: t("files.column.output")');
+    expect(page).toContain('title: t("files.column.encoding")');
+    expect(page).toContain(":label=\"t('files.mode.filename')\"");
+    expect(filesMessages).toContain('filename: "轉換檔名"');
     expect(page).toContain("files.preview");
     expect(page).toContain("loadItemPreview");
     expect(page).toContain("file-plan-layout");
@@ -93,7 +108,8 @@ describe("驗收項目的自動化契約", () => {
     expect(page).toContain("el-auto-resizer");
     expect(page).toContain("SideBySideDiffView");
     expect(page).toContain("PreviewDiffDialog");
-    expect(page).toContain("全視窗預覽");
+    expect(page).toContain('t("files.preview.fullscreen")');
+    expect(filesMessages).toContain('fullscreen: "全視窗預覽"');
     expect(page).toContain("openFullscreenPreview");
     expect(page).toContain("enable-nav");
     expect(page).toContain("fullscreen");
@@ -111,11 +127,15 @@ describe("驗收項目的自動化契約", () => {
     expect(diffView).toContain("buildPagedSideBySideDiff");
     expect(diffView).toContain("sideBySideToHtml");
     expect(diffView).toContain("v-html");
-    expect(diffView).toContain("上一個差異");
-    expect(diffView).toContain("下一個差異");
+    expect(diffView).toContain('t("components.diffView.previousChange")');
+    expect(diffView).toContain('t("components.diffView.nextChange")');
+    expect(readProjectFile("src/i18n/zh-TW/components.ts")).toContain(
+      'previousChange: "上一個差異"',
+    );
     expect(diffView).toContain("goToChange");
-    expect(fileDiff).toContain('title: "檔名"');
-    expect(fileDiff).toContain('title: "內容"');
+    expect(fileDiff).toContain('title: t("lib.fileDiff.filename.title")');
+    expect(fileDiff).toContain('title: t("lib.fileDiff.content.title")');
+    expect(readProjectFile("src/i18n/zh-TW/lib.ts")).toContain('filename: { title: "檔名"');
   });
 
   it("檔案頁與長作業進度會隨視窗寬度換行且不蓋住進度條", () => {
@@ -155,7 +175,8 @@ describe("驗收項目的自動化契約", () => {
     const page = readProjectFile("src/pages/QuickPage.vue");
     const diffView = readProjectFile("src/components/SideBySideDiffView.vue");
     expect(page).toContain("SideBySideDiffView");
-    expect(page).toContain("轉換差異");
+    expect(page).toContain('t("quick.diffTitle")');
+    expect(readProjectFile("src/i18n/zh-TW/quick.ts")).toContain('diffTitle: "轉換差異"');
     expect(page).toContain("v-model:source");
     expect(page).toContain("editable");
     expect(page).not.toContain("viewMode");
@@ -165,12 +186,16 @@ describe("驗收項目的自動化契約", () => {
 
   it("剪貼簿轉換固定並排差異檢視", () => {
     const page = readProjectFile("src/pages/ClipboardPage.vue");
+    const messages = readProjectFile("src/i18n/zh-TW/clipboard.ts");
     expect(page).toContain("SideBySideDiffView");
-    expect(page).toContain("轉換差異");
+    expect(page).toContain('t("clipboard.diffTitle")');
+    expect(messages).toContain('diffTitle: "轉換差異"');
     expect(page).toContain("v-model:source");
     expect(page).toContain("editable");
-    expect(page).toContain('source-label="剪貼簿文字"');
-    expect(page).toContain('output-label="轉換預覽"');
+    expect(page).toContain(":source-label=\"t('clipboard.sourceLabel')\"");
+    expect(page).toContain(":output-label=\"t('clipboard.outputLabel')\"");
+    expect(messages).toContain('sourceLabel: "剪貼簿文字"');
+    expect(messages).toContain('outputLabel: "轉換預覽"');
     expect(page).not.toContain("editor-grid");
   });
 
@@ -186,8 +211,9 @@ describe("驗收項目的自動化契約", () => {
     expect(page).not.toContain("detailView");
     expect(styles).not.toContain("audio-column-table");
     expect(styles).not.toContain("audio-column-menu");
-    expect(page).toContain('label="合併"');
-    expect(page).toContain('label="移除"');
+    expect(page).toContain(':label="t(\'audio.rules.merge\')" value="merge"');
+    expect(page).toContain(':label="t(\'audio.rules.remove\')" value="remove"');
+    expect(readProjectFile("src/i18n/zh-TW/audio.ts")).toContain('merge: "合併"');
     expect(readProjectFile("shared/contracts.ts")).toContain(
       'export type TagAction = "remove" | "merge"',
     );
@@ -200,41 +226,59 @@ describe("驗收項目的自動化契約", () => {
   it("音訊標籤預覽可檢視欄位差異", () => {
     const page = readProjectFile("src/pages/AudioPage.vue");
     expect(page).toContain("buildFieldDiffs");
-    expect(page).toContain('label="轉換預覽"');
+    expect(page).toContain(":label=\"t('audio.detail.columnPreview')\"");
     expect(page).toContain("diff-del");
     expect(page).toContain("fieldDiffs");
-    expect(page).toContain("隱藏不變欄位");
+    expect(page).toContain('t("audio.detail.hideUnchanged")');
+    expect(readProjectFile("src/i18n/zh-TW/audio.ts")).toContain('hideUnchanged: "隱藏不變欄位"');
   });
 
   it("E-05 覆寫需要額外確認", () => {
     const page = readProjectFile("src/pages/FilesPage.vue");
     expect(page).toContain('plannedConflictPolicy.value === "overwrite"');
-    expect(page).toContain("覆寫會取代既有的同名檔案與 .bak 備份。是否確定繼續？");
-    expect(page).toContain('title: "確認覆寫"');
-    expect(page).toContain('label="略過"');
+    expect(page).toContain('confirm(t("files.message.overwriteConfirm")');
+    expect(page).toContain('title: t("files.message.overwriteTitle")');
+    expect(page).toContain(':label="t(\'files.conflict.skip\')" value="skip"');
+    expect(readProjectFile("src/i18n/zh-TW/files.ts")).toContain(
+      'overwriteConfirm: "覆寫會取代既有的同名檔案與 .bak 備份。是否確定繼續？"',
+    );
   });
 
   it("音訊備份與改名衝突預設略過，覆寫需額外確認", () => {
     const page = readProjectFile("src/pages/AudioPage.vue");
     expect(page).toContain('ref<AudioTagPlanRequest["conflictPolicy"]>("skip")');
-    expect(page).toContain("'備份與檔名衝突' : '備份衝突'");
+    expect(page).toContain("t('audio.options.backupAndFilenameConflict')");
+    expect(page).toContain("t('audio.options.backupConflict')");
     expect(page).toContain(':disabled="!backup && !options.convertFilename"');
-    expect(page).toContain('label="略過"');
+    expect(page).toContain(':label="t(\'audio.options.skip\')" value="skip"');
     expect(page).toContain('value="overwrite"');
     expect(page).toContain('conflictPolicy.value === "overwrite"');
-    expect(page).toContain('backup.value ? "既有的 .bak 備份"');
-    expect(page).toContain('options.convertFilename ? "改名後撞名的既有檔案"');
-    expect(page).toContain('覆寫會取代${overwritten.join("與")}。是否確定繼續？');
-    expect(page).toContain('title: "確認覆寫"');
+    const audioMessages = readProjectFile("src/i18n/zh-TW/audio.ts");
+    expect(page).toContain('backup.value ? t("audio.messages.existingBackup")');
+    expect(page).toContain('options.convertFilename ? t("audio.messages.renamedConflict")');
+    expect(page).toContain('t("audio.messages.confirmOverwrite"');
+    expect(page).toContain('title: t("audio.messages.confirmOverwriteTitle")');
+    expect(audioMessages).toContain('confirmOverwrite: "覆寫會取代{targets}。是否確定繼續？"');
+    expect(audioMessages).toContain('confirmOverwriteTitle: "確認覆寫"');
   });
 
   it("F-07 ID3 編碼與 APE／Vorbis 方向分開，尚未選 MP3 也可改 ID3", () => {
     const page = readProjectFile("src/pages/AudioPage.vue");
-    expect(page).toContain("MP3／ID3v1");
-    expect(page).toContain("MP3／ID3v2");
-    expect(page).toContain("ID3v2 版本");
-    expect(page).toContain("ID3v2 編碼");
-    expect(page).toContain("APEv2／Vorbis 方向");
+    const audioMessages = readProjectFile("src/i18n/zh-TW/audio.ts");
+    for (const key of [
+      "id3v1Direction",
+      "id3v2Direction",
+      "id3v2Version",
+      "id3v2Encoding",
+      "apeVorbisDirection",
+    ]) {
+      expect(page).toContain(`:label="t('audio.options.${key}')"`);
+    }
+    expect(audioMessages).toContain('id3v1Direction: "MP3／ID3v1 方向"');
+    expect(audioMessages).toContain('id3v2Direction: "MP3／ID3v2 方向"');
+    expect(audioMessages).toContain('id3v2Version: "ID3v2 版本"');
+    expect(audioMessages).toContain('id3v2Encoding: "ID3v2 編碼"');
+    expect(audioMessages).toContain('apeVorbisDirection: "APEv2／Vorbis 方向"');
     expect(page).not.toContain('v-if="hasMp3"');
   });
 
@@ -298,7 +342,7 @@ describe("驗收項目的自動化契約", () => {
     expect(rust).toContain("show_menu_on_left_click(false)");
     expect(rust).toContain("MouseButton::Left");
     expect(rust).toContain("show_main(tray.app_handle())");
-    expect(rust).toContain('.text("show", "開啟 ConvertZZ")');
+    expect(rust).toContain('.text("show", tr_static!("開啟 ConvertZZ", "Open ConvertZZ"))');
     expect(rust).toContain('"show" => show_main(app)');
     expect(rust).toContain(".menu(&menu)");
   });
@@ -329,7 +373,7 @@ describe("驗收項目的自動化契約", () => {
     const app = readProjectFile("src/App.vue");
     const floating = readProjectFile("src/FloatingBall.vue");
     const rust = readProjectFile("src-tauri/src/lib.rs");
-    const menuIds = collectMenuActionIds(FLOATING_CONTEXT_MENU);
+    const menuIds = collectMenuActionIds(floatingContextMenu());
     const trayIds = trayMenuIds(rust).filter((id) => id !== "show");
     expect(desktop).toContain("executeLegacyAction(shortcut.action, settings");
     expect(app).toContain('listen<string>("app://legacy-action"');
@@ -370,8 +414,11 @@ describe("驗收項目的自動化契約", () => {
     expect(update).toContain("/git/ref/tags/");
     expect(update).toContain("PRE_RELEASE_CHANNEL_TAGS");
     expect(update).toContain("簽署更新通道不可用時改走 GitHub Release");
-    expect(appUpdate).toContain("是否下載並安裝");
-    expect(appUpdate).toContain("此安裝方式無法自動更新");
+    const libMessages = readProjectFile("src/i18n/zh-TW/lib.ts");
+    expect(appUpdate).toContain('t("lib.appUpdate.installPrompt"');
+    expect(appUpdate).toContain('t("lib.appUpdate.downloadPrompt"');
+    expect(libMessages).toContain("是否下載並安裝");
+    expect(libMessages).toContain("此安裝方式無法自動更新");
     expect(appUpdate).toContain("downloadAndInstall");
     expect(appUpdate).toContain("openUrl(resolved.url)");
     expect(appUpdate).toContain("includePreRelease");
@@ -380,8 +427,12 @@ describe("驗收項目的自動化契約", () => {
     expect(update).toContain('"rc"');
     expect(contracts).toContain("checkPreReleaseUpdates");
     expect(settings).toContain("checkPreReleaseUpdates");
-    expect(settings).toContain("檢查開發／預發佈版本");
-    expect(settings).toContain("目前執行的不是正式版時");
+    expect(settings).toContain('t("settings.general.checkPreRelease")');
+    expect(settings).toContain("t('settings.general.checkPreReleaseTip')");
+    expect(readProjectFile("src/i18n/zh-TW/settings.ts")).toContain(
+      'checkPreRelease: "檢查開發／預發佈版本"',
+    );
+    expect(readProjectFile("src/i18n/zh-TW/settings.ts")).toContain("目前執行的不是正式版時");
     expect(readProjectFile("src/lib/settingsMigrate.ts")).toContain(
       "defaultCheckPreReleaseUpdates",
     );
@@ -435,9 +486,13 @@ describe("驗收項目的自動化契約", () => {
     expect(app).toContain('listen<FileDropPayload>("app://file-drop"');
     expect(app).toContain("setCliInvocation(parsed)");
     expect(app).toContain("current.lastDropAction = { ...choice }");
-    expect(dialog).toContain("選擇轉換動作");
-    expect(dialog).toContain("檔案與檔名轉換");
-    expect(dialog).toContain("音訊標籤");
+    expect(dialog).toContain("t('components.dropAction.title')");
+    expect(dialog).toContain('t("components.dropAction.file")');
+    expect(dialog).toContain('t("components.dropAction.audio")');
+    const componentMessages = readProjectFile("src/i18n/zh-TW/components.ts");
+    expect(componentMessages).toContain('title: "選擇轉換動作"');
+    expect(componentMessages).toContain('file: "檔案與檔名轉換"');
+    expect(componentMessages).toContain('audio: "音訊標籤"');
     expect(dialog).toContain("lastChoice");
     expect(contracts).toContain("lastDropAction");
     expect(files).toContain('invocation?.options.mode !== "file"');
@@ -449,7 +504,7 @@ describe("驗收項目的自動化契約", () => {
     const settings = readProjectFile("src/pages/SettingsPage.vue");
     expect(rust).toContain("send_to_shortcut: true");
     expect(rust).toContain("send_to_shortcut: false");
-    expect(rust).toContain('Err("SendTo 只支援 Windows。".into())');
+    expect(rust).toMatch(/Err\(tr_static!\(\s*"SendTo 只支援 Windows。",/);
     expect(rust).toContain("GetFolderPath('SendTo')");
     expect(settings).toContain("capabilities?.sendToShortcut");
     expect(settings).toContain("set_send_to_shortcut");
@@ -489,7 +544,8 @@ describe("驗收項目的自動化契約", () => {
   });
 
   it("I-04／I-05／I-08 關於頁差異表與能力旗標一致", () => {
-    const about = readProjectFile("src/pages/AboutPage.vue");
+    const about =
+      readProjectFile("src/pages/AboutPage.vue") + readProjectFile("src/i18n/zh-TW/about.ts");
     const rust = readProjectFile("src-tauri/src/lib.rs");
     expect(about).toContain("本版停用");
     expect(about).toContain("依合成器");

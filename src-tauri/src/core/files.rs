@@ -2869,7 +2869,7 @@ fn rollback_directories(transaction: &[DirectoryTransactionEntry]) {
     }
 }
 
-fn transaction_path(path: &Path, kind: &str) -> PathBuf {
+pub(crate) fn transaction_path(path: &Path, kind: &str) -> PathBuf {
     path.with_file_name(format!(
         ".convertzz-{kind}-{}{}",
         Uuid::new_v4(),

@@ -191,15 +191,18 @@ describe("驗收項目的自動化契約", () => {
     expect(page).toContain('label="略過"');
   });
 
-  it("音訊備份衝突預設略過，覆寫需額外確認", () => {
+  it("音訊備份與改名衝突預設略過，覆寫需額外確認", () => {
     const page = readProjectFile("src/pages/AudioPage.vue");
     expect(page).toContain('ref<AudioTagPlanRequest["conflictPolicy"]>("skip")');
-    expect(page).toContain('label="備份衝突"');
+    expect(page).toContain("'備份與檔名衝突' : '備份衝突'");
+    expect(page).toContain(':disabled="!backup && !options.convertFilename"');
     expect(page).toContain('label="略過"');
     expect(page).toContain('value="overwrite"');
     expect(page).toContain('conflictPolicy.value === "overwrite"');
-    expect(page).toContain("覆寫會取代既有的 .bak 備份。是否確定繼續？");
-    expect(page).toContain('title: "確認覆寫備份"');
+    expect(page).toContain('backup.value ? "既有的 .bak 備份"');
+    expect(page).toContain('options.convertFilename ? "改名後撞名的既有檔案"');
+    expect(page).toContain('覆寫會取代${overwritten.join("與")}。是否確定繼續？');
+    expect(page).toContain('title: "確認覆寫"');
   });
 
   it("F-07 ID3 編碼與 APE／Vorbis 方向分開，尚未選 MP3 也可改 ID3", () => {

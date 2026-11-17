@@ -3890,3 +3890,132 @@ fn id3v2_flush_before_ape_is_leftover_after_removal_check() {
         );
     }
 }
+
+fn rename_only_plan(paths: &[PathBuf], policy: ConflictPolicy) -> AudioTagPlanRequest {
+    let mut request = base_plan(paths);
+    request.id3v1_enabled = false;
+    request.id3v2_enabled = false;
+    request.convert_filename = true;
+    request.filename_input_encoding = Some(TextEncoding::Auto);
+    request.filename_output_encoding = Some(TextEncoding::Utf8);
+    request.conflict_policy = policy;
+    request
+}
+
+fn leftover_transaction_files(directory: &Path) -> Vec<String> {
+    std::fs::read_dir(directory)
+        .unwrap()
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with(".convertzz-"))
+        .collect()
+}
+
+#[tokio::test]
+async fn filename_conflict_is_previewed_and_skipped_without_failure() {
+    let directory = temp_dir();
+    let path = directory.join("里面.mp3");
+    let existing = directory.join("裡面.mp3");
+    let source = id3v1_only_mp3("Hello", TextEncoding::Utf8);
+    std::fs::write(&path, &source).unwrap();
+    std::fs::write(&existing, b"existing").unwrap();
+    let service = AudioService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            rename_only_plan(&[path.clone()], ConflictPolicy::Skip),
+            noop(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        plan.files[0]
+            .notices
+            .iter()
+            .any(|notice| notice.contains("已存在")),
+        "{:?}",
+        plan.files[0].notices
+    );
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert_eq!(result.skipped, vec![path.to_string_lossy().into_owned()]);
+    assert!(result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("衝突")));
+    assert_eq!(std::fs::read(&existing).unwrap(), b"existing");
+    assert_eq!(std::fs::read(&path).unwrap(), source);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn filename_conflict_overwrite_replaces_target_without_leftovers() {
+    let directory = temp_dir();
+    let path = directory.join("里面.mp3");
+    let existing = directory.join("裡面.mp3");
+    let source = id3v1_only_mp3("Hello", TextEncoding::Utf8);
+    std::fs::write(&path, &source).unwrap();
+    std::fs::write(&existing, b"existing").unwrap();
+    let service = AudioService::new();
+    let plan = service
+        .plan(
+            shared_conversion(),
+            rename_only_plan(&[path.clone()], ConflictPolicy::Overwrite),
+            noop(),
+        )
+        .await
+        .unwrap();
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert_eq!(std::fs::read(&existing).unwrap(), source);
+    assert!(!path.exists());
+    assert!(leftover_transaction_files(&directory).is_empty());
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[test]
+fn failed_overwrite_rename_restores_existing_target() {
+    let directory = temp_dir();
+    let missing_source = directory.join("里面.mp3");
+    let existing = directory.join("裡面.mp3");
+    std::fs::write(&existing, b"existing").unwrap();
+    let mut claimed = HashSet::new();
+    assert!(apply_audio_rename(
+        &missing_source,
+        &existing,
+        ConflictPolicy::Overwrite,
+        &mut claimed
+    )
+    .is_err());
+    assert_eq!(std::fs::read(&existing).unwrap(), b"existing");
+    assert!(leftover_transaction_files(&directory).is_empty());
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[test]
+fn same_batch_target_is_never_overwritten() {
+    let directory = temp_dir();
+    let first = directory.join("a.mp3");
+    let second = directory.join("b.mp3");
+    let dest = directory.join("c.mp3");
+    std::fs::write(&first, b"first").unwrap();
+    std::fs::write(&second, b"second").unwrap();
+    let mut claimed = HashSet::new();
+    assert!(matches!(
+        apply_audio_rename(&first, &dest, ConflictPolicy::Overwrite, &mut claimed),
+        Ok(RenameOutcome::Renamed)
+    ));
+    assert!(matches!(
+        apply_audio_rename(&second, &dest, ConflictPolicy::Overwrite, &mut claimed),
+        Ok(RenameOutcome::SkippedConflict(_))
+    ));
+    assert_eq!(std::fs::read(&dest).unwrap(), b"first");
+    assert_eq!(std::fs::read(&second).unwrap(), b"second");
+    let _ = std::fs::remove_dir_all(&directory);
+}

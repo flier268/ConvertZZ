@@ -709,11 +709,15 @@ async function applyPlan() {
   )
     return;
   if (busy.value || plan.value?.planId !== planId) return;
+  const overwritten = [
+    backup.value ? "既有的 .bak 備份" : "",
+    options.convertFilename ? "改名後撞名的既有檔案" : "",
+  ].filter(Boolean);
   if (
-    backup.value &&
     conflictPolicy.value === "overwrite" &&
-    !(await confirm("覆寫會取代既有的 .bak 備份。是否確定繼續？", {
-      title: "確認覆寫備份",
+    overwritten.length &&
+    !(await confirm(`覆寫會取代${overwritten.join("與")}。是否確定繼續？`, {
+      title: "確認覆寫",
       kind: "warning",
     }))
   )
@@ -744,6 +748,11 @@ async function applyPlan() {
       },
     );
     const skipped = result.skipped?.length ?? 0;
+    const warnings = result.warnings ?? [];
+    if (warnings.length)
+      ElMessage.warning(
+        warnings.length > 1 ? `${warnings[0]}（另有 ${warnings.length - 1} 則）` : warnings[0]!,
+      );
     if (result.failed.length) {
       const detail = result.failed[0]?.message ?? "";
       ElMessage.warning(
@@ -995,8 +1004,8 @@ watch(
               <el-option label="ZhConvert" value="zhconvert" />
             </el-select>
           </el-form-item>
-          <el-form-item label="備份衝突">
-            <el-select v-model="conflictPolicy" :disabled="!backup">
+          <el-form-item :label="options.convertFilename ? '備份與檔名衝突' : '備份衝突'">
+            <el-select v-model="conflictPolicy" :disabled="!backup && !options.convertFilename">
               <el-option label="略過" value="skip" />
               <el-option label="覆寫" value="overwrite" />
             </el-select>

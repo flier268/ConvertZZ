@@ -535,6 +535,7 @@ impl AudioService {
             }
         }
 
+        let mut claimed = HashSet::new();
         for file in files.into_iter() {
             if let Err(error) = self.throw_if_cancelled(plan_id) {
                 if let Ok(mut cancelled) = self.cancelled.lock() {
@@ -573,10 +574,20 @@ impl AudioService {
                 });
                 continue;
             }
-            match apply_file(&file) {
-                Ok(()) => result
-                    .succeeded
-                    .push(file.path.to_string_lossy().into_owned()),
+            match apply_file(&file, &mut claimed) {
+                Ok(outcome) => {
+                    let path = file.path.to_string_lossy().into_owned();
+                    if let RenameOutcome::SkippedConflict(dest) = &outcome.rename {
+                        result
+                            .warnings
+                            .push(format!("檔名衝突，已略過重新命名：{}", dest.display()));
+                        if !outcome.wrote_tags {
+                            result.skipped.push(path);
+                            continue;
+                        }
+                    }
+                    result.succeeded.push(path);
+                }
                 Err(error) => result.failed.push(ApplyFailure {
                     path: file.path.to_string_lossy().into_owned(),
                     message: error.message,
@@ -950,42 +961,82 @@ fn apply_id3v2_encoding(tag: &mut id3::Tag, encoding: &str, keys: &HashSet<Strin
     *tag = replacement;
 }
 
-fn apply_file(file: &PreparedAudio) -> Result<(), CoreError> {
-    let writes_tags = !file.updates.is_empty()
+#[derive(Debug)]
+enum RenameOutcome {
+    Unchanged,
+    Renamed,
+    SkippedConflict(PathBuf),
+}
+
+struct ApplyOutcome {
+    wrote_tags: bool,
+    rename: RenameOutcome,
+}
+
+/// `claimed`：這一批已改名產生的檔案。後面的檔案撞到它們一律略過，不會覆寫同批的成果。
+fn apply_file(
+    file: &PreparedAudio,
+    claimed: &mut HashSet<PathBuf>,
+) -> Result<ApplyOutcome, CoreError> {
+    let wrote_tags = !file.updates.is_empty()
         || !file.selected_containers.is_empty()
         || !file.remove_containers.is_empty();
-    if writes_tags {
+    if wrote_tags {
         if file.format == AudioFormat::Mp3 {
             apply_mp3(file)?;
         } else {
             apply_taglib(file)?;
         }
     }
-    if let Some(dest) = &file.rename_to {
-        apply_audio_rename(&file.path, dest, file.request.conflict_policy)?;
-    }
-    Ok(())
+    let rename = match &file.rename_to {
+        Some(dest) => apply_audio_rename(&file.path, dest, file.request.conflict_policy, claimed)?,
+        None => RenameOutcome::Unchanged,
+    };
+    Ok(ApplyOutcome { wrote_tags, rename })
 }
 
-fn apply_audio_rename(source: &Path, dest: &Path, policy: ConflictPolicy) -> Result<(), CoreError> {
+/// 覆寫時先把既有檔案搬到同目錄暫存名，改名成功才刪除；改名失敗就搬回原位。
+fn apply_audio_rename(
+    source: &Path,
+    dest: &Path,
+    policy: ConflictPolicy,
+    claimed: &mut HashSet<PathBuf>,
+) -> Result<RenameOutcome, CoreError> {
     if source == dest {
-        return Ok(());
+        return Ok(RenameOutcome::Unchanged);
     }
-    if dest.exists() {
-        match policy {
-            ConflictPolicy::Skip => {
-                return Err(CoreError::new(
-                    "PATH_EXISTS",
-                    format!("檔名衝突，已略過重新命名：{}", dest.display()),
-                ));
+    let claimed_by_batch = claimed.contains(dest);
+    let mut displaced = None;
+    if claimed_by_batch || audio_rename_conflicts(source, dest) {
+        if claimed_by_batch || policy == ConflictPolicy::Skip {
+            return Ok(RenameOutcome::SkippedConflict(dest.to_path_buf()));
+        }
+        let conflict = super::files::transaction_path(dest, "conflict");
+        fs::rename(dest, &conflict)?;
+        displaced = Some(conflict);
+    }
+    match fs::rename(source, dest) {
+        Ok(()) => {
+            if let Some(conflict) = displaced {
+                let _ = fs::remove_file(&conflict);
             }
-            ConflictPolicy::Overwrite => {
-                fs::remove_file(dest)?;
+            claimed.insert(dest.to_path_buf());
+            Ok(RenameOutcome::Renamed)
+        }
+        Err(error) => {
+            if let Some(conflict) = displaced {
+                if !dest.exists() {
+                    let _ = fs::rename(&conflict, dest);
+                }
             }
+            Err(error.into())
         }
     }
-    fs::rename(source, dest)?;
-    Ok(())
+}
+
+/// 不分大小寫的檔案系統上，只差大小寫的目標就是來源本身，不算衝突。
+fn audio_rename_conflicts(source: &Path, dest: &Path) -> bool {
+    source != dest && dest.exists() && !source.as_os_str().eq_ignore_ascii_case(dest.as_os_str())
 }
 
 fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
@@ -1621,7 +1672,14 @@ async fn convert_audio_filename(
         file.converted_path = None;
         return Ok(None);
     }
-    let dest = path.with_file_name(text);
+    let dest = path.with_file_name(&text);
+    if audio_rename_conflicts(path, &dest) {
+        let notice = match request.conflict_policy {
+            ConflictPolicy::Skip => format!("檔名「{text}」已存在，將略過重新命名。"),
+            ConflictPolicy::Overwrite => format!("檔名「{text}」已存在，將覆寫該檔。"),
+        };
+        push_notice(file, notice);
+    }
     file.converted_path = Some(dest.to_string_lossy().into_owned());
     Ok(Some(dest))
 }

@@ -396,6 +396,8 @@ describe("Tauri desktop shell", () => {
       "resources/segment-dict": "segment-dict",
     });
     expect(config.bundle?.resources).not.toHaveProperty("../resources/Dictionary.csv");
+    expect(JSON.stringify(config.bundle?.resources)).not.toContain("legacy-1x");
+    expect(readProjectFile("src-tauri/src/core/user_dictionary.rs")).not.toContain("include_str!");
     expect(rust).toContain("fn core_request");
     expect(rust).not.toContain("convertzz-core");
   });

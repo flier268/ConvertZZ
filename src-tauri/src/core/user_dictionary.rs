@@ -1,18 +1,17 @@
 //! 使用者詞典：讓使用者指定特定整詞的簡繁對應。
 //!
 //! 詞條載入後加入分詞表，轉換時只對分出的整詞套用，不做全文取代。
-//! 舊版 `Dictionary.csv` 只能唯讀匯入成本格式；匯入時略過 1.x 內建列與停用列。
+//! 舊版 `Dictionary.csv` 只能唯讀匯入成本格式；匯入時略過停用列與無法匯入的列。
 
 use super::error::CoreError;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub const USER_DICTIONARY_FILE: &str = "user-dictionary.txt";
 const MAX_WORD_CHARS: usize = 64;
-const LEGACY_DEFAULTS: &str = include_str!("user_dictionary/legacy-defaults.tsv");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -61,7 +60,6 @@ pub struct UserDictionaryEntry {
 #[serde(rename_all = "camelCase")]
 pub enum LegacyImportStatus {
     Importable,
-    BuiltinDefault,
     Disabled,
     Invalid,
     Duplicate,
@@ -86,11 +84,9 @@ pub struct LegacyImportPreview {
     pub path: String,
     pub total: usize,
     pub importable: usize,
-    pub builtin_default: usize,
     pub disabled: usize,
     pub invalid: usize,
     pub duplicate: usize,
-    /// 可匯入的列與略過原因需要說明的列；內建預設列只計數，不逐列列出。
     pub rows: Vec<LegacyImportRow>,
 }
 
@@ -251,18 +247,6 @@ pub fn default_path() -> Option<PathBuf> {
     })
 }
 
-fn legacy_defaults() -> &'static HashSet<(&'static str, &'static str)> {
-    static DEFAULTS: std::sync::OnceLock<HashSet<(&'static str, &'static str)>> =
-        std::sync::OnceLock::new();
-    DEFAULTS.get_or_init(|| {
-        LEGACY_DEFAULTS
-            .lines()
-            .filter(|line| !line.starts_with('#'))
-            .filter_map(|line| line.split_once('\t'))
-            .collect()
-    })
-}
-
 fn clean_legacy_word(raw: &str) -> String {
     raw.trim_matches(|ch: char| ch.is_whitespace()).to_string()
 }
@@ -277,12 +261,10 @@ pub fn preview_legacy_import(path: &Path) -> Result<LegacyImportPreview, CoreErr
             "舊版字典不是 UTF-8 編碼；請以 UTF-8 另存後再匯入。",
         )
     })?;
-    let defaults = legacy_defaults();
     let mut preview = LegacyImportPreview {
         path: path.to_string_lossy().into_owned(),
         total: 0,
         importable: 0,
-        builtin_default: 0,
         disabled: 0,
         invalid: 0,
         duplicate: 0,
@@ -315,10 +297,6 @@ pub fn preview_legacy_import(path: &Path) -> Result<LegacyImportPreview, CoreErr
             row.reason = Some("不是六欄格式。".into());
             preview.invalid += 1;
             preview.rows.push(row);
-            continue;
-        }
-        if defaults.contains(&(columns[2], columns[4])) {
-            preview.builtin_default += 1;
             continue;
         }
         if !matches!(columns[0].to_ascii_lowercase().as_str(), "true" | "1") {

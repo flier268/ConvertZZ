@@ -87,23 +87,20 @@ fn write_csv(rows: &[&str]) -> PathBuf {
 }
 
 #[test]
-fn legacy_import_skips_builtin_disabled_and_invalid_rows() {
+fn legacy_import_lists_every_enabled_row_and_skips_disabled_invalid() {
     let path = write_csv(&[
-        // 1.x 內建列（含全形空白前綴）：略過。
+        // 1.x 內建列不另外辨識，與自訂列同樣可匯入；全形空白前綴會去除。
         "True\tBI_TradFix\t　了望\t0\t　瞭望\t0",
         "True\tTWPhrasesIT\t软件\t0\t軟體\t0",
-        // 使用者自訂與改過的內建列：匯入。
         "True\t自訂\t鲁班七号\t0\t魯班七號\t0",
-        "True\tTWPhrasesIT\t软件\t0\t軟件\t0",
         "False\t自訂\t停用词\t0\t停用詞\t0",
         "True\t自訂\t坏|词\t0\t壞詞\t0",
         "只有三欄\t自訂\t词",
         "True\t自訂\t鲁班七号\t0\t魯班七號\t0",
     ]);
     let preview = preview_legacy_import(&path).unwrap();
-    assert_eq!(preview.total, 8);
-    assert_eq!(preview.builtin_default, 2);
-    assert_eq!(preview.importable, 2);
+    assert_eq!(preview.total, 7);
+    assert_eq!(preview.importable, 3);
     assert_eq!(preview.disabled, 1);
     assert_eq!(preview.invalid, 2);
     assert_eq!(preview.duplicate, 1);
@@ -113,11 +110,10 @@ fn legacy_import_skips_builtin_disabled_and_invalid_rows() {
         .filter(|row| row.status == LegacyImportStatus::Importable)
         .map(|row| (row.simplified.as_str(), row.traditional.as_str()))
         .collect();
-    assert_eq!(importable, [("鲁班七号", "魯班七號"), ("软件", "軟件")]);
-    assert!(preview
-        .rows
-        .iter()
-        .all(|row| row.status != LegacyImportStatus::BuiltinDefault));
+    assert_eq!(
+        importable,
+        [("了望", "瞭望"), ("软件", "軟體"), ("鲁班七号", "魯班七號")]
+    );
     let _ = fs::remove_dir_all(path.parent().unwrap());
 }
 

@@ -719,9 +719,8 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
   if (operation === "userDictionary.previewLegacyImport") {
     return {
       path: String(payload.path ?? "/tmp/Dictionary.csv"),
-      total: 3,
+      total: 2,
       importable: 1,
-      builtinDefault: 1,
       disabled: 0,
       invalid: 1,
       duplicate: 0,

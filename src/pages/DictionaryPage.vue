@@ -27,7 +27,6 @@ const directionLabels: Record<UserDictionaryDirection, string> = {
 
 const statusLabels: Record<LegacyImportRow["status"], string> = {
   importable: "可匯入",
-  builtinDefault: "1.x 內建",
   disabled: "已停用",
   invalid: "無法匯入",
   duplicate: "重複",
@@ -183,7 +182,7 @@ void load();
       </div>
     </header>
     <el-alert
-      title="簡轉繁時以簡體為來源詞、繁轉簡時以繁體為來源詞；來源詞只能是中日韓文字。舊版 Dictionary.csv 只讀取，不會修改原檔；1.x 內建的預設詞條會自動略過。"
+      title="簡轉繁時以簡體為來源詞、繁轉簡時以繁體為來源詞；來源詞只能是中日韓文字。舊版 Dictionary.csv 只讀取，不會修改原檔；1.x 內建詞條會一併列出，請刪除不需要的詞條後再儲存。"
       type="info"
       :closable="false"
     />
@@ -238,9 +237,9 @@ void load();
       <template v-if="importPreview">
         <p class="path-label">{{ importPreview.path }}</p>
         <p>
-          共 {{ importPreview.total }} 列：可匯入 {{ importPreview.importable }}、1.x 內建
-          {{ importPreview.builtinDefault }}、已停用 {{ importPreview.disabled }}、無法匯入
-          {{ importPreview.invalid }}、重複 {{ importPreview.duplicate }}。
+          共 {{ importPreview.total }} 列：可匯入 {{ importPreview.importable }}、已停用
+          {{ importPreview.disabled }}、無法匯入 {{ importPreview.invalid }}、重複
+          {{ importPreview.duplicate }}。
         </p>
         <el-table v-if="skippedImportRows.length" :data="skippedImportRows" max-height="320"
           ><el-table-column prop="line" label="列" width="70" /><el-table-column

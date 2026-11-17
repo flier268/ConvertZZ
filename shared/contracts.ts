@@ -477,8 +477,7 @@ export interface UserDictionaryReadResult {
   loadError?: string | null;
 }
 
-export type LegacyImportStatus =
-  "importable" | "builtinDefault" | "disabled" | "invalid" | "duplicate";
+export type LegacyImportStatus = "importable" | "disabled" | "invalid" | "duplicate";
 
 export interface LegacyImportRow {
   line: number;
@@ -489,12 +488,11 @@ export interface LegacyImportRow {
   reason?: string;
 }
 
-/** 舊版 Dictionary.csv 匯入預覽；1.x 內建預設列只計數，不列出。 */
+/** 舊版 Dictionary.csv 匯入預覽；1.x 內建列不另外辨識，與自訂列一併列出。 */
 export interface LegacyImportPreview {
   path: string;
   total: number;
   importable: number;
-  builtinDefault: number;
   disabled: number;
   invalid: number;
   duplicate: number;

@@ -208,7 +208,7 @@ describe("驗收項目的自動化契約", () => {
 
   it("E-05 覆寫需要額外確認", () => {
     const page = readProjectFile("src/pages/FilesPage.vue");
-    expect(page).toContain('conflictPolicy === "overwrite"');
+    expect(page).toContain('plannedConflictPolicy.value === "overwrite"');
     expect(page).toContain("覆寫會取代既有的同名檔案與 .bak 備份。是否確定繼續？");
     expect(page).toContain('title: "確認覆寫"');
     expect(page).toContain('label="略過"');

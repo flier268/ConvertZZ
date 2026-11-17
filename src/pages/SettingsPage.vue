@@ -209,7 +209,7 @@ async function saveApiKey() {
               ><div class="field-with-suffix-row">
                 <el-input-number v-model="settings.previewMaxKb" :min="1" :max="1024" /><span
                   class="field-suffix"
-                  >KB</span
+                  >千字</span
                 >
               </div></el-form-item
             ></el-form

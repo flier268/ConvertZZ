@@ -50,6 +50,12 @@ describe("驗收項目的自動化契約", () => {
     expect(page).not.toContain("dictionary.update");
   });
 
+  it("預覽上限以字元計，畫面單位為千字", () => {
+    const settings = readProjectFile("src/pages/SettingsPage.vue");
+    expect(settings).toContain(">千字</span");
+    expect(settings).not.toContain(">KB</span");
+  });
+
   it("E-01／E-02 預覽會顯示來源、輸出、編碼與差異", () => {
     const page = readProjectFile("src/pages/FilesPage.vue");
     const contracts = readProjectFile("shared/contracts.ts");

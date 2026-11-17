@@ -100,6 +100,7 @@ export interface FilePlanRequest {
   allowedExtensions?: string[];
   /** 副檔名篩選（含黑名單與無副檔名）。存在時優先於 `allowedExtensions`；前端一律送這個。 */
   extensionFilter?: ExtensionFilter;
+  /** 預覽最多顯示的字元數（名稱沿用舊欄位，實際不是位元組）。 */
   previewMaxBytes?: number;
   conflictPolicy: ConflictPolicy;
   /** 轉換前自動建立 .bak 備份；省略時預設啟用。 */
@@ -405,6 +406,7 @@ export interface SettingsV2 {
   /** 音訊標籤頁轉換設定。缺欄時由設定遷移補預設。 */
   audio: AudioPageSettings;
   recognizeEncoding: boolean;
+  /** 預覽上限，單位千字（同 1.x MaxLengthPreview）；送往核心時乘以 1024 當字元數。 */
   previewMaxKb: number;
   floatingBall: { enabled: boolean; x: number; y: number };
   hotkeys: {

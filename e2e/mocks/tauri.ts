@@ -256,7 +256,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
     case "check_signed_update": {
       if (e2e().update !== "install") return null as T;
       const endpoint = String(args.endpoint ?? "");
-      const version = /\/download\/v([^/]+)\/latest\.json/u.exec(endpoint)?.[1] ?? "2.1.0";
+      const version = /\/download\/v([^/]+)\/latest\.json/u.exec(endpoint)?.[1] ?? "999.999.999";
       return {
         rid: 1,
         currentVersion: appVersion,
@@ -878,7 +878,7 @@ export async function check() {
   if (e2e().update !== "install") return null;
   return new Update({
     currentVersion: appVersion,
-    version: "2.1.0",
+    version: "999.999.999",
     body: "測試更新",
   });
 }

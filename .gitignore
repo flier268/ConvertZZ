@@ -208,6 +208,8 @@ Generated_Code/
 # because we have git ;-)
 _UpgradeReport_Files/
 Backup*/
+# macOS／Windows 不分大小寫時 Backup*/ 也會擋到 Rust 模組目錄。
+!src-tauri/src/core/backup/
 UpgradeLog*.XML
 UpgradeLog*.htm
 

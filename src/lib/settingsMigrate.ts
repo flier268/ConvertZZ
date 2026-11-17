@@ -26,6 +26,7 @@ export function defaultSettings(currentVersion = appVersion): SettingsV2 {
     vocabularyCorrection: true,
     promptAfterConversion: true,
     autoBackupBeforeConversion: true,
+    preserveModifiedTime: false,
     recognizeEncoding: true,
     previewMaxKb: 6,
     floatingBall: { enabled: true, x: -1, y: -1 },
@@ -106,6 +107,7 @@ export function migrateSettings(input: unknown, currentVersion = appVersion): Se
       engine: engineValue(input.engine),
       // 舊版 2.0／匯入設定若尚無此欄，預設啟用轉換前備份。
       autoBackupBeforeConversion: booleanValue(input.autoBackupBeforeConversion, true),
+      preserveModifiedTime: booleanValue(input.preserveModifiedTime, false),
       checkPreReleaseUpdates: booleanValue(
         input.checkPreReleaseUpdates,
         defaultCheckPreReleaseUpdates(currentVersion),
@@ -153,6 +155,7 @@ export function migrateSettings(input: unknown, currentVersion = appVersion): Se
     vocabularyCorrection: booleanValue(legacy["Vocabulary correction"], true),
     promptAfterConversion: booleanValue(legacy.Prompt, true),
     autoBackupBeforeConversion: true,
+    preserveModifiedTime: false,
     recognizeEncoding: booleanValue(legacy.RecognitionEncoding, true),
     previewMaxKb: numberValue(legacy.MaxLengthPreview, 6),
     floatingBall: {

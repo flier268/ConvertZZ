@@ -96,6 +96,7 @@ fn conversion_s2t() -> ConversionOptions {
 
 fn base_plan(paths: &[PathBuf]) -> AudioTagPlanRequest {
     AudioTagPlanRequest {
+        preserve_modified_time: false,
         paths: paths
             .iter()
             .map(|path| path.to_string_lossy().into_owned())
@@ -4018,5 +4019,38 @@ fn same_batch_target_is_never_overwritten() {
     );
     assert_eq!(std::fs::read(&dest).unwrap(), b"first");
     assert_eq!(std::fs::read(&second).unwrap(), b"second");
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn tag_write_keeps_modified_time_when_requested() {
+    let directory = temp_dir();
+    let path = directory.join("song.mp3");
+    std::fs::write(&path, id3v1_only_mp3("里面", TextEncoding::Gbk)).unwrap();
+    let old = std::time::UNIX_EPOCH + std::time::Duration::from_hours(24 * 365 * 31);
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_modified(old))
+        .unwrap();
+    let mut request = base_plan(&[path.clone()]);
+    request.preserve_modified_time = true;
+    request.selected_fields = HashMap::from([(
+        path.to_string_lossy().into_owned(),
+        vec!["id3v1:title".into()],
+    )]);
+    let service = AudioService::new();
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert_eq!(plan.summary.changed, 1);
+    let result = service
+        .apply(&plan.plan_id, noop(), never_cancel())
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), old);
     let _ = std::fs::remove_dir_all(&directory);
 }

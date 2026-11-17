@@ -574,9 +574,23 @@ impl AudioService {
                 });
                 continue;
             }
+            let times = file
+                .request
+                .preserve_modified_time
+                .then(|| crate::core::original_file_times(&file.path))
+                .flatten();
             match apply_file(&file, &mut claimed) {
                 Ok(outcome) => {
                     let path = file.path.to_string_lossy().into_owned();
+                    let written = match (&outcome.rename, &file.rename_to) {
+                        (RenameOutcome::Renamed, Some(dest)) => dest.as_path(),
+                        _ => file.path.as_path(),
+                    };
+                    if outcome.wrote_tags || matches!(outcome.rename, RenameOutcome::Renamed) {
+                        result
+                            .warnings
+                            .extend(crate::core::restore_file_times(written, times));
+                    }
                     if let RenameOutcome::SkippedConflict(dest) = &outcome.rename {
                         result
                             .warnings

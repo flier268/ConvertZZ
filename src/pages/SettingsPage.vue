@@ -228,6 +228,13 @@ async function saveApiKey() {
                   >轉換前自動備份</el-checkbox
                 >
               </el-tooltip>
+              <el-tooltip
+                content="檔案內容與音訊標籤寫入後，把修改時間設回原檔的時間，音樂庫依日期排序時不會變動。"
+                placement="top"
+                :show-after="300"
+              >
+                <el-checkbox v-model="settings.preserveModifiedTime">保留原檔修改時間</el-checkbox>
+              </el-tooltip>
               <el-checkbox v-model="settings.promptAfterConversion">完成後提示</el-checkbox>
             </div>
           </div>

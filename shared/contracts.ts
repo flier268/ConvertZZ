@@ -105,6 +105,8 @@ export interface FilePlanRequest {
   conflictPolicy: ConflictPolicy;
   /** 轉換前自動建立 .bak 備份；省略時預設啟用。 */
   backup?: boolean;
+  /** 寫入後把檔案的修改與存取時間設回原本的時間。 */
+  preserveModifiedTime?: boolean;
   /**
    * 直接指定版本控制資料夾（.git、.svn、.hg、.bzr）或其中的路徑時是否照樣處理。
    * 省略或 false：這些輸入會被略過並列在 `FileConversionPlan.ignoredInputs`。
@@ -238,6 +240,8 @@ export interface AudioTagPlanRequest extends AudioScanRequest {
   conflictPolicy: ConflictPolicy;
   /** 寫入前自動建立 .bak 備份；省略時預設啟用。 */
   backup?: boolean;
+  /** 寫入後把檔案的修改與存取時間設回原本的時間。 */
+  preserveModifiedTime?: boolean;
   id3v1Enabled: boolean;
   id3v1Direction: Direction;
   id3v1Zhconvert?: ZhConvertOptions;
@@ -403,6 +407,8 @@ export interface SettingsV2 {
   promptAfterConversion: boolean;
   /** 檔案、檔名與音訊標籤轉換前自動建立 .bak 備份。 */
   autoBackupBeforeConversion: boolean;
+  /** 檔案與音訊標籤寫入後保留原檔的修改時間。預設關閉。 */
+  preserveModifiedTime: boolean;
   /** 音訊標籤頁轉換設定。缺欄時由設定遷移補預設。 */
   audio: AudioPageSettings;
   recognizeEncoding: boolean;

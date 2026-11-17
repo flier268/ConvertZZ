@@ -221,6 +221,7 @@ async fn prepare_files(
     let vocabulary_correction = resolve_vocabulary_correction(parsed, settings)?;
     let direction = parsed.direction;
     let request = FilePlanRequest {
+        preserve_modified_time: preserve_modified_time(settings),
         paths: parsed.paths.clone(),
         output_path: parsed.output_path.clone(),
         output_directory: None,
@@ -377,6 +378,7 @@ async fn prepare_audio(
 
     let zh = zhconvert_options(settings, direction);
     let request = AudioTagPlanRequest {
+        preserve_modified_time: preserve_modified_time(settings),
         paths: parsed.paths.clone(),
         recursive: Some(true),
         id3v1_source_encoding: Some(TextEncoding::Gbk),
@@ -670,6 +672,14 @@ fn resolve_vocabulary_correction(
                 .unwrap_or(true))
         }
     }
+}
+
+/// 無頭未載入設定時不保留修改時間，與 GUI 預設相同。
+fn preserve_modified_time(settings: Option<&Value>) -> bool {
+    settings
+        .and_then(|value| value.get("preserveModifiedTime"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
 }
 
 fn engine_from_settings(settings: &Value) -> Result<EngineKind, String> {

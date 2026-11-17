@@ -21,6 +21,7 @@ vi.mock("../lib/settings", () => ({
     vocabularyCorrection: true,
     promptAfterConversion: true,
     autoBackupBeforeConversion: true,
+    preserveModifiedTime: false,
   }),
   patchSavedSettings: vi.fn(async () => ({})),
   zhConvertOptions: () => ({}),

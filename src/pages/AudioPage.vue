@@ -593,6 +593,7 @@ async function buildPlanRequest(): Promise<AudioTagPlanRequest> {
     },
     conflictPolicy: conflictPolicy.value,
     backup: backup.value,
+    preserveModifiedTime: settings.preserveModifiedTime,
     id3v1Enabled: options.id3v1Enabled,
     id3v1Direction: options.id3v1Direction,
     id3v1Zhconvert: zhConvertOptions(settings, options.id3v1Direction),

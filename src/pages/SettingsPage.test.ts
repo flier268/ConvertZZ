@@ -42,6 +42,7 @@ function settingsFixture(): SettingsV2 {
     vocabularyCorrection: true,
     promptAfterConversion: true,
     autoBackupBeforeConversion: true,
+    preserveModifiedTime: false,
     recognizeEncoding: true,
     previewMaxKb: 6,
     floatingBall: { enabled: true, x: -1, y: -1 },

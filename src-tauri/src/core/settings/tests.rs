@@ -523,3 +523,19 @@ fn legacy_1x_settings_show_dictionary_notice() {
     assert_eq!(result["legacyDictionaryNotice"], true);
     assert_eq!(migrate(Value::Null)["legacyDictionaryNotice"], false);
 }
+
+#[test]
+fn preserve_modified_time_defaults_off_and_keeps_saved_value() {
+    assert_eq!(
+        migrate(json!({ "version": 2 }))["preserveModifiedTime"],
+        false
+    );
+    assert_eq!(
+        migrate(json!({ "Engine": 0 }))["preserveModifiedTime"],
+        false
+    );
+    assert_eq!(
+        migrate(json!({ "version": 2, "preserveModifiedTime": true }))["preserveModifiedTime"],
+        true
+    );
+}

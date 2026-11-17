@@ -38,6 +38,26 @@ pub(crate) fn remove_file_on_drop(
     })
 }
 
+/// 取代原檔前記下修改與存取時間；讀不到時回傳 `None`，不阻擋寫入。
+pub(crate) fn original_file_times(path: &std::path::Path) -> Option<std::fs::FileTimes> {
+    let metadata = std::fs::metadata(path).ok()?;
+    let mut times = std::fs::FileTimes::new().set_modified(metadata.modified().ok()?);
+    if let Ok(accessed) = metadata.accessed() {
+        times = times.set_accessed(accessed);
+    }
+    Some(times)
+}
+
+/// 把原檔時間套回取代後的檔案；失敗只回傳警告，內容已寫入不回復。
+pub(crate) fn restore_file_times(
+    path: &std::path::Path,
+    times: Option<std::fs::FileTimes>,
+) -> Option<String> {
+    std::fs::set_times(path, times?)
+        .err()
+        .map(|error| format!("無法保留修改時間：{}：{error}", path.display()))
+}
+
 pub struct CoreState {
     conversion: ConversionService,
     files: FileService,

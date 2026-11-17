@@ -51,6 +51,7 @@ function settingsFixture(overrides: Partial<SettingsV2> = {}): SettingsV2 {
     vocabularyCorrection: true,
     promptAfterConversion: false,
     autoBackupBeforeConversion: true,
+    preserveModifiedTime: false,
     recognizeEncoding: true,
     previewMaxKb: 6,
     floatingBall: { enabled: true, x: -1, y: -1 },

@@ -24,6 +24,7 @@ vi.mock("../lib/settings", () => ({
     vocabularyCorrection: true,
     promptAfterConversion: true,
     autoBackupBeforeConversion: true,
+    preserveModifiedTime: false,
     audio: {
       backup: false,
       conflictPolicy: "skip",

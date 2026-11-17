@@ -39,6 +39,7 @@ fn conversion_s2t() -> ConversionOptions {
 
 fn filename_request(path: &Path, policy: ConflictPolicy) -> FilePlanRequest {
     FilePlanRequest {
+        preserve_modified_time: false,
         paths: vec![path.to_string_lossy().into_owned()],
         output_path: None,
         output_directory: None,
@@ -92,6 +93,7 @@ async fn preview_limit_and_unicode_bom() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![path.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -168,6 +170,7 @@ async fn preview_then_safe_write_and_fix_charset() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![path.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -295,6 +298,7 @@ async fn request_cancel_stops_apply_before_write() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![source.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -381,6 +385,7 @@ async fn expands_wildcards_and_output_pattern() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![source_directory
                     .join("*.txt")
                     .to_string_lossy()
@@ -444,6 +449,7 @@ async fn content_mode_output_pattern_keeps_sources() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![directory.join("*.txt").to_string_lossy().into_owned()],
                 output_path: Some(directory.join("x*.txt").to_string_lossy().into_owned()),
                 output_directory: None,
@@ -490,6 +496,7 @@ async fn rejects_mismatched_wildcard_counts() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![directory.join("*.txt").to_string_lossy().into_owned()],
                 output_path: Some(directory.join("*.*.txt").to_string_lossy().into_owned()),
                 output_directory: None,
@@ -584,6 +591,7 @@ async fn directory_input_respects_extension_filter() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![directory.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -677,6 +685,7 @@ async fn later_file_failure_keeps_earlier_writes() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![
                     first.to_string_lossy().into_owned(),
                     second.to_string_lossy().into_owned(),
@@ -734,6 +743,7 @@ async fn cancel_after_first_file_keeps_written_changes() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![
                     first.to_string_lossy().into_owned(),
                     second.to_string_lossy().into_owned(),
@@ -936,6 +946,7 @@ async fn creates_file_bak_before_conversion() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![path.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -990,6 +1001,7 @@ async fn folder_selection_backs_up_whole_folder() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![folder.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -1059,6 +1071,7 @@ async fn backup_false_skips_bak() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![path.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -1105,6 +1118,7 @@ async fn both_mode_converts_content_and_filename() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![source.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -1175,6 +1189,7 @@ async fn cancel_rejects_content_plan_without_writing() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![source.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -1305,6 +1320,7 @@ async fn content_plan_lists_without_converting() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![directory.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -1361,6 +1377,7 @@ async fn preview_rejects_path_outside_plan() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![path.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -1411,6 +1428,7 @@ async fn apply_only_writes_selected_files() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![directory.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -1647,6 +1665,7 @@ fn mp3_fixtures_keep_id3_or_mpeg_headers() {
 
 fn binary_file_request(path: &Path, mode: FileMode) -> FilePlanRequest {
     FilePlanRequest {
+        preserve_modified_time: false,
         paths: vec![path.to_string_lossy().into_owned()],
         output_path: None,
         output_directory: None,
@@ -2034,6 +2053,7 @@ fn directory_scan_request(
     allowed_extensions: Option<Vec<String>>,
 ) -> FilePlanRequest {
     FilePlanRequest {
+        preserve_modified_time: false,
         paths: vec![path.to_string_lossy().into_owned()],
         output_path: None,
         output_directory: None,
@@ -3140,6 +3160,7 @@ async fn stream_segmented_matches_in_memory_across_window() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![source.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -3184,6 +3205,7 @@ async fn glyph_only_stream_keeps_conversion_warning() {
     std::fs::write(&source, "开发").unwrap();
     let service = FileService::new();
     let request = FilePlanRequest {
+        preserve_modified_time: false,
         paths: vec![source.to_string_lossy().into_owned()],
         output_path: None,
         output_directory: None,
@@ -3251,6 +3273,7 @@ async fn stream_progress_uses_file_bytes() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![source.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -3313,6 +3336,7 @@ async fn zhconvert_stream_apply_on_current_thread() {
         .plan(
             &conversion,
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![source.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -4630,6 +4654,7 @@ async fn batch_files_convert_concurrently() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![directory.join("*.txt").to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -4691,6 +4716,7 @@ async fn concurrent_batch_skips_second_file_with_same_output() {
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![
                     directory.join("a/x.txt").to_string_lossy().into_owned(),
                     directory.join("b/x.txt").to_string_lossy().into_owned(),
@@ -4758,6 +4784,7 @@ async fn plan_marks_in_batch_duplicate_outputs_as_conflict_even_when_overwriting
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![directory.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -4820,6 +4847,7 @@ async fn convert_with_existing_bak(policy: ConflictPolicy) -> (Vec<u8>, String) 
         .plan(
             shared_conversion(),
             FilePlanRequest {
+                preserve_modified_time: false,
                 paths: vec![path.to_string_lossy().into_owned()],
                 output_path: None,
                 output_directory: None,
@@ -4913,4 +4941,94 @@ fn temporary_file_guard_removes_file_when_unwinding() {
     assert!(panicked.is_err());
     assert!(!temporary.exists());
     let _ = fs::remove_dir_all(&directory);
+}
+
+fn old_times() -> std::fs::FileTimes {
+    let old = std::time::UNIX_EPOCH + std::time::Duration::from_hours(24 * 365 * 31);
+    std::fs::FileTimes::new()
+        .set_modified(old)
+        .set_accessed(old)
+}
+
+#[tokio::test]
+async fn content_conversion_keeps_modified_time_only_when_requested() {
+    for preserve in [true, false] {
+        let directory = temp_dir();
+        let path = directory.join("a.txt");
+        std::fs::write(&path, "里面开发").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_times(old_times())
+            .unwrap();
+        let original = std::fs::metadata(&path).unwrap().modified().unwrap();
+        let mut request = filename_request(&path, ConflictPolicy::Skip);
+        request.mode = FileMode::Content;
+        request.preserve_modified_time = preserve;
+        let service = FileService::new();
+        let plan = service
+            .plan(shared_conversion(), request, noop())
+            .await
+            .unwrap();
+        let result = service
+            .apply(
+                shared_conversion(),
+                &plan.plan_id,
+                None,
+                noop(),
+                never_cancel(),
+            )
+            .await
+            .unwrap();
+        assert!(result.failed.is_empty(), "{result:?}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "裡面開發");
+        let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+        assert_eq!(modified == original, preserve, "preserve={preserve}");
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+}
+
+#[tokio::test]
+async fn directory_rename_and_content_keep_modified_time() {
+    let root = temp_dir();
+    let folder = root.join("里面");
+    std::fs::create_dir_all(&folder).unwrap();
+    let path = folder.join("开发.txt");
+    std::fs::write(&path, "里面开发").unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_times(old_times())
+        .unwrap();
+    let original = std::fs::metadata(&path).unwrap().modified().unwrap();
+    let mut request = filename_request(&root, ConflictPolicy::Skip);
+    request.mode = FileMode::Both;
+    request.recursive = true;
+    request.preserve_modified_time = true;
+    let service = FileService::new();
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{result:?}");
+    // 選取的根資料夾本身不改名；裡面的子資料夾、檔名與內容都會轉換。
+    let output = root.join("裡面").join("開發.txt");
+    assert_eq!(std::fs::read_to_string(&output).unwrap(), "裡面開發");
+    assert_eq!(
+        std::fs::metadata(&output).unwrap().modified().unwrap(),
+        original
+    );
+    let _ = std::fs::remove_dir_all(&root);
 }

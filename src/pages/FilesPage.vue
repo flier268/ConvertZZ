@@ -555,6 +555,7 @@ async function createPlan() {
           previewMaxBytes: previewMaxBytes.value,
           conflictPolicy: options.conflictPolicy,
           backup: backup.value,
+          preserveModifiedTime: settings.preserveModifiedTime,
           includeIgnored,
           conversion: {
             direction: options.direction,

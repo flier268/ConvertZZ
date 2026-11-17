@@ -212,6 +212,9 @@ pub struct FilePlanRequest {
     pub conflict_policy: ConflictPolicy,
     #[serde(default)]
     pub backup: Option<bool>,
+    /// 取代後把輸出檔的修改與存取時間設回原檔的時間。
+    #[serde(default)]
+    pub preserve_modified_time: bool,
     /// 直接指定版本控制資料夾（`.git`、`.svn`、`.hg`、`.bzr`）或其中的路徑時是否照樣處理。
     /// 預設 `false`：這些輸入會被略過並列在 `FileConversionPlan::ignored_inputs`。
     /// GUI 經使用者確認、或無頭加上 `--include-ignored` 時才設為 `true`。
@@ -512,6 +515,9 @@ pub struct AudioTagPlanRequest {
     pub conflict_policy: ConflictPolicy,
     #[serde(default)]
     pub backup: Option<bool>,
+    /// 取代後把輸出檔的修改與存取時間設回原檔的時間。
+    #[serde(default)]
+    pub preserve_modified_time: bool,
     pub id3v1_enabled: bool,
     pub id3v1_direction: Direction,
     #[serde(default)]

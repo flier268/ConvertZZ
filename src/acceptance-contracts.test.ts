@@ -50,6 +50,18 @@ describe("驗收項目的自動化契約", () => {
     expect(page).not.toContain("dictionary.update");
   });
 
+  it("保留原檔修改時間由設定頁控制，檔案與音訊請求都會帶上", () => {
+    expect(readProjectFile("src/pages/SettingsPage.vue")).toContain(
+      'v-model="settings.preserveModifiedTime"',
+    );
+    expect(readProjectFile("src/pages/FilesPage.vue")).toContain(
+      "preserveModifiedTime: settings.preserveModifiedTime",
+    );
+    expect(readProjectFile("src/pages/AudioPage.vue")).toContain(
+      "preserveModifiedTime: settings.preserveModifiedTime",
+    );
+  });
+
   it("預覽上限以字元計，畫面單位為千字", () => {
     const settings = readProjectFile("src/pages/SettingsPage.vue");
     expect(settings).toContain(">千字</span");

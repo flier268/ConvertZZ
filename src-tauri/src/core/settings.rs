@@ -33,6 +33,7 @@ fn base_default_settings() -> Value {
         "vocabularyCorrection": true,
         "promptAfterConversion": true,
         "autoBackupBeforeConversion": true,
+        "preserveModifiedTime": false,
         "recognizeEncoding": true,
         "previewMaxKb": 6,
         "floatingBall": { "enabled": true, "x": -1, "y": -1 },
@@ -172,6 +173,7 @@ fn migrate_document(input: Value) -> Value {
         "vocabularyCorrection": boolean_value(input.get("Vocabulary correction"), true),
         "promptAfterConversion": boolean_value(input.get("Prompt"), true),
         "autoBackupBeforeConversion": true,
+        "preserveModifiedTime": false,
         "recognizeEncoding": boolean_value(input.get("RecognitionEncoding"), true),
         "previewMaxKb": number_value(input.get("MaxLengthPreview"), 6),
         "floatingBall": {
@@ -244,6 +246,9 @@ fn merge_v2(input: Value) -> Value {
                 }
                 "autoBackupBeforeConversion" => {
                     merged.insert(key.clone(), json!(value.as_bool().unwrap_or(true)));
+                }
+                "preserveModifiedTime" => {
+                    merged.insert(key.clone(), json!(value.as_bool().unwrap_or(false)));
                 }
                 "checkPreReleaseUpdates" => {
                     merged.insert(

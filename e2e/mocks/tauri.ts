@@ -8,6 +8,7 @@ const defaultSettings: SettingsV2 = {
   vocabularyCorrection: true,
   promptAfterConversion: true,
   autoBackupBeforeConversion: true,
+  preserveModifiedTime: false,
   recognizeEncoding: true,
   previewMaxKb: 6,
   floatingBall: { enabled: false, x: -1, y: -1 },

@@ -1322,18 +1322,31 @@ impl FileService {
                 path: file.item.source_path,
             });
         }
-        if !file.convert_content {
-            if leaves_source_unchanged(request, &file) {
-                let warnings = content_skip_warnings(&file);
-                return Ok(FileCommitOutcome::Skipped {
-                    path: file.item.source_path,
-                    warnings,
-                });
-            }
-            return commit_prepared_file(file, self.stage_validator.as_ref(), Some(&is_cancelled));
+        if !file.convert_content && leaves_source_unchanged(request, &file) {
+            let warnings = content_skip_warnings(&file);
+            return Ok(FileCommitOutcome::Skipped {
+                path: file.item.source_path,
+                warnings,
+            });
         }
-        self.stream_convert_and_commit(conversion, request, file, progress, is_cancelled)
-            .await
+        let times = request
+            .preserve_modified_time
+            .then(|| super::original_file_times(Path::new(&source_path)))
+            .flatten();
+        let mut outcome = if file.convert_content {
+            self.stream_convert_and_commit(conversion, request, file, progress, is_cancelled)
+                .await
+        } else {
+            commit_prepared_file(file, self.stage_validator.as_ref(), Some(&is_cancelled))
+        };
+        if let Ok(FileCommitOutcome::Succeeded {
+            output_path,
+            warnings,
+        }) = &mut outcome
+        {
+            warnings.extend(super::restore_file_times(output_path, times));
+        }
+        outcome
     }
 
     async fn stream_convert_and_commit(

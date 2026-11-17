@@ -1,3 +1,5 @@
+#[macro_use]
+pub mod locale;
 mod audio;
 mod backup;
 mod cli;
@@ -53,9 +55,13 @@ pub(crate) fn restore_file_times(
     path: &std::path::Path,
     times: Option<std::fs::FileTimes>,
 ) -> Option<String> {
-    std::fs::set_times(path, times?)
-        .err()
-        .map(|error| format!("無法保留修改時間：{}：{error}", path.display()))
+    std::fs::set_times(path, times?).err().map(|error| {
+        tr!(
+            "無法保留修改時間：{}：{error}",
+            "Could not preserve modification time: {}: {error}",
+            path.display()
+        )
+    })
 }
 
 pub struct CoreState {
@@ -105,9 +111,15 @@ impl CoreState {
     }
 
     fn user_dictionary_path(&self) -> Result<PathBuf, CoreError> {
-        self.user_dictionary_path
-            .clone()
-            .ok_or_else(|| CoreError::new("USER_DICTIONARY_PATH", "找不到使用者詞典的儲存位置。"))
+        self.user_dictionary_path.clone().ok_or_else(|| {
+            CoreError::new(
+                "USER_DICTIONARY_PATH",
+                tr_static!(
+                    "找不到使用者詞典的儲存位置。",
+                    "Could not find where to store the user dictionary."
+                ),
+            )
+        })
     }
 
     fn read_user_dictionary(&self) -> Result<Value, CoreError> {
@@ -337,7 +349,7 @@ pub async fn dispatch(
             {
                 return Err(CoreError::new(
                     "USER_DICTIONARY_EXPORT_TARGET",
-                    "不能匯出到使用中的使用者詞典檔；請另選位置或檔名。",
+                    tr_static!("不能匯出到使用中的使用者詞典檔；請另選位置或檔名。", "Cannot export to the user dictionary file in use; choose another location or file name."),
                 ));
             }
             run_blocking(|| user_dictionary::export(target, &entries))?;
@@ -388,7 +400,7 @@ pub async fn dispatch(
         }
         other => Err(CoreError::new(
             "UNKNOWN_OPERATION",
-            format!("未知操作：{other}"),
+            tr!("未知操作：{other}", "Unknown operation: {other}"),
         )),
     }
 }
@@ -403,8 +415,15 @@ fn run_blocking<R>(work: impl FnOnce() -> R) -> R {
 }
 
 fn to_value<T: serde::Serialize>(value: T) -> Result<Value, CoreError> {
-    serde_json::to_value(value)
-        .map_err(|error| CoreError::new("SERIALIZE", format!("無法序列化結果：{error}")))
+    serde_json::to_value(value).map_err(|error| {
+        CoreError::new(
+            "SERIALIZE",
+            tr!(
+                "無法序列化結果：{error}",
+                "Could not serialize the result: {error}"
+            ),
+        )
+    })
 }
 
 fn required_string(payload: &Value, key: &str) -> Result<String, CoreError> {
@@ -412,7 +431,7 @@ fn required_string(payload: &Value, key: &str) -> Result<String, CoreError> {
         .get(key)
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
-        .ok_or_else(|| CoreError::new("INVALID_PAYLOAD", format!("缺少 {key}。")))
+        .ok_or_else(|| CoreError::new("INVALID_PAYLOAD", tr!("缺少 {key}。", "Missing {key}.")))
 }
 
 fn selected_paths(payload: &Value) -> Option<Vec<String>> {

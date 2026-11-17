@@ -8,6 +8,7 @@ import type {
   QuickActionSettings,
   SettingsV2,
   ShortcutSetting,
+  UiLanguage,
 } from "@shared/contracts";
 import {
   getLoadedSettings,
@@ -19,10 +20,12 @@ import {
 import { core } from "../lib/coreClient";
 import { applyDesktopSettings } from "../lib/desktop";
 import { acceleratorFromKeyboardEvent, assignShortcutAccelerator } from "../lib/hotkey";
-import { LEGACY_ACTIONS } from "../lib/legacyActions";
+import { legacyActions } from "../lib/legacyActions";
 import { importFailureMessage } from "../lib/settingsApply";
 import FilterProfilesPanel from "../components/FilterProfilesPanel.vue";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { t } from "@/i18n";
+import { applyUiLanguage } from "@/lib/uiLanguage";
 
 defineOptions({ name: "SettingsPage" });
 
@@ -36,40 +39,54 @@ const savedSnapshot = ref("");
 const activeTab = ref("general");
 const gestureModifiers = ["Ctrl", "Alt", "Shift"] as const;
 type GestureModifier = (typeof gestureModifiers)[number];
-const gestureGroups: Array<{
-  title: string;
-  hint: string;
-  rows: Array<{ label: string; keys: Record<GestureModifier, keyof QuickActionSettings> }>;
-}> = [
+const uiLanguages: UiLanguage[] = ["system", "zh-TW", "en"];
+const gestureGroups = computed<
+  Array<{
+    id: string;
+    title: string;
+    hint: string;
+    rows: Array<{
+      id: string;
+      label: string;
+      keys: Record<GestureModifier, keyof QuickActionSettings>;
+    }>;
+  }>
+>(() => [
   {
-    title: "點擊",
-    hint: "按住修飾鍵後點擊浮動球。",
+    id: "click",
+    title: t("settings.floating.click"),
+    hint: t("settings.floating.clickHint"),
     rows: [
       {
-        label: "左鍵",
+        id: "left",
+        label: t("settings.floating.leftButton"),
         keys: { Ctrl: "leftClickCtrl", Alt: "leftClickAlt", Shift: "leftClickShift" },
       },
       {
-        label: "右鍵",
+        id: "right",
+        label: t("settings.floating.rightButton"),
         keys: { Ctrl: "rightClickCtrl", Alt: "rightClickAlt", Shift: "rightClickShift" },
       },
     ],
   },
   {
-    title: "拖入檔案",
-    hint: "按住修飾鍵後把檔案拖到浮動球。",
+    id: "drop",
+    title: t("settings.floating.drop"),
+    hint: t("settings.floating.dropHint"),
     rows: [
       {
-        label: "左鍵",
+        id: "left",
+        label: t("settings.floating.leftButton"),
         keys: { Ctrl: "leftDropCtrl", Alt: "leftDropAlt", Shift: "leftDropShift" },
       },
       {
-        label: "右鍵",
+        id: "right",
+        label: t("settings.floating.rightButton"),
         keys: { Ctrl: "rightDropCtrl", Alt: "rightDropAlt", Shift: "rightDropShift" },
       },
     ],
   },
-];
+]);
 
 function quickActionValue(key: keyof QuickActionSettings): string {
   return settings.value?.quickActions[key] ?? "0";
@@ -131,7 +148,7 @@ async function save() {
       Array.isArray(parsedModules) ||
       Object.values(parsedModules).some((value) => ![-1, 0, 1].includes(Number(value)))
     ) {
-      throw new Error("ZhConvert 模組必須是值為 -1、0 或 1 的 JSON 物件。");
+      throw new Error(t("settings.modulesInvalid"));
     }
     settings.value.zhconvert.modules = Object.fromEntries(
       Object.entries(parsedModules).map(([key, value]) => [key, Number(value) as -1 | 0 | 1]),
@@ -139,7 +156,7 @@ async function save() {
     await saveSettings();
     savedSnapshot.value = settingsSnapshot(settings.value, modulesJson.value);
     const warnings = await applyDesktopSettings(settings.value);
-    ElMessage.success("設定已儲存");
+    ElMessage.success(t("settings.saved"));
     warnings.forEach((warning) => ElMessage.warning(warning));
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : String(error));
@@ -151,7 +168,7 @@ async function save() {
 async function importLegacyJson() {
   const path = await openFile({
     multiple: false,
-    filters: [{ name: "ConvertZZ 舊版設定", extensions: ["json"] }],
+    filters: [{ name: t("settings.legacyFilterName"), extensions: ["json"] }],
   });
   if (!path) return;
   importing.value = true;
@@ -159,8 +176,9 @@ async function importLegacyJson() {
     const imported = await importLegacySettings(path as string);
     if (!imported) return;
     bindSettings(imported);
+    await applyUiLanguage(imported.language);
     const warnings = await applyDesktopSettings(imported);
-    ElMessage.success("已讀取舊設定，並另存為 2.0 設定。");
+    ElMessage.success(t("settings.importedLegacy"));
     warnings.forEach((warning) => ElMessage.warning(warning));
   } catch (error) {
     ElMessage.error(importFailureMessage(error));
@@ -175,7 +193,16 @@ async function saveApiKey() {
   );
   await core.request("zhconvert.configure", { apiKey: apiKey.value });
   apiKey.value = "";
-  ElMessage.success(persisted ? "API 金鑰已保存於系統憑證庫" : "API 金鑰只保留於目前工作階段");
+  ElMessage.success(
+    persisted ? t("settings.zhconvert.keySaved") : t("settings.zhconvert.keySessionOnly"),
+  );
+}
+
+async function changeLanguage(language: UiLanguage) {
+  if (!settings.value) return;
+  settings.value.language = language;
+  await applyUiLanguage(language);
+  await save();
 }
 </script>
 
@@ -184,113 +211,139 @@ async function saveApiKey() {
     <header class="page-header">
       <div>
         <p class="eyebrow">PREFERENCES</p>
-        <h1>設定</h1>
-        <p>設定會保存於 Tauri 應用程式資料目錄。可從 1.x 的 ConvertZZ.json 匯入。</p>
+        <h1>{{ t("settings.title") }}</h1>
+        <p>{{ t("settings.intro") }}</p>
       </div>
       <div class="header-actions">
-        <el-button :loading="importing" @click="importLegacyJson">匯入 ConvertZZ.json</el-button>
+        <el-button :loading="importing" @click="importLegacyJson">{{
+          t("settings.importLegacy")
+        }}</el-button>
       </div>
     </header>
     <el-card shadow="never" class="page-fill-main settings-main-card">
       <el-tabs v-model="activeTab" class="settings-tabs">
-        <el-tab-pane label="一般" name="general" lazy>
+        <el-tab-pane :label="t('settings.tabs.general')" name="general" lazy>
           <el-form label-position="top" class="option-grid"
-            ><el-form-item label="預設引擎"
+            ><el-form-item :label="t('settings.general.language')"
+              ><el-select
+                :model-value="settings.language"
+                @update:model-value="changeLanguage($event as UiLanguage)"
+                ><el-option
+                  v-for="language in uiLanguages"
+                  :key="language"
+                  :label="t(`common.language.${language}`)"
+                  :value="language"
+              /></el-select>
+              <p class="muted">{{ t("settings.general.languageHint") }}</p></el-form-item
+            ><el-form-item :label="t('settings.general.engine')"
               ><el-select v-model="settings.engine"
-                ><el-option label="新式分詞" value="segmented" /><el-option
+                ><el-option
+                  :label="t('settings.general.engineSegmented')"
+                  value="segmented" /><el-option
                   label="ZhConvert"
                   value="zhconvert" /></el-select></el-form-item
-            ><el-form-item label="預設方向"
+            ><el-form-item :label="t('settings.general.direction')"
               ><el-select v-model="settings.direction"
-                ><el-option label="簡轉繁" value="s2t" /><el-option
-                  label="繁轉簡"
+                ><el-option :label="t('common.direction.s2t')" value="s2t" /><el-option
+                  :label="t('common.direction.t2s')"
                   value="t2s" /></el-select></el-form-item
-            ><el-form-item label="預覽上限" class="field-with-suffix"
+            ><el-form-item :label="t('settings.general.previewLimit')" class="field-with-suffix"
               ><div class="field-with-suffix-row">
                 <el-input-number v-model="settings.previewMaxKb" :min="1" :max="1024" /><span
                   class="field-suffix"
-                  >千字</span
+                  >{{ t("settings.general.previewUnit") }}</span
                 >
               </div></el-form-item
             ></el-form
           >
           <div class="settings-section">
-            <div class="section-title">轉換</div>
+            <div class="section-title">{{ t("settings.general.conversion") }}</div>
             <div class="settings-toggle-grid">
-              <el-checkbox v-model="settings.vocabularyCorrection">詞彙修正</el-checkbox>
-              <el-checkbox v-model="settings.recognizeEncoding">自動辨識編碼</el-checkbox>
+              <el-checkbox v-model="settings.vocabularyCorrection">{{
+                t("settings.general.vocabularyCorrection")
+              }}</el-checkbox>
+              <el-checkbox v-model="settings.recognizeEncoding">{{
+                t("settings.general.recognizeEncoding")
+              }}</el-checkbox>
               <el-tooltip
-                content="檔案、檔名與音訊標籤寫入前會建立 .bak。選取資料夾時備份整份資料夾，不會對其中每個檔案分別加後綴。命令列可用 /b:f 關閉。"
+                :content="t('settings.general.autoBackupTip')"
                 placement="top"
                 :show-after="300"
               >
-                <el-checkbox v-model="settings.autoBackupBeforeConversion"
-                  >轉換前自動備份</el-checkbox
-                >
+                <el-checkbox v-model="settings.autoBackupBeforeConversion">{{
+                  t("settings.general.autoBackup")
+                }}</el-checkbox>
               </el-tooltip>
               <el-tooltip
-                content="檔案內容與音訊標籤寫入後，把修改時間設回原檔的時間，音樂庫依日期排序時不會變動。"
+                :content="t('settings.general.preserveModifiedTimeTip')"
                 placement="top"
                 :show-after="300"
               >
-                <el-checkbox v-model="settings.preserveModifiedTime">保留原檔修改時間</el-checkbox>
+                <el-checkbox v-model="settings.preserveModifiedTime">{{
+                  t("settings.general.preserveModifiedTime")
+                }}</el-checkbox>
               </el-tooltip>
-              <el-checkbox v-model="settings.promptAfterConversion">完成後提示</el-checkbox>
+              <el-checkbox v-model="settings.promptAfterConversion">{{
+                t("settings.general.promptAfterConversion")
+              }}</el-checkbox>
             </div>
           </div>
           <div class="settings-section">
-            <div class="section-title">啟動與更新</div>
+            <div class="section-title">{{ t("settings.general.startupAndUpdates") }}</div>
             <div class="settings-toggle-grid">
-              <el-checkbox v-model="settings.showMainWindowOnStart">啟動時顯示主視窗</el-checkbox>
-              <el-checkbox v-model="settings.checkVersionOnStart">啟動時檢查更新</el-checkbox>
+              <el-checkbox v-model="settings.showMainWindowOnStart">{{
+                t("settings.general.showMainWindowOnStart")
+              }}</el-checkbox>
+              <el-checkbox v-model="settings.checkVersionOnStart">{{
+                t("settings.general.checkVersionOnStart")
+              }}</el-checkbox>
               <el-tooltip
-                content="正式版預設只提示正式版。目前執行的不是正式版時，會預設一併檢查開發／預發佈通道。開啟後會檢查 alpha、beta、rc 通道並可自動更新；若正式版較新則下載正式版。"
+                :content="t('settings.general.checkPreReleaseTip')"
                 placement="top"
                 :show-after="300"
               >
-                <el-checkbox v-model="settings.checkPreReleaseUpdates"
-                  >檢查開發／預發佈版本</el-checkbox
-                >
+                <el-checkbox v-model="settings.checkPreReleaseUpdates">{{
+                  t("settings.general.checkPreRelease")
+                }}</el-checkbox>
               </el-tooltip>
             </div>
           </div>
           <p v-if="settings.skippedUpdateVersion" class="settings-note">
-            已略過 {{ settings.skippedUpdateVersion }}，啟動時不會再詢問此版本。
-            <el-button text type="primary" @click="settings.skippedUpdateVersion = ''"
-              >清除略過</el-button
-            >
+            {{ t("settings.general.skippedVersion", { version: settings.skippedUpdateVersion }) }}
+            <el-button text type="primary" @click="settings.skippedUpdateVersion = ''">{{
+              t("settings.general.clearSkipped")
+            }}</el-button>
           </p>
           <p v-if="capabilities?.portable" class="settings-note muted">
-            免安裝版：設定寫在程式目錄的 settings-v2.json，可整包帶走。ZhConvert
-            金鑰仍存於系統憑證庫；檢查更新會開啟 GitHub Releases。
+            {{ t("settings.general.portableNote") }}
           </p>
           <div v-if="capabilities?.sendToShortcut" class="settings-windows">
-            <div class="section-title">Windows 整合</div>
+            <div class="section-title">{{ t("settings.general.windowsIntegration") }}</div>
             <el-button
               @click="
                 invoke('set_send_to_shortcut', { enabled: true }).then(() =>
-                  ElMessage.success('SendTo 捷徑已建立'),
+                  ElMessage.success(t('settings.general.sendToCreated')),
                 )
               "
-              >建立 SendTo 捷徑</el-button
+              >{{ t("settings.general.createSendTo") }}</el-button
             ><el-button
               @click="
                 invoke('set_send_to_shortcut', { enabled: false }).then(() =>
-                  ElMessage.success('SendTo 捷徑已移除'),
+                  ElMessage.success(t('settings.general.sendToRemoved')),
                 )
               "
-              >移除 SendTo 捷徑</el-button
+              >{{ t("settings.general.removeSendTo") }}</el-button
             >
           </div>
         </el-tab-pane>
-        <el-tab-pane label="檔案" name="files" lazy>
+        <el-tab-pane :label="t('settings.tabs.files')" name="files" lazy>
           <FilterProfilesPanel :files="settings.files" />
           <el-form label-position="top"
-            ><el-form-item label="預設路徑"
+            ><el-form-item :label="t('settings.files.defaultPath')"
               ><el-input
                 v-model="settings.files.defaultPath"
-                placeholder="留空時使用系統預設路徑" /></el-form-item
-            ><el-form-item label="修正 charset 的副檔名"
+                :placeholder="t('settings.files.defaultPathPlaceholder')" /></el-form-item
+            ><el-form-item :label="t('settings.files.fixCharsetExtensions')"
               ><el-select
                 v-model="settings.files.fixCharsetExtensions"
                 multiple
@@ -298,62 +351,67 @@ async function saveApiKey() {
                 filterable
                 default-first-option
                 style="width: 100%" /></el-form-item></el-form
-          ><el-checkbox v-model="settings.files.unicodeAddBom">Unicode 輸出加入 BOM</el-checkbox>
+          ><el-checkbox v-model="settings.files.unicodeAddBom">{{
+            t("settings.files.unicodeAddBom")
+          }}</el-checkbox>
         </el-tab-pane>
-        <el-tab-pane label="快捷鍵" name="hotkeys" lazy>
+        <el-tab-pane :label="t('settings.tabs.hotkeys')" name="hotkeys" lazy>
           <el-alert
             v-if="!capabilities?.globalShortcuts"
-            title="目前顯示伺服器無法保證全域快捷鍵。"
+            :title="t('settings.hotkeys.noGlobalShortcuts')"
             type="warning"
             :closable="false"
           />
           <div class="switch-row">
-            <el-checkbox v-model="settings.hotkeys.autoCopy">快捷鍵讀取選取文字</el-checkbox
-            ><el-checkbox v-model="settings.hotkeys.autoPaste">轉換後寫回選取文字</el-checkbox>
+            <el-checkbox v-model="settings.hotkeys.autoCopy">{{
+              t("settings.hotkeys.autoCopy")
+            }}</el-checkbox
+            ><el-checkbox v-model="settings.hotkeys.autoPaste">{{
+              t("settings.hotkeys.autoPaste")
+            }}</el-checkbox>
           </div>
           <el-table :data="settings.hotkeys.shortcuts"
-            ><el-table-column label="啟用" width="70"
+            ><el-table-column :label="t('settings.hotkeys.enabled')" width="70"
               ><template #default="scope"
                 ><el-checkbox v-model="scope.row.enabled" /></template></el-table-column
-            ><el-table-column label="動作" min-width="220"
+            ><el-table-column :label="t('settings.hotkeys.action')" min-width="220"
               ><template #default="scope"
                 ><el-select v-model="scope.row.action" filterable
                   ><el-option
-                    v-for="action in LEGACY_ACTIONS"
+                    v-for="action in legacyActions()"
                     :key="action.value"
                     :label="action.label"
                     :value="action.value" /></el-select></template></el-table-column
-            ><el-table-column label="快捷鍵" min-width="220"
+            ><el-table-column :label="t('settings.hotkeys.shortcut')" min-width="220"
               ><template #default="scope"
                 ><el-input
                   :model-value="scope.row.accelerator"
                   readonly
-                  placeholder="點選後按下組合鍵"
+                  :placeholder="t('settings.hotkeys.shortcutPlaceholder')"
                   @keydown="captureAccelerator(scope.row, $event)" /></template></el-table-column
           ></el-table>
-          <p class="muted">點選快捷鍵欄位後按下組合鍵，錄製後會自動啟用。Backspace 可清除。</p>
+          <p class="muted">{{ t("settings.hotkeys.hint") }}</p>
         </el-tab-pane>
-        <el-tab-pane label="浮動球" name="floating" lazy>
+        <el-tab-pane :label="t('settings.tabs.floating')" name="floating" lazy>
           <label class="floating-enable">
             <el-switch v-model="settings.floatingBall.enabled" />
             <span>
-              <span class="section-title">顯示浮動球</span>
+              <span class="section-title">{{ t("settings.floating.show") }}</span>
               <p class="muted">
-                桌面上的捷徑球。按住 Ctrl、Alt 或 Shift
-                後點擊，或把檔案拖進去。關閉後手勢設定仍會保留。
+                {{ t("settings.floating.description") }}
               </p>
             </span>
           </label>
           <el-alert
             v-if="capabilities && !capabilities.floatingAlwaysOnTop"
-            title="浮動球置頂能力取決於合成器。"
+            :title="t('settings.floating.alwaysOnTopLimited')"
             type="info"
             :closable="false"
             show-icon
             class="floating-limitation"
           />
           <div class="gesture-groups">
-            <section v-for="group in gestureGroups" :key="group.title" class="gesture-group">
+            <section v-for="group in gestureGroups" :key="group.id" class="gesture-group">
               <div class="gesture-group-header">
                 <div class="section-title">{{ group.title }}</div>
                 <p class="muted">{{ group.hint }}</p>
@@ -361,14 +419,14 @@ async function saveApiKey() {
               <table class="gesture-matrix">
                 <thead>
                   <tr>
-                    <th scope="col">按鈕</th>
+                    <th scope="col">{{ t("settings.floating.button") }}</th>
                     <th v-for="modifier in gestureModifiers" :key="modifier" scope="col">
                       {{ modifier }}
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="row in group.rows" :key="row.label">
+                  <tr v-for="row in group.rows" :key="row.id">
                     <th scope="row">{{ row.label }}</th>
                     <td v-for="modifier in gestureModifiers" :key="modifier">
                       <el-select
@@ -378,7 +436,7 @@ async function saveApiKey() {
                         @update:model-value="setQuickActionValue(row.keys[modifier], $event)"
                       >
                         <el-option
-                          v-for="action in LEGACY_ACTIONS"
+                          v-for="action in legacyActions()"
                           :key="action.value"
                           :label="action.label"
                           :value="action.value"
@@ -392,90 +450,99 @@ async function saveApiKey() {
           </div>
         </el-tab-pane>
         <el-tab-pane label="ZhConvert" name="zhconvert" lazy>
-          <p class="muted">本程式使用繁化姬 API。金鑰不會寫入 settings-v2.json。</p>
+          <p class="muted">{{ t("settings.zhconvert.intro") }}</p>
           <div class="control-row">
             <el-input
               v-model="apiKey"
               type="password"
               show-password
-              placeholder="選填的 ZhConvert API 金鑰"
-            /><el-button :disabled="!apiKey" @click="saveApiKey">保存金鑰</el-button
-            ><el-button link type="primary" @click="openUrl('https://zhconvert.org')"
-              >繁化姬網站</el-button
-            >
+              :placeholder="t('settings.zhconvert.apiKeyPlaceholder')"
+            /><el-button :disabled="!apiKey" @click="saveApiKey">{{
+              t("settings.zhconvert.saveKey")
+            }}</el-button
+            ><el-button link type="primary" @click="openUrl('https://zhconvert.org')">{{
+              t("settings.zhconvert.website")
+            }}</el-button>
           </div>
           <el-form label-position="top" class="option-grid"
-            ><el-form-item label="簡轉繁轉換器"
+            ><el-form-item :label="t('settings.zhconvert.converterS2T')"
               ><el-input v-model="settings.zhconvert.converterS2T" /></el-form-item
-            ><el-form-item label="繁轉簡轉換器"
+            ><el-form-item :label="t('settings.zhconvert.converterT2S')"
               ><el-input v-model="settings.zhconvert.converterT2S" /></el-form-item
-            ><el-form-item label="日文文字策略"
+            ><el-form-item :label="t('settings.zhconvert.jpTextStrategy')"
               ><el-select v-model="settings.zhconvert.jpTextConversionStrategy"
-                ><el-option label="不處理" value="none" /><el-option
-                  label="保護"
+                ><el-option :label="t('settings.zhconvert.strategy.none')" value="none" /><el-option
+                  :label="t('settings.zhconvert.strategy.protect')"
                   value="protect" /><el-option
-                  label="僅同源保護"
+                  :label="t('settings.zhconvert.strategy.protectOnlySameOrigin')"
                   value="protectOnlySameOrigin" /><el-option
-                  label="修正"
+                  :label="t('settings.zhconvert.strategy.fix')"
                   value="fix" /></el-select></el-form-item
-            ><el-form-item label="日文字形策略"
+            ><el-form-item :label="t('settings.zhconvert.jpStyleStrategy')"
               ><el-select v-model="settings.zhconvert.jpStyleConversionStrategy"
-                ><el-option label="不處理" value="none" /><el-option
-                  label="保護"
+                ><el-option :label="t('settings.zhconvert.strategy.none')" value="none" /><el-option
+                  :label="t('settings.zhconvert.strategy.protect')"
                   value="protect" /><el-option
-                  label="僅同源保護"
+                  :label="t('settings.zhconvert.strategy.protectOnlySameOrigin')"
                   value="protectOnlySameOrigin" /><el-option
-                  label="修正"
+                  :label="t('settings.zhconvert.strategy.fix')"
                   value="fix" /></el-select></el-form-item
-            ><el-form-item label="Tab 轉空白數"
+            ><el-form-item :label="t('settings.zhconvert.tabsToSpaces')"
               ><el-input-number
                 v-model="settings.zhconvert.translateTabsToSpaces"
                 :min="-1"
                 :max="16" /></el-form-item
-            ><el-form-item label="忽略的字幕樣式"
+            ><el-form-item :label="t('settings.zhconvert.ignoreTextStyles')"
               ><el-input v-model="settings.zhconvert.ignoreTextStyles" /></el-form-item
-            ><el-form-item label="視為日文的字幕樣式"
+            ><el-form-item :label="t('settings.zhconvert.jpTextStyles')"
               ><el-input v-model="settings.zhconvert.jpTextStyles" /></el-form-item
           ></el-form>
           <el-form label-position="top"
-            ><el-form-item label="模組 JSON"
+            ><el-form-item :label="t('settings.zhconvert.modulesJson')"
               ><el-input
                 v-model="modulesJson"
                 type="textarea"
                 :rows="4"
                 placeholder='{"TaiwanPhrase": 1}' /></el-form-item
-            ><el-form-item label="轉換前取代"
+            ><el-form-item :label="t('settings.zhconvert.preReplace')"
               ><el-input
                 v-model="settings.zhconvert.userPreReplace"
                 type="textarea"
                 :rows="3" /></el-form-item
-            ><el-form-item label="轉換後取代"
+            ><el-form-item :label="t('settings.zhconvert.postReplace')"
               ><el-input
                 v-model="settings.zhconvert.userPostReplace"
                 type="textarea"
                 :rows="3" /></el-form-item
-            ><el-form-item label="保護取代"
+            ><el-form-item :label="t('settings.zhconvert.protectReplace')"
               ><el-input
                 v-model="settings.zhconvert.userProtectReplace"
                 type="textarea"
                 :rows="3" /></el-form-item
           ></el-form>
           <div class="switch-row">
-            <el-checkbox v-model="settings.zhconvert.cleanUpText">清理文字</el-checkbox
-            ><el-checkbox v-model="settings.zhconvert.ensureNewlineAtEof">檔尾換行</el-checkbox
-            ><el-checkbox v-model="settings.zhconvert.trimTrailingWhiteSpaces"
-              >移除行尾空白</el-checkbox
-            ><el-checkbox v-model="settings.zhconvert.unifyLeadingHyphen"
-              >統一行首連字號</el-checkbox
-            >
+            <el-checkbox v-model="settings.zhconvert.cleanUpText">{{
+              t("settings.zhconvert.cleanUpText")
+            }}</el-checkbox
+            ><el-checkbox v-model="settings.zhconvert.ensureNewlineAtEof">{{
+              t("settings.zhconvert.ensureNewlineAtEof")
+            }}</el-checkbox
+            ><el-checkbox v-model="settings.zhconvert.trimTrailingWhiteSpaces">{{
+              t("settings.zhconvert.trimTrailingWhiteSpaces")
+            }}</el-checkbox
+            ><el-checkbox v-model="settings.zhconvert.unifyLeadingHyphen">{{
+              t("settings.zhconvert.unifyLeadingHyphen")
+            }}</el-checkbox>
           </div>
-          <p class="legal-note">使用此服務時必須遵守繁化姬的署名與商業使用條款。</p>
+          <p class="legal-note">{{ t("settings.zhconvert.legal") }}</p>
         </el-tab-pane>
       </el-tabs>
     </el-card>
     <div v-if="dirty" class="settings-save-bar">
-      <span>設定已變更，尚未儲存。</span>
-      <el-button type="primary" :loading="busy" @click="save">儲存設定</el-button>
+      <span>{{ t("settings.unsaved") }}</span>
+      <el-button type="primary" :loading="busy" @click="save">{{
+        t("settings.saveSettings")
+      }}</el-button>
     </div>
   </section>
 </template>

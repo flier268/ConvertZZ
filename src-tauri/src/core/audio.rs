@@ -254,7 +254,7 @@ impl AudioService {
             progress(super::types::ProgressEvent {
                 current: total,
                 total,
-                message: "使用已掃描的音訊標籤。".into(),
+                message: tr_static!("使用已掃描的音訊標籤。", "Using scanned audio tags.").into(),
 
                 batch: None,
             });
@@ -281,21 +281,32 @@ impl AudioService {
             if is_cancelled() {
                 return Err(CoreError::new(
                     "PLAN_CANCELLED",
-                    "音訊標籤作業已由使用者取消。",
+                    tr_static!(
+                        "音訊標籤作業已由使用者取消。",
+                        "Audio tag operation cancelled by the user."
+                    ),
                 ));
             }
             let file = &mut scanned[index];
             file.selected =
                 file.warning.is_none() && selected_paths.contains(&resolve_path(&file.path));
             let message = if file.warning.is_some() {
-                format!("無法讀取標籤：{}", file_name(Path::new(&file.path)))
+                tr!(
+                    "無法讀取標籤：{}",
+                    "Could not read tags: {}",
+                    file_name(Path::new(&file.path))
+                )
             } else {
                 file.previewed = true;
                 if !file.selected {
                     for field in &mut file.fields {
                         field.selected = false;
                     }
-                    format!("已略過未選檔案：{}", file_name(Path::new(&file.path)))
+                    tr!(
+                        "已略過未選檔案：{}",
+                        "Skipped unselected file: {}",
+                        file_name(Path::new(&file.path))
+                    )
                 } else {
                     let mut item =
                         convert_selected_fields(conversion, &request, file, &mut warnings).await?;
@@ -304,7 +315,11 @@ impl AudioService {
                     if let Some(item) = item {
                         prepared.push(item);
                     }
-                    format!("正在建立標籤預覽：{}", file_name(Path::new(&file.path)))
+                    tr!(
+                        "正在建立標籤預覽：{}",
+                        "Building tag preview: {}",
+                        file_name(Path::new(&file.path))
+                    )
                 }
             };
             done += 1;
@@ -323,7 +338,11 @@ impl AudioService {
             &progress,
             done,
             total.max(1),
-            "標籤預覽這一批已完成。".into(),
+            tr_static!(
+                "標籤預覽這一批已完成。",
+                "This tag preview batch is complete."
+            )
+            .into(),
             "plan",
             &mut preview_batch,
             true,
@@ -370,7 +389,10 @@ impl AudioService {
         )
         .await?;
         let Some(mut file) = scanned.pop() else {
-            return Err(CoreError::new("AUDIO_NOT_FOUND", "找不到這個音訊檔案。"));
+            return Err(CoreError::new(
+                "AUDIO_NOT_FOUND",
+                tr_static!("找不到這個音訊檔案。", "This audio file was not found."),
+            ));
         };
         self.patch_scan_file(&request.plan, &file);
         let Some(plan_id) = request.plan_id.clone() else {
@@ -407,13 +429,21 @@ impl AudioService {
         path: &str,
         prepared: Option<PreparedAudio>,
     ) -> Result<(), CoreError> {
-        let mut plans = self
-            .plans
-            .lock()
-            .map_err(|_| CoreError::new("PLAN_LOCK", "無法更新音訊計畫。"))?;
-        let stored = plans
-            .get_mut(plan_id)
-            .ok_or_else(|| CoreError::new("PLAN_NOT_FOUND", "音訊標籤計畫已失效。請重新預覽。"))?;
+        let mut plans = self.plans.lock().map_err(|_| {
+            CoreError::new(
+                "PLAN_LOCK",
+                tr_static!("無法更新音訊計畫。", "Could not update the audio plan."),
+            )
+        })?;
+        let stored = plans.get_mut(plan_id).ok_or_else(|| {
+            CoreError::new(
+                "PLAN_NOT_FOUND",
+                tr_static!(
+                    "音訊標籤計畫已失效。請重新預覽。",
+                    "The audio tag plan has expired. Please preview again."
+                ),
+            )
+        })?;
         let resolved = resolve_path(path);
         stored
             .files
@@ -450,7 +480,15 @@ impl AudioService {
             .lock()
             .ok()
             .and_then(|mut plans| plans.remove(plan_id))
-            .ok_or_else(|| CoreError::new("PLAN_NOT_FOUND", "音訊標籤計畫已失效。請重新預覽。"))?;
+            .ok_or_else(|| {
+                CoreError::new(
+                    "PLAN_NOT_FOUND",
+                    tr_static!(
+                        "音訊標籤計畫已失效。請重新預覽。",
+                        "The audio tag plan has expired. Please preview again."
+                    ),
+                )
+            })?;
         if request_cancelled()
             || self
                 .cancelled
@@ -461,7 +499,10 @@ impl AudioService {
             self.put_plan_back(plan_id, plan, &[]);
             return Err(CoreError::new(
                 "PLAN_CANCELLED",
-                "音訊標籤作業已由使用者取消。",
+                tr_static!(
+                    "音訊標籤作業已由使用者取消。",
+                    "Audio tag operation cancelled by the user."
+                ),
             ));
         }
         let mut result = ApplyResult {
@@ -516,7 +557,7 @@ impl AudioService {
             progress(super::types::ProgressEvent {
                 current: 0,
                 total: files.len().max(1) as u64,
-                message: "正在建立備份…".into(),
+                message: tr_static!("正在建立備份…", "Creating backups…").into(),
 
                 batch: None,
             });
@@ -527,7 +568,7 @@ impl AudioService {
                     cancelled.remove(plan_id);
                 }
                 result.failed.push(ApplyFailure {
-                    path: "備份".into(),
+                    path: tr_static!("備份", "Backup").into(),
                     message: error.message,
                 });
                 self.put_plan_back(plan_id, plan, &[]);
@@ -551,7 +592,10 @@ impl AudioService {
                 self.put_plan_back(plan_id, plan, &result.succeeded);
                 return Err(CoreError::new(
                     "PLAN_CANCELLED",
-                    "音訊標籤作業已由使用者取消。",
+                    tr_static!(
+                        "音訊標籤作業已由使用者取消。",
+                        "Audio tag operation cancelled by the user."
+                    ),
                 ));
             }
             if !included(&file.path) {
@@ -568,7 +612,7 @@ impl AudioService {
                 progress(super::types::ProgressEvent {
                     current: seen,
                     total,
-                    message: format!("已略過：{}", file_name(&file.path)),
+                    message: tr!("已略過：{}", "Skipped: {}", file_name(&file.path)),
 
                     batch: None,
                 });
@@ -592,9 +636,11 @@ impl AudioService {
                             .extend(crate::core::restore_file_times(written, times));
                     }
                     if let RenameOutcome::SkippedConflict(dest) = &outcome.rename {
-                        result
-                            .warnings
-                            .push(format!("檔名衝突，已略過重新命名：{}", dest.display()));
+                        result.warnings.push(tr!(
+                            "檔名衝突，已略過重新命名：{}",
+                            "File name conflict; rename skipped: {}",
+                            dest.display()
+                        ));
                         if !outcome.wrote_tags {
                             result.skipped.push(path);
                             continue;
@@ -610,7 +656,11 @@ impl AudioService {
             progress(super::types::ProgressEvent {
                 current: seen,
                 total,
-                message: format!("正在寫入標籤：{}", file_name(&file.path)),
+                message: tr!(
+                    "正在寫入標籤：{}",
+                    "Writing tags: {}",
+                    file_name(&file.path)
+                ),
 
                 batch: None,
             });
@@ -646,7 +696,10 @@ impl AudioService {
         {
             return Err(CoreError::new(
                 "PLAN_CANCELLED",
-                "音訊標籤作業已由使用者取消。",
+                tr_static!(
+                    "音訊標籤作業已由使用者取消。",
+                    "Audio tag operation cancelled by the user."
+                ),
             ));
         }
         Ok(())
@@ -693,7 +746,10 @@ async fn read_audio_files(
         if is_cancelled() {
             return Err(CoreError::new(
                 "PLAN_CANCELLED",
-                "音訊標籤作業已由使用者取消。",
+                tr_static!(
+                    "音訊標籤作業已由使用者取消。",
+                    "Audio tag operation cancelled by the user."
+                ),
             ));
         }
         if !path.exists() {
@@ -731,7 +787,7 @@ async fn read_audio_files(
             &progress,
             done,
             total,
-            format!("正在掃描：{}", file_name(&path)),
+            tr!("正在掃描：{}", "Scanning: {}", file_name(&path)),
             "scan",
             &mut batch,
             false,
@@ -741,7 +797,7 @@ async fn read_audio_files(
         &progress,
         done,
         total,
-        "掃描這一批音訊標籤。".into(),
+        tr_static!("掃描這一批音訊標籤。", "Scanning this batch of audio tags.").into(),
         "scan",
         &mut batch,
         true,
@@ -1078,7 +1134,7 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
                 Err(error) if has_id3v2 => {
                     return Err(CoreError::new(
                         "ID3_READ",
-                        format!("原檔有 ID3v2，但無法讀取，已停止寫入：{error}"),
+                        tr!("原檔有 ID3v2，但無法讀取，已停止寫入：{error}", "The original file has ID3v2 that cannot be read; writing stopped: {error}"),
                     ));
                 }
                 Err(_) => id3::Tag::new(),
@@ -1119,10 +1175,13 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
             if id3v2_header_version(&output) != Some(file.request.id3v2_version) {
                 return Err(CoreError::new(
                     "ID3_WRITE",
-                    format!(
+                    tr!(
                         "ID3v2 版本寫入為 {}，預期 {}。",
-                        id3v2_header_version(&output)
-                            .map_or_else(|| "未知".into(), |value| value.to_string()),
+                        "ID3v2 version written as {}, expected {}.",
+                        id3v2_header_version(&output).map_or_else(
+                            || tr_static!("未知", "unknown").into(),
+                            |value| value.to_string()
+                        ),
                         file.request.id3v2_version
                     ),
                 ));
@@ -1174,14 +1233,20 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
         if verified_mp3_audio(&source) != verified_mp3_audio(&fs::read(&temporary)?) {
             return Err(CoreError::new(
                 "AUDIO_VERIFY",
-                "MP3 標籤寫入改變了音訊資料。",
+                tr_static!(
+                    "MP3 標籤寫入改變了音訊資料。",
+                    "Writing MP3 tags changed the audio data."
+                ),
             ));
         }
         // 拿掉整個 ID3v2 時封面跟著消失，不比對。其餘寫入（含移除 ID3v1／APEv2）要留下原本的 APIC。
         if !remove_v2 && picture_count(&temporary)? != file.original_picture_count {
             return Err(CoreError::new(
                 "AUDIO_PICTURE",
-                "標籤寫入造成封面圖片數量改變。",
+                tr_static!(
+                    "標籤寫入造成封面圖片數量改變。",
+                    "Writing tags changed the number of cover images."
+                ),
             ));
         }
         if remove_v2 {
@@ -1206,14 +1271,23 @@ fn apply_taglib(file: &PreparedAudio) -> Result<(), CoreError> {
         {
             return Err(CoreError::new(
                 "AUDIO_REMOVE",
-                "第一版不能移除 vorbis-comment。",
+                tr_static!(
+                    "第一版不能移除 vorbis-comment。",
+                    "Removing vorbis-comment is not supported yet."
+                ),
             ));
         }
         if file.remove_containers.is_empty() || !file.updates.is_empty() {
             let mut tagged = read_tagged(&temporary)?;
-            let tag = tagged
-                .primary_tag_mut()
-                .ok_or_else(|| CoreError::new("AUDIO_INVALID", "音訊檔案沒有可寫入的標籤。"))?;
+            let tag = tagged.primary_tag_mut().ok_or_else(|| {
+                CoreError::new(
+                    "AUDIO_INVALID",
+                    tr_static!(
+                        "音訊檔案沒有可寫入的標籤。",
+                        "The audio file has no writable tag."
+                    ),
+                )
+            })?;
             for (identifier, values) in &file.updates {
                 let (_, key) = split_field_id(identifier);
                 set_lofty_values(tag, &key, values);
@@ -1242,7 +1316,13 @@ fn apply_taglib(file: &PreparedAudio) -> Result<(), CoreError> {
                 let mut tagged = read_tagged(&temporary)?;
                 for container in &file.remove_containers {
                     let tag_type = lofty_tag_type(*container).ok_or_else(|| {
-                        CoreError::new("AUDIO_REMOVE", "第一版不能移除這個標籤。")
+                        CoreError::new(
+                            "AUDIO_REMOVE",
+                            tr_static!(
+                                "第一版不能移除這個標籤。",
+                                "Removing this tag is not supported yet."
+                            ),
+                        )
                     })?;
                     // 記憶體裡先拿掉，磁碟再交給 TagType::remove_from_path。
                     // save_to 只會重寫還留著的標籤，不會清掉已刪的容器。
@@ -1265,7 +1345,13 @@ fn apply_taglib(file: &PreparedAudio) -> Result<(), CoreError> {
         if file.format == AudioFormat::Ape {
             let written = fs::read(&temporary)?;
             if verified_ape_audio(&source) != verified_ape_audio(&written) {
-                return Err(CoreError::new("AUDIO_VERIFY", "標籤寫入改變了音訊資料。"));
+                return Err(CoreError::new(
+                    "AUDIO_VERIFY",
+                    tr_static!(
+                        "標籤寫入改變了音訊資料。",
+                        "Writing tags changed the audio data."
+                    ),
+                ));
             }
         }
         if file.remove_containers.contains(&AudioContainer::Id3v2) {
@@ -1274,7 +1360,10 @@ fn apply_taglib(file: &PreparedAudio) -> Result<(), CoreError> {
         let verification = read_tagged(&temporary).map_err(|error| {
             CoreError::new(
                 "AUDIO_VERIFY",
-                format!("標籤寫入後的音訊檔案無法驗證。{error}"),
+                tr!(
+                    "標籤寫入後的音訊檔案無法驗證。{error}",
+                    "The audio file could not be verified after writing tags. {error}"
+                ),
             )
         })?;
         if file.remove_containers.is_empty() {
@@ -1285,7 +1374,10 @@ fn apply_taglib(file: &PreparedAudio) -> Result<(), CoreError> {
             if pictures != file.original_picture_count {
                 return Err(CoreError::new(
                     "AUDIO_PICTURE",
-                    "標籤寫入造成封面圖片數量改變。",
+                    tr_static!(
+                        "標籤寫入造成封面圖片數量改變。",
+                        "Writing tags changed the number of cover images."
+                    ),
                 ));
             }
         } else if let Ok(before) = read_tagged(&file.path) {
@@ -1304,7 +1396,10 @@ fn apply_taglib(file: &PreparedAudio) -> Result<(), CoreError> {
                 if after_count != tag.pictures().len() {
                     return Err(CoreError::new(
                         "AUDIO_PICTURE",
-                        "標籤寫入造成封面圖片數量改變。",
+                        tr_static!(
+                            "標籤寫入造成封面圖片數量改變。",
+                            "Writing tags changed the number of cover images."
+                        ),
                     ));
                 }
             }
@@ -1680,8 +1775,9 @@ async fn convert_audio_filename(
         return Ok(None);
     }
     if let Some(problem) = super::files::entry_name_problem(&text, cfg!(windows)) {
-        warnings.push(format!(
+        warnings.push(tr!(
             "{}：轉換後的檔名「{text}」{problem}，已保留原檔名。",
+            "{}: the converted file name \"{text}\" {problem}; the original name was kept.",
             file.path
         ));
         file.converted_path = None;
@@ -1690,8 +1786,14 @@ async fn convert_audio_filename(
     let dest = path.with_file_name(&text);
     if audio_rename_conflicts(path, &dest) {
         let notice = match request.conflict_policy {
-            ConflictPolicy::Skip => format!("檔名「{text}」已存在，將略過重新命名。"),
-            ConflictPolicy::Overwrite => format!("檔名「{text}」已存在，將覆寫該檔。"),
+            ConflictPolicy::Skip => tr!(
+                "檔名「{text}」已存在，將略過重新命名。",
+                "File name \"{text}\" already exists; rename will be skipped."
+            ),
+            ConflictPolicy::Overwrite => tr!(
+                "檔名「{text}」已存在，將覆寫該檔。",
+                "File name \"{text}\" already exists; that file will be overwritten."
+            ),
         };
         push_notice(file, notice);
     }
@@ -2035,13 +2137,20 @@ fn note_id3v1_truncation(
         for value in &source {
             let fit = fit_encoded_text(value, limit, encoding)?;
             if fit.truncated && notice.is_none() {
-                notice = Some(format!(
+                notice = Some(tr!(
                     "「ID3v1 {}超過 {limit} 位元組，已截斷為 {}」",
-                    field.label, fit.text
+                    "\"ID3v1 {} exceeds {limit} bytes; truncated to {}\"",
+                    field.label,
+                    fit.text
                 ));
                 field_warnings.push(AudioFieldWarning {
                     code: AudioFieldWarningCode::Truncated,
-                    message: format!("截斷 {}→{} B", fit.from_bytes, fit.to_bytes),
+                    message: tr!(
+                        "截斷 {}→{} B",
+                        "Truncated {}→{} B",
+                        fit.from_bytes,
+                        fit.to_bytes
+                    ),
                     from_bytes: Some(fit.from_bytes),
                     to_bytes: Some(fit.to_bytes),
                     count: None,
@@ -2050,7 +2159,11 @@ fn note_id3v1_truncation(
             if fit.unrepresentable > 0 {
                 field_warnings.push(AudioFieldWarning {
                     code: AudioFieldWarningCode::Unrepresentable,
-                    message: format!("{} 字無法表示", fit.unrepresentable),
+                    message: tr!(
+                        "{} 字無法表示",
+                        "{} characters cannot be represented",
+                        fit.unrepresentable
+                    ),
                     from_bytes: None,
                     to_bytes: None,
                     count: Some(fit.unrepresentable),
@@ -2077,16 +2190,16 @@ fn note_id3v1_truncation(
 
 fn label_for(key: &str) -> &str {
     match key {
-        "title" => "標題",
-        "artist" => "演出者",
-        "album" => "專輯",
-        "albumArtist" => "專輯演出者",
-        "comment" => "註解",
-        "genre" => "類型",
-        "composer" => "作曲者",
-        "lyrics" => "歌詞",
-        "year" => "年份",
-        "track" => "音軌",
+        "title" => tr_static!("標題", "Title"),
+        "artist" => tr_static!("演出者", "Artist"),
+        "album" => tr_static!("專輯", "Album"),
+        "albumArtist" => tr_static!("專輯演出者", "Album artist"),
+        "comment" => tr_static!("註解", "Comment"),
+        "genre" => tr_static!("類型", "Genre"),
+        "composer" => tr_static!("作曲者", "Composer"),
+        "lyrics" => tr_static!("歌詞", "Lyrics"),
+        "year" => tr_static!("年份", "Year"),
+        "track" => tr_static!("音軌", "Track"),
         other => other,
     }
 }
@@ -2162,8 +2275,9 @@ fn note_container_rewrites(file: &mut AudioTagFile, prepared: &Option<PreparedAu
         let encoding = id3v2_encoding_label(&item.request.id3v2_encoding);
         push_notice(
             file,
-            format!(
+            tr!(
                 "ID3v2 標籤會整個重寫為 v2.{}・{encoding}",
+                "The whole ID3v2 tag will be rewritten as v2.{} · {encoding}",
                 item.request.id3v2_version
             ),
         );
@@ -2172,7 +2286,10 @@ fn note_container_rewrites(file: &mut AudioTagFile, prepared: &Option<PreparedAu
         && item.selected_containers.contains(&AudioContainer::Id3v1)
         && !item.remove_containers.contains(&AudioContainer::Id3v1);
     if writes_id3v1 {
-        push_notice(file, "ID3v1 會重寫".into());
+        push_notice(
+            file,
+            tr_static!("ID3v1 會重寫", "ID3v1 will be rewritten").into(),
+        );
     }
 }
 
@@ -2255,23 +2372,41 @@ fn decode_synchsafe(bytes: &[u8]) -> Option<usize> {
 
 /// 只讀標頭宣告的標籤位元組，不把後面的音訊讀進記憶體。
 fn read_id3v2_declared_tag(path: &Path) -> Result<Vec<u8>, &'static str> {
-    let mut file = fs::File::open(path).map_err(|_| "無法開啟音訊檔，略過編碼重寫。")?;
+    let mut file = fs::File::open(path).map_err(|_| {
+        tr_static!(
+            "無法開啟音訊檔，略過編碼重寫。",
+            "Could not open the audio file; encoding rewrite skipped."
+        )
+    })?;
     let mut header = [0u8; 10];
-    let read = file
-        .read(&mut header)
-        .map_err(|_| "無法讀取 ID3 標頭，略過編碼重寫。")?;
+    let read = file.read(&mut header).map_err(|_| {
+        tr_static!(
+            "無法讀取 ID3 標頭，略過編碼重寫。",
+            "Could not read the ID3 header; encoding rewrite skipped."
+        )
+    })?;
     if read < 10 || &header[..3] != b"ID3" {
         return Ok(header[..read].to_vec());
     }
     let Some(size) = decode_synchsafe(&header[6..10]) else {
-        return Err("ID3 大小不是同步安全整數，略過編碼重寫。");
+        return Err(tr_static!(
+            "ID3 大小不是同步安全整數，略過編碼重寫。",
+            "ID3 size is not a synchsafe integer; encoding rewrite skipped."
+        ));
     };
     if size > ID3_TAG_READ_LIMIT {
-        return Err("ID3 標籤超過 16MB，略過編碼重寫。");
+        return Err(tr_static!(
+            "ID3 標籤超過 16MB，略過編碼重寫。",
+            "ID3 tag exceeds 16 MB; encoding rewrite skipped."
+        ));
     }
     let mut body = vec![0u8; size];
-    file.read_exact(&mut body)
-        .map_err(|_| "ID3 標籤比標頭宣告的還短，略過編碼重寫。")?;
+    file.read_exact(&mut body).map_err(|_| {
+        tr_static!(
+            "ID3 標籤比標頭宣告的還短，略過編碼重寫。",
+            "ID3 tag is shorter than its header declares; encoding rewrite skipped."
+        )
+    })?;
     let mut buffer = Vec::with_capacity(10 + size);
     buffer.extend_from_slice(&header);
     buffer.extend_from_slice(&body);
@@ -2294,23 +2429,38 @@ fn deunsync(data: &[u8]) -> Vec<u8> {
 
 fn skip_extended_header(version: u8, body: &[u8]) -> Result<usize, &'static str> {
     if body.len() < 4 {
-        return Err("延伸標頭太短，略過編碼重寫。");
+        return Err(tr_static!(
+            "延伸標頭太短，略過編碼重寫。",
+            "Extended header is too short; encoding rewrite skipped."
+        ));
     }
     if version == 4 {
         let Some(size) = decode_synchsafe(&body[..4]) else {
-            return Err("ID3v2.4 延伸標頭大小無效，略過編碼重寫。");
+            return Err(tr_static!(
+                "ID3v2.4 延伸標頭大小無效，略過編碼重寫。",
+                "Invalid ID3v2.4 extended header size; encoding rewrite skipped."
+            ));
         };
         if size < 6 || size > body.len() {
-            return Err("ID3v2.4 延伸標頭長度不合理，略過編碼重寫。");
+            return Err(tr_static!(
+                "ID3v2.4 延伸標頭長度不合理，略過編碼重寫。",
+                "Implausible ID3v2.4 extended header length; encoding rewrite skipped."
+            ));
         }
         return Ok(size);
     }
     let size = u32::from_be_bytes([body[0], body[1], body[2], body[3]]) as usize;
     let Some(total) = size.checked_add(4) else {
-        return Err("ID3v2.3 延伸標頭長度溢出，略過編碼重寫。");
+        return Err(tr_static!(
+            "ID3v2.3 延伸標頭長度溢出，略過編碼重寫。",
+            "ID3v2.3 extended header length overflows; encoding rewrite skipped."
+        ));
     };
     if size < 6 || total > body.len() {
-        return Err("ID3v2.3 延伸標頭長度不合理，略過編碼重寫。");
+        return Err(tr_static!(
+            "ID3v2.3 延伸標頭長度不合理，略過編碼重寫。",
+            "Implausible ID3v2.3 extended header length; encoding rewrite skipped."
+        ));
     }
     Ok(total)
 }
@@ -2326,30 +2476,51 @@ fn classify_id3v2(buffer: &[u8]) -> Id3v2Class {
     let version = buffer[3];
     let flags = buffer[5];
     let Some(declared) = decode_synchsafe(&buffer[6..10]) else {
-        return Id3v2Class::Unsafe("ID3 大小不是同步安全整數，略過編碼重寫。");
+        return Id3v2Class::Unsafe(tr_static!(
+            "ID3 大小不是同步安全整數，略過編碼重寫。",
+            "ID3 size is not a synchsafe integer; encoding rewrite skipped."
+        ));
     };
     if buffer.len() < 10 + declared {
-        return Id3v2Class::Unsafe("ID3 標籤比標頭宣告的還短，略過編碼重寫。");
+        return Id3v2Class::Unsafe(tr_static!(
+            "ID3 標籤比標頭宣告的還短，略過編碼重寫。",
+            "ID3 tag is shorter than its header declares; encoding rewrite skipped."
+        ));
     }
     let body = &buffer[10..10 + declared];
     if version == 2 {
         if flags & 0x40 != 0 {
-            return Id3v2Class::Unsafe("ID3v2.2 壓縮標籤無法安全判斷文字編碼，略過重寫。");
+            return Id3v2Class::Unsafe(tr_static!(
+                "ID3v2.2 壓縮標籤無法安全判斷文字編碼，略過重寫。",
+                "Cannot safely detect text encoding in a compressed ID3v2.2 tag; rewrite skipped."
+            ));
         }
         if flags & !0xc0 != 0 {
-            return Id3v2Class::Unsafe("ID3v2.2 有未知旗標，略過重寫。");
+            return Id3v2Class::Unsafe(tr_static!(
+                "ID3v2.2 有未知旗標，略過重寫。",
+                "ID3v2.2 has unknown flags; rewrite skipped."
+            ));
         }
         return parse_v22_frames(body, flags & 0x80 != 0);
     }
     if version != 3 && version != 4 {
-        return Id3v2Class::Unsafe("不支援的 ID3v2 版本，略過重寫。");
+        return Id3v2Class::Unsafe(tr_static!(
+            "不支援的 ID3v2 版本，略過重寫。",
+            "Unsupported ID3v2 version; rewrite skipped."
+        ));
     }
     if flags & 0x20 != 0 {
-        return Id3v2Class::Unsafe("實驗性 ID3v2 標籤，略過重寫。");
+        return Id3v2Class::Unsafe(tr_static!(
+            "實驗性 ID3v2 標籤，略過重寫。",
+            "Experimental ID3v2 tag; rewrite skipped."
+        ));
     }
     let known = if version == 4 { 0xf0 } else { 0xe0 };
     if flags & !known != 0 {
-        return Id3v2Class::Unsafe("ID3v2 有未知旗標，略過重寫。");
+        return Id3v2Class::Unsafe(tr_static!(
+            "ID3v2 有未知旗標，略過重寫。",
+            "ID3v2 has unknown flags; rewrite skipped."
+        ));
     }
     let mut offset = 0usize;
     if flags & 0x40 != 0 {
@@ -2373,16 +2544,25 @@ fn parse_v22_frames(body: &[u8], unsync: bool) -> Id3v2Class {
             .iter()
             .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit())
         {
-            return Id3v2Class::Unsafe("ID3v2.2 幀識別碼無效，略過重寫。");
+            return Id3v2Class::Unsafe(tr_static!(
+                "ID3v2.2 幀識別碼無效，略過重寫。",
+                "Invalid ID3v2.2 frame ID; rewrite skipped."
+            ));
         }
         let frame_size = ((body[offset + 3] as usize) << 16)
             | ((body[offset + 4] as usize) << 8)
             | (body[offset + 5] as usize);
         let Some(end) = offset.checked_add(6 + frame_size) else {
-            return Id3v2Class::Unsafe("ID3v2.2 幀長度溢出，略過重寫。");
+            return Id3v2Class::Unsafe(tr_static!(
+                "ID3v2.2 幀長度溢出，略過重寫。",
+                "ID3v2.2 frame length overflows; rewrite skipped."
+            ));
         };
         if end > body.len() {
-            return Id3v2Class::Unsafe("ID3v2.2 幀超出標籤，略過重寫。");
+            return Id3v2Class::Unsafe(tr_static!(
+                "ID3v2.2 幀超出標籤，略過重寫。",
+                "ID3v2.2 frame extends past the tag; rewrite skipped."
+            ));
         }
         let id = std::str::from_utf8(id_bytes).unwrap_or("");
         if text_frame(id) && frame_size > 0 {
@@ -2412,11 +2592,17 @@ fn parse_v23_frames(version: u8, body: &[u8], tag_unsync: bool) -> Id3v2Class {
             .iter()
             .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit())
         {
-            return Id3v2Class::Unsafe("ID3v2 幀識別碼無效，略過重寫。");
+            return Id3v2Class::Unsafe(tr_static!(
+                "ID3v2 幀識別碼無效，略過重寫。",
+                "Invalid ID3v2 frame ID; rewrite skipped."
+            ));
         }
         let frame_size = if version == 4 {
             let Some(size) = decode_synchsafe(&body[offset + 4..offset + 8]) else {
-                return Id3v2Class::Unsafe("ID3v2.4 幀大小無效，略過重寫。");
+                return Id3v2Class::Unsafe(tr_static!(
+                    "ID3v2.4 幀大小無效，略過重寫。",
+                    "Invalid ID3v2.4 frame size; rewrite skipped."
+                ));
             };
             size
         } else {
@@ -2428,10 +2614,16 @@ fn parse_v23_frames(version: u8, body: &[u8], tag_unsync: bool) -> Id3v2Class {
             ]) as usize
         };
         let Some(end) = offset.checked_add(10 + frame_size) else {
-            return Id3v2Class::Unsafe("ID3v2 幀長度溢出，略過重寫。");
+            return Id3v2Class::Unsafe(tr_static!(
+                "ID3v2 幀長度溢出，略過重寫。",
+                "ID3v2 frame length overflows; rewrite skipped."
+            ));
         };
         if end > body.len() {
-            return Id3v2Class::Unsafe("ID3v2 幀超出標籤，略過重寫。");
+            return Id3v2Class::Unsafe(tr_static!(
+                "ID3v2 幀超出標籤，略過重寫。",
+                "ID3v2 frame extends past the tag; rewrite skipped."
+            ));
         }
         let flags = [body[offset + 8], body[offset + 9]];
         let id = std::str::from_utf8(id_bytes).unwrap_or("");
@@ -2528,9 +2720,14 @@ fn format_from_path(path: &Path) -> Result<AudioFormat, CoreError> {
         "ogg" | "oga" => Ok(AudioFormat::Ogg),
         other => Err(CoreError::new(
             "AUDIO_FORMAT",
-            format!(
+            tr!(
                 "不支援音訊格式 {}。",
-                if other.is_empty() { "未知" } else { other }
+                "Unsupported audio format {}.",
+                if other.is_empty() {
+                    tr_static!("未知", "unknown")
+                } else {
+                    other
+                }
             ),
         )),
     }
@@ -2668,7 +2865,10 @@ fn reject_leftover_id3_family(buffer: &[u8]) -> Result<(), CoreError> {
     if let Some(reason) = leftover_id3_family(buffer) {
         return Err(CoreError::new(
             "AUDIO_REMOVE",
-            format!("移除 ID3v2 後標籤仍在：{reason}"),
+            tr!(
+                "移除 ID3v2 後標籤仍在：{reason}",
+                "Tag still present after removing ID3v2: {reason}"
+            ),
         ));
     }
     Ok(())
@@ -2676,14 +2876,20 @@ fn reject_leftover_id3_family(buffer: &[u8]) -> Result<(), CoreError> {
 
 fn leftover_id3_family(buffer: &[u8]) -> Option<&'static str> {
     if declared_id3v2_len(buffer).is_some() {
-        return Some("檔頭仍有 ID3v2");
+        return Some(tr_static!(
+            "檔頭仍有 ID3v2",
+            "ID3v2 still at the start of the file"
+        ));
     }
     let body = strip_id3v1(buffer);
     if lyrics3v2_footer(body) {
-        return Some("仍有 Lyrics3v2");
+        return Some(tr_static!("仍有 Lyrics3v2", "Lyrics3v2 still present"));
     }
     if has_trailing_id3v2(body) {
-        return Some("檔尾仍有 ID3v2");
+        return Some(tr_static!(
+            "檔尾仍有 ID3v2",
+            "ID3v2 still at the end of the file"
+        ));
     }
     None
 }
@@ -2894,22 +3100,41 @@ fn lofty_file_type(path: &Path) -> Option<FileType> {
 }
 
 fn read_tagged(path: &Path) -> Result<TaggedFile, CoreError> {
-    let probe = Probe::open(path)
-        .map_err(|error| CoreError::new("AUDIO_INVALID", format!("音訊檔案無法解析。{error}")))?;
+    let probe = Probe::open(path).map_err(|error| {
+        CoreError::new(
+            "AUDIO_INVALID",
+            tr!(
+                "音訊檔案無法解析。{error}",
+                "The audio file could not be parsed. {error}"
+            ),
+        )
+    })?;
     let probe = if probe.file_type().is_none() {
         if let Some(file_type) = lofty_file_type(path) {
             probe.set_file_type(file_type)
         } else {
             probe.guess_file_type().map_err(|error| {
-                CoreError::new("AUDIO_INVALID", format!("音訊檔案無法解析。{error}"))
+                CoreError::new(
+                    "AUDIO_INVALID",
+                    tr!(
+                        "音訊檔案無法解析。{error}",
+                        "The audio file could not be parsed. {error}"
+                    ),
+                )
             })?
         }
     } else {
         probe
     };
-    probe
-        .read()
-        .map_err(|error| CoreError::new("AUDIO_INVALID", format!("音訊檔案無法解析。{error}")))
+    probe.read().map_err(|error| {
+        CoreError::new(
+            "AUDIO_INVALID",
+            tr!(
+                "音訊檔案無法解析。{error}",
+                "The audio file could not be parsed. {error}"
+            ),
+        )
+    })
 }
 
 fn commit_temporary(path: &Path, temporary: &Path) -> Result<(), CoreError> {

@@ -539,3 +539,21 @@ fn preserve_modified_time_defaults_off_and_keeps_saved_value() {
         true
     );
 }
+
+#[test]
+fn migrates_ui_language() {
+    assert_eq!(migrate(json!({}))["language"], "system");
+    assert_eq!(migrate(json!({ "version": 2 }))["language"], "system");
+    assert_eq!(
+        migrate(json!({ "version": 2, "language": "en" }))["language"],
+        "en"
+    );
+    assert_eq!(
+        migrate(json!({ "version": 2, "language": "zh-TW" }))["language"],
+        "zh-TW"
+    );
+    assert_eq!(
+        migrate(json!({ "version": 2, "language": "fr" }))["language"],
+        "system"
+    );
+}

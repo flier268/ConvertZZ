@@ -134,7 +134,13 @@ impl Drop for Admission<'_> {
 }
 
 fn convert_panic_error() -> CoreError {
-    CoreError::new("CONVERT_PANIC", "轉換時發生內部錯誤。")
+    CoreError::new(
+        "CONVERT_PANIC",
+        tr_static!(
+            "轉換時發生內部錯誤。",
+            "An internal error occurred during conversion."
+        ),
+    )
 }
 
 pub(super) struct Emit {
@@ -464,7 +470,13 @@ where
                 .create_new(true)
                 .open(stage)
                 .map_err(|error| {
-                    CoreError::new("FILE_STAGE", format!("無法建立暫存檔：{error}"))
+                    CoreError::new(
+                        "FILE_STAGE",
+                        tr!(
+                            "無法建立暫存檔：{error}",
+                            "Could not create a temporary file: {error}"
+                        ),
+                    )
                 })?,
             written: RollingHash::new(),
             head_text: String::new(),
@@ -523,7 +535,13 @@ impl<R: FnMut(u64, u64)> Front<'_, R> {
         last: bool,
     ) -> Result<Result<Vec<Emit>, ContentSkip>, CoreError> {
         if self.is_cancelled.is_some_and(|check| check()) {
-            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+            return Err(CoreError::new(
+                "PLAN_CANCELLED",
+                tr_static!(
+                    "檔案作業已由使用者取消。",
+                    "File operation cancelled by the user."
+                ),
+            ));
         }
         if !self.utf16 && bytes.contains(&0) {
             return Ok(Err(ContentSkip::Binary));
@@ -682,10 +700,19 @@ impl Coordinator {
         loop {
             // 真正的錯誤留給 read_parallel 結尾回報，這裡只負責停止讀取。
             if state.error.is_some() {
-                return Err(CoreError::new("CONVERT_ABORTED", "轉換已中止。"));
+                return Err(CoreError::new(
+                    "CONVERT_ABORTED",
+                    tr_static!("轉換已中止。", "Conversion aborted."),
+                ));
             }
             if cancelled() {
-                return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+                return Err(CoreError::new(
+                    "PLAN_CANCELLED",
+                    tr_static!(
+                        "檔案作業已由使用者取消。",
+                        "File operation cancelled by the user."
+                    ),
+                ));
             }
             if state.in_flight < cap {
                 state.in_flight += 1;
@@ -821,10 +848,19 @@ where
                     let (coordinator, sink) = (&coordinator, &sink);
                     scope.spawn(move |_| {
                         let result = if coordinator.failed() {
-                            Err(CoreError::new("CONVERT_ABORTED", "轉換已中止。"))
+                            Err(CoreError::new(
+                                "CONVERT_ABORTED",
+                                tr_static!("轉換已中止。", "Conversion aborted."),
+                            ))
                         } else if let Some(_admission) = runtime.enter(&cancelled) {
                             if cancelled() {
-                                Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"))
+                                Err(CoreError::new(
+                                    "PLAN_CANCELLED",
+                                    tr_static!(
+                                        "檔案作業已由使用者取消。",
+                                        "File operation cancelled by the user."
+                                    ),
+                                ))
                             } else {
                                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                                     convert(&emit.text, emit.skip_chars, emit.hold_chars)
@@ -832,7 +868,13 @@ where
                                 .unwrap_or_else(|_| Err(convert_panic_error()))
                             }
                         } else {
-                            Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"))
+                            Err(CoreError::new(
+                                "PLAN_CANCELLED",
+                                tr_static!(
+                                    "檔案作業已由使用者取消。",
+                                    "File operation cancelled by the user."
+                                ),
+                            ))
                         };
                         coordinator.finish(this, result, is_final, sink);
                     });
@@ -905,7 +947,10 @@ where
         if on_disk != sink.written {
             return Err(CoreError::with_details(
                 "FILE_VERIFY",
-                "暫存檔寫入驗證失敗。",
+                tr_static!(
+                    "暫存檔寫入驗證失敗。",
+                    "Temporary file verification failed."
+                ),
                 serde_json::json!({ "path": stage }),
             ));
         }

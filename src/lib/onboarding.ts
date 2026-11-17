@@ -1,16 +1,24 @@
+import { t } from "@/i18n";
+
 export const ONBOARDING_STORE_KEY = "onboardingCompleted";
 
 export const ONBOARDING_STEPS = [
-  { id: "welcome", page: "quick", title: "歡迎使用 ConvertZZ 2.0" },
-  { id: "quick", page: "quick", title: "快速轉換" },
-  { id: "files", page: "files", title: "檔案與檔名" },
-  { id: "clipboard", page: "clipboard", title: "剪貼簿" },
-  { id: "audio", page: "audio", title: "音訊標籤" },
-  { id: "tools", page: "tools", title: "文字工具" },
-  { id: "desktop", page: "quick", title: "浮動球與托盤" },
-  { id: "import", page: "settings", title: "匯入舊版設定" },
-  { id: "settings", page: "settings", title: "設定與快捷鍵" },
+  { id: "welcome", page: "quick" },
+  { id: "quick", page: "quick" },
+  { id: "files", page: "files" },
+  { id: "clipboard", page: "clipboard" },
+  { id: "audio", page: "audio" },
+  { id: "tools", page: "tools" },
+  { id: "desktop", page: "quick" },
+  { id: "import", page: "settings" },
+  { id: "settings", page: "settings" },
 ] as const;
+
+export type OnboardingStepId = (typeof ONBOARDING_STEPS)[number]["id"];
+
+export function onboardingStepTitle(id: OnboardingStepId): string {
+  return t(`lib.onboarding.steps.${id}`);
+}
 
 export type OnboardingPage = (typeof ONBOARDING_STEPS)[number]["page"];
 
@@ -25,5 +33,5 @@ export function importStepIndex(): number {
 }
 
 export function importStepNextLabel(imported: boolean): string {
-  return imported ? "下一步" : "略過匯入";
+  return imported ? t("lib.onboarding.next") : t("lib.onboarding.skipImport");
 }

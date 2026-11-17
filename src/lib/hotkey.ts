@@ -1,3 +1,5 @@
+import { t } from "@/i18n";
+
 const MODIFIER_KEYS = new Set([
   "Control",
   "Shift",
@@ -85,7 +87,7 @@ export function unregisteredAcceleratorWarnings(
 ): string[] {
   return shortcuts
     .filter((item) => item.accelerator && !item.enabled)
-    .map((item) => `快捷鍵 ${item.accelerator} 已設定但未啟用，因此尚未註冊。`);
+    .map((item) => t("lib.hotkey.notEnabled", { accelerator: item.accelerator }));
 }
 
 function tauriKeyName(event: { key: string; code: string }): string | undefined {

@@ -54,7 +54,7 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
         // --flag= 但值為空：split_long_equals 會略過，改記缺值錯誤以免當成路徑。
         if let Some((flag, rest)) = raw.split_once('=') {
             if flag.starts_with('-') && rest.is_empty() && is_valued_flag(flag) {
-                parse_errors.push(format!("{flag} 需要值"));
+                parse_errors.push(tr!("{flag} 需要值", "{flag} requires a value"));
                 if is_output_flag(flag) {
                     output_flag_seen = true;
                 }
@@ -71,7 +71,10 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
                         parsed.input_encoding = encoding;
                         input_encoding_explicit = true;
                     } else {
-                        parse_errors.push(format!("無效的 {flag} 值：{value}"));
+                        parse_errors.push(tr!(
+                            "無效的 {flag} 值：{value}",
+                            "Invalid {flag} value: {value}"
+                        ));
                     }
                 }
                 "--output" | "-o" => {
@@ -80,7 +83,10 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
                         parsed.output_encoding = encoding;
                         output_encoding_explicit = true;
                     } else {
-                        parse_errors.push(format!("無效的 {flag} 值：{value}"));
+                        parse_errors.push(tr!(
+                            "無效的 {flag} 值：{value}",
+                            "Invalid {flag} value: {value}"
+                        ));
                     }
                 }
                 "--output-path" => parsed.output_path = Some(value.to_string()),
@@ -89,7 +95,10 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
                         parsed.direction = direction;
                         direction_explicit = true;
                     } else {
-                        parse_errors.push(format!("無效的 --direction 值：{value}"));
+                        parse_errors.push(tr!(
+                            "無效的 --direction 值：{value}",
+                            "Invalid --direction value: {value}"
+                        ));
                     }
                 }
                 "--engine" => match parse_engine_value(value) {
@@ -104,7 +113,10 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
                         parsed.vocabulary_correction = vocab;
                         vocabulary_explicit = true;
                     } else {
-                        parse_errors.push(format!("無效的 --vocabulary 值：{value}"));
+                        parse_errors.push(tr!(
+                            "無效的 --vocabulary 值：{value}",
+                            "Invalid --vocabulary value: {value}"
+                        ));
                     }
                 }
                 "--backup" => {
@@ -112,7 +124,10 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
                         parsed.backup = flag;
                         backup_explicit = true;
                     } else {
-                        parse_errors.push(format!("無效的 --backup 值：{value}"));
+                        parse_errors.push(tr!(
+                            "無效的 --backup 值：{value}",
+                            "Invalid --backup value: {value}"
+                        ));
                     }
                 }
                 "--operation" => {
@@ -120,7 +135,10 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
                         parsed.operation = operation;
                         operation_explicit = true;
                     } else {
-                        parse_errors.push(format!("無效的 --operation 值：{value}"));
+                        parse_errors.push(tr!(
+                            "無效的 --operation 值：{value}",
+                            "Invalid --operation value: {value}"
+                        ));
                     }
                 }
                 "--config" => config_path = Some(value.to_string()),
@@ -173,7 +191,10 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
                         parsed.input_encoding = encoding;
                         input_encoding_explicit = true;
                     } else {
-                        parse_errors.push(format!("無效的 --input 值：{value}"));
+                        parse_errors.push(tr!(
+                            "無效的 --input 值：{value}",
+                            "Invalid --input value: {value}"
+                        ));
                     }
                 }
             }
@@ -186,7 +207,10 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
                         parsed.output_encoding = encoding;
                         output_encoding_explicit = true;
                     } else {
-                        parse_errors.push(format!("無效的 --output 值：{value}"));
+                        parse_errors.push(tr!(
+                            "無效的 --output 值：{value}",
+                            "Invalid --output value: {value}"
+                        ));
                     }
                 }
             }
@@ -205,7 +229,10 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
                         parsed.direction = direction;
                         direction_explicit = true;
                     } else {
-                        parse_errors.push(format!("無效的 --direction 值：{value}"));
+                        parse_errors.push(tr!(
+                            "無效的 --direction 值：{value}",
+                            "Invalid --direction value: {value}"
+                        ));
                     }
                 }
             }
@@ -230,7 +257,10 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
                         parsed.vocabulary_correction = vocab;
                         vocabulary_explicit = true;
                     } else {
-                        parse_errors.push(format!("無效的 --vocabulary 值：{value}"));
+                        parse_errors.push(tr!(
+                            "無效的 --vocabulary 值：{value}",
+                            "Invalid --vocabulary value: {value}"
+                        ));
                     }
                 }
             }
@@ -242,7 +272,10 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
                         parsed.operation = operation;
                         operation_explicit = true;
                     } else {
-                        parse_errors.push(format!("無效的 --operation 值：{value}"));
+                        parse_errors.push(tr!(
+                            "無效的 --operation 值：{value}",
+                            "Invalid --operation value: {value}"
+                        ));
                     }
                 }
             }
@@ -336,7 +369,7 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
                 parsed.vocabulary_correction = VocabularyCorrection::Settings;
                 vocabulary_explicit = true;
             }
-            "/e:l" => parse_errors.push(LEGACY_ENGINE_REMOVED.to_string()),
+            "/e:l" => parse_errors.push(legacy_engine_removed()),
             "/e:f" => {
                 parsed.engine = EngineKind::Zhconvert;
                 engine_explicit = true;
@@ -473,7 +506,7 @@ fn take_required_value(
     match take_value(args, index) {
         Some(value) => Some(value),
         None => {
-            errors.push(format!("{flag} 需要值"));
+            errors.push(tr!("{flag} 需要值", "{flag} requires a value"));
             None
         }
     }
@@ -522,15 +555,22 @@ fn parse_direction_value(value: &str) -> Option<Direction> {
     }
 }
 
-const LEGACY_ENGINE_REMOVED: &str =
-    "舊版字典引擎已在 2.0 移除。請在「使用者詞典」頁把 Dictionary.csv 匯入為使用者詞典，再改用 segmented 引擎。";
+fn legacy_engine_removed() -> String {
+    tr!(
+        "舊版字典引擎已在 2.0 移除。請在「使用者詞典」頁把 Dictionary.csv 匯入為使用者詞典，再改用 segmented 引擎。",
+        "The legacy dictionary engine was removed in 2.0. Import Dictionary.csv as a user dictionary on the User dictionary page, then use the segmented engine."
+    )
+}
 
 fn parse_engine_value(value: &str) -> Result<EngineKind, String> {
     match value.to_ascii_lowercase().as_str() {
         "segmented" | "n" | "new" => Ok(EngineKind::Segmented),
-        "legacy" | "l" | "local" => Err(LEGACY_ENGINE_REMOVED.to_string()),
+        "legacy" | "l" | "local" => Err(legacy_engine_removed()),
         "zhconvert" | "f" | "fanhuaji" => Ok(EngineKind::Zhconvert),
-        _ => Err(format!("無效的 --engine 值：{value}")),
+        _ => Err(tr!(
+            "無效的 --engine 值：{value}",
+            "Invalid --engine value: {value}"
+        )),
     }
 }
 

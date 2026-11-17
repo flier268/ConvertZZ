@@ -3,6 +3,7 @@ import { ensureSupportedFilesFilter } from "./fileFilters";
 import { dialogFiltersForProfile, resolveProfile } from "./filterProfiles";
 import { floatingBallPosition } from "./desktop";
 import { zhConvertOptions } from "./settings";
+import { t } from "@/i18n";
 
 export function fileConversionDefaults(settings: SettingsV2) {
   return {
@@ -48,5 +49,7 @@ export function importedSettingsEffects(settings: SettingsV2) {
 }
 
 export function importFailureMessage(error: unknown): string {
-  return `匯入失敗。目前設定未變更。${error instanceof Error ? error.message : String(error)}`;
+  return t("lib.settings.importFailed", {
+    error: error instanceof Error ? error.message : String(error),
+  });
 }

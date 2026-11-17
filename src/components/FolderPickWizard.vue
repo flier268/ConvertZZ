@@ -10,10 +10,12 @@ import {
   emptyProfile,
   filterCollectsNothing,
   modeLabel,
-  NO_EXTENSION_LABEL,
+  noExtensionLabel,
   profileFilter,
   summarizeProfile,
+  profileDisplayName,
 } from "../lib/filterProfiles";
+import { t, tn } from "@/i18n";
 import ProfileEditorDialog from "./ProfileEditorDialog.vue";
 
 export interface FolderPickResult {
@@ -67,11 +69,14 @@ const emptyAllowList = computed(
   () => Boolean(selected.value) && filterCollectsNothing(selected.value),
 );
 const folderName = computed(() => path.value.split(/[\\/]/u).filter(Boolean).pop() ?? path.value);
-const steps = [
-  { id: 1, label: "資料夾" },
-  { id: 2, label: "篩選 profile" },
-  { id: 3, label: "預覽與確認" },
-] as const;
+const steps = computed(
+  () =>
+    [
+      { id: 1, label: t("components.folderPickWizard.stepFolder") },
+      { id: 2, label: t("components.folderPickWizard.stepProfile") },
+      { id: 3, label: t("components.folderPickWizard.stepConfirm") },
+    ] as const,
+);
 
 watch(
   () => props.modelValue,
@@ -208,7 +213,11 @@ function formatCount(value: number): string {
 }
 
 const confirmLabel = computed(() =>
-  filtered.value ? `加入 ${formatCount(filtered.value.included)} 個檔案` : "加入檔案",
+  filtered.value
+    ? tn("components.folderPickWizard.addFiles", filtered.value.included, {
+        count: formatCount(filtered.value.included),
+      })
+    : t("components.folderPickWizard.addFilesPending"),
 );
 const canConfirm = computed(() => Boolean(filtered.value && filtered.value.included > 0));
 </script>
@@ -216,14 +225,18 @@ const canConfirm = computed(() => Boolean(filtered.value && filtered.value.inclu
 <template>
   <el-dialog
     :model-value="modelValue"
-    :title="step === 3 && path ? `選取來源資料夾 — ${folderName}` : '選取來源資料夾'"
+    :title="
+      step === 3 && path
+        ? t('components.folderPickWizard.titleWithFolder', { name: folderName })
+        : t('components.folderPickWizard.title')
+    "
     width="720px"
     class="folder-wizard"
     append-to-body
     :close-on-click-modal="false"
     @update:model-value="(value: boolean) => (value ? undefined : close())"
   >
-    <ol class="wizard-steps" aria-label="步驟">
+    <ol class="wizard-steps" :aria-label="t('components.folderPickWizard.stepsAria')">
       <li
         v-for="item in steps"
         :key="item.id"
@@ -234,28 +247,40 @@ const canConfirm = computed(() => Boolean(filtered.value && filtered.value.inclu
       </li>
     </ol>
 
-    <section v-if="step === 1" class="wizard-body" aria-label="步驟 1 資料夾">
+    <section
+      v-if="step === 1"
+      class="wizard-body"
+      :aria-label="t('components.folderPickWizard.step1Aria')"
+    >
       <div class="path-row">
         <el-input
           v-model="path"
-          placeholder="資料夾路徑"
-          aria-label="來源資料夾路徑"
+          :placeholder="t('components.folderPickWizard.pathPlaceholder')"
+          :aria-label="t('components.folderPickWizard.pathAria')"
           @update:model-value="stats = undefined"
         />
-        <el-button @click="browse">瀏覽…</el-button>
+        <el-button @click="browse">{{ t("common.browse") }}</el-button>
       </div>
       <el-checkbox
         :model-value="recursive"
         @update:model-value="(value: unknown) => setRecursive(Boolean(value))"
-        >包含子資料夾</el-checkbox
+        >{{ t("components.folderPickWizard.recursive") }}</el-checkbox
       >
-      <p class="wizard-hint">隱藏資料夾（以 . 開頭）與版本控制資料夾不會掃描。</p>
+      <p class="wizard-hint">{{ t("components.folderPickWizard.hiddenHint") }}</p>
     </section>
 
-    <section v-else-if="step === 2" class="wizard-body" aria-label="步驟 2 篩選 profile">
+    <section
+      v-else-if="step === 2"
+      class="wizard-body"
+      :aria-label="t('components.folderPickWizard.step2Aria')"
+    >
       <div class="profile-head">
-        <span class="wizard-hint">{{ path }}{{ recursive ? "（含子資料夾）" : "" }}</span>
-        <el-button @click="openEditor(null)">＋ 新增 profile</el-button>
+        <span class="wizard-hint"
+          >{{ path }}{{ recursive ? t("components.folderPickWizard.withSubfolders") : "" }}</span
+        >
+        <el-button @click="openEditor(null)">{{
+          t("components.folderPickWizard.newProfile")
+        }}</el-button>
       </div>
       <el-radio-group
         :model-value="profileId"
@@ -270,29 +295,33 @@ const canConfirm = computed(() => Boolean(filtered.value && filtered.value.inclu
           data-testid="profile-row"
           @click="emit('update:profileId', profile.id)"
         >
-          <el-radio :value="profile.id" :aria-label="profile.name">
-            <span class="profile-name">{{ profile.name }}</span>
+          <el-radio :value="profile.id" :aria-label="profileDisplayName(profile)">
+            <span class="profile-name">{{ profileDisplayName(profile) }}</span>
             <el-tag
               disable-transitions
               size="small"
               :type="profile.mode === 'deny' ? 'danger' : 'success'"
               >{{ modeLabel(profile.mode) }}</el-tag
             >
-            <small v-if="profile.builtin" class="wizard-hint">內建・不可刪除</small>
+            <small v-if="profile.builtin" class="wizard-hint">{{
+              t("components.folderPickWizard.builtinHint")
+            }}</small>
             <span class="profile-summary">{{ summarizeProfile(profile) }}</span>
           </el-radio>
           <span class="profile-row-actions" @click.stop>
-            <el-button text type="primary" @click="openEditor(profile)">編輯</el-button>
-            <el-button v-if="!profile.builtin" text type="primary" @click="copyProfile(profile)"
-              >複製</el-button
-            >
+            <el-button text type="primary" @click="openEditor(profile)">{{
+              t("components.folderPickWizard.edit")
+            }}</el-button>
+            <el-button v-if="!profile.builtin" text type="primary" @click="copyProfile(profile)">{{
+              t("components.folderPickWizard.copy")
+            }}</el-button>
           </span>
         </div>
       </el-radio-group>
-      <el-checkbox v-model="remember">下次選資料夾時記住這個 profile，直接到預覽</el-checkbox>
+      <el-checkbox v-model="remember">{{ t("components.folderPickWizard.remember") }}</el-checkbox>
     </section>
 
-    <section v-else class="wizard-body" aria-label="步驟 3 預覽與確認">
+    <section v-else class="wizard-body" :aria-label="t('components.folderPickWizard.step3Aria')">
       <el-alert
         v-if="quickPath && selected"
         type="success"
@@ -300,30 +329,32 @@ const canConfirm = computed(() => Boolean(filtered.value && filtered.value.inclu
         class="quick-banner"
         show-icon
       >
-        已套用上次的 profile「{{ selected.name }}」，略過步驟 2。
-        <el-button text type="primary" @click="goTo(2)">更換 profile</el-button>
+        {{ t("components.folderPickWizard.quickApplied", { name: profileDisplayName(selected) }) }}
+        <el-button text type="primary" @click="goTo(2)">{{
+          t("components.folderPickWizard.changeProfile")
+        }}</el-button>
       </el-alert>
       <p v-if="scanning" class="wizard-hint" role="status">
-        {{ scanProgress || "掃描中…" }}
-        <el-button text type="danger" @click="cancelScan">取消</el-button>
+        {{ scanProgress || t("components.folderPickWizard.scanning") }}
+        <el-button text type="danger" @click="cancelScan">{{ t("common.cancel") }}</el-button>
       </p>
       <template v-else-if="filtered && stats">
         <div class="stat-cards">
           <div>
             <strong>{{ formatCount(filtered.included) }}</strong
-            ><span>將包含的檔案</span>
+            ><span>{{ t("components.folderPickWizard.includedFiles") }}</span>
           </div>
           <div>
             <strong>{{ filtered.includedKinds }}</strong
-            ><span>副檔名種類</span>
+            ><span>{{ t("components.folderPickWizard.extensionKinds") }}</span>
           </div>
           <div>
             <strong>{{ formatCount(filtered.excluded) }}</strong
-            ><span>排除的檔案</span>
+            ><span>{{ t("components.folderPickWizard.excludedFiles") }}</span>
           </div>
           <div v-if="recursive">
             <strong>{{ formatCount(stats.directoryCount) }}</strong
-            ><span>子資料夾</span>
+            ><span>{{ t("components.folderPickWizard.subfolders") }}</span>
           </div>
         </div>
         <el-alert
@@ -331,7 +362,7 @@ const canConfirm = computed(() => Boolean(filtered.value && filtered.value.inclu
           type="warning"
           :closable="false"
           show-icon
-          title="這個 profile 沒有符合的檔案。請按「上一步」換一個 profile。"
+          :title="t('components.folderPickWizard.noMatch')"
         />
         <el-alert
           v-for="warning in stats.warnings"
@@ -341,12 +372,12 @@ const canConfirm = computed(() => Boolean(filtered.value && filtered.value.inclu
           :title="warning"
         />
         <div class="stat-table-wrap">
-          <table class="stat-table" aria-label="副檔名統計">
+          <table class="stat-table" :aria-label="t('components.folderPickWizard.statsAria')">
             <thead>
               <tr>
-                <th>副檔名</th>
-                <th>檔案數</th>
-                <th>狀態</th>
+                <th>{{ t("components.folderPickWizard.extension") }}</th>
+                <th>{{ t("components.folderPickWizard.fileCount") }}</th>
+                <th>{{ t("components.folderPickWizard.status") }}</th>
               </tr>
             </thead>
             <tbody>
@@ -355,14 +386,18 @@ const canConfirm = computed(() => Boolean(filtered.value && filtered.value.inclu
                 :key="row.extension ?? ''"
                 :class="{ off: !row.included }"
               >
-                <td>{{ row.extension ?? NO_EXTENSION_LABEL }}</td>
+                <td>{{ row.extension ?? noExtensionLabel() }}</td>
                 <td>{{ formatCount(row.count) }}</td>
                 <td>
                   <el-tag
                     disable-transitions
                     size="small"
                     :type="row.included ? 'success' : 'info'"
-                    >{{ row.included ? "包含" : "排除" }}</el-tag
+                    >{{
+                      row.included
+                        ? t("components.folderPickWizard.included")
+                        : t("components.folderPickWizard.excluded")
+                    }}</el-tag
                   >
                 </td>
               </tr>
@@ -370,28 +405,37 @@ const canConfirm = computed(() => Boolean(filtered.value && filtered.value.inclu
           </table>
         </div>
         <p class="wizard-hint profile-line">
-          profile：<strong>{{ selected?.name }}</strong>
+          {{ t("components.folderPickWizard.profileLabel")
+          }}<strong>{{ selected ? profileDisplayName(selected) : "" }}</strong>
           <el-tag disable-transitions size="small">{{
             selected ? modeLabel(selected.mode) : ""
           }}</el-tag>
-          <el-button text type="primary" @click="goTo(2)">更換</el-button>
-          <span v-if="scanSeconds !== undefined" class="scan-time"
-            >掃描 {{ scanSeconds.toFixed(1) }} 秒</span
-          >
+          <el-button text type="primary" @click="goTo(2)">{{
+            t("components.folderPickWizard.change")
+          }}</el-button>
+          <span v-if="scanSeconds !== undefined" class="scan-time">{{
+            t("components.folderPickWizard.scanTime", { seconds: scanSeconds.toFixed(1) })
+          }}</span>
         </p>
-        <p v-if="emptyAllowList" class="wizard-hint">此 profile 是空白名單。</p>
+        <p v-if="emptyAllowList" class="wizard-hint">
+          {{ t("components.folderPickWizard.emptyAllowList") }}
+        </p>
       </template>
     </section>
 
     <template #footer>
       <div class="wizard-footer">
-        <el-button :disabled="step === 1" @click="back">上一步</el-button>
+        <el-button :disabled="step === 1" @click="back">{{
+          t("components.folderPickWizard.back")
+        }}</el-button>
         <span class="spacer" />
-        <el-button @click="close">取消</el-button>
-        <el-button v-if="step === 1" type="primary" :disabled="!path" @click="next"
-          >下一步</el-button
-        >
-        <el-button v-else-if="step === 2" type="primary" @click="next">下一步</el-button>
+        <el-button @click="close">{{ t("common.cancel") }}</el-button>
+        <el-button v-if="step === 1" type="primary" :disabled="!path" @click="next">{{
+          t("components.folderPickWizard.next")
+        }}</el-button>
+        <el-button v-else-if="step === 2" type="primary" @click="next">{{
+          t("components.folderPickWizard.next")
+        }}</el-button>
         <el-button v-else type="primary" :disabled="!canConfirm" @click="confirmPick">{{
           confirmLabel
         }}</el-button>

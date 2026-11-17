@@ -28,6 +28,7 @@ pub fn default_settings() -> Value {
 fn base_default_settings() -> Value {
     json!({
         "version": 2,
+        "language": "system",
         "engine": "segmented",
         "direction": "s2t",
         "vocabularyCorrection": true,
@@ -168,6 +169,7 @@ fn migrate_document(input: Value) -> Value {
 
     json!({
         "version": 2,
+        "language": "system",
         "engine": engine_value(input.get("Engine")),
         "direction": defaults["direction"],
         "vocabularyCorrection": boolean_value(input.get("Vocabulary correction"), true),
@@ -260,6 +262,13 @@ fn merge_v2(input: Value) -> Value {
                 }
                 "engine" => {
                     merged.insert(key.clone(), json!(supported_engine(value)));
+                }
+                "language" => {
+                    let language = match value.as_str() {
+                        Some(language @ ("zh-TW" | "en")) => language,
+                        _ => "system",
+                    };
+                    merged.insert(key.clone(), json!(language));
                 }
                 // 舊版字典引擎已移除，它的字典路徑不再有作用。
                 "dictionaryPath" => {}

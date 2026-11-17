@@ -1,4 +1,4 @@
-import type { EngineKind, SettingsV2 } from "@shared/contracts";
+import type { EngineKind, SettingsV2, UiLanguage } from "@shared/contracts";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { version as appVersion } from "../../package.json";
@@ -21,6 +21,7 @@ export function defaultCheckPreReleaseUpdates(currentVersion = appVersion): bool
 export function defaultSettings(currentVersion = appVersion): SettingsV2 {
   return {
     version: 2,
+    language: "system",
     engine: "segmented",
     direction: "s2t",
     vocabularyCorrection: true,
@@ -104,6 +105,7 @@ export function migrateSettings(input: unknown, currentVersion = appVersion): Se
     return {
       ...defaults,
       ...current,
+      language: languageValue(input.language),
       engine: engineValue(input.engine),
       // 舊版 2.0／匯入設定若尚無此欄，預設啟用轉換前備份。
       autoBackupBeforeConversion: booleanValue(input.autoBackupBeforeConversion, true),
@@ -226,6 +228,10 @@ function normalizeSavedTypeFilter(value: string | undefined, fallback: string): 
 function normalizeTypeFilter(value: string, fallback: string): string {
   if (!value || isLegacyBuiltinFileTypeFilter(value)) return fallback;
   return value;
+}
+
+function languageValue(value: unknown): UiLanguage {
+  return value === "zh-TW" || value === "en" ? value : "system";
 }
 
 function isSettingsV2(value: unknown): value is SettingsV2 {

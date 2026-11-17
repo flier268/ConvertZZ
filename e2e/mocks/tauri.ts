@@ -3,6 +3,7 @@ import type { SettingsV2 } from "../../shared/contracts";
 
 const defaultSettings: SettingsV2 = {
   version: 2,
+  language: "system",
   engine: "segmented",
   direction: "s2t",
   vocabularyCorrection: true,
@@ -255,7 +256,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
     case "check_signed_update": {
       if (e2e().update !== "install") return null as T;
       const endpoint = String(args.endpoint ?? "");
-      const version = /\/download\/v([^/]+)\/latest\.json/u.exec(endpoint)?.[1] ?? "2.1.0";
+      const version = /\/download\/v([^/]+)\/latest\.json/u.exec(endpoint)?.[1] ?? "999.999.999";
       return {
         rid: 1,
         currentVersion: appVersion,
@@ -266,6 +267,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
     }
     case "show_main_window":
     case "show_toast":
+    case "set_ui_language":
     case "quit_app":
     case "save_zhconvert_api_key":
     case "set_send_to_shortcut":
@@ -876,7 +878,7 @@ export async function check() {
   if (e2e().update !== "install") return null;
   return new Update({
     currentVersion: appVersion,
-    version: "2.1.0",
+    version: "999.999.999",
     body: "測試更新",
   });
 }

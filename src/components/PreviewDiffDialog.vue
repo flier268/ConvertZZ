@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { DiffSection } from "../lib/fileDiff";
+import { t } from "@/i18n";
 import SideBySideDiffView from "./SideBySideDiffView.vue";
 
 const props = withDefaults(
@@ -14,7 +15,6 @@ const props = withDefaults(
     enableNav?: boolean;
   }>(),
   {
-    title: "差異",
     meta: () => [],
     sections: () => [],
     fullscreen: false,
@@ -40,7 +40,7 @@ const compact = computed(() => !props.fullscreen && props.sections.length > 1);
 <template>
   <el-dialog
     v-model="visible"
-    :title="title"
+    :title="title ?? t('components.previewDiff.title')"
     :width="fullscreen ? '100%' : '920px'"
     :fullscreen="fullscreen"
     class="preview-diff-dialog"
@@ -54,7 +54,7 @@ const compact = computed(() => !props.fullscreen && props.sections.length > 1);
         <code>{{ entry.value }}</code>
       </div>
     </div>
-    <el-empty v-if="!hasContent" description="此項目沒有可顯示的預覽內容" />
+    <el-empty v-if="!hasContent" :description="t('components.previewDiff.empty')" />
     <div v-else class="preview-diff-sections" :class="{ fullscreen }">
       <section
         v-for="(section, index) in sections"

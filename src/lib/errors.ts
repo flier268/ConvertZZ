@@ -1,8 +1,10 @@
+import { t } from "@/i18n";
+
 function safeJson(value: unknown): string {
   try {
     return JSON.stringify(value);
   } catch {
-    return "[無法序列化]";
+    return t("lib.errors.unserializable");
   }
 }
 
@@ -17,8 +19,8 @@ function nonEmptyString(value: unknown): string | undefined {
  * Tauri 常直接 reject 字串或 `{ message, code }`，不一定是 Error。
  */
 export function formatUnknownError(error: unknown): string {
-  if (error == null) return "未知錯誤（空值）";
-  if (typeof error === "string") return nonEmptyString(error) ?? "未知錯誤（空字串）";
+  if (error == null) return t("lib.errors.nullValue");
+  if (typeof error === "string") return nonEmptyString(error) ?? t("lib.errors.emptyString");
   if (typeof error === "number" || typeof error === "boolean" || typeof error === "bigint") {
     return String(error);
   }
@@ -28,7 +30,7 @@ export function formatUnknownError(error: unknown): string {
     const parts: string[] = [];
     const message = nonEmptyString(error.message);
     if (message) parts.push(message);
-    else parts.push("未知錯誤（空訊息）");
+    else parts.push(t("lib.errors.emptyMessage"));
     if (error.name && error.name !== "Error") parts.push(`name=${error.name}`);
     if (extras.code != null && extras.code !== "") parts.push(`code=${String(extras.code)}`);
     if (extras.details != null) parts.push(`details=${safeJson(extras.details)}`);
@@ -45,7 +47,7 @@ export function formatUnknownError(error: unknown): string {
     if (parts.length) return parts.join(" · ");
     const json = safeJson(error);
     if (json && json !== "{}" && json !== "[]") return json;
-    return "未知錯誤（空物件）";
+    return t("lib.errors.emptyObject");
   }
 
   return String(error);

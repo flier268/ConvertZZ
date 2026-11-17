@@ -9,34 +9,38 @@ import { resolveShellAction } from "./appMenu";
 import { core } from "./coreClient";
 import { zhConvertOptions } from "./settings";
 import { showAppToast } from "./toast";
+import { t } from "@/i18n";
 
-export const LEGACY_ACTIONS = [
-  { label: "無", value: "0" },
-  { label: "隱藏或顯示浮動球", value: "1" },
-  { label: "GBK → Big5 並簡轉繁", value: "a1" },
-  { label: "Big5 → GBK 並繁轉簡", value: "a2" },
-  { label: "Unicode 簡轉繁", value: "a3" },
-  { label: "Unicode 繁轉簡", value: "a4" },
-  { label: "Unicode → HTML 十進位", value: "za1" },
-  { label: "Unicode → HTML 十六進位", value: "za2" },
-  { label: "HTML → Unicode", value: "za3" },
-  { label: "Unicode → GBK 重新解讀", value: "zb1" },
-  { label: "Unicode → Big5 重新解讀", value: "zb2" },
-  { label: "Unicode → Shift-JIS 重新解讀", value: "zb3" },
-  { label: "GBK → Unicode 重新解讀", value: "zb4" },
-  { label: "Big5 → Unicode 重新解讀", value: "zb5" },
-  { label: "Shift-JIS → Unicode 重新解讀", value: "zb6" },
-  { label: "Shift-JIS → GBK", value: "zc1" },
-  { label: "Shift-JIS → Big5", value: "zc2" },
-  { label: "GBK → Shift-JIS", value: "zc3" },
-  { label: "Big5 → Shift-JIS", value: "zc4" },
-  { label: "HZ → GBK", value: "zd1" },
-  { label: "HZ → Big5", value: "zd2" },
-  { label: "GBK → HZ", value: "zd3" },
-  { label: "Big5 → HZ", value: "zd4" },
-  { label: "半形 → 全形", value: "ze1" },
-  { label: "全形 → 半形", value: "ze2" },
-] as const;
+/** 標籤依目前語系產生；在 template 或 computed 內呼叫。 */
+export function legacyActions() {
+  return [
+    { label: t("lib.legacyActions.none"), value: "0" },
+    { label: t("lib.legacyActions.toggleFloatingBall"), value: "1" },
+    { label: t("lib.legacyActions.a1"), value: "a1" },
+    { label: t("lib.legacyActions.a2"), value: "a2" },
+    { label: t("lib.legacyActions.a3"), value: "a3" },
+    { label: t("lib.legacyActions.a4"), value: "a4" },
+    { label: t("lib.legacyActions.za1"), value: "za1" },
+    { label: t("lib.legacyActions.za2"), value: "za2" },
+    { label: "HTML → Unicode", value: "za3" },
+    { label: t("lib.legacyActions.zb1"), value: "zb1" },
+    { label: t("lib.legacyActions.zb2"), value: "zb2" },
+    { label: t("lib.legacyActions.zb3"), value: "zb3" },
+    { label: t("lib.legacyActions.zb4"), value: "zb4" },
+    { label: t("lib.legacyActions.zb5"), value: "zb5" },
+    { label: t("lib.legacyActions.zb6"), value: "zb6" },
+    { label: "Shift-JIS → GBK", value: "zc1" },
+    { label: "Shift-JIS → Big5", value: "zc2" },
+    { label: "GBK → Shift-JIS", value: "zc3" },
+    { label: "Big5 → Shift-JIS", value: "zc4" },
+    { label: "HZ → GBK", value: "zd1" },
+    { label: "HZ → Big5", value: "zd2" },
+    { label: "GBK → HZ", value: "zd3" },
+    { label: "Big5 → HZ", value: "zd4" },
+    { label: t("lib.legacyActions.ze1"), value: "ze1" },
+    { label: t("lib.legacyActions.ze2"), value: "ze2" },
+  ] as const;
+}
 
 const ENCODING_ACTIONS: Record<string, [TextEncoding, TextEncoding]> = {
   zb1: ["gbk", "utf8"],
@@ -131,14 +135,14 @@ export async function executeLegacyAction(
     const [sourceEncoding, targetEncoding] = ENCODING_ACTIONS[action];
     text = await utility(text, "encoding", sourceEncoding, targetEncoding);
   } else {
-    throw new Error(`不支援的舊版動作：${action}`);
+    throw new Error(t("lib.legacyActions.unsupported", { action }));
   }
 
   await writeText(text);
   if (automation.paste && input === undefined) await invoke("replace_selection", { text });
   const durationMs = Math.round(performance.now() - started);
   if (settings.promptAfterConversion && !automation.copy && !automation.paste) {
-    await showAppToast(`轉換完成\n耗時：${durationMs} ms`);
+    await showAppToast(t("lib.legacyActions.done", { duration: durationMs }));
   }
   return { text, durationMs };
 }

@@ -7,6 +7,7 @@ import { convertText } from "../lib/actions";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { core } from "../lib/coreClient";
 import SideBySideDiffView from "../components/SideBySideDiffView.vue";
+import { t } from "@/i18n";
 
 defineOptions({ name: "ClipboardPage" });
 
@@ -86,7 +87,7 @@ function toggleWatch(value: boolean) {
 
 async function copy() {
   await writeText(output.value);
-  ElMessage.success("結果已寫入剪貼簿");
+  ElMessage.success(t("clipboard.written"));
 }
 
 onMounted(async () => {
@@ -124,14 +125,16 @@ onBeforeUnmount(() => {
     <header class="page-header">
       <div>
         <p class="eyebrow">CLIPBOARD</p>
-        <h1>剪貼簿</h1>
-        <p>監看模式只讀取文字內容。</p>
+        <h1>{{ t("clipboard.title") }}</h1>
+        <p>{{ t("clipboard.subtitle") }}</p>
       </div>
       <div class="header-actions">
-        <el-checkbox v-model="vocabularyCorrection">詞彙修正</el-checkbox
+        <el-checkbox v-model="vocabularyCorrection">{{
+          t("clipboard.vocabularyCorrection")
+        }}</el-checkbox
         ><el-switch
           v-model="watching"
-          active-text="持續監看"
+          :active-text="t('clipboard.watch')"
           @change="toggleWatch(Boolean($event))"
         />
       </div>
@@ -140,14 +143,16 @@ onBeforeUnmount(() => {
     <el-card shadow="never"
       ><div class="control-row">
         <el-select v-model="direction" style="width: 150px"
-          ><el-option label="不轉換簡繁" value="none" /><el-option
-            label="簡轉繁"
-            value="s2t" /><el-option label="繁轉簡" value="t2s" /></el-select
+          ><el-option :label="t('clipboard.direction.none')" value="none" /><el-option
+            :label="t('common.direction.s2t')"
+            value="s2t" /><el-option :label="t('common.direction.t2s')" value="t2s" /></el-select
         ><el-select v-model="engine" style="width: 180px"
-          ><el-option label="新式分詞" value="segmented" /><el-option
-            label="ZhConvert"
+          ><el-option :label="t('clipboard.engine.segmented')" value="segmented" /><el-option
+            :label="t('clipboard.engine.zhconvert')"
             value="zhconvert" /></el-select
-        ><el-checkbox v-model="reinterpretEncoding">重新解讀編碼</el-checkbox
+        ><el-checkbox v-model="reinterpretEncoding">{{
+          t("clipboard.reinterpretEncoding")
+        }}</el-checkbox
         ><template v-if="reinterpretEncoding"
           ><el-select v-model="targetEncoding" style="width: 130px"
             ><el-option
@@ -162,14 +167,16 @@ onBeforeUnmount(() => {
               :key="value"
               :label="value"
               :value="value" /></el-select></template
-        ><el-button @click="refresh(true)">立即讀取</el-button
-        ><el-button type="primary" :disabled="!output" @click="copy">寫回剪貼簿</el-button>
+        ><el-button @click="refresh(true)">{{ t("clipboard.readNow") }}</el-button
+        ><el-button type="primary" :disabled="!output" @click="copy">{{
+          t("clipboard.writeBack")
+        }}</el-button>
       </div></el-card
     >
     <el-card shadow="never" class="page-fill-main">
       <template #header
         ><div class="card-title">
-          <span>轉換差異</span>
+          <span>{{ t("clipboard.diffTitle") }}</span>
         </div></template
       >
       <SideBySideDiffView
@@ -177,10 +184,10 @@ onBeforeUnmount(() => {
         :output="output"
         editable
         fill-height
-        source-label="剪貼簿文字"
-        output-label="轉換預覽"
-        source-placeholder="剪貼簿文字會顯示於此"
-        output-placeholder="轉換預覽會顯示於此"
+        :source-label="t('clipboard.sourceLabel')"
+        :output-label="t('clipboard.outputLabel')"
+        :source-placeholder="t('clipboard.sourcePlaceholder')"
+        :output-placeholder="t('clipboard.outputPlaceholder')"
       />
     </el-card>
   </section>

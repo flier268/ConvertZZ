@@ -1,5 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { emitAppEvent, e2eState, openApp, openPage, scrollAudioRow } from "../helpers";
+import {
+  emitAppEvent,
+  e2eState,
+  mockLatestGitHubRelease,
+  openApp,
+  openPage,
+  scrollAudioRow,
+} from "../helpers";
 
 test.describe("ConvertZZ 前端", () => {
   test("啟動後顯示快速轉換並連上轉換核心", async ({ page }) => {
@@ -311,28 +318,31 @@ test.describe("ConvertZZ 前端", () => {
   });
 
   test("無法自動安裝時改開啟 GitHub Release", async ({ page }) => {
-    await page.route("https://api.github.com/**", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          tag_name: "v2.1.0",
-          html_url: "https://github.com/flier268/ConvertZZ/releases/tag/v2.1.0",
-        }),
-      });
-    });
+    await mockLatestGitHubRelease(page, "999.999.999");
     await openApp(page);
     await openPage(page, "#tour-about", "ConvertZZ 2.0");
     await page.getByRole("button", { name: "檢查更新" }).click();
-    await expect(page.getByText("發現新版本 2.1.0")).toBeVisible();
+    await expect(page.getByText("發現新版本 999.999.999")).toBeVisible();
     await expect(page.getByText("此安裝方式無法自動更新")).toBeVisible();
     await page.getByRole("button", { name: "開啟下載頁" }).click();
     await expect
       .poll(async () => (await e2eState(page)).lastOpenedUrl ?? "")
-      .toBe("https://github.com/flier268/ConvertZZ/releases/tag/v2.1.0");
+      .toBe("https://github.com/flier268/ConvertZZ/releases/tag/v999.999.999");
+  });
+
+  test("設定頁切換介面語言為英文後畫面立即改用英文並儲存", async ({ page }) => {
+    await openApp(page);
+    await openPage(page, "#nav-settings", "設定");
+    await page.locator(".el-form-item", { hasText: "介面語言" }).locator(".el-select").click();
+    await page.getByRole("option", { name: "English" }).click();
+    await expect(page.getByRole("menuitem", { name: "Settings" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Quick convert" })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect.poll(async () => (await e2eState(page)).savedSettings?.language).toBe("en");
   });
 
   test("可略過此版本並在設定頁看到紀錄", async ({ page }) => {
+    await mockLatestGitHubRelease(page, "999.999.999");
     await openApp(page, { update: "install" });
     await openPage(page, "#tour-about", "ConvertZZ 2.0");
     await page.getByRole("button", { name: "檢查更新" }).click();
@@ -340,14 +350,15 @@ test.describe("ConvertZZ 前端", () => {
     await page.getByText("不再詢問此版本").click();
     await page.getByRole("button", { name: "稍後再說" }).click();
     await openPage(page, "#tour-settings", "設定");
-    await expect(page.locator(".settings-note")).toContainText("已略過 2.1.0");
+    await expect(page.locator(".settings-note")).toContainText("已略過 999.999.999");
   });
 
   test("G-15 可安裝更新會先確認再下載", async ({ page }) => {
+    await mockLatestGitHubRelease(page, "999.999.999");
     await openApp(page, { update: "install" });
     await openPage(page, "#tour-about", "ConvertZZ 2.0");
     await page.getByRole("button", { name: "檢查更新" }).click();
-    await expect(page.getByText("發現新版本 2.1.0")).toBeVisible();
+    await expect(page.getByText("發現新版本 999.999.999")).toBeVisible();
     await expect(page.getByText("是否下載並安裝")).toBeVisible();
     await expect(page.getByRole("button", { name: "下載並安裝" })).toBeVisible();
     await page.getByRole("button", { name: "稍後再說" }).click();

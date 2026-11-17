@@ -1,3 +1,4 @@
+#[macro_use]
 mod core;
 mod selection;
 
@@ -13,9 +14,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{
-    menu::{MenuBuilder, SubmenuBuilder},
+    menu::{Menu, MenuBuilder, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Emitter, Manager, PhysicalPosition, Runtime, State, WebviewWindowBuilder,
+    WindowEvent,
 };
 use tauri_plugin_updater::UpdaterExt;
 
@@ -55,30 +57,58 @@ fn is_portable_mode() -> bool {
 }
 
 fn portable_settings_path() -> Result<PathBuf, String> {
-    let directory = executable_directory().ok_or_else(|| "找不到執行檔目錄。".to_string())?;
+    let directory = executable_directory().ok_or_else(|| {
+        tr_static!(
+            "找不到執行檔目錄。",
+            "Could not find the executable directory."
+        )
+        .to_string()
+    })?;
     if !directory_is_portable(&directory) {
-        return Err("目前不是免安裝可攜模式。".into());
+        return Err(tr_static!("目前不是免安裝可攜模式。", "Not running in portable mode.").into());
     }
     Ok(directory.join(PORTABLE_SETTINGS_FILE))
 }
 
 fn write_portable_settings_document(path: &Path, document: &Value) -> Result<(), String> {
-    let payload =
-        serde_json::to_vec_pretty(document).map_err(|error| format!("序列化設定失敗：{error}"))?;
+    let payload = serde_json::to_vec_pretty(document).map_err(|error| {
+        tr!(
+            "序列化設定失敗：{error}",
+            "Failed to serialize settings: {error}"
+        )
+    })?;
     let temporary = path.with_added_extension("tmp");
     let guard = core::remove_file_on_drop(&temporary);
-    fs::write(&temporary, &payload).map_err(|error| format!("寫入暫存設定失敗：{error}"))?;
+    fs::write(&temporary, &payload).map_err(|error| {
+        tr!(
+            "寫入暫存設定失敗：{error}",
+            "Failed to write temporary settings: {error}"
+        )
+    })?;
     if path.exists() {
         let backup = path.with_added_extension("bak");
         let _ = fs::remove_file(&backup);
-        fs::rename(path, &backup).map_err(|error| format!("備份舊設定失敗：{error}"))?;
+        fs::rename(path, &backup).map_err(|error| {
+            tr!(
+                "備份舊設定失敗：{error}",
+                "Failed to back up previous settings: {error}"
+            )
+        })?;
         if let Err(error) = fs::rename(&temporary, path) {
             let _ = fs::rename(&backup, path);
-            return Err(format!("取代設定檔失敗：{error}"));
+            return Err(tr!(
+                "取代設定檔失敗：{error}",
+                "Failed to replace the settings file: {error}"
+            ));
         }
         let _ = fs::remove_file(&backup);
     } else {
-        fs::rename(&temporary, path).map_err(|error| format!("寫入設定檔失敗：{error}"))?;
+        fs::rename(&temporary, path).map_err(|error| {
+            tr!(
+                "寫入設定檔失敗：{error}",
+                "Failed to write the settings file: {error}"
+            )
+        })?;
     }
     std::mem::DropGuard::dismiss(guard);
     Ok(())
@@ -158,8 +188,8 @@ fn platform_capabilities() -> PlatformCapabilities {
     {
         let mut limitations = Vec::new();
         if portable {
-            limitations.push("免安裝版設定寫在程式目錄，可整包帶走。");
-            limitations.push("免安裝版不支援應用程式內自動更新，請改從 GitHub Releases 下載。");
+            limitations.push(tr_static!("免安裝版設定寫在程式目錄，可整包帶走。", "The portable version stores settings in the program folder, so you can carry the whole folder."));
+            limitations.push(tr_static!("免安裝版不支援應用程式內自動更新，請改從 GitHub Releases 下載。", "The portable version does not support in-app updates; download new versions from GitHub Releases."));
         }
         return PlatformCapabilities {
             platform: "windows",
@@ -193,19 +223,31 @@ fn platform_capabilities() -> PlatformCapabilities {
             limitations: {
                 let mut items = if wayland {
                     vec![
-                        "Wayland 不允許一般應用程式注入鍵盤事件。",
-                        "本版停用 Wayland 全域快捷鍵。",
-                        "浮動球置頂能力取決於合成器。",
+                        tr_static!(
+                            "Wayland 不允許一般應用程式注入鍵盤事件。",
+                            "Wayland does not allow regular apps to inject keyboard events."
+                        ),
+                        tr_static!(
+                            "本版停用 Wayland 全域快捷鍵。",
+                            "Global shortcuts are disabled on Wayland in this version."
+                        ),
+                        tr_static!(
+                            "浮動球置頂能力取決於合成器。",
+                            "Keeping the Floating ball on top depends on the compositor."
+                        ),
                     ]
                 } else {
-                    vec!["系統托盤需要 AppIndicator 支援。"]
+                    vec![tr_static!(
+                        "系統托盤需要 AppIndicator 支援。",
+                        "The system tray requires AppIndicator support."
+                    )]
                 };
                 if std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_none() {
-                    items.push("缺少 Secret Service 時 ZhConvert API 金鑰只保留於目前工作階段。");
+                    items.push(tr_static!("缺少 Secret Service 時 ZhConvert API 金鑰只保留於目前工作階段。", "Without Secret Service, the ZhConvert API key is kept only for the current session."));
                 }
                 if portable {
-                    items.push("免安裝版設定寫在程式目錄，可整包帶走。");
-                    items.push("免安裝版不支援應用程式內自動更新，請改從 GitHub Releases 下載。");
+                    items.push(tr_static!("免安裝版設定寫在程式目錄，可整包帶走。", "The portable version stores settings in the program folder, so you can carry the whole folder."));
+                    items.push(tr_static!("免安裝版不支援應用程式內自動更新，請改從 GitHub Releases 下載。", "The portable version does not support in-app updates; download new versions from GitHub Releases."));
                 }
                 items
             },
@@ -225,7 +267,10 @@ fn platform_capabilities() -> PlatformCapabilities {
             credential_storage: true,
             portable,
             automatic_updates,
-            limitations: vec!["自動複製貼上需要輔助使用（Accessibility）權限。"],
+            limitations: vec![tr_static!(
+                "自動複製貼上需要輔助使用（Accessibility）權限。",
+                "Automatic copy and paste requires Accessibility permission."
+            )],
         };
     }
 
@@ -241,7 +286,10 @@ fn platform_capabilities() -> PlatformCapabilities {
         credential_storage: false,
         portable,
         automatic_updates,
-        limitations: vec!["目前平台不在正式支援範圍。"],
+        limitations: vec![tr_static!(
+            "目前平台不在正式支援範圍。",
+            "This platform is not officially supported."
+        )],
     }
 }
 
@@ -251,11 +299,24 @@ fn load_portable_settings_store() -> Result<Option<Value>, String> {
     if !path.is_file() {
         return Ok(None);
     }
-    let bytes = fs::read(&path).map_err(|error| format!("讀取可攜設定失敗：{error}"))?;
-    let document: Value =
-        serde_json::from_slice(&bytes).map_err(|error| format!("可攜設定格式無效：{error}"))?;
+    let bytes = fs::read(&path).map_err(|error| {
+        tr!(
+            "讀取可攜設定失敗：{error}",
+            "Failed to read portable settings: {error}"
+        )
+    })?;
+    let document: Value = serde_json::from_slice(&bytes).map_err(|error| {
+        tr!(
+            "可攜設定格式無效：{error}",
+            "Invalid portable settings format: {error}"
+        )
+    })?;
     if !document.is_object() {
-        return Err("可攜設定必須是 JSON 物件。".into());
+        return Err(tr_static!(
+            "可攜設定必須是 JSON 物件。",
+            "Portable settings must be a JSON object."
+        )
+        .into());
     }
     Ok(Some(document))
 }
@@ -263,7 +324,11 @@ fn load_portable_settings_store() -> Result<Option<Value>, String> {
 #[tauri::command]
 fn save_portable_settings_store(document: Value) -> Result<(), String> {
     if !document.is_object() {
-        return Err("可攜設定必須是 JSON 物件。".into());
+        return Err(tr_static!(
+            "可攜設定必須是 JSON 物件。",
+            "Portable settings must be a JSON object."
+        )
+        .into());
     }
     let path = portable_settings_path()?;
     write_portable_settings_document(&path, &document)
@@ -272,7 +337,7 @@ fn save_portable_settings_store(document: Value) -> Result<(), String> {
 #[tauri::command]
 fn capture_selection() -> Result<String, String> {
     if !platform_capabilities().automatic_copy_paste {
-        return Err("目前顯示伺服器不允許自動讀寫選取文字。".into());
+        return Err(tr_static!("目前顯示伺服器不允許自動讀寫選取文字。", "The current display server does not allow automatically reading or writing selected text.").into());
     }
     selection::capture()
 }
@@ -280,7 +345,7 @@ fn capture_selection() -> Result<String, String> {
 #[tauri::command]
 fn replace_selection(text: String) -> Result<(), String> {
     if !platform_capabilities().automatic_copy_paste {
-        return Err("目前顯示伺服器不允許自動讀寫選取文字。".into());
+        return Err(tr_static!("目前顯示伺服器不允許自動讀寫選取文字。", "The current display server does not allow automatically reading or writing selected text.").into());
     }
     selection::replace(text)
 }
@@ -329,13 +394,21 @@ fn set_send_to_shortcut(enabled: bool) -> Result<(), String> {
         return if status.success() {
             Ok(())
         } else {
-            Err("無法更新 SendTo 捷徑。".into())
+            Err(tr_static!(
+                "無法更新 SendTo 捷徑。",
+                "Could not update the SendTo shortcuts."
+            )
+            .into())
         };
     }
     #[cfg(not(target_os = "windows"))]
     {
         let _ = enabled;
-        Err("SendTo 只支援 Windows。".into())
+        Err(tr_static!(
+            "SendTo 只支援 Windows。",
+            "SendTo is only supported on Windows."
+        )
+        .into())
     }
 }
 
@@ -386,10 +459,16 @@ fn create_configured_windows(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
-fn install_tray(app: &tauri::App) -> tauri::Result<()> {
-    let others = SubmenuBuilder::new(app, "其他")
-        .text("za1", "Unicode → HTML 十進位")
-        .text("za2", "Unicode → HTML 十六進位")
+fn build_tray_menu<R: Runtime, M: Manager<R>>(app: &M) -> tauri::Result<Menu<R>> {
+    let others = SubmenuBuilder::new(app, tr_static!("其他", "Other"))
+        .text(
+            "za1",
+            tr_static!("Unicode → HTML 十進位", "Unicode → HTML decimal"),
+        )
+        .text(
+            "za2",
+            tr_static!("Unicode → HTML 十六進位", "Unicode → HTML hexadecimal"),
+        )
         .text("za3", "HTML → Unicode")
         .separator()
         .text("zb1", "Unicode → GBK")
@@ -409,32 +488,54 @@ fn install_tray(app: &tauri::App) -> tauri::Result<()> {
         .text("zd3", "GBK → HZ")
         .text("zd4", "Big5 → HZ")
         .separator()
-        .text("ze1", "半形 → 全形")
-        .text("ze2", "全形 → 半形")
+        .text("ze1", tr_static!("半形 → 全形", "Half-width → Full-width"))
+        .text("ze2", tr_static!("全形 → 半形", "Full-width → Half-width"))
         .build()?;
-    let help = SubmenuBuilder::new(app, "說明")
-        .text("about", "關於 ConvertZZ")
-        .text("report", "回報問題")
+    let help = SubmenuBuilder::new(app, tr_static!("說明", "Help"))
+        .text("about", tr_static!("關於 ConvertZZ", "About ConvertZZ"))
+        .text("report", tr_static!("回報問題", "Report an issue"))
         .build()?;
-    let menu = MenuBuilder::new(app)
-        .text("show", "開啟 ConvertZZ")
+    MenuBuilder::new(app)
+        .text("show", tr_static!("開啟 ConvertZZ", "Open ConvertZZ"))
         .separator()
         .text("a1", "GBK → Big5")
         .text("a2", "Big5 → GBK")
-        .text("a3", "Unicode 簡 → Unicode 繁")
-        .text("a4", "Unicode 繁 → Unicode 簡")
+        .text(
+            "a3",
+            tr_static!(
+                "Unicode 簡 → Unicode 繁",
+                "Unicode Simplified → Traditional"
+            ),
+        )
+        .text(
+            "a4",
+            tr_static!(
+                "Unicode 繁 → Unicode 簡",
+                "Unicode Traditional → Simplified"
+            ),
+        )
         .separator()
-        .text("b1", "文件/檔名轉換")
-        .text("b2", "剪貼簿轉換")
+        .text(
+            "b1",
+            tr_static!("文件/檔名轉換", "Convert files / filenames"),
+        )
+        .text("b2", tr_static!("剪貼簿轉換", "Convert clipboard"))
         .separator()
-        .text("c1", "Audio 標籤轉換")
+        .text("c1", tr_static!("Audio 標籤轉換", "Convert audio tags"))
         .separator()
         .item(&others)
-        .text("1", "隱藏或顯示浮動球")
-        .text("settings", "設定")
+        .text(
+            "1",
+            tr_static!("隱藏或顯示浮動球", "Show or hide floating ball"),
+        )
+        .text("settings", tr_static!("設定", "Settings"))
         .item(&help)
-        .text("quit", "結束 ConvertZZ")
-        .build()?;
+        .text("quit", tr_static!("結束 ConvertZZ", "Quit ConvertZZ"))
+        .build()
+}
+
+fn install_tray(app: &tauri::App) -> tauri::Result<()> {
+    let menu = build_tray_menu(app)?;
     let tray = TrayIconBuilder::with_id("main-tray")
         .tooltip("ConvertZZ 2.0")
         .menu(&menu)
@@ -572,6 +673,18 @@ fn show_toast(app: AppHandle, message: String) {
     let _ = app.emit("app://toast", message);
 }
 
+/// 主視窗載入或變更介面語言時呼叫：切換核心訊息語系並重建托盤選單（選單 id 不變）。
+#[tauri::command]
+fn set_ui_language(app: AppHandle, locale: String) -> Result<(), String> {
+    core::locale::set_ui_locale(&locale);
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        let menu = build_tray_menu(&app).map_err(|error| error.to_string())?;
+        tray.set_menu(Some(menu))
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn quit_app(app: AppHandle) {
     app.exit(0);
@@ -594,7 +707,8 @@ async fn check_signed_update(
 ) -> Result<Option<SignedUpdateMetadata>, String> {
     let mut builder = webview.updater_builder();
     if let Some(endpoint) = endpoint {
-        let url = url::Url::parse(&endpoint).map_err(|error| format!("更新端點無效：{error}"))?;
+        let url = url::Url::parse(&endpoint)
+            .map_err(|error| tr!("更新端點無效：{error}", "Invalid update endpoint: {error}"))?;
         builder = builder
             .endpoints(vec![url])
             .map_err(|error| error.to_string())?;
@@ -734,6 +848,7 @@ pub fn run() {
             set_send_to_shortcut,
             show_main_window,
             show_toast,
+            set_ui_language,
             quit_app,
             check_signed_update,
         ])

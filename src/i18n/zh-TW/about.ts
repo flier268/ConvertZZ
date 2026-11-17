@@ -1,0 +1,71 @@
+export default {
+  subtitle: "GPL-3.0 跨平台中文轉換工具。",
+  replayOnboarding: "重看系統導覽",
+  checkUpdates: "檢查更新",
+  reportIssue: "回報問題",
+  hero: {
+    title: "新的核心。",
+    body: "Vue 與 Element Plus 提供介面。Rust 轉換核心在同程序提供相同的 Windows、Linux 與 macOS 結果。",
+  },
+  platform: {
+    title: "平台差異",
+    subtitle: "同一套轉換核心，桌面能力依作業系統與顯示伺服器而異。",
+    currentEnvironment: "目前環境：{platform} / {displayServer}",
+    noLimitations: "此環境沒有額外桌面限制。",
+    feature: "功能",
+    current: "目前",
+  },
+  features: {
+    textFiles: "文字、檔案與檔名轉換",
+    audioTags: "ID3、APEv2、OGG、Opus 標籤",
+    globalShortcuts: "全域快捷鍵",
+    autoCopyPaste: "自動複製與貼上",
+    floatingBallOnTop: "浮動球置頂",
+    sendTo: "SendTo 捷徑",
+    tray: "系統托盤",
+    credentials: "憑證庫",
+    autoUpdate: "自動更新",
+  },
+  support: {
+    full: "完整",
+    disabledThisRelease: "本版停用",
+    disabled: "停用",
+    dependsOnCompositor: "依合成器",
+    notApplicable: "不適用",
+  },
+  details: {
+    trayWindows: "左鍵與選單完整",
+    trayLinux: "需 AppIndicator；使用選單開啟",
+    trayMacos: "選單列圖示與選單",
+    credentialsWindows: "Windows Credential Manager",
+    credentialsLinux: "Secret Service",
+    credentialsMacos: "鑰匙圈",
+    updateWindows: "安裝程式可下載安裝",
+    updateLinux: "AppImage 可下載安裝；DEB／RPM 開啟下載頁",
+    updateMacos: "DMG／應用程式包可下載安裝",
+  },
+  conversion: {
+    title: "轉換差異",
+    subtitle: "與 1.x 相比，規則與未命中字元的處理如下。",
+    legacyEngine: {
+      title: "舊版字典引擎",
+      body: "1.x 以 Dictionary.csv 全文直接取代的舊版字典引擎已移除。",
+    },
+    unmatched: {
+      title: "未命中字元",
+      body: "未命中字元改由 cjk-convert-rs 處理。",
+    },
+    glyphs: {
+      title: "字形",
+      body: "少數字形可能與 Windows LCMapStringEx 不同。",
+    },
+    encoding: {
+      title: "編碼",
+      body: "舊版 Encoding.Default 會依 Windows 系統碼頁改變。新版編碼工具改用明確指定的編碼。",
+    },
+    zhconvert: {
+      title: "ZhConvert",
+      body: "ZhConvert 是選用的網路服務。",
+    },
+  },
+};

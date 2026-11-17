@@ -1,0 +1,118 @@
+import type source from "../zh-TW/settings";
+import type { LocaleMessages } from "../types";
+
+const messages: LocaleMessages<typeof source> = {
+  title: "Settings",
+  intro:
+    "Settings are stored in the Tauri app data directory. You can import ConvertZZ.json from 1.x.",
+  importLegacy: "Import ConvertZZ.json",
+  legacyFilterName: "ConvertZZ legacy settings",
+  importedLegacy: "Legacy settings were read and saved as 2.0 settings.",
+  saved: "Settings saved",
+  modulesInvalid: "ZhConvert modules must be a JSON object whose values are -1, 0, or 1.",
+  unsaved: "Settings have changed but are not saved.",
+  saveSettings: "Save settings",
+  tabs: {
+    general: "General",
+    files: "Files",
+    hotkeys: "Shortcuts",
+    floating: "Floating ball",
+  },
+  general: {
+    language: "Language",
+    languageHint:
+      "Follow system: uses Traditional Chinese when the system language is Chinese, otherwise English.",
+    engine: "Default engine",
+    engineSegmented: "Segmentation engine",
+    direction: "Default direction",
+    previewLimit: "Preview limit",
+    previewUnit: "K chars",
+    conversion: "Conversion",
+    vocabularyCorrection: "Vocabulary correction",
+    recognizeEncoding: "Detect encoding automatically",
+    autoBackup: "Back up before converting",
+    autoBackupTip:
+      "Creates a .bak before writing files, file names, or audio tags. When a folder is selected, the whole folder is backed up instead of adding a suffix to each file. Use /b:f on the command line to turn this off.",
+    preserveModifiedTime: "Keep original modified time",
+    preserveModifiedTimeTip:
+      "After writing file contents or audio tags, restores the original modified time so music libraries sorted by date stay unchanged.",
+    promptAfterConversion: "Notify when finished",
+    startupAndUpdates: "Startup and updates",
+    showMainWindowOnStart: "Show main window on startup",
+    checkVersionOnStart: "Check for updates on startup",
+    checkPreRelease: "Check development / pre-release versions",
+    checkPreReleaseTip:
+      "Stable builds only offer stable releases by default. When the running build is not stable, development / pre-release channels are checked as well. When enabled, alpha, beta, and rc channels are checked and can update automatically; if a newer stable release exists, it is downloaded instead.",
+    skippedVersion: "Skipped {version}. You won't be asked about this version on startup.",
+    clearSkipped: "Clear skipped version",
+    portableNote:
+      "Portable edition: settings are stored in settings-v2.json in the program folder, so the whole folder can be moved. The ZhConvert key is still stored in the system credential store; checking for updates opens GitHub Releases.",
+    windowsIntegration: "Windows integration",
+    createSendTo: "Create SendTo shortcut",
+    removeSendTo: "Remove SendTo shortcut",
+    sendToCreated: "SendTo shortcut created",
+    sendToRemoved: "SendTo shortcut removed",
+  },
+  files: {
+    defaultPath: "Default path",
+    defaultPathPlaceholder: "Leave empty to use the system default path",
+    fixCharsetExtensions: "Extensions for charset fix",
+    unicodeAddBom: "Add BOM to Unicode output",
+  },
+  hotkeys: {
+    noGlobalShortcuts: "Global shortcuts cannot be guaranteed on the current display server.",
+    autoCopy: "Read selected text with shortcut",
+    autoPaste: "Write converted text back to selection",
+    enabled: "Enabled",
+    action: "Action",
+    shortcut: "Shortcut",
+    shortcutPlaceholder: "Click, then press a key combination",
+    hint: "Click a shortcut field and press a key combination; it is enabled after recording. Press Backspace to clear.",
+  },
+  floating: {
+    show: "Show floating ball",
+    description:
+      "A shortcut ball on the desktop. Click it while holding Ctrl, Alt, or Shift, or drop files onto it. Gesture settings are kept when it is turned off.",
+    alwaysOnTopLimited: "Keeping the floating ball on top depends on the compositor.",
+    click: "Click",
+    clickHint: "Hold a modifier key and click the floating ball.",
+    drop: "Drop files",
+    dropHint: "Hold a modifier key and drop files onto the floating ball.",
+    leftButton: "Left button",
+    rightButton: "Right button",
+    button: "Button",
+  },
+  zhconvert: {
+    intro: "This app uses the ZhConvert API. The key is not written to settings-v2.json.",
+    apiKeyPlaceholder: "Optional ZhConvert API key",
+    saveKey: "Save key",
+    website: "ZhConvert website",
+    keySaved: "API key saved to the system credential store",
+    keySessionOnly: "API key kept for the current session only",
+    converterS2T: "Simplified → Traditional converter",
+    converterT2S: "Traditional → Simplified converter",
+    jpTextStrategy: "Japanese text strategy",
+    jpStyleStrategy: "Japanese glyph strategy",
+    strategy: {
+      none: "None",
+      protect: "Protect",
+      protectOnlySameOrigin: "Protect same-origin only",
+      fix: "Fix",
+    },
+    tabsToSpaces: "Tabs to spaces",
+    ignoreTextStyles: "Ignored subtitle styles",
+    jpTextStyles: "Subtitle styles treated as Japanese",
+    modulesJson: "Modules JSON",
+    preReplace: "Replace before conversion",
+    postReplace: "Replace after conversion",
+    protectReplace: "Protected replacements",
+    cleanUpText: "Clean up text",
+    ensureNewlineAtEof: "Newline at end of file",
+    trimTrailingWhiteSpaces: "Trim trailing whitespace",
+    unifyLeadingHyphen: "Unify leading hyphens",
+    legal:
+      "When using this service, you must follow ZhConvert's attribution and commercial use terms.",
+  },
+};
+
+export default messages;

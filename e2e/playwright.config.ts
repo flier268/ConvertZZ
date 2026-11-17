@@ -17,8 +17,9 @@ export default defineConfig({
     trace: "on-first-retry",
     viewport: { width: 1280, height: 800 },
     actionTimeout: 10_000,
+    locale: "zh-TW",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], locale: "zh-TW" } }],
   webServer: {
     command: "pnpm run dev:e2e",
     cwd: root,

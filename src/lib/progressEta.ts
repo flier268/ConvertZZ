@@ -1,3 +1,5 @@
+import { t } from "@/i18n";
+
 export type ProgressSnapshot = {
   current: number;
   total: number;
@@ -28,9 +30,9 @@ export function formatDurationSeconds(totalSeconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const rest = seconds % 60;
-  if (hours > 0) return `${hours} 時 ${minutes} 分 ${rest} 秒`;
-  if (minutes > 0) return `${minutes} 分 ${rest} 秒`;
-  return `${rest} 秒`;
+  if (hours > 0) return t("lib.progress.hms", { hours, minutes, seconds: rest });
+  if (minutes > 0) return t("lib.progress.ms", { minutes, seconds: rest });
+  return t("lib.progress.s", { seconds: rest });
 }
 
 export function formatProgressLabel(
@@ -38,11 +40,11 @@ export function formatProgressLabel(
   startedAtMs: number | undefined,
   nowMs = Date.now(),
 ): string {
-  const base = progress?.message?.trim() || "處理中…";
+  const base = progress?.message?.trim() || t("lib.progress.processing");
   const remaining = estimateRemainingSeconds(progress, startedAtMs, nowMs);
   if (remaining == null) return base;
-  if (remaining < 1) return `${base}（即將完成）`;
-  return `${base}（約剩 ${formatDurationSeconds(remaining)}）`;
+  if (remaining < 1) return t("lib.progress.almostDone", { base });
+  return t("lib.progress.remaining", { base, duration: formatDurationSeconds(remaining) });
 }
 
 export function progressPercentage(progress: ProgressSnapshot | undefined): number {

@@ -1,4 +1,13 @@
 import type { FilePlanItem } from "@shared/contracts";
+import { t } from "@/i18n";
+
+function filenameLabels() {
+  return {
+    title: t("lib.fileDiff.filename.title"),
+    sourceLabel: t("lib.fileDiff.filename.sourceLabel"),
+    outputLabel: t("lib.fileDiff.filename.outputLabel"),
+  };
+}
 
 export interface DiffSection {
   title: string;
@@ -29,9 +38,7 @@ export function buildFileDiffSections(item: FilePlanItem): DiffSection[] {
 
   if (renamed) {
     sections.push({
-      title: "檔名",
-      sourceLabel: "來源檔名",
-      outputLabel: "輸出檔名",
+      ...filenameLabels(),
       source: sourceName,
       output: outputName,
     });
@@ -41,9 +48,7 @@ export function buildFileDiffSections(item: FilePlanItem): DiffSection[] {
   if (!item.previewLoaded && !previewIsFilename) {
     if (!renamed && (item.sourcePreview || item.outputPreview)) {
       sections.push({
-        title: "檔名",
-        sourceLabel: "來源檔名",
-        outputLabel: "輸出檔名",
+        ...filenameLabels(),
         source: item.sourcePreview ?? "",
         output: item.outputPreview ?? "",
       });
@@ -53,17 +58,15 @@ export function buildFileDiffSections(item: FilePlanItem): DiffSection[] {
 
   if (!previewIsFilename) {
     sections.push({
-      title: "內容",
-      sourceLabel: "來源預覽",
-      outputLabel: "輸出預覽",
+      title: t("lib.fileDiff.content.title"),
+      sourceLabel: t("lib.fileDiff.content.sourceLabel"),
+      outputLabel: t("lib.fileDiff.content.outputLabel"),
       source: item.sourcePreview ?? "",
       output: item.outputPreview ?? "",
     });
   } else if (!renamed) {
     sections.push({
-      title: "檔名",
-      sourceLabel: "來源檔名",
-      outputLabel: "輸出檔名",
+      ...filenameLabels(),
       source: item.sourcePreview ?? "",
       output: item.outputPreview ?? "",
     });

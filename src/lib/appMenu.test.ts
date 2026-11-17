@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { collectMenuActionIds, FLOATING_CONTEXT_MENU, resolveShellAction } from "./appMenu";
+import { collectMenuActionIds, floatingContextMenu, resolveShellAction } from "./appMenu";
 
 describe("浮動球右鍵選單", () => {
   it("包含舊版懸浮球右鍵的轉換與視窗動作", () => {
-    expect(collectMenuActionIds(FLOATING_CONTEXT_MENU)).toEqual(
+    expect(collectMenuActionIds(floatingContextMenu())).toEqual(
       expect.arrayContaining([
         "a1",
         "a2",
@@ -41,12 +41,12 @@ describe("浮動球右鍵選單", () => {
   });
 
   it("Audio 標籤轉換是單一項目，不再分 ID3／APE／OGG 子選單", () => {
-    expect(FLOATING_CONTEXT_MENU).toContainEqual({
+    expect(floatingContextMenu()).toContainEqual({
       type: "item",
       id: "c1",
       label: "Audio 標籤轉換",
     });
-    expect(collectMenuActionIds(FLOATING_CONTEXT_MENU)).not.toContain("c2");
+    expect(collectMenuActionIds(floatingContextMenu())).not.toContain("c2");
   });
 
   it("文件、剪貼簿與音訊項目會開啟主視窗對應頁面", () => {

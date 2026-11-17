@@ -186,6 +186,20 @@ export async function scrollAudioListToEnd(page: Page): Promise<void> {
   await expect.poll(() => audioWindowCaughtUp(list), { timeout: 15_000 }).toBe(true);
 }
 
+/** 固定 GitHub Release 查詢結果，避免更新測試依賴線上最新版。 */
+export async function mockLatestGitHubRelease(page: Page, version: string): Promise<void> {
+  await page.route("https://api.github.com/**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        tag_name: `v${version}`,
+        html_url: `https://github.com/flier268/ConvertZZ/releases/tag/v${version}`,
+      }),
+    });
+  });
+}
+
 export async function openPage(page: Page, id: string, heading: string): Promise<void> {
   const label = navLabels[id];
   if (label) await page.getByRole("menuitem", { name: label }).click();

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AudioTagFile, CoreOperation } from "@shared/contracts";
 import { formatUnknownError } from "./errors";
+import { t } from "@/i18n";
 
 export type Progress = {
   current: number;
@@ -62,7 +63,7 @@ class CoreClient {
         if (timeoutMs > 0) {
           timer = setTimeout(() => {
             this.pending.delete(requestId);
-            reject(new Error(`轉換核心要求逾時：${operation}`));
+            reject(new Error(t("lib.coreClient.timeout", { operation })));
           }, timeoutMs);
         }
         this.pending.set(requestId, { onProgress: options.onProgress });

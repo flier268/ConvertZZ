@@ -4,7 +4,8 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { emit, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { FLOATING_CONTEXT_MENU } from "./lib/appMenu";
+import { floatingContextMenu } from "./lib/appMenu";
+import { t } from "@/i18n";
 import { popupAppMenu } from "./lib/appMenuPopup";
 import { executeLegacyAction } from "./lib/legacyActions";
 import {
@@ -125,7 +126,7 @@ async function handleContextMenu(event: MouseEvent) {
   htmlMenu.value = undefined;
   if (isTauri()) {
     try {
-      await popupAppMenu(FLOATING_CONTEXT_MENU, runAction);
+      await popupAppMenu(floatingContextMenu(), runAction);
     } catch (error) {
       await showAppToast(error instanceof Error ? error.message : String(error));
     }
@@ -150,7 +151,7 @@ async function handleDrop(event: DragEvent) {
 <template>
   <div
     class="floating-shell"
-    title="拖入檔案轉換 · 拖曳移動 · 右鍵開啟選單 · 輔助鍵加點擊執行設定動作"
+    :title="t('app.floatingBall.title')"
     @mousedown="handlePointerDown"
     @mouseup="handlePointerUp"
     @contextmenu="handleContextMenu"
@@ -162,7 +163,7 @@ async function handleDrop(event: DragEvent) {
     <div
       class="floating-orb"
       :class="{ busy, 'drop-target': dropTarget }"
-      aria-label="ConvertZZ 浮動球"
+      :aria-label="t('app.floatingBall.ariaLabel')"
     >
       <BrandMark />
     </div>
@@ -172,7 +173,7 @@ async function handleDrop(event: DragEvent) {
       :style="{ left: `${htmlMenu.x}px`, top: `${htmlMenu.y}px` }"
       @mousedown.stop
     >
-      <template v-for="(node, index) in FLOATING_CONTEXT_MENU" :key="index">
+      <template v-for="(node, index) in floatingContextMenu()" :key="index">
         <hr v-if="node.type === 'separator'" />
         <div v-else-if="node.type === 'submenu'" class="floating-context-submenu">
           <button type="button">{{ node.label }}</button>

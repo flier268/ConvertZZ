@@ -7,6 +7,7 @@ import type { PlatformCapabilities } from "@shared/contracts";
 import BrandMark from "../BrandMark.vue";
 import { isDialogCancelled, promptForAppUpdate } from "../lib/appUpdate";
 import { loadSettings } from "../lib/settings";
+import { t } from "@/i18n";
 
 defineOptions({ name: "AboutPage" });
 
@@ -40,64 +41,94 @@ const platformColumns: Array<{ key: PlatformColumn; label: string }> = [
   { key: "macos", label: "macOS" },
 ];
 
-const differences: Array<{ feature: string } & Record<PlatformColumn, string>> = [
-  { feature: "文字、檔案與檔名轉換", windows: "完整", x11: "完整", wayland: "完整", macos: "完整" },
+type Support =
+  "full" | "disabledThisRelease" | "disabled" | "dependsOnCompositor" | "notApplicable";
+type Detail =
+  | "trayWindows"
+  | "trayLinux"
+  | "trayMacos"
+  | "credentialsWindows"
+  | "credentialsLinux"
+  | "credentialsMacos"
+  | "updateWindows"
+  | "updateLinux"
+  | "updateMacos";
+type Cell = { support: Support } | { detail: Detail };
+type Feature =
+  | "textFiles"
+  | "audioTags"
+  | "globalShortcuts"
+  | "autoCopyPaste"
+  | "floatingBallOnTop"
+  | "sendTo"
+  | "tray"
+  | "credentials"
+  | "autoUpdate";
+
+const full: Cell = { support: "full" };
+const notApplicable: Cell = { support: "notApplicable" };
+
+const differences: Array<{ feature: Feature } & Record<PlatformColumn, Cell>> = [
+  { feature: "textFiles", windows: full, x11: full, wayland: full, macos: full },
+  { feature: "audioTags", windows: full, x11: full, wayland: full, macos: full },
   {
-    feature: "ID3、APEv2、OGG、Opus 標籤",
-    windows: "完整",
-    x11: "完整",
-    wayland: "完整",
-    macos: "完整",
+    feature: "globalShortcuts",
+    windows: full,
+    x11: full,
+    wayland: { support: "disabledThisRelease" },
+    macos: full,
   },
-  { feature: "全域快捷鍵", windows: "完整", x11: "完整", wayland: "本版停用", macos: "完整" },
-  { feature: "自動複製與貼上", windows: "完整", x11: "完整", wayland: "停用", macos: "完整" },
-  { feature: "浮動球置頂", windows: "完整", x11: "完整", wayland: "依合成器", macos: "完整" },
-  { feature: "SendTo 捷徑", windows: "完整", x11: "不適用", wayland: "不適用", macos: "不適用" },
   {
-    feature: "系統托盤",
-    windows: "左鍵與選單完整",
-    x11: "需 AppIndicator；使用選單開啟",
-    wayland: "需 AppIndicator；使用選單開啟",
-    macos: "選單列圖示與選單",
+    feature: "autoCopyPaste",
+    windows: full,
+    x11: full,
+    wayland: { support: "disabled" },
+    macos: full,
   },
   {
-    feature: "憑證庫",
-    windows: "Windows Credential Manager",
-    x11: "Secret Service",
-    wayland: "Secret Service",
-    macos: "鑰匙圈",
+    feature: "floatingBallOnTop",
+    windows: full,
+    x11: full,
+    wayland: { support: "dependsOnCompositor" },
+    macos: full,
   },
   {
-    feature: "自動更新",
-    windows: "安裝程式可下載安裝",
-    x11: "AppImage 可下載安裝；DEB／RPM 開啟下載頁",
-    wayland: "AppImage 可下載安裝；DEB／RPM 開啟下載頁",
-    macos: "DMG／應用程式包可下載安裝",
+    feature: "sendTo",
+    windows: full,
+    x11: notApplicable,
+    wayland: notApplicable,
+    macos: notApplicable,
+  },
+  {
+    feature: "tray",
+    windows: { detail: "trayWindows" },
+    x11: { detail: "trayLinux" },
+    wayland: { detail: "trayLinux" },
+    macos: { detail: "trayMacos" },
+  },
+  {
+    feature: "credentials",
+    windows: { detail: "credentialsWindows" },
+    x11: { detail: "credentialsLinux" },
+    wayland: { detail: "credentialsLinux" },
+    macos: { detail: "credentialsMacos" },
+  },
+  {
+    feature: "autoUpdate",
+    windows: { detail: "updateWindows" },
+    x11: { detail: "updateLinux" },
+    wayland: { detail: "updateLinux" },
+    macos: { detail: "updateMacos" },
   },
 ];
 
 const conversionDifferences = [
-  {
-    title: "舊版字典引擎",
-    body: "1.x 以 Dictionary.csv 全文直接取代的舊版字典引擎已移除。",
-  },
-  {
-    title: "未命中字元",
-    body: "未命中字元改由 cjk-convert-rs 處理。",
-  },
-  {
-    title: "字形",
-    body: "少數字形可能與 Windows LCMapStringEx 不同。",
-  },
-  {
-    title: "編碼",
-    body: "舊版 Encoding.Default 會依 Windows 系統碼頁改變。新版編碼工具改用明確指定的編碼。",
-  },
-  {
-    title: "ZhConvert",
-    body: "ZhConvert 是選用的網路服務。",
-  },
-];
+  "legacyEngine",
+  "unmatched",
+  "glyphs",
+  "encoding",
+  "zhconvert",
+] as const;
 
 const currentColumn = computed<PlatformColumn | null>(() => {
   const value = capabilities.value;
@@ -109,11 +140,15 @@ const currentColumn = computed<PlatformColumn | null>(() => {
   return null;
 });
 
-function capabilityTone(value: string): "success" | "warning" | "info" | undefined {
-  if (value === "完整") return "success";
-  if (value === "停用" || value === "本版停用" || value === "依合成器") return "warning";
-  if (value === "不適用") return "info";
-  return undefined;
+function cellLabel(cell: Cell): string {
+  return "support" in cell ? t(`about.support.${cell.support}`) : t(`about.details.${cell.detail}`);
+}
+
+function capabilityTone(cell: Cell): "success" | "warning" | "info" | undefined {
+  if (!("support" in cell)) return undefined;
+  if (cell.support === "full") return "success";
+  if (cell.support === "notApplicable") return "info";
+  return "warning";
 }
 </script>
 
@@ -123,13 +158,17 @@ function capabilityTone(value: string): "success" | "warning" | "info" | undefin
       <div>
         <p class="eyebrow">ABOUT</p>
         <h1>ConvertZZ 2.0</h1>
-        <p>GPL-3.0 跨平台中文轉換工具。</p>
+        <p>{{ t("about.subtitle") }}</p>
       </div>
       <div class="header-actions">
-        <el-button @click="replayOnboarding?.()">重看系統導覽</el-button>
-        <el-button :loading="checkingUpdate" @click="checkForUpdates">檢查更新</el-button>
-        <el-button type="primary" @click="openUrl('https://github.com/flier268/ConvertZZ/issues')"
-          >回報問題</el-button
+        <el-button @click="replayOnboarding?.()">{{ t("about.replayOnboarding") }}</el-button>
+        <el-button :loading="checkingUpdate" @click="checkForUpdates">{{
+          t("about.checkUpdates")
+        }}</el-button>
+        <el-button
+          type="primary"
+          @click="openUrl('https://github.com/flier268/ConvertZZ/issues')"
+          >{{ t("about.reportIssue") }}</el-button
         >
       </div>
     </header>
@@ -137,29 +176,31 @@ function capabilityTone(value: string): "success" | "warning" | "info" | undefin
       <el-card shadow="never" class="about-hero">
         <div class="about-mark"><BrandMark /></div>
         <div>
-          <h2>新的核心。</h2>
-          <p>
-            Vue 與 Element Plus 提供介面。Rust 轉換核心在同程序提供相同的 Windows、Linux 與 macOS
-            結果。
-          </p>
+          <h2>{{ t("about.hero.title") }}</h2>
+          <p>{{ t("about.hero.body") }}</p>
         </div>
       </el-card>
       <div class="about-diff-grid">
         <el-card shadow="never" class="about-panel">
           <template #header>
             <div class="about-panel-header">
-              <div class="section-title">平台差異</div>
-              <p class="muted">同一套轉換核心，桌面能力依作業系統與顯示伺服器而異。</p>
+              <div class="section-title">{{ t("about.platform.title") }}</div>
+              <p class="muted">{{ t("about.platform.subtitle") }}</p>
             </div>
           </template>
           <el-alert
             v-if="capabilities"
             class="capability-alert"
-            :title="`目前環境：${capabilities.platform} / ${capabilities.displayServer}`"
+            :title="
+              t('about.platform.currentEnvironment', {
+                platform: capabilities.platform,
+                displayServer: capabilities.displayServer,
+              })
+            "
             :description="
               capabilities?.limitations.length
                 ? capabilities.limitations.join(' ')
-                : '此環境沒有額外桌面限制。'
+                : t('about.platform.noLimitations')
             "
             :type="capabilities?.limitations.length ? 'warning' : 'info'"
             :closable="false"
@@ -168,20 +209,23 @@ function capabilityTone(value: string): "success" | "warning" | "info" | undefin
           <table class="capability-table">
             <thead>
               <tr>
-                <th scope="col">功能</th>
+                <th scope="col">{{ t("about.platform.feature") }}</th>
                 <th
                   v-for="column in platformColumns"
                   :key="column.key"
                   scope="col"
                   :class="{ 'is-current': currentColumn === column.key }"
                 >
-                  {{ column.label }}<small v-if="currentColumn === column.key">目前</small>
+                  {{ column.label
+                  }}<small v-if="currentColumn === column.key">{{
+                    t("about.platform.current")
+                  }}</small>
                 </th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="row in differences" :key="row.feature">
-                <th scope="row">{{ row.feature }}</th>
+                <th scope="row">{{ t(`about.features.${row.feature}`) }}</th>
                 <td
                   v-for="column in platformColumns"
                   :key="column.key"
@@ -193,9 +237,9 @@ function capabilityTone(value: string): "success" | "warning" | "info" | undefin
                     effect="light"
                     size="small"
                   >
-                    {{ row[column.key] }}
+                    {{ cellLabel(row[column.key]) }}
                   </el-tag>
-                  <span v-else class="capability-detail">{{ row[column.key] }}</span>
+                  <span v-else class="capability-detail">{{ cellLabel(row[column.key]) }}</span>
                 </td>
               </tr>
             </tbody>
@@ -204,14 +248,14 @@ function capabilityTone(value: string): "success" | "warning" | "info" | undefin
         <el-card shadow="never" class="about-panel">
           <template #header>
             <div class="about-panel-header">
-              <div class="section-title">轉換差異</div>
-              <p class="muted">與 1.x 相比，規則與未命中字元的處理如下。</p>
+              <div class="section-title">{{ t("about.conversion.title") }}</div>
+              <p class="muted">{{ t("about.conversion.subtitle") }}</p>
             </div>
           </template>
           <ul class="conversion-diff-list">
-            <li v-for="item in conversionDifferences" :key="item.title">
-              <strong>{{ item.title }}</strong>
-              <p>{{ item.body }}</p>
+            <li v-for="item in conversionDifferences" :key="item">
+              <strong>{{ t(`about.conversion.${item}.title`) }}</strong>
+              <p>{{ t(`about.conversion.${item}.body`) }}</p>
             </li>
           </ul>
         </el-card>

@@ -1,10 +1,20 @@
+import { t } from "@/i18n";
+
 export interface LegacyFileFilter {
   name: string;
   extensions: string[];
 }
 
-export const SUPPORTED_FILES_FILTER_NAME = "支援的檔案";
+export function supportedFilesFilterName(): string {
+  return t("lib.fileFilters.supportedFiles");
+}
+
+/** 設定字串 `<所有檔案|*.*>` 的群組名（儲存值，不翻譯）。 */
 export const ALL_FILES_FILTER_NAME = "所有檔案";
+
+export function allFilesFilterName(): string {
+  return t("lib.fileFilters.allFiles");
+}
 /** 對話框篩選與掃描狀態用的所有檔案標記。不是副檔名。 */
 export const ALL_FILES_EXTENSION = "*";
 /** 使用者在篩選器字串裡加入所有檔案時的群組。預設字串不含這項。 */
@@ -127,7 +137,8 @@ export function appendAllFilesTypeFilter(value: string): string {
 
 /** 執行時在對話框篩選最前方加上「支援的檔案」聯集；設定字串本身不必也不應寫入此項。 */
 export function ensureSupportedFilesFilter(filters: LegacyFileFilter[]): LegacyFileFilter[] {
-  const categories = filters.filter((filter) => filter.name !== SUPPORTED_FILES_FILTER_NAME);
+  const supportedName = supportedFilesFilterName();
+  const categories = filters.filter((filter) => filter.name !== supportedName);
   const extensions = Array.from(
     new Set(
       (categories.length ? categories : filters).flatMap((filter) =>
@@ -138,7 +149,7 @@ export function ensureSupportedFilesFilter(filters: LegacyFileFilter[]): LegacyF
     ),
   );
   if (!extensions.length) return filters;
-  return [{ name: SUPPORTED_FILES_FILTER_NAME, extensions }, ...categories];
+  return [{ name: supportedName, extensions }, ...categories];
 }
 
 /**
@@ -147,17 +158,17 @@ export function ensureSupportedFilesFilter(filters: LegacyFileFilter[]): LegacyF
  */
 export function dialogFileFilters(filters: LegacyFileFilter[]): LegacyFileFilter[] {
   const withSupported = ensureSupportedFilesFilter(filters);
-  const supportedIndex = withSupported.findIndex(
-    (filter) => filter.name === SUPPORTED_FILES_FILTER_NAME,
-  );
+  const supportedName = supportedFilesFilterName();
+  const allFilesName = allFilesFilterName();
+  const supportedIndex = withSupported.findIndex((filter) => filter.name === supportedName);
   const alreadyListed = withSupported.some(
     (filter, index) =>
       index > supportedIndex &&
-      filter.name === ALL_FILES_FILTER_NAME &&
+      (filter.name === ALL_FILES_FILTER_NAME || filter.name === allFilesName) &&
       filter.extensions.includes(ALL_FILES_EXTENSION),
   );
   if (alreadyListed) return withSupported;
-  const allFiles = { name: ALL_FILES_FILTER_NAME, extensions: [ALL_FILES_EXTENSION] };
+  const allFiles = { name: allFilesName, extensions: [ALL_FILES_EXTENSION] };
   const insertAt = supportedIndex >= 0 ? supportedIndex + 1 : 0;
   return [...withSupported.slice(0, insertAt), allFiles, ...withSupported.slice(insertAt)];
 }

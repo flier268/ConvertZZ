@@ -8,6 +8,7 @@ import { core, isCancellationError } from "../lib/coreClient";
 import { loadSettings, zhConvertOptions } from "../lib/settings";
 import { formatProgressLabel, progressPercentage, type ProgressSnapshot } from "../lib/progressEta";
 import SideBySideDiffView from "../components/SideBySideDiffView.vue";
+import { t } from "@/i18n";
 
 defineOptions({ name: "QuickPage" });
 
@@ -56,10 +57,11 @@ async function convert() {
     );
     output.value = result.text;
     duration.value = result.durationMs;
-    if (promptAfterConversion.value) ElMessage.success(`轉換完成。耗時 ${result.durationMs} ms。`);
+    if (promptAfterConversion.value)
+      ElMessage.success(t("quick.converted", { ms: result.durationMs }));
     if (result.warnings.length) ElMessage.warning(result.warnings[0]);
   } catch (error) {
-    if (isCancellationError(error)) ElMessage.info("已取消轉換。");
+    if (isCancellationError(error)) ElMessage.info(t("quick.cancelled"));
     else ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     busy.value = false;
@@ -86,7 +88,7 @@ async function paste() {
 
 async function copy() {
   await writeText(output.value);
-  ElMessage.success("結果已複製");
+  ElMessage.success(t("quick.copied"));
 }
 </script>
 
@@ -95,31 +97,33 @@ async function copy() {
     <header class="page-header">
       <div>
         <p class="eyebrow">CONVERSION</p>
-        <h1>快速轉換</h1>
-        <p>使用分詞語意修正、舊版字典或 ZhConvert。</p>
+        <h1>{{ t("quick.title") }}</h1>
+        <p>{{ t("quick.subtitle") }}</p>
       </div>
-      <el-button @click="paste">貼上並轉換</el-button>
+      <el-button @click="paste">{{ t("quick.pasteAndConvert") }}</el-button>
     </header>
     <el-card shadow="never" class="control-card">
       <div class="control-row">
         <el-segmented
           v-model="direction"
           :options="[
-            { label: '簡體 → 繁體', value: 's2t' },
-            { label: '繁體 → 簡體', value: 't2s' },
-            { label: '不轉換', value: 'none' },
+            { label: t('quick.direction.s2t'), value: 's2t' },
+            { label: t('quick.direction.t2s'), value: 't2s' },
+            { label: t('quick.direction.none'), value: 'none' },
           ]"
         />
         <el-select v-model="engine" style="width: 180px">
-          <el-option label="新式分詞引擎" value="segmented" />
+          <el-option :label="t('quick.engine.segmented')" value="segmented" />
 
-          <el-option label="ZhConvert API" value="zhconvert" />
+          <el-option :label="t('quick.engine.zhconvert')" value="zhconvert" />
         </el-select>
-        <el-checkbox v-model="vocabularyCorrection">詞彙修正</el-checkbox>
-        <el-button type="primary" :loading="busy" :disabled="busy" @click="convert"
-          >開始轉換</el-button
-        >
-        <el-button v-if="busy" @click="cancelConvert">停止轉換</el-button>
+        <el-checkbox v-model="vocabularyCorrection">{{
+          t("quick.vocabularyCorrection")
+        }}</el-checkbox>
+        <el-button type="primary" :loading="busy" :disabled="busy" @click="convert">{{
+          t("quick.start")
+        }}</el-button>
+        <el-button v-if="busy" @click="cancelConvert">{{ t("quick.stop") }}</el-button>
       </div>
       <el-progress
         v-if="busy && progress"
@@ -131,10 +135,10 @@ async function copy() {
     <el-card shadow="never" class="page-fill-main">
       <template #header
         ><div class="card-title">
-          <span>轉換差異</span>
+          <span>{{ t("quick.diffTitle") }}</span>
           <div class="header-actions">
             <small v-if="duration !== undefined">{{ duration }} ms</small>
-            <el-button :disabled="!output" @click="copy">複製結果</el-button>
+            <el-button :disabled="!output" @click="copy">{{ t("quick.copyResult") }}</el-button>
           </div>
         </div></template
       >
@@ -143,8 +147,8 @@ async function copy() {
         :output="output"
         editable
         fill-height
-        source-label="原始文字"
-        output-label="轉換結果"
+        :source-label="t('quick.sourceLabel')"
+        :output-label="t('quick.outputLabel')"
       />
     </el-card>
   </section>

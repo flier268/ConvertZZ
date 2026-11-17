@@ -1,0 +1,72 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Tauri 開發（除錯 Rust）",
+      "type": "lldb",
+      "request": "launch",
+      "cargo": {
+        "args": ["build", "--manifest-path=./src-tauri/Cargo.toml", "--bin=convertzz"],
+        "filter": { "kind": "bin", "name": "convertzz" }
+      },
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Vite 開發伺服器",
+      "postDebugTask": "停止 Vite 開發伺服器"
+    },
+    {
+      "name": "無頭 CLI（除錯 Rust）",
+      "type": "lldb",
+      "request": "launch",
+      "cargo": {
+        "args": ["build", "--manifest-path=./src-tauri/Cargo.toml", "--bin=convertzz"],
+        "filter": { "kind": "bin", "name": "convertzz" }
+      },
+      "args": "--headless ${input:cliArgs}",
+      "cwd": "${workspaceFolder}",
+      "terminal": "integrated"
+    },
+    {
+      "name": "Rust 單元測試（除錯）",
+      "type": "lldb",
+      "request": "launch",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--manifest-path=./src-tauri/Cargo.toml",
+          "--lib",
+          "-p",
+          "convertzz"
+        ],
+        "filter": { "kind": "lib", "name": "convertzz_lib" }
+      },
+      "args": ["${input:rustTestFilter}", "--nocapture"],
+      "cwd": "${workspaceFolder}/src-tauri"
+    },
+    {
+      "name": "Vitest 目前檔案",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["exec", "vitest", "run", "${relativeFile}"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true,
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "cliArgs",
+      "type": "promptString",
+      "description": "--headless 之後的參數，例如 --direction s2t --file a.txt",
+      "default": "--help"
+    },
+    {
+      "id": "rustTestFilter",
+      "type": "promptString",
+      "description": "Rust 測試名稱篩選（例如 user_dictionary）",
+      "default": "user_dictionary"
+    }
+  ]
+}

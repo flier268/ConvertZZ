@@ -2,6 +2,94 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Tauri 開發",
+      "type": "shell",
+      "command": "pnpm run dev",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Vite 開發伺服器",
+      "detail": "供 launch.json 除錯 Rust 時提供前端（http://localhost:1420）",
+      "type": "shell",
+      "command": "pnpm run dev:web",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": { "regexp": "^__never_match__$" },
+        "background": {
+          "activeBegins": true,
+          "beginsPattern": "VITE",
+          "endsPattern": "Local:"
+        }
+      },
+      "presentation": { "reveal": "silent", "panel": "dedicated" }
+    },
+    {
+      "label": "停止 Vite 開發伺服器",
+      "type": "shell",
+      "command": "echo ${input:terminateVite}",
+      "problemMatcher": [],
+      "presentation": { "reveal": "never" }
+    },
+    {
+      "label": "前端檢查",
+      "detail": "Prettier、型別檢查、Vitest 與前端建置",
+      "type": "shell",
+      "command": "pnpm run check",
+      "group": "test",
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "Vitest",
+      "type": "shell",
+      "command": "pnpm test",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Rust 測試",
+      "type": "shell",
+      "command": "cargo test --manifest-path src-tauri/Cargo.toml --workspace",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": ["$rustc"]
+    },
+    {
+      "label": "e2e",
+      "detail": "Playwright 對 Vite 前端，Tauri 由 e2e/mocks 模擬",
+      "type": "shell",
+      "command": "pnpm run test:e2e",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "全部檢查",
+      "dependsOn": ["前端檢查", "Rust 格式檢查", "Rust 測試"],
+      "dependsOrder": "sequence",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Rust 格式檢查",
+      "type": "shell",
+      "command": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
+      "problemMatcher": []
+    },
+    {
+      "label": "格式化",
+      "type": "shell",
+      "command": "pnpm fmt",
+      "problemMatcher": []
+    },
+    {
+      "label": "Rust 建置（除錯）",
+      "type": "shell",
+      "command": "cargo build --manifest-path src-tauri/Cargo.toml",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$rustc"]
+    },
+    {
       "label": "升版",
       "type": "shell",
       "command": "pnpm bump-version ${input:appVersion}",
@@ -17,6 +105,12 @@
       "id": "appVersion",
       "type": "promptString",
       "description": "產品版本（例如 2.0.0-beta12）"
+    },
+    {
+      "id": "terminateVite",
+      "type": "command",
+      "command": "workbench.action.tasks.terminate",
+      "args": "Vite 開發伺服器"
     }
   ]
 }

@@ -49,6 +49,7 @@ describe("驗收項目的自動化契約", () => {
     expect(page).toContain("userDictionary.previewImport");
     expect(page).toContain("userDictionary.export");
     expect(page).toContain('title: "不建議直接匯入舊版字典"');
+    expect(page).toContain('title: "確認刪除詞條"');
     expect(page).toContain("el-table-v2");
     expect(page).not.toContain("dictionary.update");
     expect(page).not.toContain("Dictionary.csv");

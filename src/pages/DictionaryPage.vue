@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, h, reactive, ref, shallowRef, watch } from "vue";
 import { confirm, open, save as chooseSavePath } from "@tauri-apps/plugin-dialog";
-import { ElButton, ElInput, ElMessage, ElOption, ElSelect } from "element-plus";
-import type { Column, TableV2Instance } from "element-plus";
+import { ElButton, ElCheckbox, ElInput, ElMessage, ElOption, ElSelect } from "element-plus";
+import type { CheckboxValueType, Column, TableV2Instance } from "element-plus";
 import type {
   DictionaryImportPreview,
   DictionaryImportRow,
@@ -57,6 +57,13 @@ const importVisible = ref(false);
 const table = ref<TableV2Instance>();
 let nextKey = 0;
 
+/** 勾選的列；只保留目前篩選結果中的列，刪除時不會動到看不到的詞條。 */
+const selected = reactive(new Set<number>());
+const selectedCount = computed(() => selected.size);
+const allVisibleSelected = computed(
+  () => visibleRows.value.length > 0 && selected.size === visibleRows.value.length,
+);
+
 const dirty = computed(() => revision.value !== savedRevision.value);
 const skippedImportRows = computed(
   () => importPreview.value?.rows.filter((row) => row.status !== "importable") ?? [],
@@ -79,6 +86,10 @@ function entries(): UserDictionaryEntry[] {
 /** 只在篩選條件或列數變動時重算；編輯中的列不會因不再符合關鍵字而消失。 */
 function refreshView() {
   visibleRows.value = rows.value.filter((row) => matchesFilter(row, filter));
+  if (selected.size) {
+    const visible = new Set(visibleRows.value.map((row) => row.key));
+    for (const key of [...selected]) if (!visible.has(key)) selected.delete(key);
+  }
   sourceOptions.value = [
     ...new Set(rows.value.flatMap((row) => (row.sourceFile ? [row.sourceFile] : []))),
   ].sort((a, b) => a.localeCompare(b, "zh-Hant"));
@@ -105,7 +116,37 @@ function formatImportedAt(value?: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-TW", { hour12: false });
 }
 
+function setAllVisibleSelected(value: boolean) {
+  selected.clear();
+  if (value) for (const row of visibleRows.value) selected.add(row.key);
+}
+
+function setSelected(row: Row, value: boolean) {
+  if (value) selected.add(row.key);
+  else selected.delete(row.key);
+}
+
 const columns: Column<Row>[] = [
+  {
+    key: "selected",
+    title: "選取",
+    width: 48,
+    align: "center",
+    headerCellRenderer: () =>
+      h(ElCheckbox, {
+        modelValue: allVisibleSelected.value,
+        indeterminate: selected.size > 0 && !allVisibleSelected.value,
+        disabled: visibleRows.value.length === 0,
+        "aria-label": "全選篩選結果",
+        "onUpdate:modelValue": (value: CheckboxValueType) => setAllVisibleSelected(Boolean(value)),
+      }),
+    cellRenderer: ({ rowData }) =>
+      h(ElCheckbox, {
+        modelValue: selected.has(rowData.key),
+        "aria-label": "選取此列",
+        "onUpdate:modelValue": (value: CheckboxValueType) => setSelected(rowData, Boolean(value)),
+      }),
+  },
   {
     key: "simplified",
     title: "簡體",
@@ -174,7 +215,7 @@ const columns: Column<Row>[] = [
     cellRenderer: ({ rowData }) =>
       h(
         ElButton,
-        { link: true, type: "danger", onClick: () => removeEntry(rowData) },
+        { link: true, type: "danger", onClick: () => void removeEntry(rowData) },
         () => "刪除",
       ),
   },
@@ -207,11 +248,34 @@ function addEntry() {
   table.value?.scrollToTop(0);
 }
 
-function removeEntry(row: Row) {
+async function confirmRemoval(message: string): Promise<boolean> {
+  return confirm(`${message}按「儲存」後才會寫入詞典；儲存前可按「重設未儲存變更」復原。`, {
+    title: "確認刪除詞條",
+    kind: "warning",
+  });
+}
+
+async function removeEntry(row: Row) {
+  const label = [row.simplified, row.traditional].filter(Boolean).join("／") || "空白詞條";
+  if (!(await confirmRemoval(`要從表格刪除「${label}」嗎？`))) return;
+  selected.delete(row.key);
   replaceRows(
     rows.value.filter((candidate) => candidate.key !== row.key),
     true,
   );
+}
+
+async function removeSelected() {
+  const count = selected.size;
+  if (!count) return;
+  if (!(await confirmRemoval(`要從表格刪除選取的 ${count.toLocaleString()} 筆詞條嗎？`))) return;
+  const keys = new Set(selected);
+  selected.clear();
+  replaceRows(
+    rows.value.filter((row) => !keys.has(row.key)),
+    true,
+  );
+  ElMessage.success(`已從表格刪除 ${count} 筆，按「儲存」後才會生效。`);
 }
 
 function conflictMessage(values: UserDictionaryEntry[]): string | undefined {
@@ -344,6 +408,8 @@ void load();
         <el-button :loading="busy" @click="chooseImportFile">匯入</el-button
         ><el-button :disabled="busy" @click="exportDictionary">匯出</el-button
         ><el-button @click="addEntry">新增</el-button
+        ><el-button type="danger" plain :disabled="!selectedCount" @click="removeSelected"
+          >刪除選取{{ selectedCount ? `（${selectedCount.toLocaleString()}）` : "" }}</el-button
         ><el-button :disabled="!dirty" @click="load">重設未儲存變更</el-button
         ><el-button type="primary" :disabled="!dirty" :loading="busy" @click="save">儲存</el-button>
       </div>

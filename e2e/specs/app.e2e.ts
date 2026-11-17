@@ -446,6 +446,49 @@ test.describe("ConvertZZ 前端", () => {
     expect((await e2eState(page)).lastDictionaryExport?.entries).toHaveLength(2);
   });
 
+  test("使用者詞典全選只選篩選結果，可多選刪除", async ({ page }) => {
+    await openApp(page, { dictionaryEntryCount: 200 });
+    await openPage(page, "#tour-dictionary", "使用者詞典");
+    await expect(page.getByText("201 / 201 筆")).toBeVisible();
+    const deleteSelected = page.getByRole("button", { name: /^刪除選取/ });
+    await expect(deleteSelected).toBeDisabled();
+
+    await page.getByRole("combobox", { name: "來源篩選" }).click();
+    await page.getByRole("option", { name: "大量.txt" }).click();
+    await expect(page.getByText("100 / 201 筆")).toBeVisible();
+    await page.locator(".dictionary-table-host .el-table-v2__header-cell .el-checkbox").click();
+    await expect(deleteSelected).toHaveText("刪除選取（100）");
+    await page.evaluate(() => {
+      window.__convertzzE2e!.confirmResult = false;
+    });
+    await deleteSelected.click();
+    await expect
+      .poll(async () => (await e2eState(page)).confirms ?? [])
+      .toEqual([expect.stringContaining("要從表格刪除選取的 100 筆詞條嗎")]);
+    await expect(page.getByText("100 / 201 筆")).toBeVisible();
+    await expect(deleteSelected).toHaveText("刪除選取（100）");
+    await page.evaluate(() => {
+      window.__convertzzE2e!.confirmResult = true;
+    });
+    await deleteSelected.click();
+    // 該來源已無詞條，來源篩選回到全部；其他來源的詞條不受影響。
+    await expect(page.getByText("101 / 101 筆")).toBeVisible();
+    const rowChecks = page.locator(".dictionary-table-host .el-table-v2__row .el-checkbox");
+    await rowChecks.nth(0).click();
+    await rowChecks.nth(1).click();
+    await expect(deleteSelected).toHaveText("刪除選取（2）");
+    await page.getByPlaceholder("搜尋簡體或繁體").fill("词1");
+    await expect(deleteSelected).toBeDisabled();
+    await page.getByPlaceholder("搜尋簡體或繁體").fill("");
+    await expect(page.getByText("101 / 101 筆")).toBeVisible();
+    await page.getByRole("button", { name: "刪除", exact: true }).first().click();
+    await expect
+      .poll(async () => (await e2eState(page)).confirms?.at(-1))
+      .toContain("要從表格刪除「优盘／隨身碟」嗎");
+    await expect(page.getByText("100 / 100 筆")).toBeVisible();
+    await expect(page.getByRole("button", { name: "儲存", exact: true })).toBeEnabled();
+  });
+
   test("使用者詞典 5 萬筆只渲染可見列，並可依來源、方向與關鍵字篩選", async ({ page }) => {
     await openApp(page, { dictionaryEntryCount: 50_000 });
     await openPage(page, "#tour-dictionary", "使用者詞典");
@@ -463,7 +506,9 @@ test.describe("ConvertZZ 前端", () => {
     await page.getByPlaceholder("搜尋簡體或繁體").fill("詞4999");
     await expect(page.getByText("6 / 50,001 筆")).toBeVisible();
 
-    const firstInput = page.locator(".dictionary-table-host .el-table-v2__row input").first();
+    const firstInput = page
+      .locator(".dictionary-table-host .el-table-v2__row input.el-input__inner")
+      .first();
     await firstInput.fill("詞改");
     await expect(page.getByText("6 / 50,001 筆")).toBeVisible();
     await expect(page.getByRole("button", { name: "儲存", exact: true })).toBeEnabled();

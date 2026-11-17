@@ -288,6 +288,28 @@ test.describe("ConvertZZ 前端", () => {
       );
   });
 
+  test("建立預覽後變更衝突策略或備份會讓預覽失效，不會繞過覆寫確認", async ({ page }) => {
+    await openApp(page);
+    await openPage(page, "#tour-files", "檔案與檔名");
+    const policy = page.locator(".el-form-item", { hasText: "衝突策略" }).locator(".el-select");
+    await policy.click();
+    await page.getByRole("option", { name: "覆寫" }).click();
+    await page.getByRole("button", { name: "選取檔案" }).click();
+    await page.getByRole("button", { name: "建立預覽" }).click();
+    await expect(page.getByText("變更預覽")).toBeVisible();
+
+    await policy.click();
+    await page.getByRole("option", { name: "略過" }).click();
+    await expect(page.getByText("選項已變更，請重新建立預覽。")).toBeVisible();
+    await expect(page.getByText("變更預覽")).toBeHidden();
+    await expect(page.getByRole("button", { name: "確認執行" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "建立預覽" }).click();
+    await expect(page.getByText("變更預覽")).toBeVisible();
+    await page.locator(".el-checkbox", { hasText: "轉換前備份（.bak）" }).click();
+    await expect(page.getByText("變更預覽")).toBeHidden();
+  });
+
   test("無法自動安裝時改開啟 GitHub Release", async ({ page }) => {
     await page.route("https://api.github.com/**", async (route) => {
       await route.fulfill({

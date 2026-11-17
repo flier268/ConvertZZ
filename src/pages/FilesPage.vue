@@ -116,6 +116,38 @@ const options = reactive({
 });
 
 let previewTimer: ReturnType<typeof setTimeout> | undefined;
+/** 建立預覽時的選項快照；之後選項一變，預覽就不再代表實際會寫入的內容。 */
+const plannedInputs = ref("");
+/** 預覽建立時的衝突策略；套用時的覆寫確認以它為準，不看畫面目前的值。 */
+const plannedConflictPolicy = ref<FilePlanRequest["conflictPolicy"]>("skip");
+const applying = ref(false);
+
+function planInputsKey(): string {
+  const profile = currentProfile.value;
+  return JSON.stringify({
+    paths: paths.value,
+    outputPath: outputPath.value ?? null,
+    outputDirectory: outputDirectory.value ?? null,
+    options,
+    backup: backup.value,
+    previewMaxBytes: previewMaxBytes.value,
+    fixCharsetExtensions: fixCharsetExtensions.value,
+    filter: profile ? profileFilter(profile) : null,
+  });
+}
+
+async function invalidatePlan() {
+  const stale = plan.value;
+  if (!stale) return;
+  plan.value = undefined;
+  clearPreviewState();
+  await core.request("files.cancel", { planId: stale.planId }).catch(() => undefined);
+  ElMessage.info("選項已變更，請重新建立預覽。");
+}
+
+watch(planInputsKey, (key) => {
+  if (plan.value && !applying.value && key !== plannedInputs.value) void invalidatePlan();
+});
 let columnResizeCleanup: (() => void) | undefined;
 
 loadSettings().then((settings) => {
@@ -531,6 +563,8 @@ async function createPlan() {
   progress.value = undefined;
   progressStartedAt.value = Date.now();
   clearPreviewState();
+  let requestedInputs = planInputsKey();
+  const requestedPolicy = options.conflictPolicy;
   try {
     const settings = await loadSettings();
     const profile = currentProfile.value;
@@ -586,11 +620,19 @@ async function createPlan() {
         created = await requestPlan(true);
       } else {
         // 取消：從來源清單移除這些路徑；計畫本身已略過它們，不必重建。
+        const unchanged = planInputsKey() === requestedInputs;
         paths.value = withoutIgnoredInputs(paths.value, ignored);
+        if (unchanged) requestedInputs = planInputsKey();
         created = { ...created, warnings: dropIgnoredInputWarnings(created.warnings, ignored) };
       }
     }
+    plannedInputs.value = requestedInputs;
+    plannedConflictPolicy.value = requestedPolicy;
     plan.value = created;
+    if (planInputsKey() !== requestedInputs) {
+      await invalidatePlan();
+      return;
+    }
     if (!created.items.length) {
       ElMessage.warning(created.warnings[0] ?? "沒有找到可轉換的檔案。");
     }
@@ -615,16 +657,18 @@ async function applyPlan() {
     title: "確認檔案轉換",
     kind: "warning",
   });
-  if (!accepted) return;
+  if (!accepted || !plan.value) return;
   if (
-    options.conflictPolicy === "overwrite" &&
+    plannedConflictPolicy.value === "overwrite" &&
     !(await confirm("覆寫會取代既有的同名檔案與 .bak 備份。是否確定繼續？", {
       title: "確認覆寫",
       kind: "warning",
     }))
   )
     return;
+  if (!plan.value) return;
   busy.value = true;
+  applying.value = true;
   progress.value = undefined;
   progressStartedAt.value = Date.now();
   try {
@@ -672,6 +716,7 @@ async function applyPlan() {
     else ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
     busy.value = false;
+    applying.value = false;
     activeRequestId.value = undefined;
     progress.value = undefined;
     progressStartedAt.value = undefined;

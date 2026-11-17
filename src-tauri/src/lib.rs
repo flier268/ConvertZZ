@@ -339,28 +339,6 @@ fn set_send_to_shortcut(enabled: bool) -> Result<(), String> {
     }
 }
 
-fn discover_dictionary(app: Option<&AppHandle>) -> Option<std::path::PathBuf> {
-    let mut candidates = Vec::new();
-    if let Some(app) = app {
-        if let Ok(resource) = app.path().resource_dir() {
-            candidates.push(resource.join("Dictionary.csv"));
-        }
-    }
-    if let Ok(executable) = std::env::current_exe() {
-        if let Some(directory) = executable.parent() {
-            candidates.push(directory.join("Dictionary.csv"));
-            candidates.push(directory.join("../lib/ConvertZZ/Dictionary.csv"));
-            candidates.push(directory.join("../Resources/Dictionary.csv"));
-        }
-    }
-    candidates.push(
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/Dictionary.csv"),
-    );
-    candidates.push(std::path::PathBuf::from("resources/Dictionary.csv"));
-    candidates.push(std::path::PathBuf::from("Dictionary.csv"));
-    candidates.into_iter().find(|path| path.is_file())
-}
-
 fn log_file_path(app: &AppHandle) -> Option<std::path::PathBuf> {
     app.path()
         .app_log_dir()
@@ -710,14 +688,12 @@ pub fn run() {
     if core::args_request_headless(&cli_args) {
         #[cfg(windows)]
         ensure_headless_console();
-        let code = core::headless::run(&cli_args, discover_dictionary(None));
+        let code = core::headless::run(&cli_args);
         std::process::exit(code);
     }
 
     tauri::Builder::default()
-        .manage(Arc::new(
-            CoreState::new(discover_dictionary(None)).expect("無法初始化轉換核心"),
-        ))
+        .manage(Arc::new(CoreState::new().expect("無法初始化轉換核心")))
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             show_main(app);
             let _ = app.emit("app://second-instance", args);

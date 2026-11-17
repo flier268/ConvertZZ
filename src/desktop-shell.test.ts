@@ -312,7 +312,7 @@ describe("Tauri desktop shell", () => {
     const clipboard = readProjectFile("src/pages/ClipboardPage.vue");
 
     expect(app).toContain(
-      'include="QuickPage,FilesPage,ClipboardPage,AudioPage,ToolsPage,DictionaryPage,SettingsPage"',
+      'include="QuickPage,FilesPage,ClipboardPage,AudioPage,ToolsPage,SettingsPage"',
     );
     expect(settings).toContain('defineOptions({ name: "SettingsPage" })');
     expect(files).toContain('defineOptions({ name: "FilesPage" })');
@@ -393,9 +393,9 @@ describe("Tauri desktop shell", () => {
     expect(existsSync(binariesDir)).toBe(false);
     expect(config.bundle?.externalBin).toBeUndefined();
     expect(config.bundle?.resources).toMatchObject({
-      "../resources/Dictionary.csv": "Dictionary.csv",
       "resources/segment-dict": "segment-dict",
     });
+    expect(config.bundle?.resources).not.toHaveProperty("../resources/Dictionary.csv");
     expect(rust).toContain("fn core_request");
     expect(rust).not.toContain("convertzz-core");
   });

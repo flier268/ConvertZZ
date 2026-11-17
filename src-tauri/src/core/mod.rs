@@ -2,8 +2,6 @@ mod audio;
 mod backup;
 mod cli;
 mod conversion;
-mod dictionary;
-mod dictionary_service;
 mod encoding;
 mod error;
 mod files;
@@ -22,11 +20,9 @@ pub use error::CoreError;
 pub use types::{CancelCheck, Direction, ProgressEvent, ProgressReporter};
 
 use audio::AudioService;
-use dictionary_service::DictionaryService;
 use files::FileService;
 use serde_json::Value;
 use std::collections::HashSet;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use zhconvert::ZhConvertClient;
 
@@ -34,18 +30,16 @@ pub struct CoreState {
     conversion: ConversionService,
     files: FileService,
     audio: AudioService,
-    dictionary: DictionaryService,
     cancelled_requests: Mutex<HashSet<String>>,
 }
 
 impl CoreState {
-    pub fn new(dictionary_path: Option<PathBuf>) -> Result<Self, CoreError> {
-        let conversion = ConversionService::new(dictionary_path.clone())?;
+    pub fn new() -> Result<Self, CoreError> {
+        let conversion = ConversionService::new()?;
         Ok(Self {
             conversion,
             files: FileService::new(),
             audio: AudioService::new(),
-            dictionary: DictionaryService::new(dictionary_path),
             cancelled_requests: Mutex::new(HashSet::new()),
         })
     }
@@ -216,18 +210,6 @@ pub async fn dispatch(
         "audio.cancel" => {
             let plan_id = required_string(&payload, "planId")?;
             to_value(state.audio.cancel(&plan_id))
-        }
-        "dictionary.read" => {
-            let request = serde_json::from_value(payload)?;
-            to_value(state.dictionary.read(request)?)
-        }
-        "dictionary.update" => {
-            let request = serde_json::from_value(payload)?;
-            to_value(state.dictionary.update(request)?)
-        }
-        "dictionary.preview" => {
-            let request = serde_json::from_value(payload)?;
-            to_value(state.dictionary.preview(request)?)
         }
         "settings.migrate" => {
             if let Some(path) = payload.get("path").and_then(Value::as_str) {

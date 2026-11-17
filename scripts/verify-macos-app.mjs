@@ -14,7 +14,6 @@ const apeFixture = resolve(apeArgument);
 const oggFixture = resolve(oggArgument);
 const macosDir = join(app, "Contents", "MacOS");
 const resourceDirectory = join(app, "Contents", "Resources");
-const dictionary = join(resourceDirectory, "Dictionary.csv");
 const segmentDict = join(resourceDirectory, "segment-dict");
 
 if (!existsSync(macosDir)) {
@@ -31,9 +30,6 @@ if (binaries.length === 0) {
   throw new Error("macOS 應用程式包缺少可執行檔。");
 }
 
-if (!existsSync(dictionary)) {
-  throw new Error("macOS 應用程式包缺少 Dictionary.csv。");
-}
 if (!existsSync(join(segmentDict, "segment"))) {
   throw new Error("macOS 應用程式包缺少 segment-dict 分詞字典。");
 }

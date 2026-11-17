@@ -40,7 +40,6 @@ function settingsFixture(): SettingsV2 {
     autoBackupBeforeConversion: true,
     recognizeEncoding: true,
     previewMaxKb: 6,
-    dictionaryPath: "",
     floatingBall: { enabled: false, x: -1, y: -1 },
     hotkeys: { autoCopy: true, autoPaste: true, shortcuts: [] },
     quickActions: {

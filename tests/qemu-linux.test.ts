@@ -26,7 +26,7 @@ describe("QEMU Linux 乾淨環境驗收", () => {
     expect(script).toContain("libayatana-appindicator3-dev");
     expect(script).toContain("libwebkit2gtk-4.1-0");
     expect(script).toContain("segment-dict");
-    expect(script).toContain("Dictionary.csv");
+    expect(script).not.toContain("Dictionary.csv");
     expect(script).toContain("不應再包含 taglib WASM");
     expect(script).toContain("--appimage-extract");
     expect(script).toContain('cp "${appimages[0]}" "$EXTRACT/ConvertZZ.AppImage"');

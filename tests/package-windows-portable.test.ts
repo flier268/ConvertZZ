@@ -11,7 +11,6 @@ import {
 function makeReleaseDir() {
   const root = mkdtempSync(join(tmpdir(), "convertzz-portable-"));
   writeFileSync(join(root, "ConvertZZ.exe"), "exe");
-  writeFileSync(join(root, "Dictionary.csv"), "csv");
   mkdirSync(join(root, "segment-dict", "segment"), { recursive: true });
   writeFileSync(join(root, "segment-dict", "segment", "dict.txt"), "dict");
   mkdirSync(join(root, "licenses"), { recursive: true });
@@ -26,7 +25,6 @@ describe("Windows 免安裝 zip 打包", () => {
     try {
       expect(listPortablePayload(releaseDir)).toEqual([
         "ConvertZZ.exe",
-        "Dictionary.csv",
         "segment-dict",
         "licenses",
         "helper.dll",
@@ -40,7 +38,7 @@ describe("Windows 免安裝 zip 打包", () => {
     const releaseDir = mkdtempSync(join(tmpdir(), "convertzz-portable-missing-"));
     try {
       writeFileSync(join(releaseDir, "ConvertZZ.exe"), "exe");
-      expect(() => listPortablePayload(releaseDir)).toThrow(/Dictionary\.csv/);
+      expect(() => listPortablePayload(releaseDir)).toThrow(/segment-dict/);
     } finally {
       rmSync(releaseDir, { recursive: true, force: true });
     }
@@ -64,7 +62,7 @@ describe("Windows 免安裝 zip 打包", () => {
 
       const entries = listZipEntries(result.zipPath);
       expect(entries).toContain("ConvertZZ/ConvertZZ.exe");
-      expect(entries).toContain("ConvertZZ/Dictionary.csv");
+      expect(entries).not.toContain("ConvertZZ/Dictionary.csv");
       expect(entries).toContain("ConvertZZ/helper.dll");
       expect(entries).toContain("ConvertZZ/portable");
       expect(entries.some((entry) => entry.includes("segment-dict/segment/dict.txt"))).toBe(true);

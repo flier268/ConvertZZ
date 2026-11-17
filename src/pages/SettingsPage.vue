@@ -198,8 +198,6 @@ async function saveApiKey() {
             ><el-form-item label="預設引擎"
               ><el-select v-model="settings.engine"
                 ><el-option label="新式分詞" value="segmented" /><el-option
-                  label="舊版字典"
-                  value="legacy" /><el-option
                   label="ZhConvert"
                   value="zhconvert" /></el-select></el-form-item
             ><el-form-item label="預設方向"

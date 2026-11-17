@@ -561,7 +561,6 @@ async function createPlan() {
             engine: options.engine,
             vocabularyCorrection: options.vocabularyCorrection,
             zhconvert: zhConvertOptions(settings, options.direction),
-            dictionaryPath: settings.dictionaryPath,
           },
         } satisfies FilePlanRequest,
         {
@@ -755,8 +754,8 @@ watch(
         <el-form-item label="引擎"
           ><el-select v-model="options.engine"
             ><el-option label="新式分詞" value="segmented" /><el-option
-              label="舊版字典"
-              value="legacy" /><el-option label="ZhConvert" value="zhconvert" /></el-select
+              label="ZhConvert"
+              value="zhconvert" /></el-select
         ></el-form-item>
         <el-form-item label="來源編碼"
           ><el-select v-model="options.inputEncoding"

@@ -15,7 +15,6 @@ export async function convertText(
   engine: EngineKind,
   vocabularyCorrection = true,
   zhconvert?: ZhConvertOptions,
-  dictionaryPath?: string,
   requestOptions?: CoreRequestOptions,
 ): Promise<ConversionResult> {
   return core.request<ConversionResult>(
@@ -26,7 +25,6 @@ export async function convertText(
       engine,
       vocabularyCorrection,
       zhconvert,
-      dictionaryPath,
     } satisfies ConversionRequest,
     requestOptions,
   );
@@ -38,17 +36,9 @@ export async function convertClipboard(
   automation: { copy: boolean; paste: boolean } = { copy: false, paste: false },
   vocabularyCorrection = true,
   zhconvert?: ZhConvertOptions,
-  dictionaryPath?: string,
 ): Promise<ConversionResult> {
   const source = automation.copy ? await invoke<string>("capture_selection") : await readText();
-  const result = await convertText(
-    source,
-    direction,
-    engine,
-    vocabularyCorrection,
-    zhconvert,
-    dictionaryPath,
-  );
+  const result = await convertText(source, direction, engine, vocabularyCorrection, zhconvert);
   await writeText(result.text);
   if (automation.paste) await invoke("replace_selection", { text: result.text });
   return result;

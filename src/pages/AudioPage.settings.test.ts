@@ -29,7 +29,7 @@ vi.mock("../lib/settings", () => ({
       conflictPolicy: "skip",
       recursive: true,
       direction: "t2s",
-      engine: "legacy",
+      engine: "zhconvert",
       vocabularyCorrection: false,
       id3v1Enabled: true,
       id3v1Direction: "s2t",
@@ -119,7 +119,7 @@ describe("音訊編輯設定", () => {
     expect(written.engine).toBe("opencc");
     expect(written.vocabularyCorrection).toBe(false);
     expect(written.audio.direction).toBe("t2s");
-    expect(written.audio.engine).toBe("legacy");
+    expect(written.audio.engine).toBe("zhconvert");
     expect(written.audio.vocabularyCorrection).toBe(false);
     expect(written.audio.backup).toBe(false);
     expect(written.audio.id3v1SourceEncoding).toBe("big5");

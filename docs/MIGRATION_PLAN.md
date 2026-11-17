@@ -78,7 +78,7 @@
 
 建立 `SettingsV2` 與舊設定匯入流程。
 
-保留 `Dictionary.csv` 的 UTF-8 BOM 六欄格式。
+保留 `Dictionary.csv` 的 UTF-8 BOM 六欄格式。（2.0 正式版已移除舊版字典引擎，見 C-08～C-11 與 D-11／D-12 的註記。）
 
 本階段完成後，不得直接覆寫舊設定或舊字典。
 
@@ -86,7 +86,7 @@
 
 在 `src-tauri/src/core` 建立 Rust 轉換核心與型別化 `core_request` 協定。
 
-實作新式分詞、舊版字典與 ZhConvert 三種引擎。
+實作新式分詞、舊版字典與 ZhConvert 三種引擎。（舊版字典引擎已於 2.0 正式版前移除。）
 
 實作長文字切分與所有必要編碼。
 
@@ -204,4 +204,4 @@ Linux X11：2026-08-18／19 本機證據見各日期目錄。Linux Wayland：202
 | Linux x64 Wayland | 2.0.0-beta6 | 通過 | flier268 | 2026-08-24 | `~/Desktop/ConvertZZ-acceptance/2026-08-24-wayland/` |
 | macOS Universal | 2.0.0-beta15 | 通過 | flier268 | 2026-11-17 | 使用者確認可用 |
 
-各平台已完成簽核。舊 WPF 可回復標記為 `legacy-wpf-final`（commit `9425ab8a230faf8b573201ef72a6c71dfd17ea7d`）。K-07 已於 2026-08-24 移除倉庫內 `ConvertZZ/`；字典資源改由 `resources/Dictionary.csv` 提供。
+各平台已完成簽核。舊 WPF 可回復標記為 `legacy-wpf-final`（commit `9425ab8a230faf8b573201ef72a6c71dfd17ea7d`）。K-07 已於 2026-08-24 移除倉庫內 `ConvertZZ/`。舊版字典引擎與 `resources/Dictionary.csv` 已於 2.0 正式版前移除。

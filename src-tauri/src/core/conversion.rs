@@ -1,4 +1,3 @@
-use super::dictionary::LegacyDictionary;
 use super::error::CoreError;
 use super::parallelism::default_convert_jobs;
 use super::roundtrip_dict::{is_package_data_path, parse_synonym_entry};
@@ -10,55 +9,13 @@ use cjk_convert_rs::{cn2tw_min_with, tw2cn_with};
 use novel_segment::{DoSegmentOptions, Segment, SegmentOptions, POSTAG};
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::{Instant, SystemTime};
+use std::time::Instant;
 
 pub(crate) mod specials;
 
 const MAX_CHUNK_CHARACTERS: usize = 8_192;
-
-/// Dictionary cache identity. mtime alone is insufficient on filesystems with one-second
-/// resolution; length catches most edits, and platform identity catches atomic replaces that
-/// keep the same byte length (Unix inode/dev; Windows creation time — `file_index` is nightly-only).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct DictionaryStamp {
-    modified: SystemTime,
-    len: u64,
-    identity: u64,
-}
-
-impl DictionaryStamp {
-    fn from_metadata(metadata: &Metadata) -> Self {
-        Self {
-            modified: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
-            len: metadata.len(),
-            identity: file_identity(metadata),
-        }
-    }
-}
-
-fn file_identity(metadata: &Metadata) -> u64 {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        metadata.ino() ^ metadata.dev().rotate_left(32)
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        // Stable stand-in for file_index: a replaced file keeps forced mtime/len but gets a
-        // new creation_time after write-temp + rename.
-        metadata.creation_time()
-    }
-    #[cfg(not(any(unix, windows)))]
-    {
-        let _ = metadata;
-        0
-    }
-}
 
 #[derive(Clone, Debug)]
 struct ExtraSynonymHit {
@@ -148,8 +105,6 @@ fn extra_pos_allows(token_pos: u32, prev_pos: u32, allowed: u32) -> bool {
 pub struct ConversionService {
     segmenter: Segment,
     extra_synonym: ExtraSynonymMap,
-    dictionaries: Mutex<HashMap<PathBuf, (DictionaryStamp, Arc<LegacyDictionary>)>>,
-    default_dictionary: Option<PathBuf>,
     pub zhconvert: ZhConvertClient,
 }
 
@@ -326,24 +281,19 @@ fn apply_specials_pins(segmenter: &mut Segment) -> Result<(), CoreError> {
 }
 
 impl ConversionService {
-    pub fn new(default_dictionary: Option<PathBuf>) -> Result<Self, CoreError> {
-        Self::build(default_dictionary, ExtraLoad::Discover)
+    pub fn new() -> Result<Self, CoreError> {
+        Self::build(ExtraLoad::Discover)
     }
 
-    pub fn without_extra_correction(
-        default_dictionary: Option<PathBuf>,
-    ) -> Result<Self, CoreError> {
-        Self::build(default_dictionary, ExtraLoad::Skip)
+    pub fn without_extra_correction() -> Result<Self, CoreError> {
+        Self::build(ExtraLoad::Skip)
     }
 
-    pub fn with_extra_correction(
-        default_dictionary: Option<PathBuf>,
-        extra_root: &Path,
-    ) -> Result<Self, CoreError> {
-        Self::build(default_dictionary, ExtraLoad::Dir(extra_root.to_path_buf()))
+    pub fn with_extra_correction(extra_root: &Path) -> Result<Self, CoreError> {
+        Self::build(ExtraLoad::Dir(extra_root.to_path_buf()))
     }
 
-    fn build(default_dictionary: Option<PathBuf>, extra: ExtraLoad) -> Result<Self, CoreError> {
+    fn build(extra: ExtraLoad) -> Result<Self, CoreError> {
         configure_segment_dict_root();
         specials::init()?;
         let mut segmenter = Segment::new(SegmentOptions {
@@ -366,8 +316,6 @@ impl ConversionService {
         Ok(Self {
             segmenter,
             extra_synonym,
-            dictionaries: Mutex::new(HashMap::new()),
-            default_dictionary,
             zhconvert: ZhConvertClient::new(),
         })
     }
@@ -511,27 +459,6 @@ impl ConversionService {
                         &is_cancelled,
                     )
                 })?;
-            } else if request.engine == super::types::EngineKind::Legacy {
-                let path = request
-                    .dictionary_path
-                    .as_deref()
-                    .map(PathBuf::from)
-                    .or_else(|| self.default_dictionary.clone())
-                    .ok_or_else(|| CoreError::new("DICTIONARY_MISSING", "找不到舊版字典。"))?;
-                let dictionary = self.dictionary(&path)?;
-                text = run_cpu_bound(|| {
-                    convert_legacy_chunked(
-                        &dictionary,
-                        &text,
-                        request.direction,
-                        &progress,
-                        &is_cancelled,
-                    )
-                })?;
-                warnings.push(
-                    "未命中字元使用跨平台 cjk-convert-rs，結果可能與舊版 Windows 映射略有差異。"
-                        .into(),
-                );
             }
         }
         Ok(ConversionResult {
@@ -577,27 +504,6 @@ impl ConversionService {
                         &is_cancelled,
                     )
                 })?;
-            } else if request.engine == super::types::EngineKind::Legacy {
-                let path = request
-                    .dictionary_path
-                    .as_deref()
-                    .map(PathBuf::from)
-                    .or_else(|| self.default_dictionary.clone())
-                    .ok_or_else(|| CoreError::new("DICTIONARY_MISSING", "找不到舊版字典。"))?;
-                let dictionary = self.dictionary(&path)?;
-                text = run_cpu_bound(|| {
-                    convert_legacy_chunked(
-                        &dictionary,
-                        &slice_chars(&text, skip_chars, hold_chars),
-                        request.direction,
-                        &progress,
-                        &is_cancelled,
-                    )
-                })?;
-                warnings.push(
-                    "未命中字元使用跨平台 cjk-convert-rs，結果可能與舊版 Windows 映射略有差異。"
-                        .into(),
-                );
             } else {
                 text = slice_chars(&text, skip_chars, hold_chars);
             }
@@ -773,22 +679,6 @@ impl ConversionService {
         let next = words.get(index + 1).map(|item| item.w.as_str());
         specials::current().apply_token(&pulled, next, direction, pos, prev_pos)
     }
-
-    fn dictionary(&self, path: &Path) -> Result<Arc<LegacyDictionary>, CoreError> {
-        let stamp = DictionaryStamp::from_metadata(&std::fs::metadata(path)?);
-        let mut cache = self
-            .dictionaries
-            .lock()
-            .map_err(|_| CoreError::new("DICTIONARY_LOCK", "無法鎖定字典快取。"))?;
-        if let Some((cached_stamp, dictionary)) = cache.get(path) {
-            if *cached_stamp == stamp {
-                return Ok(Arc::clone(dictionary));
-            }
-        }
-        let dictionary = Arc::new(LegacyDictionary::load(path)?);
-        cache.insert(path.to_path_buf(), (stamp, Arc::clone(&dictionary)));
-        Ok(dictionary)
-    }
 }
 
 fn segment_plain_options(convert_synonym: bool) -> DoSegmentOptions {
@@ -889,42 +779,6 @@ fn convert_glyphs_chunked(
     })
 }
 
-fn convert_legacy_chunked(
-    dictionary: &LegacyDictionary,
-    text: &str,
-    direction: Direction,
-    progress: &Option<ProgressReporter>,
-    is_cancelled: &Option<CancelCheck>,
-) -> Result<String, CoreError> {
-    let total = text.chars().count().max(1) as u64;
-    if total <= MAX_CHUNK_CHARACTERS as u64 {
-        throw_if_cancelled(is_cancelled)?;
-        let converted = dictionary.replace(text, direction, |value| base_convert(value, direction));
-        report_convert_progress(progress, total, total);
-        return Ok(converted);
-    }
-    let units = collect_line_units(text);
-    let jobs = default_convert_jobs();
-    if jobs <= 1 || units.len() < 2 {
-        let mut output = String::with_capacity(text.len());
-        let mut done = 0u64;
-        for unit in units {
-            throw_if_cancelled(is_cancelled)?;
-            let piece = &text[unit.start..unit.end];
-            output.push_str(
-                &dictionary.replace(piece, direction, |value| base_convert(value, direction)),
-            );
-            done += unit.chars;
-            report_convert_progress(progress, done, total);
-        }
-        return Ok(output);
-    }
-    convert_units_parallel(jobs, &units, total, progress, is_cancelled, |unit| {
-        let piece = &text[unit.start..unit.end];
-        Ok(dictionary.replace(piece, direction, |value| base_convert(value, direction)))
-    })
-}
-
 #[derive(Clone, Copy, Debug)]
 enum UnitKind {
     Plain,
@@ -979,31 +833,6 @@ fn collect_plain_units(text: &str) -> Vec<TextUnit> {
             kind: UnitKind::Plain,
         });
         local = end;
-    }
-    units
-}
-
-fn collect_line_units(text: &str) -> Vec<TextUnit> {
-    let mut units = Vec::new();
-    let mut start = 0usize;
-    for (idx, _) in text.match_indices('\n') {
-        let end = idx + 1;
-        let piece = &text[start..end];
-        units.push(TextUnit {
-            start,
-            end,
-            chars: piece.chars().count() as u64,
-            kind: UnitKind::Plain,
-        });
-        start = end;
-    }
-    if start < text.len() {
-        units.push(TextUnit {
-            start,
-            end: text.len(),
-            chars: text[start..].chars().count() as u64,
-            kind: UnitKind::Plain,
-        });
     }
     units
 }
@@ -1229,13 +1058,7 @@ fn split_text(text: &str) -> Vec<String> {
 pub(crate) fn shared_conversion() -> &'static ConversionService {
     use std::sync::OnceLock;
     static SERVICE: OnceLock<ConversionService> = OnceLock::new();
-    SERVICE.get_or_init(|| {
-        ConversionService::new(Some(
-            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../resources/Dictionary.csv"),
-        ))
-        .unwrap()
-    })
+    SERVICE.get_or_init(|| ConversionService::new().unwrap())
 }
 
 #[cfg(test)]

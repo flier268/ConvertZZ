@@ -44,7 +44,6 @@ function settingsFixture(): SettingsV2 {
     autoBackupBeforeConversion: true,
     recognizeEncoding: true,
     previewMaxKb: 6,
-    dictionaryPath: "",
     floatingBall: { enabled: true, x: -1, y: -1 },
     hotkeys: {
       autoCopy: true,
@@ -319,7 +318,7 @@ describe("設定分頁", () => {
 
   it("可從設定頁匯入 ConvertZZ.json 並套用桌面設定", async () => {
     const imported = settingsFixture();
-    imported.engine = "legacy";
+    imported.engine = "zhconvert";
     imported.previewMaxKb = 12;
     openFile.mockResolvedValue("/tmp/ConvertZZ.json");
     importLegacySettings.mockResolvedValue(imported);

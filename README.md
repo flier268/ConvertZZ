@@ -24,7 +24,6 @@ ConvertZZ 是跨平台中文轉換工具。
 - Unicode 與傳統文字編碼轉換。
 - HTML 字元實體轉換。
 - 全形與半形轉換。
-- 舊版六欄字典編輯。
 - 獨立浮動球。
 - 系統托盤與全域快捷鍵。
 
@@ -46,13 +45,7 @@ ConvertZZ 是跨平台中文轉換工具。
 
 長文字會依安全邊界分段。
 
-「舊版字典」會讀取 `Dictionary.csv`。
-
-它會保留啟用狀態與優先權。
-
-它會保留長詞優先規則。
-
-優先權 `9999` 仍代表保護詞。
+1.x 的「舊版字典」引擎（以 `Dictionary.csv` 全文直接取代）已在 2.0 移除。
 
 未命中字元會交由 `cjk-convert-rs` 處理。
 
@@ -123,10 +116,6 @@ APEv2 與 Vorbis Comment 固定使用 UTF-8。
 
 遞迴處理不會跟隨符號連結。
 
-舊版字典儲存前會詢問使用者。
-
-確認後會先建立不覆蓋的時間戳備份。
-
 ## 平台差異
 
 | 功能 | Windows | Linux X11 | Linux Wayland | macOS |
@@ -160,7 +149,7 @@ Linux 使用者可從托盤選單開啟主視窗。
 | 範圍 | 狀態 | 說明 |
 | --- | --- | --- |
 | Vue、Element Plus 與 Tauri 2 外殼 | 已完成 | 主視窗、浮動球、托盤與單一執行個體已接通。 |
-| 新式、舊字典與 ZhConvert 引擎 | 已完成 | 黃金測試與服務模擬測試已建立。 |
+| 新式分詞與 ZhConvert 引擎 | 已完成 | 黃金測試與服務模擬測試已建立；舊版字典引擎已於 2.0 移除。 |
 | 檔案與檔名安全寫入 | 已完成 | 預覽、確認、衝突、暫存、回復與符號連結規則已實作。 |
 | MP3、APE、OGG 與 Opus 標籤 | 已完成 | 音訊樣本已於發行環境驗收。 |
 | 舊版設定匯入 | 已完成 | 匯入前會詢問並備份；各平台已人工驗收。 |
@@ -237,8 +226,6 @@ AppImage 會封裝建置時收集到的對應執行函式庫。
 
 新設定會存入 Tauri 應用程式設定目錄。
 
-舊版 `Dictionary.csv` 會依 UTF-8 BOM 六欄格式讀取。
-
 ### 2.0 命令列（建議）
 
 ```bash
@@ -262,7 +249,7 @@ ConvertZZ --headless --file --config ./my-settings.json -y a.txt
 | `--output`／`-o` | 輸出編碼（明確指定且未用 `--file`／`--audio` 時會進無頭；可與純 `--filename` 併用） |
 | `--output-path` | 輸出路徑（亦可為第二個位置參數） |
 | `--direction` | `s2t`／`t2s`／`none`（無頭且未載入設定時必填） |
-| `--engine` | `segmented`／`legacy`／`zhconvert`（無頭預設 `segmented`） |
+| `--engine` | `segmented`／`zhconvert`（無頭預設 `segmented`；`legacy` 已移除，會回報錯誤） |
 | `--vocabulary` | `on`／`off`／`settings`（無頭未載入設定時 `settings` 無效，預設 `on`） |
 | `--globalconfig` | 無頭時載入本機全域／可攜設定 |
 | `--config` | 無頭時載入指定設定檔（不可與 `--globalconfig` 併用） |

@@ -32,8 +32,8 @@ const DEFAULT_FIX_CHARSET_EXTENSIONS: &[&str] = &[
 ];
 
 /// 無頭 CLI 進入點。回傳行程結束碼（0＝成功）。
-pub fn run(args: &[String], dictionary_path: Option<PathBuf>) -> i32 {
-    match run_inner(args, dictionary_path) {
+pub fn run(args: &[String]) -> i32 {
+    match run_inner(args) {
         Ok(code) => code,
         Err(error) => {
             eprintln!("錯誤：{error}");
@@ -42,7 +42,7 @@ pub fn run(args: &[String], dictionary_path: Option<PathBuf>) -> i32 {
     }
 }
 
-fn run_inner(args: &[String], dictionary_path: Option<PathBuf>) -> Result<i32, String> {
+fn run_inner(args: &[String]) -> Result<i32, String> {
     let mut parsed = parse_cli(args, None);
     if !parsed.headless {
         return Err("內部錯誤：非無頭參數不應進入無頭路徑。".into());
@@ -63,7 +63,7 @@ fn run_inner(args: &[String], dictionary_path: Option<PathBuf>) -> Result<i32, S
     let settings = load_cli_settings(&parsed)?;
     apply_settings_defaults(&mut parsed, settings.as_ref())?;
 
-    let state = Arc::new(CoreState::new(dictionary_path).map_err(|error| error.message.clone())?);
+    let state = Arc::new(CoreState::new().map_err(|error| error.message.clone())?);
     if let Some(api_key) = load_zhconvert_api_key_quiet() {
         zhconvert_client(&state).configure(&api_key);
     }
@@ -253,10 +253,6 @@ async fn prepare_files(
         conversion: ConversionOptions {
             direction,
             engine: parsed.engine,
-            dictionary_path: settings
-                .and_then(|value| value.get("dictionaryPath"))
-                .and_then(Value::as_str)
-                .map(str::to_string),
             zhconvert: Some(zhconvert_options(settings, direction)),
             vocabulary_correction: Some(vocabulary_correction),
         },
@@ -389,10 +385,6 @@ async fn prepare_audio(
         conversion: ConversionOptions {
             direction,
             engine: parsed.engine,
-            dictionary_path: settings
-                .and_then(|value| value.get("dictionaryPath"))
-                .and_then(Value::as_str)
-                .map(str::to_string),
             zhconvert: Some(zh.clone()),
             vocabulary_correction: Some(vocabulary_correction),
         },
@@ -612,7 +604,7 @@ fn apply_settings_defaults(parsed: &mut ParsedCli, settings: Option<&Value>) -> 
             parsed.direction_explicit = true;
         }
         if !parsed.engine_explicit {
-            parsed.engine = engine_from_settings(settings);
+            parsed.engine = engine_from_settings(settings)?;
             parsed.engine_explicit = true;
         }
         if !parsed.backup_explicit {
@@ -678,11 +670,15 @@ fn resolve_vocabulary_correction(
     }
 }
 
-fn engine_from_settings(settings: &Value) -> EngineKind {
+fn engine_from_settings(settings: &Value) -> Result<EngineKind, String> {
     match settings.get("engine").and_then(Value::as_str) {
-        Some("legacy") => EngineKind::Legacy,
-        Some("zhconvert") => EngineKind::Zhconvert,
-        _ => EngineKind::Segmented,
+        Some("zhconvert") => Ok(EngineKind::Zhconvert),
+        // 設定檔尚未經 GUI 遷移時不可默默換引擎；改用 --engine 明確指定。
+        Some("legacy") => Err(
+            "設定檔使用的舊版字典引擎已在 2.0 移除。請在「字典」頁匯入 Dictionary.csv，或加上 --engine segmented。"
+                .into(),
+        ),
+        _ => Ok(EngineKind::Segmented),
     }
 }
 
@@ -934,7 +930,13 @@ fn normalize_settings_document(raw: Value) -> Value {
         Some(inner) if inner.is_object() => inner.clone(),
         _ => raw,
     };
-    migrate(input)
+    let removed_engine = input.get("engine").and_then(Value::as_str) == Some("legacy");
+    let mut migrated = migrate(input);
+    // GUI 遷移會把 legacy 改成 segmented；無頭保留原值，未明確指定 --engine 時回報錯誤。
+    if removed_engine {
+        migrated["engine"] = Value::from("legacy");
+    }
+    migrated
 }
 
 fn portable_settings_store_path() -> Option<PathBuf> {

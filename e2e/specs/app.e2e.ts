@@ -179,7 +179,6 @@ test.describe("ConvertZZ 前端", () => {
       { nav: "#nav-quick", heading: "快速轉換" },
       { nav: "#nav-clipboard", heading: "剪貼簿" },
       { nav: "#nav-tools", heading: "文字工具" },
-      { nav: "#nav-dictionary", heading: "舊版字典" },
       { nav: "#nav-settings", heading: "設定" },
       { nav: "#nav-about", heading: "ConvertZZ 2.0" },
       { nav: "#nav-audio", heading: "音訊標籤" },
@@ -373,18 +372,6 @@ test.describe("ConvertZZ 前端", () => {
     await expect(page.getByText("需 AppIndicator；使用選單開啟").first()).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "Linux Wayland" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "macOS" })).toBeVisible();
-  });
-
-  test("D-11 儲存字典前會詢問", async ({ page }) => {
-    await openApp(page, { selectedFiles: "/tmp/Dictionary.csv" });
-    await openPage(page, "#tour-dictionary", "舊版字典");
-    await page.getByRole("button", { name: "選取可寫字典" }).click();
-    await expect(page.getByRole("button", { name: "儲存變更", exact: true })).toBeDisabled();
-    await page.getByRole("button", { name: "新增" }).click();
-    await page.getByRole("button", { name: "儲存變更", exact: true }).click();
-    await expect
-      .poll(async () => (await e2eState(page)).confirms ?? [])
-      .toEqual(expect.arrayContaining([expect.stringContaining("將先備份字典，再寫入")]));
   });
 
   test("E-01 內容預覽會顯示來源與輸出文字", async ({ page }) => {

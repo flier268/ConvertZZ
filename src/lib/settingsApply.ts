@@ -24,7 +24,6 @@ export function fileConversionDefaults(settings: SettingsV2) {
     ),
     promptAfterConversion: settings.promptAfterConversion,
     autoBackupBeforeConversion: settings.autoBackupBeforeConversion,
-    dictionaryPath: settings.dictionaryPath,
   };
 }
 

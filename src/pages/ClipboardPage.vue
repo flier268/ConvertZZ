@@ -56,7 +56,6 @@ async function refresh(force = false) {
         engine.value,
         vocabularyCorrection.value,
         zhConvertOptions(settings, direction.value),
-        settings.dictionaryPath,
       )
     ).text;
     if (reinterpretEncoding.value && direction.value !== "s2t")
@@ -146,8 +145,8 @@ onBeforeUnmount(() => {
             value="s2t" /><el-option label="繁轉簡" value="t2s" /></el-select
         ><el-select v-model="engine" style="width: 180px"
           ><el-option label="新式分詞" value="segmented" /><el-option
-            label="舊版字典"
-            value="legacy" /><el-option label="ZhConvert" value="zhconvert" /></el-select
+            label="ZhConvert"
+            value="zhconvert" /></el-select
         ><el-checkbox v-model="reinterpretEncoding">重新解讀編碼</el-checkbox
         ><template v-if="reinterpretEncoding"
           ><el-select v-model="targetEncoding" style="width: 130px"

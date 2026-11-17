@@ -560,7 +560,7 @@ fn write_corpus(sources: &Path, relative: &str, body: &str) {
 }
 
 fn test_service() -> ConversionService {
-    ConversionService::without_extra_correction(None).expect("service")
+    ConversionService::without_extra_correction().expect("service")
 }
 
 fn base_config(sources: PathBuf, output: PathBuf) -> RoundtripRunConfig {

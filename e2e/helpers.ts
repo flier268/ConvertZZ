@@ -19,7 +19,6 @@ const navLabels: Record<string, string> = {
   "#nav-clipboard": "剪貼簿",
   "#nav-audio": "音訊標籤",
   "#nav-tools": "文字工具",
-  "#nav-dictionary": "舊版字典",
   "#nav-settings": "設定",
   "#nav-about": "關於與差異",
 };

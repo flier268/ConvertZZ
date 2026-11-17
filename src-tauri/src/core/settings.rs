@@ -250,8 +250,10 @@ fn merge_v2(input: Value) -> Value {
                     );
                 }
                 "engine" => {
-                    merged.insert(key.clone(), value.clone());
+                    merged.insert(key.clone(), json!(supported_engine(value)));
                 }
+                // 舊版字典引擎已移除，它的字典路徑不再有作用。
+                "dictionaryPath" => {}
                 _ => {
                     merged.insert(key.clone(), value.clone());
                 }
@@ -260,6 +262,12 @@ fn merge_v2(input: Value) -> Value {
     }
     if !merged.contains_key("engine") {
         merged.insert("engine".into(), json!("segmented"));
+    }
+    if let Some(audio) = merged.get_mut("audio").and_then(Value::as_object_mut) {
+        if let Some(engine) = audio.get("engine") {
+            let engine = supported_engine(engine);
+            audio.insert("engine".into(), json!(engine));
+        }
     }
     if let Some(filter) = merged
         .get("files")
@@ -728,11 +736,18 @@ fn normalize_modifier(value: &str) -> String {
         .join("+")
 }
 
+/// 已移除的 `legacy` 與不明值改回新式分詞。
+fn supported_engine(value: &Value) -> &'static str {
+    match value.as_str() {
+        Some("zhconvert") => "zhconvert",
+        _ => "segmented",
+    }
+}
+
 fn engine_value(value: Option<&Value>) -> &'static str {
     match value {
         Some(Value::Number(number)) if number.as_i64() == Some(1) => "zhconvert",
         Some(Value::String(text)) if text == "Fanhuaji" || text == "zhconvert" => "zhconvert",
-        Some(Value::String(text)) if text == "legacy" => "legacy",
         _ => "segmented",
     }
 }

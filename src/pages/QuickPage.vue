@@ -45,7 +45,6 @@ async function convert() {
       engine.value,
       vocabularyCorrection.value,
       zhconvert.value,
-      settings.dictionaryPath,
       {
         onProgress: (value) => {
           progress.value = value;
@@ -113,7 +112,7 @@ async function copy() {
         />
         <el-select v-model="engine" style="width: 180px">
           <el-option label="新式分詞引擎" value="segmented" />
-          <el-option label="舊版字典引擎" value="legacy" />
+
           <el-option label="ZhConvert API" value="zhconvert" />
         </el-select>
         <el-checkbox v-model="vocabularyCorrection">詞彙修正</el-checkbox>

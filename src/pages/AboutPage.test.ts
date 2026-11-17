@@ -105,7 +105,7 @@ describe("關於與差異", () => {
   it("轉換差異以條目呈現且保留原說明", async () => {
     const wrapper = await mountPage();
     expect(wrapper.text()).toContain("轉換差異");
-    expect(wrapper.text()).toContain("舊版字典的優先權、長詞與保護詞規則保持不變。");
+    expect(wrapper.text()).toContain("1.x 以 Dictionary.csv 全文直接取代的舊版字典引擎已移除。");
     expect(wrapper.text()).toContain("未命中字元改由 cjk-convert-rs 處理。");
     expect(wrapper.text()).toContain("ZhConvert 是選用的網路服務。");
     wrapper.unmount();

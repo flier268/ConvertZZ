@@ -64,7 +64,7 @@ fn run_roundtrip_command(args: RoundtripArgs) -> Result<(), String> {
     let _ = signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&stop));
     let _ = signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&sigterm));
 
-    let service = ConversionService::without_extra_correction(None)
+    let service = ConversionService::without_extra_correction()
         .map_err(|error| format!("無法初始化轉換核心：{error}"))?;
     let status = run_roundtrip(
         &service,

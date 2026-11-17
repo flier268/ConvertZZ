@@ -23,46 +23,6 @@ fn keeps_legacy_flags_and_new_engine() {
 }
 
 #[test]
-fn recognizes_audio_and_legacy_engine() {
-    let parsed = parse_cli(&args(&["/audio", "/e:l", "song.ape"]), None);
-    assert_eq!(parsed.mode, CliMode::Audio);
-    assert_eq!(parsed.engine, EngineKind::Legacy);
-    assert_eq!(parsed.paths, ["song.ape"]);
-    assert_eq!(
-        parse_cli(
-            &args(&["/audio", "a.mp3", "b.ape", "c.ogg", "d.opus"]),
-            None
-        )
-        .paths,
-        ["a.mp3", "b.ape", "c.ogg", "d.opus"]
-    );
-}
-
-#[test]
-fn maps_engine_flags() {
-    assert_eq!(
-        parse_cli(&args(&["/e:l", "book.txt"]), None).engine,
-        EngineKind::Legacy
-    );
-    assert_eq!(
-        parse_cli(&args(&["/e:f", "book.txt"]), None).engine,
-        EngineKind::Zhconvert
-    );
-    assert_eq!(
-        parse_cli(&args(&["/e:n", "book.txt"]), None).engine,
-        EngineKind::Segmented
-    );
-}
-
-#[test]
-fn uses_saved_engine_when_unspecified() {
-    assert_eq!(
-        parse_cli(&args(&["book.txt"]), Some(EngineKind::Legacy)).engine,
-        EngineKind::Legacy
-    );
-}
-
-#[test]
 fn keeps_t2s_and_disabled_dictionary() {
     let parsed = parse_cli(&args(&["/f:s", "/d:f", "book.txt"]), None);
     assert_eq!(parsed.mode, CliMode::File);
@@ -310,7 +270,7 @@ fn config_flags_parse() {
 #[test]
 fn engine_flag_is_explicit() {
     assert!(!parse_cli(&args(&["--file", "a.txt"]), None).engine_explicit);
-    assert!(parse_cli(&args(&["--file", "--engine", "legacy", "a.txt"]), None).engine_explicit);
+    assert!(parse_cli(&args(&["--file", "--engine", "zhconvert", "a.txt"]), None).engine_explicit);
     assert!(parse_cli(&args(&["/file", "/e:n", "a.txt"]), None).engine_explicit);
 }
 
@@ -383,4 +343,40 @@ fn backup_and_input_flags_are_explicit() {
     assert!(parse_cli(&args(&["--file", "/b:f", "a.txt"]), None).backup_explicit);
     assert!(parse_cli(&args(&["--file", "--input", "gbk", "a.txt"]), None).input_encoding_explicit);
     assert!(parse_cli(&args(&["--file", "/i:utf8", "a.txt"]), None).input_encoding_explicit);
+}
+
+#[test]
+fn maps_engine_flags() {
+    assert_eq!(
+        parse_cli(&args(&["/e:f", "book.txt"]), None).engine,
+        EngineKind::Zhconvert
+    );
+    assert_eq!(
+        parse_cli(&args(&["/e:n", "book.txt"]), None).engine,
+        EngineKind::Segmented
+    );
+}
+
+#[test]
+fn legacy_engine_requests_report_removal() {
+    for argv in [
+        vec!["/e:l", "book.txt"],
+        vec!["--engine", "legacy", "book.txt"],
+        vec!["--engine=l", "book.txt"],
+    ] {
+        let parsed = parse_cli(&args(&argv), None);
+        assert_eq!(parsed.parse_errors.len(), 1, "{argv:?}");
+        assert!(
+            parsed.parse_errors[0].contains("Dictionary.csv"),
+            "{argv:?}"
+        );
+    }
+}
+
+#[test]
+fn uses_saved_engine_when_unspecified() {
+    assert_eq!(
+        parse_cli(&args(&["book.txt"]), Some(EngineKind::Zhconvert)).engine,
+        EngineKind::Zhconvert
+    );
 }

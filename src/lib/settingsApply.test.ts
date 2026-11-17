@@ -67,7 +67,6 @@ describe("已匯入 SettingsV2 欄位會影響實際行為", () => {
       },
     });
     imported.direction = "t2s";
-    imported.dictionaryPath = "/tmp/Dictionary.csv";
     imported.showMainWindowOnStart = true;
 
     const effects = importedSettingsEffects(imported);
@@ -85,7 +84,6 @@ describe("已匯入 SettingsV2 欄位會影響實際行為", () => {
         { name: "文字", extensions: ["txt", "log"] },
       ],
       promptAfterConversion: false,
-      dictionaryPath: "/tmp/Dictionary.csv",
     });
     expect(effects.zhconvert).toMatchObject({
       converter: "China",
@@ -119,7 +117,11 @@ describe("已匯入 SettingsV2 欄位會影響實際行為", () => {
   it("逐欄變更會改變對應行為", () => {
     const baseline = importedSettingsEffects(defaultSettings());
     const cases: Array<{ name: string; change: (value: SettingsV2) => void; path: string[] }> = [
-      { name: "engine", change: (value) => (value.engine = "legacy"), path: ["files", "engine"] },
+      {
+        name: "engine",
+        change: (value) => (value.engine = "zhconvert"),
+        path: ["files", "engine"],
+      },
       {
         name: "direction",
         change: (value) => (value.direction = "t2s"),
@@ -129,11 +131,6 @@ describe("已匯入 SettingsV2 欄位會影響實際行為", () => {
         name: "vocabularyCorrection",
         change: (value) => (value.vocabularyCorrection = false),
         path: ["files", "vocabularyCorrection"],
-      },
-      {
-        name: "dictionaryPath",
-        change: (value) => (value.dictionaryPath = "/tmp/d.csv"),
-        path: ["files", "dictionaryPath"],
       },
       {
         name: "promptAfterConversion",

@@ -96,10 +96,14 @@ export function migrateSettings(input: unknown, currentVersion = appVersion): Se
       fixCharsetExtensions: defaults.files.fixCharsetExtensions,
       unicodeAddBom: defaults.files.unicodeAddBom,
     };
+    // 舊版字典引擎已移除；它的字典路徑不再有作用。
+    const { dictionaryPath: _removed, ...current } = input as SettingsV2 & {
+      dictionaryPath?: unknown;
+    };
     return {
       ...defaults,
-      ...input,
-      engine: input.engine ?? "segmented",
+      ...current,
+      engine: engineValue(input.engine),
       // 舊版 2.0／匯入設定若尚無此欄，預設啟用轉換前備份。
       autoBackupBeforeConversion: booleanValue(input.autoBackupBeforeConversion, true),
       checkPreReleaseUpdates: booleanValue(
@@ -117,7 +121,11 @@ export function migrateSettings(input: unknown, currentVersion = appVersion): Se
       }),
       zhconvert: { ...defaults.zhconvert, ...input.zhconvert },
       lastDropAction: { ...defaults.lastDropAction, ...input.lastDropAction },
-      audio: { ...defaults.audio, ...input.audio },
+      audio: {
+        ...defaults.audio,
+        ...input.audio,
+        engine: engineValue(input.audio?.engine ?? defaults.audio.engine),
+      },
     };
   }
   const legacy = (input && typeof input === "object" ? input : {}) as LegacySettings;
@@ -287,7 +295,6 @@ function normalizeModifier(value: string): string {
 
 function engineValue(value: unknown): EngineKind {
   if (value === 1 || value === "Fanhuaji" || value === "zhconvert") return "zhconvert";
-  if (value === "legacy") return "legacy";
   return "segmented";
 }
 

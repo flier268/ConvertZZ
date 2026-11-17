@@ -65,7 +65,6 @@
     "active": true,
     "targets": ["nsis", "appimage", "deb", "rpm", "app", "dmg"],
     "resources": {
-      "../resources/Dictionary.csv": "Dictionary.csv",
       "resources/segment-dict": "segment-dict",
       "resources/extra-correction": "extra-correction",
       "resources/conversion-specials": "conversion-specials",

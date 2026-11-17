@@ -11,7 +11,6 @@ async fn convert(text: &str, direction: Direction, engine: EngineKind) -> String
             text: text.into(),
             direction,
             engine,
-            dictionary_path: None,
             zhconvert: None,
             vocabulary_correction: None,
         })
@@ -135,7 +134,6 @@ async fn segmented_s2t_golden_cases() {
                 text: source.into(),
                 direction: Direction::S2t,
                 engine: EngineKind::Segmented,
-                dictionary_path: None,
                 zhconvert: None,
                 vocabulary_correction: None,
             })
@@ -194,7 +192,6 @@ async fn wagyu_stays_one_word_so_zhi_is_not_zhi_classifier() {
             text: source.into(),
             direction: Direction::S2t,
             engine: EngineKind::Segmented,
-            dictionary_path: None,
             zhconvert: None,
             vocabulary_correction: None,
         })
@@ -262,7 +259,6 @@ async fn taiwan_xiang_li_place_names_stay() {
                 text: source.into(),
                 direction: Direction::S2t,
                 engine: EngineKind::Segmented,
-                dictionary_path: None,
                 zhconvert: None,
                 vocabulary_correction: None,
             })
@@ -396,13 +392,13 @@ fn with_extra_correction_requires_synonym_file() {
             .as_nanos()
     ));
     std::fs::create_dir_all(&root).unwrap();
-    let err = match super::ConversionService::with_extra_correction(None, &root) {
+    let err = match super::ConversionService::with_extra_correction(&root) {
         Ok(_) => panic!("expected missing synonym to fail"),
         Err(error) => error,
     };
     assert!(err.to_string().contains("zht.corpus.synonym.txt"));
     std::fs::write(root.join("zht.corpus.synonym.txt"), "制度,製度\n").unwrap();
-    super::ConversionService::with_extra_correction(None, &root).expect("load extra");
+    super::ConversionService::with_extra_correction(&root).expect("load extra");
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -436,7 +432,6 @@ async fn neighborhood_li_and_jieju_keep_taiwan_forms() {
                 text: source.into(),
                 direction: Direction::S2t,
                 engine: EngineKind::Segmented,
-                dictionary_path: None,
                 zhconvert: None,
                 vocabulary_correction: None,
             })
@@ -467,13 +462,12 @@ async fn extra_synonym_pos_is_consulted() {
     )
     .unwrap();
     std::fs::write(root.join("zht.corpus.synonym.txt"), "錕鋙正,錕鋙錯|D_V\n").unwrap();
-    let noun_only = super::ConversionService::with_extra_correction(None, &root).unwrap();
+    let noun_only = super::ConversionService::with_extra_correction(&root).unwrap();
     let noun = noun_only
         .convert(ConversionRequest {
             text: "錕鋙錯".into(),
             direction: Direction::S2t,
             engine: EngineKind::Segmented,
-            dictionary_path: None,
             zhconvert: None,
             vocabulary_correction: None,
         })
@@ -491,13 +485,12 @@ async fn extra_synonym_pos_is_consulted() {
         "錕鋙正|0x1000|20000\n錕鋙錯|0x1000|20000\n",
     )
     .unwrap();
-    let verb = super::ConversionService::with_extra_correction(None, &root).unwrap();
+    let verb = super::ConversionService::with_extra_correction(&root).unwrap();
     let matched = verb
         .convert(ConversionRequest {
             text: "錕鋙錯".into(),
             direction: Direction::S2t,
             engine: EngineKind::Segmented,
-            dictionary_path: None,
             zhconvert: None,
             vocabulary_correction: None,
         })
@@ -546,7 +539,7 @@ async fn extra_synonym_does_not_overwrite_stable_taiwan_forms() {
 七隻,七只|D_MQ+D_N\n",
     )
     .unwrap();
-    let extra = super::ConversionService::with_extra_correction(None, &root).unwrap();
+    let extra = super::ConversionService::with_extra_correction(&root).unwrap();
     for (source, expected) in [
         ("上面註記", "上面註記"),
         ("控制藥物", "控制藥物"),
@@ -563,7 +556,6 @@ async fn extra_synonym_does_not_overwrite_stable_taiwan_forms() {
                 text: source.into(),
                 direction: Direction::S2t,
                 engine: EngineKind::Segmented,
-                dictionary_path: None,
                 zhconvert: None,
                 vocabulary_correction: None,
             })
@@ -689,76 +681,12 @@ async fn long_text_does_not_split_unicode() {
 }
 
 #[tokio::test]
-async fn legacy_dictionary() {
-    let result = convert("软件和头发", Direction::S2t, EngineKind::Legacy).await;
-    assert!(result.contains("軟體"));
-    assert!(result.contains("頭髮"));
-}
-
-#[tokio::test]
-async fn legacy_dictionary_reloads_after_same_mtime_replace() {
-    // CI filesystems may only resolve mtime to one second. Same-length replacements
-    // (裡面→裏邊) must still invalidate the cache after an atomic rename (Unix inode /
-    // Windows creation_time; file_index is nightly-only).
-    let directory =
-        std::env::temp_dir().join(format!("convertzz-dict-cache-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&directory).unwrap();
-    let path = directory.join("Dictionary.csv");
-    let original = "\u{feff}true\t一般\t里面\t1\t裡面\t1\n";
-    let updated = "\u{feff}true\t一般\t里面\t3\t裏邊\t3\n";
-    assert_eq!(original.len(), updated.len());
-    std::fs::write(&path, original).unwrap();
-    let mtime = std::fs::metadata(&path).unwrap().modified().unwrap();
-
-    let first = service()
-        .convert(ConversionRequest {
-            text: "里面".into(),
-            direction: Direction::S2t,
-            engine: EngineKind::Legacy,
-            dictionary_path: Some(path.to_string_lossy().into_owned()),
-            zhconvert: None,
-            vocabulary_correction: None,
-        })
-        .await
-        .unwrap();
-    assert_eq!(first.text, "裡面");
-
-    let temporary = directory.join(".convertzz-dictionary-next.csv");
-    let previous = directory.join(".convertzz-dictionary-previous.csv");
-    std::fs::write(&temporary, updated).unwrap();
-    std::fs::rename(&path, &previous).unwrap();
-    std::fs::rename(&temporary, &path).unwrap();
-    std::fs::File::options()
-        .write(true)
-        .open(&path)
-        .unwrap()
-        .set_modified(mtime)
-        .unwrap();
-    assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), mtime);
-
-    let second = service()
-        .convert(ConversionRequest {
-            text: "里面".into(),
-            direction: Direction::S2t,
-            engine: EngineKind::Legacy,
-            dictionary_path: Some(path.to_string_lossy().into_owned()),
-            zhconvert: None,
-            vocabulary_correction: None,
-        })
-        .await
-        .unwrap();
-    assert_eq!(second.text, "裏邊");
-    let _ = std::fs::remove_dir_all(&directory);
-}
-
-#[tokio::test]
 async fn vocabulary_off_uses_glyph_only() {
     let result = service()
         .convert(ConversionRequest {
             text: "里面开发面对表面钟表简繁转换".into(),
             direction: Direction::S2t,
             engine: EngineKind::Segmented,
-            dictionary_path: None,
             zhconvert: None,
             vocabulary_correction: Some(false),
         })
@@ -811,7 +739,6 @@ async fn mixed_html_like_content_stays_interactive() {
             text: text.clone(),
             direction: Direction::S2t,
             engine: EngineKind::Segmented,
-            dictionary_path: None,
             zhconvert: None,
             vocabulary_correction: None,
         })
@@ -876,7 +803,6 @@ async fn convert_with_progress_can_be_cancelled() {
                 text,
                 direction: Direction::S2t,
                 engine: EngineKind::Segmented,
-                dictionary_path: None,
                 zhconvert: None,
                 vocabulary_correction: Some(true),
             },
@@ -909,7 +835,6 @@ async fn extra_correction_maps_fanwei_to_fanwei() {
             text: "范围".into(),
             direction: Direction::S2t,
             engine: EngineKind::Segmented,
-            dictionary_path: None,
             zhconvert: None,
             vocabulary_correction: Some(false),
         })
@@ -937,7 +862,6 @@ fn convert_window_defers_token_that_reaches_hold() {
         text: "冲上前发起".into(),
         direction: Direction::S2t,
         engine: EngineKind::Segmented,
-        dictionary_path: None,
         zhconvert: None,
         vocabulary_correction: None,
     };
@@ -969,14 +893,13 @@ fn convert_window_defers_token_that_reaches_hold() {
 
 #[tokio::test]
 async fn without_extra_correction_s2t_fanwei() {
-    let isolated = super::ConversionService::without_extra_correction(None).expect("service");
+    let isolated = super::ConversionService::without_extra_correction().expect("service");
     for source in ["范圍", "范围", "範圍"] {
         let text = isolated
             .convert(ConversionRequest {
                 text: source.into(),
                 direction: Direction::S2t,
                 engine: EngineKind::Segmented,
-                dictionary_path: None,
                 zhconvert: None,
                 vocabulary_correction: None,
             })

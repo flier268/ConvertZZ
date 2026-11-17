@@ -92,14 +92,13 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
                         parse_errors.push(format!("無效的 --direction 值：{value}"));
                     }
                 }
-                "--engine" => {
-                    if let Some(engine) = parse_engine_value(value) {
+                "--engine" => match parse_engine_value(value) {
+                    Ok(engine) => {
                         parsed.engine = engine;
                         engine_explicit = true;
-                    } else {
-                        parse_errors.push(format!("無效的 --engine 值：{value}"));
                     }
-                }
+                    Err(message) => parse_errors.push(message),
+                },
                 "--vocabulary" => {
                     if let Some(vocab) = parse_vocabulary_value(value) {
                         parsed.vocabulary_correction = vocab;
@@ -214,11 +213,12 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
                 if let Some(value) =
                     take_required_value(args, &mut index, "--engine", &mut parse_errors)
                 {
-                    if let Some(engine) = parse_engine_value(&value) {
-                        parsed.engine = engine;
-                        engine_explicit = true;
-                    } else {
-                        parse_errors.push(format!("無效的 --engine 值：{value}"));
+                    match parse_engine_value(&value) {
+                        Ok(engine) => {
+                            parsed.engine = engine;
+                            engine_explicit = true;
+                        }
+                        Err(message) => parse_errors.push(message),
                     }
                 }
             }
@@ -336,10 +336,7 @@ pub fn parse_cli(args: &[String], default_engine: Option<EngineKind>) -> ParsedC
                 parsed.vocabulary_correction = VocabularyCorrection::Settings;
                 vocabulary_explicit = true;
             }
-            "/e:l" => {
-                parsed.engine = EngineKind::Legacy;
-                engine_explicit = true;
-            }
+            "/e:l" => parse_errors.push(LEGACY_ENGINE_REMOVED.to_string()),
             "/e:f" => {
                 parsed.engine = EngineKind::Zhconvert;
                 engine_explicit = true;
@@ -430,7 +427,7 @@ ConvertZZ 命令列
   --output, -o <編碼>    輸出編碼（同上；明確指定且未用 --file／--audio 時會進無頭）
   --output-path <路徑>   輸出路徑（亦可寫成第二個位置參數）
   --direction <方向>     s2t｜t2s｜none（無頭且未載入設定時必填）
-  --engine <引擎>        segmented｜legacy｜zhconvert（無頭預設 segmented）
+  --engine <引擎>        segmented｜zhconvert（無頭預設 segmented）
   --vocabulary <值>      on｜off｜settings（無頭未載入設定時 settings 無效，預設 on）
   --globalconfig         無頭時載入本機全域／可攜設定
   --config <路徑>        無頭時載入指定設定檔（不可與 --globalconfig 併用）
@@ -525,12 +522,15 @@ fn parse_direction_value(value: &str) -> Option<Direction> {
     }
 }
 
-fn parse_engine_value(value: &str) -> Option<EngineKind> {
+const LEGACY_ENGINE_REMOVED: &str =
+    "舊版字典引擎已在 2.0 移除。請在「字典」頁把 Dictionary.csv 匯入為使用者詞典，再改用 segmented 引擎。";
+
+fn parse_engine_value(value: &str) -> Result<EngineKind, String> {
     match value.to_ascii_lowercase().as_str() {
-        "segmented" | "n" | "new" => Some(EngineKind::Segmented),
-        "legacy" | "l" | "local" => Some(EngineKind::Legacy),
-        "zhconvert" | "f" | "fanhuaji" => Some(EngineKind::Zhconvert),
-        _ => None,
+        "segmented" | "n" | "new" => Ok(EngineKind::Segmented),
+        "legacy" | "l" | "local" => Err(LEGACY_ENGINE_REMOVED.to_string()),
+        "zhconvert" | "f" | "fanhuaji" => Ok(EngineKind::Zhconvert),
+        _ => Err(format!("無效的 --engine 值：{value}")),
     }
 }
 

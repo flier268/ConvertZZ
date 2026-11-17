@@ -3,7 +3,6 @@ import { computed, onBeforeUnmount, onMounted, provide, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  Collection,
   Document,
   Files,
   Headset,
@@ -18,7 +17,6 @@ import FilesPage from "./pages/FilesPage.vue";
 import ClipboardPage from "./pages/ClipboardPage.vue";
 import AudioPage from "./pages/AudioPage.vue";
 import ToolsPage from "./pages/ToolsPage.vue";
-import DictionaryPage from "./pages/DictionaryPage.vue";
 import SettingsPage from "./pages/SettingsPage.vue";
 import AboutPage from "./pages/AboutPage.vue";
 import OnboardingTour from "./OnboardingTour.vue";
@@ -76,7 +74,6 @@ const pages = {
   clipboard: ClipboardPage,
   audio: AudioPage,
   tools: ToolsPage,
-  dictionary: DictionaryPage,
   settings: SettingsPage,
   about: AboutPage,
 };
@@ -217,9 +214,6 @@ onBeforeUnmount(() => unlisten.forEach((dispose) => dispose()));
         <el-menu-item id="tour-tools" index="tools"
           ><el-icon><Operation /></el-icon><span>文字工具</span></el-menu-item
         >
-        <el-menu-item id="tour-dictionary" index="dictionary"
-          ><el-icon><Collection /></el-icon><span>舊版字典</span></el-menu-item
-        >
         <el-menu-item id="tour-settings" index="settings"
           ><el-icon><Setting /></el-icon><span>設定</span></el-menu-item
         >
@@ -235,9 +229,7 @@ onBeforeUnmount(() => unlisten.forEach((dispose) => dispose()));
     </el-aside>
     <el-main class="content">
       <template v-if="ready">
-        <keep-alive
-          include="QuickPage,FilesPage,ClipboardPage,AudioPage,ToolsPage,DictionaryPage,SettingsPage"
-        >
+        <keep-alive include="QuickPage,FilesPage,ClipboardPage,AudioPage,ToolsPage,SettingsPage">
           <component :is="currentPage" />
         </keep-alive>
       </template>

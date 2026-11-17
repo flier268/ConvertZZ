@@ -32,7 +32,6 @@ fn conversion_s2t() -> ConversionOptions {
     ConversionOptions {
         direction: Direction::S2t,
         engine: EngineKind::Segmented,
-        dictionary_path: None,
         zhconvert: None,
         vocabulary_correction: None,
     }
@@ -604,7 +603,6 @@ async fn directory_input_respects_extension_filter() {
                 conversion: ConversionOptions {
                     direction: Direction::None,
                     engine: EngineKind::Segmented,
-                    dictionary_path: None,
                     zhconvert: None,
                     vocabulary_correction: None,
                 },
@@ -3305,10 +3303,7 @@ async fn stream_progress_uses_file_bytes() {
 #[tokio::test]
 async fn zhconvert_stream_apply_on_current_thread() {
     let (url, state) = crate::core::zhconvert::start_mock();
-    let mut conversion = super::super::conversion::ConversionService::new(Some(
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/Dictionary.csv"),
-    ))
-    .unwrap();
+    let mut conversion = super::super::conversion::ConversionService::new().unwrap();
     conversion.zhconvert = crate::core::zhconvert::ZhConvertClient::with_base_url(url);
     let directory = temp_dir();
     let source = directory.join("雲端.txt");

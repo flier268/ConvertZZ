@@ -21,14 +21,10 @@ try {
   const appDir = join(extractionDirectory, "squashfs-root");
   const binary = join(appDir, "usr/bin/convertzz");
   const resourceDirectory = join(appDir, "usr/lib/ConvertZZ");
-  const dictionary = join(resourceDirectory, "Dictionary.csv");
   const segmentDict = join(resourceDirectory, "segment-dict");
 
   if (!existsSync(binary) || (statSync(binary).mode & 0o111) === 0) {
     throw new Error("AppImage 缺少可執行的 usr/bin/convertzz。");
-  }
-  if (!existsSync(dictionary)) {
-    throw new Error("AppImage 缺少 Dictionary.csv。");
   }
   if (!existsSync(join(segmentDict, "segment"))) {
     throw new Error("AppImage 缺少 segment-dict 分詞字典。");

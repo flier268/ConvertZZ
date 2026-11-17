@@ -98,7 +98,6 @@ export async function executeLegacyAction(
         settings.engine,
         settings.vocabularyCorrection,
         zhConvertOptions(settings, "s2t"),
-        settings.dictionaryPath,
       )
     ).text;
   } else if (action === "a2") {
@@ -109,7 +108,6 @@ export async function executeLegacyAction(
         settings.engine,
         settings.vocabularyCorrection,
         zhConvertOptions(settings, "t2s"),
-        settings.dictionaryPath,
       )
     ).text;
     text = await utility(text, "encoding", "gbk", "big5");
@@ -122,7 +120,6 @@ export async function executeLegacyAction(
         settings.engine,
         settings.vocabularyCorrection,
         zhConvertOptions(settings, direction),
-        settings.dictionaryPath,
       )
     ).text;
   } else if (action === "za1") text = await utility(text, "html-decimal-encode");

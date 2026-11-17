@@ -42,36 +42,30 @@ fn rejects_headless_without_direction_when_no_config() {
     let input = dir.join("in.txt");
     fs::write(&input, "測試").expect("write");
 
-    let code = run(
-        &args(&[
-            "--output",
-            "utf8",
-            "--vocabulary",
-            "off",
-            "--no-backup",
-            "--yes",
-            input.to_str().unwrap(),
-        ]),
-        None,
-    );
+    let code = run(&args(&[
+        "--output",
+        "utf8",
+        "--vocabulary",
+        "off",
+        "--no-backup",
+        "--yes",
+        input.to_str().unwrap(),
+    ]));
     assert_eq!(code, 1);
     let _ = fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn rejects_globalconfig_with_config_path() {
-    let code = run(
-        &args(&[
-            "--headless",
-            "--file",
-            "--globalconfig",
-            "--config",
-            "/tmp/missing-settings.json",
-            "--yes",
-            "a.txt",
-        ]),
-        None,
-    );
+    let code = run(&args(&[
+        "--headless",
+        "--file",
+        "--globalconfig",
+        "--config",
+        "/tmp/missing-settings.json",
+        "--yes",
+        "a.txt",
+    ]));
     assert_eq!(code, 1);
 }
 
@@ -81,20 +75,17 @@ fn rejects_explicit_vocabulary_settings_without_config() {
     let input = dir.join("in.txt");
     fs::write(&input, "測試").expect("write");
 
-    let code = run(
-        &args(&[
-            "--output",
-            "utf8",
-            "--direction",
-            "none",
-            "--vocabulary",
-            "settings",
-            "--no-backup",
-            "--yes",
-            input.to_str().unwrap(),
-        ]),
-        None,
-    );
+    let code = run(&args(&[
+        "--output",
+        "utf8",
+        "--direction",
+        "none",
+        "--vocabulary",
+        "settings",
+        "--no-backup",
+        "--yes",
+        input.to_str().unwrap(),
+    ]));
     assert_eq!(code, 1);
     let _ = fs::remove_dir_all(&dir);
 }
@@ -106,23 +97,20 @@ fn headless_output_path_with_no_backup_keeps_source() {
     let output = dir.join("out.txt");
     fs::write(&input, "简体字测试").expect("write input");
 
-    let code = run(
-        &args(&[
-            "--output",
-            "utf8",
-            "--direction",
-            "s2t",
-            "--vocabulary",
-            "off",
-            "--engine",
-            "segmented",
-            "--no-backup",
-            "--yes",
-            input.to_str().unwrap(),
-            output.to_str().unwrap(),
-        ]),
-        None,
-    );
+    let code = run(&args(&[
+        "--output",
+        "utf8",
+        "--direction",
+        "s2t",
+        "--vocabulary",
+        "off",
+        "--engine",
+        "segmented",
+        "--no-backup",
+        "--yes",
+        input.to_str().unwrap(),
+        output.to_str().unwrap(),
+    ]));
     assert_eq!(code, 0);
     assert_eq!(fs::read_to_string(&output).unwrap().trim(), "簡體字測試");
     assert!(input.exists(), "指定輸出路徑時不得移除來源檔");
@@ -136,23 +124,20 @@ fn headless_file_convert_with_yes() {
     let output = dir.join("out.txt");
     fs::write(&input, "简体字测试").expect("write input");
 
-    let code = run(
-        &args(&[
-            "--output",
-            "utf8",
-            "--direction",
-            "s2t",
-            "--vocabulary",
-            "off",
-            "--engine",
-            "segmented",
-            "--no-backup",
-            "--yes",
-            input.to_str().unwrap(),
-            output.to_str().unwrap(),
-        ]),
-        None,
-    );
+    let code = run(&args(&[
+        "--output",
+        "utf8",
+        "--direction",
+        "s2t",
+        "--vocabulary",
+        "off",
+        "--engine",
+        "segmented",
+        "--no-backup",
+        "--yes",
+        input.to_str().unwrap(),
+        output.to_str().unwrap(),
+    ]));
     assert_eq!(code, 0, "headless file convert should succeed");
     let text = fs::read_to_string(&output).expect("read output");
     assert_eq!(text.trim(), "簡體字測試");
@@ -165,20 +150,17 @@ fn headless_flag_file_without_output_encoding() {
     let input = dir.join("sample.txt");
     fs::write(&input, "測試文字").expect("write");
 
-    let code = run(
-        &args(&[
-            "--headless",
-            "--file",
-            "--direction",
-            "none",
-            "--vocabulary",
-            "off",
-            "--no-backup",
-            "-y",
-            input.to_str().unwrap(),
-        ]),
-        None,
-    );
+    let code = run(&args(&[
+        "--headless",
+        "--file",
+        "--direction",
+        "none",
+        "--vocabulary",
+        "off",
+        "--no-backup",
+        "-y",
+        input.to_str().unwrap(),
+    ]));
     assert_eq!(code, 0);
     let _ = fs::remove_dir_all(&dir);
 }
@@ -201,19 +183,16 @@ fn headless_config_path_supplies_direction() {
     )
     .expect("write config");
 
-    let code = run(
-        &args(&[
-            "--output",
-            "utf8",
-            "--config",
-            config.to_str().unwrap(),
-            "--no-backup",
-            "--yes",
-            input.to_str().unwrap(),
-            output.to_str().unwrap(),
-        ]),
-        None,
-    );
+    let code = run(&args(&[
+        "--output",
+        "utf8",
+        "--config",
+        config.to_str().unwrap(),
+        "--no-backup",
+        "--yes",
+        input.to_str().unwrap(),
+        output.to_str().unwrap(),
+    ]));
     assert_eq!(code, 0);
     let text = fs::read_to_string(&output).expect("read output");
     assert_eq!(text.trim(), "簡體字測試");
@@ -238,19 +217,16 @@ fn headless_config_accepts_store_document_shape() {
     )
     .expect("write config");
 
-    let code = run(
-        &args(&[
-            "--output",
-            "utf8",
-            "--config",
-            config.to_str().unwrap(),
-            "--no-backup",
-            "--yes",
-            input.to_str().unwrap(),
-            output.to_str().unwrap(),
-        ]),
-        None,
-    );
+    let code = run(&args(&[
+        "--output",
+        "utf8",
+        "--config",
+        config.to_str().unwrap(),
+        "--no-backup",
+        "--yes",
+        input.to_str().unwrap(),
+        output.to_str().unwrap(),
+    ]));
     assert_eq!(code, 0);
     let text = fs::read_to_string(&output).expect("read output");
     assert_eq!(text.trim(), "簡體字測試");
@@ -270,17 +246,14 @@ fn normalize_settings_document_extracts_store_key() {
 
 #[test]
 fn rejects_invalid_direction_value() {
-    let code = run(
-        &args(&[
-            "--output",
-            "utf8",
-            "--direction",
-            "sideways",
-            "--yes",
-            "a.txt",
-        ]),
-        None,
-    );
+    let code = run(&args(&[
+        "--output",
+        "utf8",
+        "--direction",
+        "sideways",
+        "--yes",
+        "a.txt",
+    ]));
     assert_eq!(code, 1);
 }
 
@@ -508,7 +481,7 @@ fn headless_s2t_both(extra: &[&str], path: &str) -> i32 {
     ];
     items.extend_from_slice(extra);
     items.push(path);
-    run(&args(&items), None)
+    run(&args(&items))
 }
 
 #[test]
@@ -645,20 +618,17 @@ fn audio_then_filename_keeps_original_backup_and_renames_only_audio() {
     fs::write(folder.join("测试音乐.mp3"), &original).expect("copy mp3");
     fs::write(folder.join("歌词/说明.txt"), "说明").expect("write txt");
 
-    let code = run(
-        &args(&[
-            "--headless",
-            "--audio",
-            "--filename",
-            "--direction",
-            "s2t",
-            "--vocabulary",
-            "off",
-            "--yes",
-            folder.to_str().unwrap(),
-        ]),
-        None,
-    );
+    let code = run(&args(&[
+        "--headless",
+        "--audio",
+        "--filename",
+        "--direction",
+        "s2t",
+        "--vocabulary",
+        "off",
+        "--yes",
+        folder.to_str().unwrap(),
+    ]));
     assert_eq!(code, 0);
     assert!(folder.join("測試音樂.mp3").exists(), "音訊檔應改名");
     assert!(
@@ -671,5 +641,59 @@ fn audio_then_filename_keeps_original_backup_and_renames_only_audio() {
         original,
         "備份必須是轉換前的原檔"
     );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn settings_with_legacy_engine_fail_instead_of_switching() {
+    let dir = temp_dir("legacy-engine");
+    let input = dir.join("in.txt");
+    let config = dir.join("settings.json");
+    fs::write(&input, "简体").expect("write input");
+    let mut settings = default_settings();
+    settings["engine"] = json!("legacy");
+    settings["direction"] = json!("s2t");
+    fs::write(&config, settings.to_string()).expect("write config");
+    let code = run(&args(&[
+        "--headless",
+        "--file",
+        "--config",
+        config.to_str().unwrap(),
+        "--no-backup",
+        "--yes",
+        input.to_str().unwrap(),
+    ]));
+    assert_ne!(code, 0);
+    assert_eq!(
+        fs::read_to_string(&input).unwrap(),
+        "简体",
+        "不得改用其他引擎寫入"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn settings_with_legacy_engine_convert_when_engine_is_explicit() {
+    let dir = temp_dir("legacy-engine-explicit");
+    let input = dir.join("in.txt");
+    let config = dir.join("settings.json");
+    fs::write(&input, "简体").expect("write input");
+    let mut settings = default_settings();
+    settings["engine"] = json!("legacy");
+    settings["direction"] = json!("s2t");
+    fs::write(&config, settings.to_string()).expect("write config");
+    let code = run(&args(&[
+        "--headless",
+        "--file",
+        "--config",
+        config.to_str().unwrap(),
+        "--engine",
+        "segmented",
+        "--no-backup",
+        "--yes",
+        input.to_str().unwrap(),
+    ]));
+    assert_eq!(code, 0);
+    assert_eq!(fs::read_to_string(&input).unwrap(), "簡體");
     let _ = fs::remove_dir_all(&dir);
 }

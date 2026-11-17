@@ -590,7 +590,6 @@ async function buildPlanRequest(): Promise<AudioTagPlanRequest> {
       engine: options.engine,
       vocabularyCorrection: options.vocabularyCorrection,
       zhconvert: zhConvertOptions(settings, options.direction),
-      dictionaryPath: settings.dictionaryPath,
     },
     conflictPolicy: conflictPolicy.value,
     backup: backup.value,
@@ -992,7 +991,7 @@ watch(
           <el-form-item label="引擎">
             <el-select v-model="options.engine">
               <el-option label="新式分詞" value="segmented" />
-              <el-option label="舊版字典" value="legacy" />
+
               <el-option label="ZhConvert" value="zhconvert" />
             </el-select>
           </el-form-item>

@@ -700,29 +700,6 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
   if (operation === "audio.cancel") {
     return { cancelled: true };
   }
-  if (operation === "dictionary.read") {
-    return {
-      path: String(payload.path ?? "/tmp/Dictionary.csv"),
-      total: 1,
-      entries: [
-        {
-          index: 0,
-          enabled: true,
-          type: "test",
-          simplified: "里面",
-          simplifiedPriority: 1,
-          traditional: "裡面",
-          traditionalPriority: 1,
-        },
-      ],
-    };
-  }
-  if (operation === "dictionary.update") {
-    return { updated: 1, backupPath: "/tmp/Dictionary.backup-20260817.csv" };
-  }
-  if (operation === "dictionary.preview") {
-    return { text: "裡面" };
-  }
   if (operation === "convert.preview") {
     return { text: "裡面開發頭髮", durationMs: 1 };
   }

@@ -42,11 +42,11 @@ describe("開發／預發佈更新預設", () => {
   });
 
   it("缺少欄位時依目前版本補預設，已寫入的選擇維持不變", () => {
-    expect(migrateSettings({ version: 2, engine: "legacy" }, "2.0.0").checkPreReleaseUpdates).toBe(
-      false,
-    );
     expect(
-      migrateSettings({ version: 2, engine: "legacy" }, "2.0.0-beta5").checkPreReleaseUpdates,
+      migrateSettings({ version: 2, engine: "zhconvert" }, "2.0.0").checkPreReleaseUpdates,
+    ).toBe(false);
+    expect(
+      migrateSettings({ version: 2, engine: "zhconvert" }, "2.0.0-beta5").checkPreReleaseUpdates,
     ).toBe(true);
     expect(
       migrateSettings({ version: 2, checkPreReleaseUpdates: false }, "2.0.0-beta5")
@@ -149,5 +149,20 @@ describe("副檔名篩選 profile 遷移", () => {
       "文字",
       "網頁",
     ]);
+  });
+
+  it("已移除的舊版字典引擎改回新式分詞，並丟掉字典路徑", () => {
+    const migrated = migrateSettings(
+      {
+        version: 2,
+        engine: "legacy",
+        dictionaryPath: "/tmp/Dictionary.csv",
+        audio: { engine: "legacy" },
+      },
+      "2.0.0",
+    );
+    expect(migrated.engine).toBe("segmented");
+    expect(migrated.audio.engine).toBe("segmented");
+    expect(migrated).not.toHaveProperty("dictionaryPath");
   });
 });

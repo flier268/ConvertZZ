@@ -20,7 +20,6 @@ ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程
 | `src-tauri/` | 視窗、托盤、快捷鍵、憑證庫、轉換核心與平台能力 |
 | `shared/contracts.ts` | 前後端共用的操作與型別 |
 | `scripts/` | git hook、發行輔助與 Linux／macOS 驗證 |
-| `resources/Dictionary.csv` | 舊版六欄字典資源（由安裝包一併封入） |
 | `tests/fixtures/` | 音訊與發行驗證樣本 |
 | `e2e/` | Playwright 前端端對端測試 |
 
@@ -97,7 +96,7 @@ Vitest 涵蓋 `src/**/*.test.ts` 與 `tests/**/*.test.ts`。轉換核心單元�
 
 驗收通過後應盡量補可重跑護欄：畫面／路由契約（`src/acceptance-contracts.test.ts`）、發行工作流程（`tests/release-workflow.test.ts`）、行為單元測試與 e2e。契約通過不等於桌面殼層或乾淨環境人工證據已完成。
 
-- 引擎變更必須覆蓋黃金案例、空白標點保留、長文分段，以及舊字典的啟用、優先權與 `9999` 保護詞。
+- 引擎變更必須覆蓋黃金案例、空白標點保留與長文分段。
 - 檔案變更必須覆蓋預覽未確認不寫入、衝突略過、暫存驗證、單檔兩階段重新命名、單檔失敗回復、停止後保留已寫入變更，以及不跟隨符號連結。確認後逐檔轉換並立即寫入，不得等整批完成才落盤。
 - 音訊變更必須覆蓋未選欄位、未知欄位、二進位欄位與封面不變、`.bak` 衝突略過／覆寫，且不得重新編碼音訊內容。
 - ZhConvert 變更必須用模擬伺服器鎖定官方 `/convert`，並確認網路失敗時不切換引擎。
@@ -108,8 +107,8 @@ Vitest 涵蓋 `src/**/*.test.ts` 與 `tests/**/*.test.ts`。轉換核心單元�
 - 檔案與標籤作業必須先預覽，使用者確認後才寫入。
 - 內容先寫入同目錄暫存檔，驗證成功後才取代原檔。
 - 檔名衝突預設略過。覆寫需要額外確認。檔案與音訊的 `.bak` 備份衝突同樣依衝突策略，預設略過（保留既有備份）；選擇覆寫時需額外確認。同一批多個項目輸出到相同路徑時，計劃一律把後者標為衝突。
-- 舊版 `ConvertZZ.json` 只讀取，結果另存為 2.0 設定，不得修改來源。`Dictionary.csv` 必須先詢問，再建立不覆蓋的時間戳備份。備份失敗時不得寫入或覆寫。
-- `Dictionary.csv` 維持 UTF-8 BOM 六欄格式；倉庫來源為 `resources/Dictionary.csv`。
+- 舊版 `ConvertZZ.json` 只讀取，結果另存為 2.0 設定，不得修改來源。
+- 1.x 的舊版字典引擎（`Dictionary.csv` 全文直接取代）已在 2.0 移除，不要恢復。CLI 的 `--engine legacy`／`/e:l` 與設定檔裡的 `legacy` 須回報錯誤，不得默默改用其他引擎寫入；GUI 設定遷移改回 `segmented`。
 - 舊 WPF 原始碼已於 K-07 移除；可自 git 標籤 `legacy-wpf-final` 回復 `ConvertZZ/`。
 - 命令列以 2.0 `--flag` 為準（如 `--output`、`--direction`、`--headless`、`--yes`）；舊版 `/o:utf8`、`/f:t` 等仍可解析但不做後續擴充。檔案作業須先預覽（GUI）或 CLI 計劃摘要後確認。無頭模式（`--headless`，或明確 `--output`／`-o` 且未指定 `--file`／`--audio`）全程不開 GUI，寫入需 `--yes`／`-y` 或 TTY 確認（是／否）；`--audio --filename` 先寫標籤再改名、只確認一次。不要恢復無確認寫入。無頭預設不讀設定，須由命令列提供必要參數（至少 `--direction`）；`--globalconfig` 載入本機全域／可攜設定，`--config <路徑>` 載入指定設定檔（二者不可併用）。無頭在 `tauri::Builder`／single-instance 之前 early-exit，行為不依賴 GUI 是否已開啟。
 - 自動更新簽署 Windows 安裝程式、Linux AppImage 與 macOS `.app.tar.gz`。公鑰放在 `tauri.conf.json`，私鑰只存在 GitHub Secrets `TAURI_SIGNING_PRIVATE_KEY`。

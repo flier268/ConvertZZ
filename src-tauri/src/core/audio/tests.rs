@@ -88,7 +88,6 @@ fn conversion_s2t() -> ConversionOptions {
     ConversionOptions {
         direction: Direction::S2t,
         engine: EngineKind::Segmented,
-        dictionary_path: None,
         zhconvert: None,
         vocabulary_correction: None,
     }

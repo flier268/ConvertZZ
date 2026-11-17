@@ -1,4 +1,4 @@
-export type EngineKind = "segmented" | "legacy" | "zhconvert";
+export type EngineKind = "segmented" | "zhconvert";
 export type Direction = "none" | "s2t" | "t2s";
 export type AudioContainer = "id3v1" | "id3v2" | "apev2" | "vorbis-comment";
 export type ConflictPolicy = "skip" | "overwrite";
@@ -7,7 +7,6 @@ export interface ConversionRequest {
   text: string;
   direction: Direction;
   engine: EngineKind;
-  dictionaryPath?: string;
   zhconvert?: ZhConvertOptions;
   vocabularyCorrection?: boolean;
 }
@@ -400,7 +399,6 @@ export interface SettingsV2 {
   engine: EngineKind;
   direction: Direction;
   vocabularyCorrection: boolean;
-  dictionaryPath?: string;
   promptAfterConversion: boolean;
   /** 檔案、檔名與音訊標籤轉換前自動建立 .bak 備份。 */
   autoBackupBeforeConversion: boolean;
@@ -468,9 +466,6 @@ export type CoreOperation =
   | "audio.rescanFile"
   | "audio.apply"
   | "audio.cancel"
-  | "dictionary.read"
-  | "dictionary.update"
-  | "dictionary.preview"
   | "settings.migrate"
   | "zhconvert.configure"
   | "zhconvert.serviceInfo"

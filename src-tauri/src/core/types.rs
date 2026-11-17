@@ -46,7 +46,6 @@ impl ProgressEvent {
 #[serde(rename_all = "camelCase")]
 pub enum EngineKind {
     Segmented,
-    Legacy,
     Zhconvert,
 }
 
@@ -108,8 +107,6 @@ pub struct ConversionRequest {
     pub direction: Direction,
     pub engine: EngineKind,
     #[serde(default)]
-    pub dictionary_path: Option<String>,
-    #[serde(default)]
     pub zhconvert: Option<ZhConvertOptions>,
     #[serde(default)]
     pub vocabulary_correction: Option<bool>,
@@ -120,8 +117,6 @@ pub struct ConversionRequest {
 pub struct ConversionOptions {
     pub direction: Direction,
     pub engine: EngineKind,
-    #[serde(default)]
-    pub dictionary_path: Option<String>,
     #[serde(default)]
     pub zhconvert: Option<ZhConvertOptions>,
     #[serde(default)]
@@ -134,7 +129,6 @@ impl ConversionOptions {
             text: text.into(),
             direction: self.direction,
             engine: self.engine,
-            dictionary_path: self.dictionary_path.clone(),
             zhconvert: self.zhconvert.clone(),
             vocabulary_correction: self.vocabulary_correction,
         }
@@ -695,91 +689,4 @@ pub enum UtilityKind {
     Encoding,
     Fullwidth,
     Halfwidth,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DictionaryEntry {
-    pub enabled: bool,
-    #[serde(rename = "type")]
-    pub entry_type: String,
-    pub simplified: String,
-    pub simplified_priority: i64,
-    pub traditional: String,
-    pub traditional_priority: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct IndexedDictionaryEntry {
-    pub index: usize,
-    pub enabled: bool,
-    #[serde(rename = "type")]
-    pub entry_type: String,
-    pub simplified: String,
-    pub simplified_priority: i64,
-    pub traditional: String,
-    pub traditional_priority: i64,
-}
-
-impl From<IndexedDictionaryEntry> for DictionaryEntry {
-    fn from(entry: IndexedDictionaryEntry) -> Self {
-        Self {
-            enabled: entry.enabled,
-            entry_type: entry.entry_type,
-            simplified: entry.simplified,
-            simplified_priority: entry.simplified_priority,
-            traditional: entry.traditional,
-            traditional_priority: entry.traditional_priority,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DictionaryReadRequest {
-    #[serde(default)]
-    pub path: Option<String>,
-    #[serde(default)]
-    pub query: Option<String>,
-    #[serde(default)]
-    pub offset: Option<usize>,
-    #[serde(default)]
-    pub limit: Option<usize>,
-    #[serde(default)]
-    pub sort: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DictionaryUpdateRequest {
-    pub path: String,
-    #[serde(default)]
-    pub updates: Option<Vec<DictionaryUpdate>>,
-    #[serde(default)]
-    pub inserts: Option<Vec<DictionaryEntry>>,
-    #[serde(default)]
-    pub deletes: Option<Vec<usize>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DictionaryUpdate {
-    pub index: usize,
-    pub entry: DictionaryEntry,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DictionaryPreviewRequest {
-    #[serde(default)]
-    pub path: Option<String>,
-    pub text: String,
-    pub direction: Direction,
-    #[serde(default)]
-    pub updates: Option<Vec<DictionaryUpdate>>,
-    #[serde(default)]
-    pub inserts: Option<Vec<DictionaryEntry>>,
-    #[serde(default)]
-    pub deletes: Option<Vec<usize>>,
 }

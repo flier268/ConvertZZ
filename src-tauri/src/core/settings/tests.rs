@@ -255,13 +255,8 @@ fn missing_last_drop_action_defaults() {
 fn preserves_raw_saved_paths() {
     let result = migrate(json!({
         "version": 2,
-        "dictionaryPath": r"\\?\C:\Program Files\ConvertZZ\Dictionary.csv",
         "files": { "defaultPath": r"\\?\D:\Text", "typeFilter": "", "fixCharsetExtensions": [] }
     }));
-    assert_eq!(
-        result["dictionaryPath"],
-        r"\\?\C:\Program Files\ConvertZZ\Dictionary.csv"
-    );
     assert_eq!(result["files"]["defaultPath"], r"\\?\D:\Text");
     assert_eq!(result["files"]["typeFilter"], super::DEFAULT_TYPE_FILTER);
 }
@@ -495,4 +490,21 @@ fn filter_profile_normalize_vectors_match_ts() {
             case["name"]
         );
     }
+}
+
+#[test]
+fn removed_legacy_engine_migrates_to_segmented_and_drops_dictionary_path() {
+    let result = migrate(json!({
+        "version": 2,
+        "engine": "legacy",
+        "dictionaryPath": "/tmp/Dictionary.csv",
+        "audio": { "engine": "legacy" }
+    }));
+    assert_eq!(result["engine"], "segmented");
+    assert_eq!(result["audio"]["engine"], "segmented");
+    assert!(result.get("dictionaryPath").is_none());
+    let kept =
+        migrate(json!({ "version": 2, "engine": "zhconvert", "audio": { "engine": "zhconvert" } }));
+    assert_eq!(kept["engine"], "zhconvert");
+    assert_eq!(kept["audio"]["engine"], "zhconvert");
 }

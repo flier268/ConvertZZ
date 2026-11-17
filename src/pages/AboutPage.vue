@@ -78,8 +78,8 @@ const differences: Array<{ feature: string } & Record<PlatformColumn, string>> =
 
 const conversionDifferences = [
   {
-    title: "舊版字典",
-    body: "舊版字典的優先權、長詞與保護詞規則保持不變。",
+    title: "舊版字典引擎",
+    body: "1.x 以 Dictionary.csv 全文直接取代的舊版字典引擎已移除。",
   },
   {
     title: "未命中字元",

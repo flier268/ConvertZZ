@@ -152,14 +152,7 @@ describe("executeLegacyAction", () => {
     const result = await executeLegacyAction("a3", settingsFixture());
     expect(readText).toHaveBeenCalledOnce();
     expect(invoke).not.toHaveBeenCalledWith("capture_selection");
-    expect(convertText).toHaveBeenCalledWith(
-      "里面",
-      "s2t",
-      "segmented",
-      true,
-      undefined,
-      undefined,
-    );
+    expect(convertText).toHaveBeenCalledWith("里面", "s2t", "segmented", true, undefined);
     expect(writeText).toHaveBeenCalledWith("裡面");
     expect(invoke).not.toHaveBeenCalledWith("replace_selection", expect.anything());
     expect(result.text).toBe("裡面");

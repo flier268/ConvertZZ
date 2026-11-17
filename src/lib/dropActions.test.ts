@@ -32,7 +32,7 @@ describe("dropActions", () => {
       buildDropCliInvocation(
         ["/tmp/a.txt", "/tmp/b.txt"],
         { kind: "file", operation: "filename", direction: "t2s" },
-        { engine: "legacy", autoBackupBeforeConversion: false },
+        { engine: "zhconvert", autoBackupBeforeConversion: false },
       ),
     ).toEqual({
       mode: "file",
@@ -40,7 +40,7 @@ describe("dropActions", () => {
       inputEncoding: "auto",
       outputEncoding: "auto",
       direction: "t2s",
-      engine: "legacy",
+      engine: "zhconvert",
       operation: "filename",
       vocabularyCorrection: "settings",
       backup: false,

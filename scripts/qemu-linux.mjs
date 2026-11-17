@@ -85,7 +85,6 @@ export function guestScript() {
     'dpkg -s libayatana-appindicator3-1 >/dev/null || fail "APT 未補齊 AppIndicator"',
     'dpkg -s libgtk-3-0 >/dev/null || fail "APT 未補齊 GTK"',
     'test -x /usr/bin/convertzz || fail "缺少主程式"',
-    'test -f /usr/lib/ConvertZZ/Dictionary.csv || fail "缺少字典"',
     'test -d /usr/lib/ConvertZZ/segment-dict/segment || fail "缺少分詞字典"',
     'test ! -f /usr/lib/ConvertZZ/taglib-wasi.wasm || fail "不應再包含 taglib WASM"',
     'WORKDIR="$(mktemp -d)"',
@@ -166,7 +165,7 @@ export function findLinuxArtifacts(projectRoot) {
 /** Host-side DEB sanity check before starting QEMU. */
 export function assertLinuxDebReady(debPath) {
   const listing = listDebContents(debPath);
-  const required = ["usr/lib/ConvertZZ/Dictionary.csv", "usr/lib/ConvertZZ/segment-dict/segment/"];
+  const required = ["usr/lib/ConvertZZ/segment-dict/segment/"];
   const forbidden = ["usr/lib/ConvertZZ/taglib-wasi.wasm"];
   const missing = required.filter((entry) => !listing.some((line) => line.includes(entry)));
   const presentForbidden = forbidden.filter((entry) =>

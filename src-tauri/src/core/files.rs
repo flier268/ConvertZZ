@@ -543,6 +543,10 @@ impl FileService {
         } else {
             converted.text
         };
+        if let Some(problem) = entry_name_problem(&text, cfg!(windows)) {
+            warnings.push(format!("轉換後的名稱「{text}」{problem}，已保留原名稱。"));
+            return Ok((name.to_string(), warnings));
+        }
         Ok((text, warnings))
     }
 
@@ -3372,6 +3376,37 @@ fn keep_invalid_utf8_name(
     let elsewhere = output_path.as_path() != source_path;
     *output_path = source_path.to_path_buf();
     elsewhere
+}
+
+/// 轉換後的檔名或資料夾名稱不能當成單一路徑元件時回傳原因。
+/// 7 位元編碼（HZ、ISO-2022-JP）或 UTF-16 重新解讀可能產生 `/`、`\\` 或 NUL。
+pub(crate) fn entry_name_problem(name: &str, windows: bool) -> Option<&'static str> {
+    if name.is_empty() || name == "." || name == ".." {
+        return Some("不是有效的名稱");
+    }
+    if name.contains(['/', '\0']) || (windows && name.contains('\\')) {
+        return Some("含路徑分隔字元");
+    }
+    if !windows {
+        return None;
+    }
+    if name
+        .chars()
+        .any(|ch| ch.is_control() || matches!(ch, '<' | '>' | ':' | '"' | '|' | '?' | '*'))
+    {
+        return Some("含 Windows 不允許的字元");
+    }
+    if name.ends_with(['.', ' ']) {
+        return Some("在 Windows 上不能以句點或空白結尾");
+    }
+    let stem = name.split('.').next().unwrap_or_default().trim_end();
+    let upper = stem.to_ascii_uppercase();
+    let reserved = matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ((upper.starts_with("COM") || upper.starts_with("LPT"))
+            && upper.len() == 4
+            && upper.as_bytes()[3].is_ascii_digit()
+            && upper.as_bytes()[3] != b'0');
+    reserved.then_some("是 Windows 保留名稱")
 }
 
 fn extension_of(path: &Path) -> String {

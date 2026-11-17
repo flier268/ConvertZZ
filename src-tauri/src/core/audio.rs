@@ -1679,6 +1679,14 @@ async fn convert_audio_filename(
         file.converted_path = None;
         return Ok(None);
     }
+    if let Some(problem) = super::files::entry_name_problem(&text, cfg!(windows)) {
+        warnings.push(format!(
+            "{}：轉換後的檔名「{text}」{problem}，已保留原檔名。",
+            file.path
+        ));
+        file.converted_path = None;
+        return Ok(None);
+    }
     let dest = path.with_file_name(&text);
     if audio_rename_conflicts(path, &dest) {
         let notice = match request.conflict_policy {

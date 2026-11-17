@@ -5032,3 +5032,53 @@ async fn directory_rename_and_content_keep_modified_time() {
     );
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[tokio::test]
+async fn filename_reinterpret_producing_path_separator_keeps_original_name() {
+    let directory = temp_dir();
+    let source = directory.join("隘.txt");
+    std::fs::write(&source, "甲").unwrap();
+    let mut request = filename_request(&source, ConflictPolicy::Skip);
+    request.conversion.direction = Direction::None;
+    request.input_encoding = TextEncoding::Gbk;
+    request.output_encoding = TextEncoding::HzGb2312;
+    let service = FileService::new();
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    assert_eq!(plan.items.len(), 1);
+    assert_eq!(output_file_name(&plan.items[0]), "隘.txt");
+    let warning = plan.items[0].warning.as_deref().unwrap_or("");
+    assert!(warning.contains("含路徑分隔字元"), "{warning}");
+    service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(names(&directory), ["隘.txt"]);
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[test]
+fn entry_name_problem_rejects_separators_and_windows_reserved_names() {
+    assert!(entry_name_problem("~{0/~}.txt", false).is_some());
+    assert!(entry_name_problem("a\0b", false).is_some());
+    assert!(entry_name_problem("..", false).is_some());
+    assert!(entry_name_problem("", false).is_some());
+    assert!(entry_name_problem("a\\b.txt", false).is_none());
+    assert!(entry_name_problem("a\\b.txt", true).is_some());
+    for name in [
+        "a:b.txt", "a?.txt", "結尾.", "結尾 ", "con.txt", "COM1", "lpt9.log", "NUL",
+    ] {
+        assert!(entry_name_problem(name, true).is_some(), "{name}");
+    }
+    for name in ["軟體.txt", "COM10.txt", "console.txt", "COM0"] {
+        assert!(entry_name_problem(name, true).is_none(), "{name}");
+    }
+}

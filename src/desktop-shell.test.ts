@@ -372,7 +372,9 @@ describe("Tauri desktop shell", () => {
     expect(rust).toContain('.text("a3", "Unicode 簡 → Unicode 繁")');
     expect(rust).toContain('.text("b1", "文件/檔名轉換")');
     expect(rust).toContain('.text("settings", "設定")');
-    for (const actionId of ["a1", "a4", "b2", "c3", "za1", "ze2", "1", "about", "report", "quit"]) {
+    expect(rust).toContain('.text("c1", "Audio 標籤轉換")');
+    expect(rust).not.toContain('"c2"');
+    for (const actionId of ["a1", "a4", "b2", "c1", "za1", "ze2", "1", "about", "report", "quit"]) {
       expect(rust).toContain(`.text("${actionId}"`);
     }
     expect(config.bundle?.icon).toEqual(

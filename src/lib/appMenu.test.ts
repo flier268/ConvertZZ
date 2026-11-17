@@ -12,8 +12,6 @@ describe("浮動球右鍵選單", () => {
         "b1",
         "b2",
         "c1",
-        "c2",
-        "c3",
         "za1",
         "za2",
         "za3",
@@ -40,6 +38,15 @@ describe("浮動球右鍵選單", () => {
         "quit",
       ]),
     );
+  });
+
+  it("Audio 標籤轉換是單一項目，不再分 ID3／APE／OGG 子選單", () => {
+    expect(FLOATING_CONTEXT_MENU).toContainEqual({
+      type: "item",
+      id: "c1",
+      label: "Audio 標籤轉換",
+    });
+    expect(collectMenuActionIds(FLOATING_CONTEXT_MENU)).not.toContain("c2");
   });
 
   it("文件、剪貼簿與音訊項目會開啟主視窗對應頁面", () => {

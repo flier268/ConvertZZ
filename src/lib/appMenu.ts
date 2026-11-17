@@ -12,15 +12,7 @@ export const FLOATING_CONTEXT_MENU: AppMenuNode[] = [
   { type: "item", id: "b1", label: "文件/檔名轉換" },
   { type: "item", id: "b2", label: "剪貼簿轉換" },
   { type: "separator" },
-  {
-    type: "submenu",
-    label: "Audio 標籤轉換",
-    items: [
-      { type: "item", id: "c1", label: "ID3" },
-      { type: "item", id: "c2", label: "APE" },
-      { type: "item", id: "c3", label: "OGG" },
-    ],
-  },
+  { type: "item", id: "c1", label: "Audio 標籤轉換" },
   { type: "separator" },
   {
     type: "submenu",
@@ -76,8 +68,6 @@ export const SHELL_ACTIONS = {
   b1: { type: "navigate", page: "files" },
   b2: { type: "navigate", page: "clipboard" },
   c1: { type: "navigate", page: "audio" },
-  c2: { type: "navigate", page: "audio" },
-  c3: { type: "navigate", page: "audio" },
   settings: { type: "navigate", page: "settings" },
   about: { type: "navigate", page: "about" },
   report: { type: "open-url", url: "https://github.com/flier268/ConvertZZ/issues" },

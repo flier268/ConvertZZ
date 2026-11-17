@@ -387,11 +387,6 @@ fn create_configured_windows(app: &tauri::App) -> tauri::Result<()> {
 }
 
 fn install_tray(app: &tauri::App) -> tauri::Result<()> {
-    let audio = SubmenuBuilder::new(app, "Audio 標籤轉換")
-        .text("c1", "ID3")
-        .text("c2", "APE")
-        .text("c3", "OGG")
-        .build()?;
     let others = SubmenuBuilder::new(app, "其他")
         .text("za1", "Unicode → HTML 十進位")
         .text("za2", "Unicode → HTML 十六進位")
@@ -432,7 +427,7 @@ fn install_tray(app: &tauri::App) -> tauri::Result<()> {
         .text("b1", "文件/檔名轉換")
         .text("b2", "剪貼簿轉換")
         .separator()
-        .item(&audio)
+        .text("c1", "Audio 標籤轉換")
         .separator()
         .item(&others)
         .text("1", "隱藏或顯示浮動球")

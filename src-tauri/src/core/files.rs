@@ -364,6 +364,7 @@ impl FileService {
             .clamp(1024, 1024 * 1024) as usize;
         let inspected =
             inspect_preview(&source_path, plan_request.input_encoding, preview_max_bytes)?;
+        let mut encoding_warning = None;
         let (source_preview, output_preview, detected_encoding, content_warning) = match inspected {
             InspectedBytes::Skip(reason) => (String::new(), String::new(), None, Some(reason)),
             InspectedBytes::Text { text, encoding } => {
@@ -401,6 +402,7 @@ impl FileService {
                 {
                     output_text = repair_unrepresentable_big5(&output_text);
                 }
+                encoding_warning = unrepresentable_warning(&output_text, output_encoding);
                 (source_preview, output_text, Some(encoding), None)
             }
         };
@@ -428,6 +430,7 @@ impl FileService {
             content_warning.map(|reason| content_skip_message(reason).to_string()),
             file.item.warning.clone(),
         );
+        file.item.warning = merge_warning(encoding_warning, file.item.warning.clone());
         Ok(file.item.clone())
     }
 
@@ -2606,6 +2609,19 @@ fn resolve_output_encoding(
             .filter(|value| *value != TextEncoding::Auto)
             .unwrap_or(TextEncoding::Utf8)
     }
+}
+
+/// 預覽時先提醒：套用時遇到輸出編碼無法表示的字元會略過整個檔案。
+fn unrepresentable_warning(text: &str, encoding: TextEncoding) -> Option<String> {
+    let mut buffer = [0u8; 4];
+    let first = text.chars().find(|character| {
+        !super::encoding::encode_text_detailed(character.encode_utf8(&mut buffer), encoding, false)
+            .is_ok_and(|encoded| !encoded.had_errors)
+    })?;
+    Some(format!(
+        "有字元無法以 {} 表示（例如「{first}」），套用時會略過此檔；請改用 UTF-8 等輸出編碼。",
+        super::encoding::encoding_label(encoding)
+    ))
 }
 
 fn repair_unrepresentable_big5(text: &str) -> String {

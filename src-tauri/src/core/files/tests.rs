@@ -5082,3 +5082,56 @@ fn entry_name_problem_rejects_separators_and_windows_reserved_names() {
         assert!(entry_name_problem(name, true).is_none(), "{name}");
     }
 }
+
+#[tokio::test]
+async fn unrepresentable_output_characters_skip_the_file_and_keep_source() {
+    let directory = temp_dir();
+    let path = directory.join("emoji.txt");
+    let source = "软件😀里面\n";
+    std::fs::write(&path, source).unwrap();
+    let mut request = filename_request(&path, ConflictPolicy::Skip);
+    request.mode = FileMode::Content;
+    request.input_encoding = TextEncoding::Utf8;
+    request.output_encoding = TextEncoding::Big5;
+    let service = FileService::new();
+    let plan = service
+        .plan(shared_conversion(), request, noop())
+        .await
+        .unwrap();
+    let previewed = service
+        .preview(
+            shared_conversion(),
+            FilePreviewRequest {
+                plan_id: plan.plan_id.clone(),
+                source_path: path.to_string_lossy().into_owned(),
+            },
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    let warning = previewed.warning.as_deref().unwrap_or("");
+    assert!(
+        warning.contains("無法以 Big5 表示") && warning.contains("😀"),
+        "{warning}"
+    );
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.succeeded.is_empty(), "{result:?}");
+    assert_eq!(result.failed.len(), 1, "{result:?}");
+    assert!(
+        result.failed[0].message.contains("無法以 Big5 表示"),
+        "{result:?}"
+    );
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), source);
+    assert_eq!(names(&directory), ["emoji.txt"]);
+    let _ = std::fs::remove_dir_all(&directory);
+}

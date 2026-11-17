@@ -1,8 +1,8 @@
 use super::error::CoreError;
 use super::types::TextEncoding;
 use encoding_rs::{
-    CoderResult, Decoder, Encoder, Encoding, BIG5, EUC_JP, GBK, ISO_2022_JP, SHIFT_JIS, UTF_16BE,
-    UTF_16LE, UTF_8,
+    CoderResult, Decoder, Encoder, EncoderResult, Encoding, BIG5, EUC_JP, GBK, ISO_2022_JP,
+    SHIFT_JIS, UTF_16BE, UTF_16LE, UTF_8,
 };
 use regex::Regex;
 use std::sync::OnceLock;
@@ -551,7 +551,7 @@ impl StreamEncoder {
 
     pub fn push(&mut self, text: &str, last: bool) -> Result<Vec<u8>, CoreError> {
         let mut output = match &mut self.inner {
-            EncoderInner::Codec(encoder) => encode_codec(encoder, text, last)?,
+            EncoderInner::Codec(encoder) => encode_codec(encoder, self.encoding, text, last)?,
             EncoderInner::Utf16 { little } => encode_utf16(text, *little),
             EncoderInner::Hz { chinese } => encode_hz_push(text, last, chinese)?,
         };
@@ -567,24 +567,52 @@ impl StreamEncoder {
     }
 }
 
-fn encode_codec(encoder: &mut Encoder, text: &str, last: bool) -> Result<Vec<u8>, CoreError> {
+/// 檔案寫入用：遇到輸出編碼無法表示的字元就中止，不讓 encoding_rs 改寫成 `&#數字;` 後當成成功。
+fn encode_codec(
+    encoder: &mut Encoder,
+    encoding: TextEncoding,
+    text: &str,
+    last: bool,
+) -> Result<Vec<u8>, CoreError> {
     let mut output = Vec::new();
     let mut offset = 0;
     loop {
         let remaining = text.len() - offset;
-        if let Some(needed) = encoder.max_buffer_length_from_utf8_if_no_unmappables(remaining) {
-            output.reserve(needed);
-        }
-        let (result, read, had_errors) =
-            encoder.encode_from_utf8_to_vec(&text[offset..], &mut output, last);
-        let _ = had_errors;
+        let needed = encoder
+            .max_buffer_length_from_utf8_without_replacement(remaining)
+            .unwrap_or(remaining.saturating_mul(4) + 16);
+        output.reserve(needed.max(16));
+        let (result, read) =
+            encoder.encode_from_utf8_to_vec_without_replacement(&text[offset..], &mut output, last);
         offset += read;
         match result {
-            CoderResult::InputEmpty => break,
-            CoderResult::OutputFull => continue,
+            EncoderResult::InputEmpty => break,
+            EncoderResult::OutputFull => continue,
+            EncoderResult::Unmappable(character) => {
+                return Err(CoreError::with_details(
+                    "ENCODING_UNREPRESENTABLE",
+                    format!(
+                        "有字元無法以 {} 表示（例如「{character}」），已略過此檔，原檔未修改。請改用 UTF-8 等可表示的輸出編碼。",
+                        encoding_label(encoding)
+                    ),
+                    serde_json::json!({ "character": character.to_string() }),
+                ));
+            }
         }
     }
     Ok(output)
+}
+
+pub(crate) fn encoding_label(encoding: TextEncoding) -> &'static str {
+    match encoding {
+        TextEncoding::Big5 => "Big5",
+        TextEncoding::Gbk => "GBK",
+        TextEncoding::ShiftJis => "Shift-JIS",
+        TextEncoding::EucJp => "EUC-JP",
+        TextEncoding::Iso2022Jp => "ISO-2022-JP",
+        TextEncoding::HzGb2312 => "HZ-GB-2312",
+        _ => "輸出編碼",
+    }
 }
 
 fn encode_hz_push(text: &str, last: bool, chinese: &mut bool) -> Result<Vec<u8>, CoreError> {

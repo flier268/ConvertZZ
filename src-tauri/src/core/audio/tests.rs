@@ -8,6 +8,7 @@ use super::super::types::{
 use super::*;
 use id3::{TagLike, Version};
 use lofty::picture::PictureType;
+use std::assert_matches;
 use std::collections::HashSet;
 use std::process::Command;
 use std::sync::Arc;
@@ -4007,14 +4008,14 @@ fn same_batch_target_is_never_overwritten() {
     std::fs::write(&first, b"first").unwrap();
     std::fs::write(&second, b"second").unwrap();
     let mut claimed = HashSet::new();
-    assert!(matches!(
+    assert_matches!(
         apply_audio_rename(&first, &dest, ConflictPolicy::Overwrite, &mut claimed),
         Ok(RenameOutcome::Renamed)
-    ));
-    assert!(matches!(
+    );
+    assert_matches!(
         apply_audio_rename(&second, &dest, ConflictPolicy::Overwrite, &mut claimed),
         Ok(RenameOutcome::SkippedConflict(_))
-    ));
+    );
     assert_eq!(std::fs::read(&dest).unwrap(), b"first");
     assert_eq!(std::fs::read(&second).unwrap(), b"second");
     let _ = std::fs::remove_dir_all(&directory);

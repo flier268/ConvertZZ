@@ -6,7 +6,7 @@ authors = ["ConvertZZ contributors"]
 license = "GPL-3.0-only"
 repository = "https://github.com/flier268/ConvertZZ"
 edition = "2021"
-rust-version = "1.89"
+rust-version = "1.96"
 default-run = "convertzz"
 
 [workspace]

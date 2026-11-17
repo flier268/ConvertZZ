@@ -264,8 +264,8 @@ fn alias(name: &str) -> Option<TextEncoding> {
 
 fn looks_like_hz(buffer: &[u8]) -> bool {
     buffer
-        .windows(3)
-        .any(|window| window[0] == b'~' && window[1] == b'{' && window[2].is_ascii_graphic())
+        .array_windows()
+        .any(|&[tilde, brace, next]| tilde == b'~' && brace == b'{' && next.is_ascii_graphic())
 }
 
 fn strip_bom(buffer: &[u8], encoding: TextEncoding) -> &[u8] {

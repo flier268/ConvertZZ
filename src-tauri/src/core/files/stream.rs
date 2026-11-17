@@ -992,6 +992,7 @@ pub(super) fn slice_chars(text: &str, skip: usize, hold: usize) -> String {
 mod tests {
     use super::*;
     use crate::core::conversion::is_cjk_char;
+    use std::assert_matches;
     use std::io::Read;
 
     #[test]
@@ -1075,7 +1076,7 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(matches!(result, StreamResult::Written(_)), "{result:?}");
+        assert_matches!(result, StreamResult::Written(_));
         assert_eq!(std::fs::read_to_string(&stage).unwrap(), text);
         if std::thread::available_parallelism().map_or(1, |n| n.get()) > 1 {
             assert!(threads.lock().unwrap().len() > 1);
@@ -1137,7 +1138,7 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(matches!(result, StreamResult::Written(_)), "{result:?}");
+        assert_matches!(result, StreamResult::Written(_));
         assert_eq!(std::fs::read_to_string(&stage).unwrap(), text);
         // 取樣有 250 ms 延遲；降載稍後新開工的視窗必須是單一工作。
         assert_eq!(peak_after_drop.load(Ordering::SeqCst), 1);
@@ -1185,7 +1186,7 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(matches!(result, StreamResult::Written(_)), "{result:?}");
+        assert_matches!(result, StreamResult::Written(_));
         assert_eq!(std::fs::read_to_string(&stage).unwrap(), text);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1276,7 +1277,7 @@ mod tests {
         let result = tokio::time::timeout(std::time::Duration::from_secs(30), run())
             .await
             .expect("admission must be released after a panic");
-        assert!(matches!(result, Ok(StreamResult::Written(_))), "{result:?}");
+        assert_matches!(result, Ok(StreamResult::Written(_)));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1360,7 +1361,7 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(matches!(result, StreamResult::Written(_)), "{result:?}");
+        assert_matches!(result, StreamResult::Written(_));
         assert_eq!(std::fs::read_to_string(&stage).unwrap(), text);
         let _ = std::fs::remove_dir_all(&dir);
     }

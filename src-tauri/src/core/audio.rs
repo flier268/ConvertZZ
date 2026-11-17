@@ -1499,8 +1499,7 @@ fn set_id3v2_value_in_version(tag: &mut id3::Tag, key: &str, value: String, vers
                 }
             }
         }
-        other if other.starts_with("frame:") => {
-            let rest = other.trim_start_matches("frame:");
+        other if let Some(rest) = other.strip_prefix("frame:") => {
             if let Some((id, description)) = rest.split_once(':') {
                 if id == "TXXX" {
                     // 只換這個 description，其餘 TXXX 照原順序寫回。

@@ -65,10 +65,10 @@ fn portable_settings_path() -> Result<PathBuf, String> {
 fn write_portable_settings_document(path: &Path, document: &Value) -> Result<(), String> {
     let payload =
         serde_json::to_vec_pretty(document).map_err(|error| format!("序列化設定失敗：{error}"))?;
-    let temporary = path.with_extension("json.tmp");
+    let temporary = path.with_added_extension("tmp");
     fs::write(&temporary, &payload).map_err(|error| format!("寫入暫存設定失敗：{error}"))?;
     if path.exists() {
-        let backup = path.with_extension("json.bak");
+        let backup = path.with_added_extension("bak");
         let _ = fs::remove_file(&backup);
         fs::rename(path, &backup).map_err(|error| format!("備份舊設定失敗：{error}"))?;
         if let Err(error) = fs::rename(&temporary, path) {

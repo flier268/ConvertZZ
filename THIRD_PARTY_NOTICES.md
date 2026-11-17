@@ -28,7 +28,7 @@ ConvertZZ 2.0 包含第三方自由軟體。
 
 `cjk-convert-rs` 對照表來自 `cjk-conv` 與 `@lazy-cjk/*`（ISC）。
 
-`ws-segment-rs` 分詞字典來自 `segment-dict`，發行包會附帶 `src-tauri/resources/segment-dict`。
+`ws-segment-rs` 分詞字典來自 `segment-dict`，發行包會附帶 `src-tauri/resources/segment-dict`（只保留 `ws-segment-rs` 預設載入的檔案；未使用的 `jieba-js/`、`nodejieba/`、`segment/jieba/` 未收錄）。
 
 `src-tauri/resources/conversion-specials/place-names.txt` 的縣／市／鄉／鎮／里名稱來自內政部國土測繪中心代碼服務（政府資料開放授權條款第1版）。
 

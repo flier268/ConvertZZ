@@ -34,7 +34,7 @@ ConvertZZ 2.0 是跨平台中文轉換桌面程式。產品說明與發行流程
 - 變更通訊協定時，先改 `shared/contracts.ts`，再同步 `src-tauri/src/core` dispatch 與前端客戶端。
 - 前端不得取得任意 Shell。檔案路徑只可來自選擇器或已驗證的工作項目。
 - 新式引擎只使用 `ws-segment-rs` 的分詞與 `ZhtSynonymOptimizer`，字形只交給 `cjk-convert-rs`。不要新增硬編碼語意取代清單。璇／疱／么、胜肽／里長與一簡多繁等字形特例與固定整詞只寫 `resources/conversion-specials/rules.txt`；台灣完整「xx縣／xx市／xx鄉／xx鎮／xx里」寫 `place-names.txt`（分詞釘詞、轉換套用、roundtrip-dict 參照）。
-- 分詞與簡轉繁套件字典維持 `resources/segment-dict`（來自套件）。語料回環修正是 ConvertZZ 額外層，只放 `extra-correction` 或 `data/roundtrip-correction`，不得寫入、覆寫或併入套件詞典。
+- 分詞與簡轉繁套件字典維持 `resources/segment-dict`（來自套件，只收錄 `ws-segment-rs` 實際載入的檔案；`jieba-js/`、`nodejieba/`、`segment/jieba/` 不收錄，升級 `ws-segment-rs` 時重新確認）。語料回環修正是 ConvertZZ 額外層，只放 `extra-correction` 或 `data/roundtrip-correction`，不得寫入、覆寫或併入套件詞典。
 
 ## 建置與檢查
 

@@ -13,6 +13,10 @@ function makeReleaseDir() {
   writeFileSync(join(root, "ConvertZZ.exe"), "exe");
   mkdirSync(join(root, "segment-dict", "segment"), { recursive: true });
   writeFileSync(join(root, "segment-dict", "segment", "dict.txt"), "dict");
+  mkdirSync(join(root, "extra-correction"), { recursive: true });
+  writeFileSync(join(root, "extra-correction", "zht.corpus.synonym.txt"), "extra");
+  mkdirSync(join(root, "conversion-specials"), { recursive: true });
+  writeFileSync(join(root, "conversion-specials", "rules.txt"), "rules");
   mkdirSync(join(root, "licenses"), { recursive: true });
   writeFileSync(join(root, "licenses", "THIRD_PARTY_NOTICES.md"), "notice");
   writeFileSync(join(root, "helper.dll"), "dll");
@@ -26,6 +30,8 @@ describe("Windows 免安裝 zip 打包", () => {
       expect(listPortablePayload(releaseDir)).toEqual([
         "ConvertZZ.exe",
         "segment-dict",
+        "extra-correction",
+        "conversion-specials",
         "licenses",
         "helper.dll",
       ]);
@@ -39,6 +45,10 @@ describe("Windows 免安裝 zip 打包", () => {
     try {
       writeFileSync(join(releaseDir, "ConvertZZ.exe"), "exe");
       expect(() => listPortablePayload(releaseDir)).toThrow(/segment-dict/);
+      mkdirSync(join(releaseDir, "segment-dict"));
+      expect(() => listPortablePayload(releaseDir)).toThrow(/extra-correction/);
+      mkdirSync(join(releaseDir, "extra-correction"));
+      expect(() => listPortablePayload(releaseDir)).toThrow(/conversion-specials/);
     } finally {
       rmSync(releaseDir, { recursive: true, force: true });
     }
@@ -66,6 +76,8 @@ describe("Windows 免安裝 zip 打包", () => {
       expect(entries).toContain("ConvertZZ/helper.dll");
       expect(entries).toContain("ConvertZZ/portable");
       expect(entries.some((entry) => entry.includes("segment-dict/segment/dict.txt"))).toBe(true);
+      expect(entries).toContain("ConvertZZ/extra-correction/zht.corpus.synonym.txt");
+      expect(entries).toContain("ConvertZZ/conversion-specials/rules.txt");
       expect(entries.some((entry) => entry.includes("licenses/THIRD_PARTY_NOTICES.md"))).toBe(true);
       expect(bytes.byteLength).toBeGreaterThan(0);
     } finally {

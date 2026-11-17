@@ -29,7 +29,7 @@ const ZIP_MAX_UINT32 = 0xffffffff;
  * @returns {string[]}
  */
 export function listPortablePayload(releaseDir) {
-  const required = ["ConvertZZ.exe", "segment-dict"];
+  const required = ["ConvertZZ.exe", "segment-dict", "extra-correction", "conversion-specials"];
   for (const name of required) {
     const path = join(releaseDir, name);
     if (!existsSync(path)) {
@@ -37,7 +37,7 @@ export function listPortablePayload(releaseDir) {
     }
   }
   /** @type {string[]} */
-  const entries = ["ConvertZZ.exe", "segment-dict"];
+  const entries = [...required];
   const licenses = join(releaseDir, "licenses");
   if (existsSync(licenses) && statSync(licenses).isDirectory()) {
     entries.push("licenses");

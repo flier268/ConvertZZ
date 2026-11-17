@@ -469,6 +469,10 @@ export interface UserDictionaryEntry {
   simplified: string;
   traditional: string;
   direction: UserDictionaryDirection;
+  /** 匯入時間（RFC 3339）；手動加入的詞沒有。 */
+  importedAt?: string;
+  /** 最後一次匯入時的來源檔名，只作標籤。 */
+  sourceFile?: string;
 }
 
 export interface UserDictionaryReadResult {
@@ -477,26 +481,32 @@ export interface UserDictionaryReadResult {
   loadError?: string | null;
 }
 
-export type LegacyImportStatus = "importable" | "disabled" | "invalid" | "duplicate";
+/** native：本程式的詞典或匯出檔；legacy：1.x 六欄 Dictionary.csv。 */
+export type DictionaryImportFormat = "native" | "legacy";
 
-export interface LegacyImportRow {
+export type DictionaryImportStatus = "importable" | "disabled" | "invalid" | "duplicate";
+
+export interface DictionaryImportRow {
   line: number;
   simplified: string;
   traditional: string;
-  status: LegacyImportStatus;
+  status: DictionaryImportStatus;
   direction?: UserDictionaryDirection;
   reason?: string;
 }
 
-/** 舊版 Dictionary.csv 匯入預覽；1.x 內建列不另外辨識，與自訂列一併列出。 */
-export interface LegacyImportPreview {
+/** 匯入預覽；可匯入的列會標上這次匯入的檔名與時間。 */
+export interface DictionaryImportPreview {
   path: string;
+  format: DictionaryImportFormat;
+  sourceFile: string;
+  importedAt: string;
   total: number;
   importable: number;
   disabled: number;
   invalid: number;
   duplicate: number;
-  rows: LegacyImportRow[];
+  rows: DictionaryImportRow[];
 }
 
 export type CoreOperation =
@@ -517,7 +527,8 @@ export type CoreOperation =
   | "settings.migrate"
   | "userDictionary.read"
   | "userDictionary.save"
-  | "userDictionary.previewLegacyImport"
+  | "userDictionary.previewImport"
+  | "userDictionary.export"
   | "zhconvert.configure"
   | "zhconvert.serviceInfo"
   | "utility.convert"

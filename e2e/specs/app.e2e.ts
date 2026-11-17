@@ -387,21 +387,86 @@ test.describe("ConvertZZ 前端", () => {
       .toBe(false);
   });
 
-  test("使用者詞典匯入舊版 Dictionary.csv 後需確認才儲存", async ({ page }) => {
-    await openApp(page, { selectedFiles: "/tmp/Dictionary.csv" });
+  test("使用者詞典匯入 1.x 字典先警告，確認後標上來源並立即儲存", async ({ page }) => {
+    await openApp(page, { selectedFiles: "/tmp/我的舊字典.csv" });
     await openPage(page, "#tour-dictionary", "使用者詞典");
     await expect(page.getByRole("button", { name: "儲存", exact: true })).toBeDisabled();
-    await page.getByRole("button", { name: "匯入舊版 Dictionary.csv" }).click();
-    const dialog = page.getByRole("dialog", { name: "匯入舊版 Dictionary.csv" });
-    await expect(dialog.getByText("來源詞只能是中日韓文字。")).toBeVisible();
-    await dialog.getByRole("button", { name: "加入表格" }).click();
-    await expect(page.getByText("2 筆", { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "儲存", exact: true }).click();
+    await page.getByRole("button", { name: "匯入", exact: true }).click();
     await expect
       .poll(async () => (await e2eState(page)).confirms ?? [])
-      .toEqual(
-        expect.arrayContaining([expect.stringContaining("將寫入 2 筆詞彙並重新載入轉換引擎")]),
-      );
+      .toEqual([expect.stringContaining("不建議直接匯入")]);
+    const dialog = page.getByRole("dialog", { name: "匯入詞典" });
+    await expect(dialog.getByText("來源詞只能是中日韓文字。")).toBeVisible();
+    await expect(dialog.getByText("1.x 舊版字典，共")).toBeVisible();
+    await dialog.getByRole("button", { name: "匯入並儲存" }).click();
+    await expect
+      .poll(async () => (await e2eState(page)).lastDictionarySave)
+      .toEqual([
+        { simplified: "优盘", traditional: "隨身碟", direction: "s2t" },
+        {
+          simplified: "信息",
+          traditional: "資訊",
+          direction: "both",
+          sourceFile: "我的舊字典.csv",
+          importedAt: "2026-11-17T12:00:00+08:00",
+        },
+      ]);
+    await expect(
+      page.locator(".dictionary-source span", { hasText: "我的舊字典.csv" }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "儲存", exact: true })).toBeDisabled();
+  });
+
+  test("使用者詞典取消舊版警告時不匯入", async ({ page }) => {
+    await openApp(page, { selectedFiles: "/tmp/Dictionary.csv", confirmResult: false });
+    await openPage(page, "#tour-dictionary", "使用者詞典");
+    await page.getByRole("button", { name: "匯入", exact: true }).click();
+    await expect
+      .poll(async () => (await e2eState(page)).confirms ?? [])
+      .toEqual([expect.stringContaining("不建議直接匯入")]);
+    await expect(page.getByRole("dialog", { name: "匯入詞典" })).toBeHidden();
+    expect((await e2eState(page)).lastDictionarySave).toBeUndefined();
+  });
+
+  test("使用者詞典匯入本格式不警告，匯出寫到選擇的路徑", async ({ page }) => {
+    await openApp(page, { selectedFiles: "/tmp/隨便的名字.txt", savePath: "/tmp/備份.tsv" });
+    await openPage(page, "#tour-dictionary", "使用者詞典");
+    await page.getByRole("button", { name: "匯入", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "匯入詞典" });
+    await expect(dialog.getByText("使用者詞典，共")).toBeVisible();
+    expect((await e2eState(page)).confirms).toEqual([]);
+    await dialog.getByRole("button", { name: "匯入並儲存" }).click();
+    await expect(
+      page.locator(".dictionary-source span", { hasText: "隨便的名字.txt" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "匯出", exact: true }).click();
+    await expect
+      .poll(async () => (await e2eState(page)).lastDictionaryExport?.path)
+      .toBe("/tmp/備份.tsv");
+    expect((await e2eState(page)).lastDictionaryExport?.entries).toHaveLength(2);
+  });
+
+  test("使用者詞典 5 萬筆只渲染可見列，並可依來源、方向與關鍵字篩選", async ({ page }) => {
+    await openApp(page, { dictionaryEntryCount: 50_000 });
+    await openPage(page, "#tour-dictionary", "使用者詞典");
+    await expect(page.getByText("50,001 / 50,001 筆")).toBeVisible();
+    const renderedRows = await page.locator(".dictionary-table-host .el-table-v2__row").count();
+    expect(renderedRows).toBeGreaterThan(0);
+    expect(renderedRows).toBeLessThan(100);
+
+    await page.getByRole("combobox", { name: "來源篩選" }).click();
+    await page.getByRole("option", { name: "手動加入" }).click();
+    await expect(page.getByText("25,001 / 50,001 筆")).toBeVisible();
+    await page.getByRole("combobox", { name: "來源篩選" }).click();
+    await page.getByRole("option", { name: "大量.txt" }).click();
+    await expect(page.getByText("25,000 / 50,001 筆")).toBeVisible();
+    await page.getByPlaceholder("搜尋簡體或繁體").fill("詞4999");
+    await expect(page.getByText("6 / 50,001 筆")).toBeVisible();
+
+    const firstInput = page.locator(".dictionary-table-host .el-table-v2__row input").first();
+    await firstInput.fill("詞改");
+    await expect(page.getByText("6 / 50,001 筆")).toBeVisible();
+    await expect(page.getByRole("button", { name: "儲存", exact: true })).toBeEnabled();
   });
 
   test("E-01 內容預覽會顯示來源與輸出文字", async ({ page }) => {

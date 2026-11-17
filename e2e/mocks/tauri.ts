@@ -131,6 +131,12 @@ export interface ConvertzzE2eConfig {
   skippedUpdateVersion?: string;
   checkVersionOnStart?: boolean;
   selectedFiles?: string | string[];
+  /** 使用者詞典「另存」對話框回傳的路徑。 */
+  savePath?: string | null;
+  /** 使用者詞典額外產生的詞條數，用來檢查大量資料時的捲動與篩選。 */
+  dictionaryEntryCount?: number;
+  lastDictionarySave?: unknown[];
+  lastDictionaryExport?: { path: string; entries: unknown[] };
   selectedDirectory?: string;
   clipboardText?: string;
   confirmResult?: boolean;
@@ -710,15 +716,27 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
     return { cancelled: true };
   }
   if (operation === "userDictionary.read") {
+    const count = e2e().dictionaryEntryCount ?? 0;
+    const generated = Array.from({ length: count }, (_, index) => ({
+      simplified: `词${index}`,
+      traditional: `詞${index}`,
+      direction: "both",
+      ...(index % 2 ? { sourceFile: "大量.txt", importedAt: "2026-11-17T12:00:00+08:00" } : {}),
+    }));
     return {
       path: "/tmp/user-dictionary.txt",
-      entries: [{ simplified: "优盘", traditional: "隨身碟", direction: "s2t" }],
+      entries: [{ simplified: "优盘", traditional: "隨身碟", direction: "s2t" }, ...generated],
       loadError: null,
     };
   }
-  if (operation === "userDictionary.previewLegacyImport") {
+  if (operation === "userDictionary.previewImport") {
+    const path = String(payload.path ?? "/tmp/Dictionary.csv");
+    const legacy = path.toLowerCase().endsWith(".csv");
     return {
-      path: String(payload.path ?? "/tmp/Dictionary.csv"),
+      path,
+      format: legacy ? "legacy" : "native",
+      sourceFile: path.split("/").pop(),
+      importedAt: "2026-11-17T12:00:00+08:00",
       total: 2,
       importable: 1,
       disabled: 0,
@@ -742,8 +760,14 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
       ],
     };
   }
+  if (operation === "userDictionary.export") {
+    const entries = Array.isArray(payload.entries) ? payload.entries : [];
+    e2e().lastDictionaryExport = { path: String(payload.path), entries };
+    return { exported: entries.length, path: payload.path };
+  }
   if (operation === "userDictionary.save") {
     const entries = Array.isArray(payload.entries) ? payload.entries : [];
+    e2e().lastDictionarySave = entries;
     return { saved: entries.length, path: "/tmp/user-dictionary.txt" };
   }
   if (operation === "convert.preview") {
@@ -811,6 +835,11 @@ export async function open(
 ): Promise<string | string[] | null> {
   if (options.directory && e2e().selectedDirectory) return e2e().selectedDirectory;
   return e2e().selectedFiles ?? "/tmp/里面.txt";
+}
+
+export async function save(): Promise<string | null> {
+  const path = e2e().savePath;
+  return path === undefined ? "/tmp/匯出.txt" : path;
 }
 
 export async function readText(): Promise<string> {

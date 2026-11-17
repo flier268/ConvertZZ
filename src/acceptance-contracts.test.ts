@@ -41,13 +41,17 @@ describe("驗收項目的自動化契約", () => {
     expect(settings).toContain("notifySettingsReplaced");
   });
 
-  it("使用者詞典儲存前會詢問，舊版字典只經匯入預覽", () => {
+  it("使用者詞典儲存前會詢問，匯入只經預覽且舊版先警告，清單使用虛擬捲動", () => {
     const page = readProjectFile("src/pages/DictionaryPage.vue");
     expect(page).toContain("重新載入轉換引擎");
     expect(page).toContain('title: "確認儲存使用者詞典"');
     expect(page).toContain("userDictionary.save");
-    expect(page).toContain("userDictionary.previewLegacyImport");
+    expect(page).toContain("userDictionary.previewImport");
+    expect(page).toContain("userDictionary.export");
+    expect(page).toContain('title: "不建議直接匯入舊版字典"');
+    expect(page).toContain("el-table-v2");
     expect(page).not.toContain("dictionary.update");
+    expect(page).not.toContain("Dictionary.csv");
   });
 
   it("保留原檔修改時間由設定頁控制，檔案與音訊請求都會帶上", () => {

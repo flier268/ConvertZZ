@@ -319,11 +319,29 @@ pub async fn dispatch(
                 serde_json::from_value(payload.get("entries").cloned().unwrap_or(Value::Null))?;
             state.save_user_dictionary(entries)
         }
-        "userDictionary.previewLegacyImport" => {
+        "userDictionary.previewImport" => {
             let path = required_string(&payload, "path")?;
             to_value(run_blocking(|| {
-                user_dictionary::preview_legacy_import(std::path::Path::new(&path))
+                user_dictionary::preview_import(std::path::Path::new(&path))
             })?)
+        }
+        "userDictionary.export" => {
+            let path = required_string(&payload, "path")?;
+            let entries: Vec<UserDictionaryEntry> =
+                serde_json::from_value(payload.get("entries").cloned().unwrap_or(Value::Null))?;
+            let target = std::path::Path::new(&path);
+            if state
+                .user_dictionary_path
+                .as_deref()
+                .is_some_and(|live| same_file_path(live, target))
+            {
+                return Err(CoreError::new(
+                    "USER_DICTIONARY_EXPORT_TARGET",
+                    "不能匯出到使用中的使用者詞典檔；請另選位置或檔名。",
+                ));
+            }
+            run_blocking(|| user_dictionary::export(target, &entries))?;
+            Ok(serde_json::json!({ "exported": entries.len(), "path": path }))
         }
         "settings.migrate" => {
             if let Some(path) = payload.get("path").and_then(Value::as_str) {
@@ -412,4 +430,42 @@ fn selected_paths(payload: &Value) -> Option<Vec<String>> {
 
 pub fn zhconvert_client(state: &CoreState) -> &ZhConvertClient {
     &state.conversion.zhconvert
+}
+
+/// 比對兩個路徑是否指向同一個檔案；檔案未存在時比對正規化後的上層目錄與檔名。
+fn same_file_path(a: &std::path::Path, b: &std::path::Path) -> bool {
+    fn normalize(path: &std::path::Path) -> Option<PathBuf> {
+        if let Ok(path) = std::fs::canonicalize(path) {
+            return Some(path);
+        }
+        let parent = std::fs::canonicalize(path.parent()?).ok()?;
+        Some(parent.join(path.file_name()?))
+    }
+    match (normalize(a), normalize(b)) {
+        (Some(a), Some(b)) => a == b,
+        _ => a == b,
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::same_file_path;
+
+    #[test]
+    fn same_file_path_matches_existing_and_missing_files_through_dot_segments() {
+        let dir = std::env::temp_dir().join(format!("convertzz-same-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        let live = dir.join("user-dictionary.txt");
+        assert!(same_file_path(
+            &live,
+            &dir.join("sub/../user-dictionary.txt")
+        ));
+        std::fs::write(&live, "").unwrap();
+        assert!(same_file_path(
+            &live,
+            &dir.join("sub/../user-dictionary.txt")
+        ));
+        assert!(!same_file_path(&live, &dir.join("export.txt")));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

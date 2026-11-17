@@ -1,3 +1,4 @@
+#[macro_use]
 mod core;
 mod selection;
 
@@ -13,9 +14,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{
-    menu::{MenuBuilder, SubmenuBuilder},
+    menu::{Menu, MenuBuilder, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Emitter, Manager, PhysicalPosition, Runtime, State, WebviewWindowBuilder,
+    WindowEvent,
 };
 use tauri_plugin_updater::UpdaterExt;
 
@@ -386,10 +388,16 @@ fn create_configured_windows(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
-fn install_tray(app: &tauri::App) -> tauri::Result<()> {
-    let others = SubmenuBuilder::new(app, "其他")
-        .text("za1", "Unicode → HTML 十進位")
-        .text("za2", "Unicode → HTML 十六進位")
+fn build_tray_menu<R: Runtime, M: Manager<R>>(app: &M) -> tauri::Result<Menu<R>> {
+    let others = SubmenuBuilder::new(app, tr_static!("其他", "Other"))
+        .text(
+            "za1",
+            tr_static!("Unicode → HTML 十進位", "Unicode → HTML decimal"),
+        )
+        .text(
+            "za2",
+            tr_static!("Unicode → HTML 十六進位", "Unicode → HTML hexadecimal"),
+        )
         .text("za3", "HTML → Unicode")
         .separator()
         .text("zb1", "Unicode → GBK")
@@ -409,32 +417,54 @@ fn install_tray(app: &tauri::App) -> tauri::Result<()> {
         .text("zd3", "GBK → HZ")
         .text("zd4", "Big5 → HZ")
         .separator()
-        .text("ze1", "半形 → 全形")
-        .text("ze2", "全形 → 半形")
+        .text("ze1", tr_static!("半形 → 全形", "Half-width → Full-width"))
+        .text("ze2", tr_static!("全形 → 半形", "Full-width → Half-width"))
         .build()?;
-    let help = SubmenuBuilder::new(app, "說明")
-        .text("about", "關於 ConvertZZ")
-        .text("report", "回報問題")
+    let help = SubmenuBuilder::new(app, tr_static!("說明", "Help"))
+        .text("about", tr_static!("關於 ConvertZZ", "About ConvertZZ"))
+        .text("report", tr_static!("回報問題", "Report an issue"))
         .build()?;
-    let menu = MenuBuilder::new(app)
-        .text("show", "開啟 ConvertZZ")
+    MenuBuilder::new(app)
+        .text("show", tr_static!("開啟 ConvertZZ", "Open ConvertZZ"))
         .separator()
         .text("a1", "GBK → Big5")
         .text("a2", "Big5 → GBK")
-        .text("a3", "Unicode 簡 → Unicode 繁")
-        .text("a4", "Unicode 繁 → Unicode 簡")
+        .text(
+            "a3",
+            tr_static!(
+                "Unicode 簡 → Unicode 繁",
+                "Unicode Simplified → Traditional"
+            ),
+        )
+        .text(
+            "a4",
+            tr_static!(
+                "Unicode 繁 → Unicode 簡",
+                "Unicode Traditional → Simplified"
+            ),
+        )
         .separator()
-        .text("b1", "文件/檔名轉換")
-        .text("b2", "剪貼簿轉換")
+        .text(
+            "b1",
+            tr_static!("文件/檔名轉換", "Convert files / filenames"),
+        )
+        .text("b2", tr_static!("剪貼簿轉換", "Convert clipboard"))
         .separator()
-        .text("c1", "Audio 標籤轉換")
+        .text("c1", tr_static!("Audio 標籤轉換", "Convert audio tags"))
         .separator()
         .item(&others)
-        .text("1", "隱藏或顯示浮動球")
-        .text("settings", "設定")
+        .text(
+            "1",
+            tr_static!("隱藏或顯示浮動球", "Show or hide floating ball"),
+        )
+        .text("settings", tr_static!("設定", "Settings"))
         .item(&help)
-        .text("quit", "結束 ConvertZZ")
-        .build()?;
+        .text("quit", tr_static!("結束 ConvertZZ", "Quit ConvertZZ"))
+        .build()
+}
+
+fn install_tray(app: &tauri::App) -> tauri::Result<()> {
+    let menu = build_tray_menu(app)?;
     let tray = TrayIconBuilder::with_id("main-tray")
         .tooltip("ConvertZZ 2.0")
         .menu(&menu)
@@ -570,6 +600,18 @@ fn show_toast(app: AppHandle, message: String) {
         place_toast_near_cursor(&app, &window);
     }
     let _ = app.emit("app://toast", message);
+}
+
+/// 主視窗載入或變更介面語言時呼叫：切換核心訊息語系並重建托盤選單（選單 id 不變）。
+#[tauri::command]
+fn set_ui_language(app: AppHandle, locale: String) -> Result<(), String> {
+    core::locale::set_ui_locale(&locale);
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        let menu = build_tray_menu(&app).map_err(|error| error.to_string())?;
+        tray.set_menu(Some(menu))
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -734,6 +776,7 @@ pub fn run() {
             set_send_to_shortcut,
             show_main_window,
             show_toast,
+            set_ui_language,
             quit_app,
             check_signed_update,
         ])

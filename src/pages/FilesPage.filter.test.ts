@@ -33,6 +33,7 @@ import FilesPage from "./FilesPage.vue";
 function settingsFixture(): SettingsV2 {
   return {
     version: 2,
+    language: "zh-TW",
     engine: "segmented",
     direction: "s2t",
     vocabularyCorrection: true,

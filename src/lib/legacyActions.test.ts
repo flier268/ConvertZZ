@@ -46,6 +46,7 @@ const { executeLegacyAction } = await import("./legacyActions");
 function settingsFixture(overrides: Partial<SettingsV2> = {}): SettingsV2 {
   return {
     version: 2,
+    language: "zh-TW",
     engine: "segmented",
     direction: "s2t",
     vocabularyCorrection: true,

@@ -3,6 +3,7 @@ import type { SettingsV2 } from "../../shared/contracts";
 
 const defaultSettings: SettingsV2 = {
   version: 2,
+  language: "system",
   engine: "segmented",
   direction: "s2t",
   vocabularyCorrection: true,
@@ -266,6 +267,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
     }
     case "show_main_window":
     case "show_toast":
+    case "set_ui_language":
     case "quit_app":
     case "save_zhconvert_api_key":
     case "set_send_to_shortcut":

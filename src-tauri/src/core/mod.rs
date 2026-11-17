@@ -1,3 +1,5 @@
+#[macro_use]
+pub mod locale;
 mod audio;
 mod backup;
 mod cli;

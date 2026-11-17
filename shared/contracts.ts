@@ -399,8 +399,12 @@ export interface AudioPageSettings {
   filenameOutputEncoding: TextEncoding;
 }
 
+/** 介面語言：`system` 依作業系統語言決定（中文系統用繁體中文，其餘用英文）。 */
+export type UiLanguage = "system" | "zh-TW" | "en";
+
 export interface SettingsV2 {
   version: 2;
+  language: UiLanguage;
   engine: EngineKind;
   direction: Direction;
   vocabularyCorrection: boolean;

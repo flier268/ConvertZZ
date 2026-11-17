@@ -634,3 +634,42 @@ fn settings_extension_filter_keeps_profiles_when_default_id_is_invalid() {
     assert_eq!(filter.extensions, vec![".csv".to_string()]);
     assert!(filter.include_no_extension);
 }
+
+#[test]
+fn audio_then_filename_keeps_original_backup_and_renames_only_audio() {
+    let dir = temp_dir("audio-filename");
+    let folder = dir.join("音乐");
+    fs::create_dir_all(folder.join("歌词")).expect("folder");
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/测试音乐.mp3");
+    let original = fs::read(&fixture).expect("fixture");
+    fs::write(folder.join("测试音乐.mp3"), &original).expect("copy mp3");
+    fs::write(folder.join("歌词/说明.txt"), "说明").expect("write txt");
+
+    let code = run(
+        &args(&[
+            "--headless",
+            "--audio",
+            "--filename",
+            "--direction",
+            "s2t",
+            "--vocabulary",
+            "off",
+            "--yes",
+            folder.to_str().unwrap(),
+        ]),
+        None,
+    );
+    assert_eq!(code, 0);
+    assert!(folder.join("測試音樂.mp3").exists(), "音訊檔應改名");
+    assert!(
+        folder.join("歌词/说明.txt").exists(),
+        "非音訊檔與資料夾不應改名"
+    );
+    let backup = dir.join("音乐.bak/测试音乐.mp3");
+    assert_eq!(
+        fs::read(&backup).expect("backup"),
+        original,
+        "備份必須是轉換前的原檔"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}

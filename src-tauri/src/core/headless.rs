@@ -83,13 +83,12 @@ fn run_inner(args: &[String], dictionary_path: Option<PathBuf>) -> Result<i32, S
                 } else if do_tags {
                     run_audio(state, &mut parsed, settings.as_ref()).await
                 } else {
-                    let mut filename_parsed = parsed.clone();
-                    filename_parsed.mode = CliMode::File;
-                    filename_parsed.operation = FileMode::Filename;
-                    run_files(state, &mut filename_parsed, settings.as_ref()).await
+                    let mut filename_parsed =
+                        audio_filename_cli(Arc::clone(&state), parsed.clone(), false).await?;
+                    run_files(state, &mut filename_parsed, settings.as_ref(), true).await
                 }
             }
-            CliMode::File => run_files(state, &mut parsed, settings.as_ref()).await,
+            CliMode::File => run_files(state, &mut parsed, settings.as_ref(), false).await,
             CliMode::Interactive => Err("無頭模式無法判斷作業類型。".into()),
         }
     })
@@ -121,10 +120,9 @@ async fn run_audio_then_filename(
     settings: Option<&Value>,
 ) -> Result<i32, String> {
     let audio = prepare_audio(Arc::clone(&state), parsed, settings).await?;
-    let mut filename_parsed = parsed.clone();
-    filename_parsed.mode = CliMode::File;
-    filename_parsed.operation = FileMode::Filename;
-    let files = prepare_files(Arc::clone(&state), &filename_parsed, settings).await?;
+    // 標籤步驟已依 --backup 建立 .bak；改名步驟再備份會用已改標籤的檔案蓋掉原始備份。
+    let filename_parsed = audio_filename_cli(Arc::clone(&state), parsed.clone(), true).await?;
+    let files = prepare_files(Arc::clone(&state), &filename_parsed, settings, true).await?;
 
     let tag_count = audio.as_ref().map(|item| item.writable).unwrap_or(0);
     let name_count = files.ready_paths.len();
@@ -151,12 +149,44 @@ async fn run_audio_then_filename(
     Ok(code)
 }
 
+/// 音訊檔名改用檔案流程改名，但只限掃描到的音訊檔本身：
+/// 不套用檔案頁的副檔名篩選，也不改資料夾名稱（與 GUI 音訊頁一致）。
+async fn audio_filename_cli(
+    state: Arc<CoreState>,
+    parsed: ParsedCli,
+    after_tags: bool,
+) -> Result<ParsedCli, String> {
+    let scanned_value = dispatch_op(
+        state,
+        "audio.scan",
+        json!({
+            "paths": parsed.paths,
+            "recursive": true,
+            "id3v1SourceEncoding": "gbk",
+            "id3v2SourceEncoding": "gbk",
+            "id3v2RepairSourceEncoding": true,
+        }),
+    )
+    .await?;
+    let scanned: Vec<AudioTagFile> =
+        serde_json::from_value(scanned_value).map_err(|e| format!("無法解析掃描結果：{e}"))?;
+    let mut filename_parsed = parsed;
+    filename_parsed.mode = CliMode::File;
+    filename_parsed.operation = FileMode::Filename;
+    filename_parsed.paths = scanned.into_iter().map(|file| file.path).collect();
+    if after_tags {
+        filename_parsed.backup = false;
+    }
+    Ok(filename_parsed)
+}
+
 async fn run_files(
     state: Arc<CoreState>,
     parsed: &mut ParsedCli,
     settings: Option<&Value>,
+    audio_names: bool,
 ) -> Result<i32, String> {
-    let prepared = prepare_files(Arc::clone(&state), parsed, settings).await?;
+    let prepared = prepare_files(Arc::clone(&state), parsed, settings, audio_names).await?;
     if prepared.ready_paths.is_empty() {
         eprintln!("沒有可寫入的檔案。");
         return Ok(
@@ -179,10 +209,12 @@ async fn run_files(
     apply_files(state, prepared).await
 }
 
+/// `audio_names`：路徑已是掃描到的音訊檔，不再套用檔案頁的副檔名篩選。
 async fn prepare_files(
     state: Arc<CoreState>,
     parsed: &ParsedCli,
     settings: Option<&Value>,
+    audio_names: bool,
 ) -> Result<PreparedFileWrite, String> {
     let vocabulary_correction = resolve_vocabulary_correction(parsed, settings)?;
     let direction = parsed.direction;
@@ -201,8 +233,16 @@ async fn prepare_files(
             .unwrap_or(false),
         fix_charset_declaration: true,
         fix_charset_extensions: Some(fix_charset_extensions(settings)),
-        allowed_extensions: allowed_extensions(settings),
-        extension_filter: settings_extension_filter(settings),
+        allowed_extensions: if audio_names {
+            None
+        } else {
+            allowed_extensions(settings)
+        },
+        extension_filter: if audio_names {
+            None
+        } else {
+            settings_extension_filter(settings)
+        },
         preview_max_bytes: settings
             .and_then(|value| value.get("previewMaxKb"))
             .and_then(Value::as_u64)

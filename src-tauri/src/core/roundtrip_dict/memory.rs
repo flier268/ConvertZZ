@@ -319,10 +319,9 @@ fn macos_available() -> Option<u64> {
     if rc != libc::KERN_SUCCESS {
         return None;
     }
-    // `free_count` excludes speculative pages; purgeable and speculative are reclaimable.
+    // `free_count` 不含 speculative；purgeable 已計入 active／inactive，不可重複加。
     let pages = u64::from(stats.free_count)
         + u64::from(stats.inactive_count)
-        + u64::from(stats.purgeable_count)
         + u64::from(stats.speculative_count);
     Some(pages.saturating_mul(page as u64))
 }

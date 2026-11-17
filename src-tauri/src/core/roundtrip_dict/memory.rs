@@ -5,6 +5,7 @@ use std::time::Instant;
 
 pub const LCS_MATRIX_BYTES: u64 = 801 * 801 * 4;
 pub const EST_LINE_BYTES: u64 = 256;
+#[cfg(target_os = "linux")]
 const CGROUP_UNLIMITED: u64 = 0x7FFF_FFFF_FFFF_F000;
 
 #[derive(Clone, Debug, Default)]
@@ -52,7 +53,15 @@ impl MemorySampler for HostMemorySampler {
         {
             linux_sample()
         }
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(target_os = "macos")]
+        {
+            macos_sample()
+        }
+        #[cfg(windows)]
+        {
+            windows_sample()
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
         {
             MemorySample::default()
         }
@@ -257,6 +266,118 @@ fn read_cgroup_max(path: &str) -> Option<u64> {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn macos_sample() -> MemorySample {
+    MemorySample {
+        rss_bytes: macos_rss(),
+        mem_available: macos_available(),
+        mem_total: macos_total(),
+        ..MemorySample::default()
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_total() -> Option<u64> {
+    let mut value: u64 = 0;
+    let mut len = std::mem::size_of::<u64>();
+    let rc = unsafe {
+        libc::sysctlbyname(
+            c"hw.memsize".as_ptr(),
+            (&mut value as *mut u64).cast(),
+            &mut len,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    (rc == 0 && len == std::mem::size_of::<u64>() && value > 0).then_some(value)
+}
+
+/// `mach_host_self` adds a send-right reference on every call, so cache the port.
+#[cfg(target_os = "macos")]
+#[allow(deprecated)]
+fn macos_host_port() -> libc::mach_port_t {
+    static HOST: std::sync::OnceLock<libc::mach_port_t> = std::sync::OnceLock::new();
+    *HOST.get_or_init(|| unsafe { libc::mach_host_self() })
+}
+
+#[cfg(target_os = "macos")]
+fn macos_available() -> Option<u64> {
+    let page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    if page <= 0 {
+        return None;
+    }
+    let mut stats: libc::vm_statistics64 = unsafe { std::mem::zeroed() };
+    let mut count = libc::HOST_VM_INFO64_COUNT;
+    let rc = unsafe {
+        libc::host_statistics64(
+            macos_host_port(),
+            libc::HOST_VM_INFO64,
+            (&mut stats as *mut libc::vm_statistics64).cast(),
+            &mut count,
+        )
+    };
+    if rc != libc::KERN_SUCCESS {
+        return None;
+    }
+    // `free_count` excludes speculative pages; purgeable and speculative are reclaimable.
+    let pages = u64::from(stats.free_count)
+        + u64::from(stats.inactive_count)
+        + u64::from(stats.purgeable_count)
+        + u64::from(stats.speculative_count);
+    Some(pages.saturating_mul(page as u64))
+}
+
+#[cfg(target_os = "macos")]
+#[allow(deprecated)]
+fn macos_rss() -> Option<u64> {
+    let mut info: libc::mach_task_basic_info = unsafe { std::mem::zeroed() };
+    let mut count = libc::MACH_TASK_BASIC_INFO_COUNT;
+    let rc = unsafe {
+        libc::task_info(
+            libc::mach_task_self(),
+            libc::MACH_TASK_BASIC_INFO,
+            (&mut info as *mut libc::mach_task_basic_info).cast(),
+            &mut count,
+        )
+    };
+    let resident = info.resident_size;
+    (rc == libc::KERN_SUCCESS && resident > 0).then_some(resident)
+}
+
+#[cfg(windows)]
+fn windows_sample() -> MemorySample {
+    use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
+    use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+    use windows::Win32::System::Threading::GetCurrentProcess;
+
+    let mut status = MEMORYSTATUSEX {
+        dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
+        ..Default::default()
+    };
+    let (mem_available, mem_total) = match unsafe { GlobalMemoryStatusEx(&mut status) } {
+        Ok(()) => (
+            Some(status.ullAvailPhys),
+            (status.ullTotalPhys > 0).then_some(status.ullTotalPhys),
+        ),
+        Err(_) => (None, None),
+    };
+    let cb = std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
+    let mut counters = PROCESS_MEMORY_COUNTERS {
+        cb,
+        ..Default::default()
+    };
+    let rss_bytes = unsafe { GetProcessMemoryInfo(GetCurrentProcess(), &mut counters, cb) }
+        .ok()
+        .map(|()| counters.WorkingSetSize as u64)
+        .filter(|bytes| *bytes > 0);
+    MemorySample {
+        rss_bytes,
+        mem_available,
+        mem_total,
+        ..MemorySample::default()
+    }
+}
+
 pub struct CountingSemaphore {
     state: Mutex<(usize, usize)>,
     cvar: Condvar,
@@ -429,6 +550,22 @@ impl MemorySampler for FakeSampler {
             inflight_est: 0,
             mem_available: None,
             mem_total: None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(any(target_os = "linux", target_os = "macos", windows))]
+    #[test]
+    fn host_sampler_reports_total_memory() {
+        let sample = HostMemorySampler.sample();
+        assert!(sample.mem_total.is_some_and(|total| total > 0));
+        assert!(sample.rss_bytes.is_some_and(|rss| rss > 0));
+        if let (Some(available), Some(total)) = (sample.mem_available, sample.mem_total) {
+            assert!(available <= total);
         }
     }
 }

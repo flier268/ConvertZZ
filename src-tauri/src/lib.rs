@@ -66,6 +66,7 @@ fn write_portable_settings_document(path: &Path, document: &Value) -> Result<(),
     let payload =
         serde_json::to_vec_pretty(document).map_err(|error| format!("序列化設定失敗：{error}"))?;
     let temporary = path.with_added_extension("tmp");
+    let guard = core::remove_file_on_drop(&temporary);
     fs::write(&temporary, &payload).map_err(|error| format!("寫入暫存設定失敗：{error}"))?;
     if path.exists() {
         let backup = path.with_added_extension("bak");
@@ -73,14 +74,13 @@ fn write_portable_settings_document(path: &Path, document: &Value) -> Result<(),
         fs::rename(path, &backup).map_err(|error| format!("備份舊設定失敗：{error}"))?;
         if let Err(error) = fs::rename(&temporary, path) {
             let _ = fs::rename(&backup, path);
-            let _ = fs::remove_file(&temporary);
             return Err(format!("取代設定檔失敗：{error}"));
         }
         let _ = fs::remove_file(&backup);
-    } else if let Err(error) = fs::rename(&temporary, path) {
-        let _ = fs::remove_file(&temporary);
-        return Err(format!("寫入設定檔失敗：{error}"));
+    } else {
+        fs::rename(&temporary, path).map_err(|error| format!("寫入設定檔失敗：{error}"))?;
     }
+    std::mem::DropGuard::dismiss(guard);
     Ok(())
 }
 

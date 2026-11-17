@@ -4874,3 +4874,43 @@ async fn bak_conflict_overwrite_replaces_file_backup() {
     assert_eq!(bak, "里面".as_bytes());
     assert_eq!(converted, "裡面");
 }
+
+#[test]
+fn copy_and_stage_never_delete_an_existing_destination() {
+    let directory = temp_dir();
+    let source = directory.join("source.txt");
+    let existing = directory.join("existing.txt");
+    fs::write(&source, "source").unwrap();
+    fs::write(&existing, "keep").unwrap();
+    assert!(copy_file_chunked(&source, &existing, None).is_err());
+    assert!(write_stage(&existing, b"new", &source).is_err());
+    assert_eq!(fs::read_to_string(&existing).unwrap(), "keep");
+    let _ = fs::remove_dir_all(&directory);
+}
+
+#[test]
+fn cancelled_copy_removes_partial_destination() {
+    let directory = temp_dir();
+    let source = directory.join("source.txt");
+    let destination = directory.join("partial.txt");
+    fs::write(&source, "source").unwrap();
+    let cancel: CancelCheck = Arc::new(|| true);
+    assert!(copy_file_chunked(&source, &destination, Some(&cancel)).is_err());
+    assert!(!destination.exists());
+    let _ = fs::remove_dir_all(&directory);
+}
+
+#[test]
+fn temporary_file_guard_removes_file_when_unwinding() {
+    let directory = temp_dir();
+    let temporary = directory.join(".convertzz-stage.txt");
+    let path = temporary.clone();
+    let panicked = std::panic::catch_unwind(move || {
+        let _guard = super::super::remove_file_on_drop(&path);
+        fs::write(&path, "partial").unwrap();
+        panic!("寫入途中失敗");
+    });
+    assert!(panicked.is_err());
+    assert!(!temporary.exists());
+    let _ = fs::remove_dir_all(&directory);
+}

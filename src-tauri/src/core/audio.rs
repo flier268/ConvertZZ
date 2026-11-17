@@ -1041,7 +1041,8 @@ fn audio_rename_conflicts(source: &Path, dest: &Path) -> bool {
 
 fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
     let temporary = temporary_path(&file.path);
-    let result = (|| -> Result<(), CoreError> {
+    let guard = crate::core::remove_file_on_drop(&temporary);
+    (|| -> Result<(), CoreError> {
         let source = fs::read(&file.path)?;
         let remove_v2 = file.remove_containers.contains(&AudioContainer::Id3v2);
         let remove_v1 = file.remove_containers.contains(&AudioContainer::Id3v1);
@@ -1061,7 +1062,6 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
             let mut tag = match id3::Tag::read_from_path(&temporary) {
                 Ok(tag) => tag,
                 Err(error) if has_id3v2 => {
-                    let _ = fs::remove_file(&temporary);
                     return Err(CoreError::new(
                         "ID3_READ",
                         format!("原檔有 ID3v2，但無法讀取，已停止寫入：{error}"),
@@ -1103,7 +1103,6 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
         };
         if writes_v2 {
             if id3v2_header_version(&output) != Some(file.request.id3v2_version) {
-                let _ = fs::remove_file(&temporary);
                 return Err(CoreError::new(
                     "ID3_WRITE",
                     format!(
@@ -1159,7 +1158,6 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
         }
 
         if verified_mp3_audio(&source) != verified_mp3_audio(&fs::read(&temporary)?) {
-            let _ = fs::remove_file(&temporary);
             return Err(CoreError::new(
                 "AUDIO_VERIFY",
                 "MP3 標籤寫入改變了音訊資料。",
@@ -1167,7 +1165,6 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
         }
         // 拿掉整個 ID3v2 時封面跟著消失，不比對。其餘寫入（含移除 ID3v1／APEv2）要留下原本的 APIC。
         if !remove_v2 && picture_count(&temporary)? != file.original_picture_count {
-            let _ = fs::remove_file(&temporary);
             return Err(CoreError::new(
                 "AUDIO_PICTURE",
                 "標籤寫入造成封面圖片數量改變。",
@@ -1177,19 +1174,18 @@ fn apply_mp3(file: &PreparedAudio) -> Result<(), CoreError> {
             reject_leftover_id3_family(&fs::read(&temporary)?)?;
         }
         Ok(())
-    })();
-    if let Err(error) = result {
-        let _ = fs::remove_file(&temporary);
-        return Err(error);
-    }
-    finish_temporary(&file.path, &temporary)
+    })()?;
+    commit_temporary(&file.path, &temporary)?;
+    std::mem::DropGuard::dismiss(guard);
+    Ok(())
 }
 
 fn apply_taglib(file: &PreparedAudio) -> Result<(), CoreError> {
     let source = fs::read(&file.path)?;
     let temporary = temporary_path(&file.path);
+    let guard = crate::core::remove_file_on_drop(&temporary);
     fs::copy(&file.path, &temporary)?;
-    let result = (|| -> Result<(), CoreError> {
+    (|| -> Result<(), CoreError> {
         if file
             .remove_containers
             .contains(&AudioContainer::VorbisComment)
@@ -1300,12 +1296,10 @@ fn apply_taglib(file: &PreparedAudio) -> Result<(), CoreError> {
             }
         }
         Ok(())
-    })();
-    if let Err(error) = result {
-        let _ = fs::remove_file(&temporary);
-        return Err(error);
-    }
-    finish_temporary(&file.path, &temporary)
+    })()?;
+    commit_temporary(&file.path, &temporary)?;
+    std::mem::DropGuard::dismiss(guard);
+    Ok(())
 }
 
 fn push_standard_fields(fields: &mut Vec<AudioTagField>, container: AudioContainer, tag: &Tag) {
@@ -2894,14 +2888,6 @@ fn read_tagged(path: &Path) -> Result<TaggedFile, CoreError> {
     probe
         .read()
         .map_err(|error| CoreError::new("AUDIO_INVALID", format!("音訊檔案無法解析。{error}")))
-}
-
-fn finish_temporary(path: &Path, temporary: &Path) -> Result<(), CoreError> {
-    if let Err(error) = commit_temporary(path, temporary) {
-        let _ = fs::remove_file(temporary);
-        return Err(error);
-    }
-    Ok(())
 }
 
 fn commit_temporary(path: &Path, temporary: &Path) -> Result<(), CoreError> {

@@ -1855,30 +1855,26 @@ where
     C: Fn(&Path, &Path, Option<&CancelCheck>) -> Result<(), CoreError>,
 {
     let stage = transaction_path(output, "stage");
-    let result = (|| -> Result<(), CoreError> {
-        copy(source, &stage, is_cancelled)?;
-        verify_stage(&stage, None, source)?;
-        if let Some(validator) = stage_validator {
-            validator(&stage, None, source)?;
-        }
-        if is_cancelled.is_some_and(|check| check()) {
-            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
-        }
-        let original = transaction_path(source, "original");
-        fs::rename(source, &original)?;
-        if let Err(error) = fs::rename(&stage, output) {
-            if original.exists() && !source.exists() {
-                let _ = fs::rename(&original, source);
-            }
-            return Err(error.into());
-        }
-        let _ = fs::remove_file(&original);
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&stage);
+    let stage_guard = super::remove_file_on_drop(&stage);
+    copy(source, &stage, is_cancelled)?;
+    verify_stage(&stage, None, source)?;
+    if let Some(validator) = stage_validator {
+        validator(&stage, None, source)?;
     }
-    result
+    if is_cancelled.is_some_and(|check| check()) {
+        return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
+    }
+    let original = transaction_path(source, "original");
+    fs::rename(source, &original)?;
+    if let Err(error) = fs::rename(&stage, output) {
+        if original.exists() && !source.exists() {
+            let _ = fs::rename(&original, source);
+        }
+        return Err(error.into());
+    }
+    std::mem::DropGuard::dismiss(stage_guard);
+    let _ = fs::remove_file(&original);
+    Ok(())
 }
 
 fn is_case_only_rename(source: &Path, output: &Path) -> bool {
@@ -2677,52 +2673,45 @@ fn copy_file_chunked(
     destination: &Path,
     is_cancelled: Option<&CancelCheck>,
 ) -> Result<(), CoreError> {
-    let result = (|| -> Result<(), CoreError> {
-        let mut reader = fs::File::open(source)?;
-        let mut writer = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(destination)?;
-        let mut buffer = vec![0u8; COPY_CHUNK_BYTES];
-        loop {
-            if is_cancelled.is_some_and(|check| check()) {
-                return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
-            }
-            let read = read_chunk(&mut reader, &mut buffer)?;
-            if read == 0 {
-                break;
-            }
-            writer.write_all(&buffer[..read])?;
+    let mut reader = fs::File::open(source)?;
+    let mut writer = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(destination)?;
+    // 檔案是這裡新建的才清除；create_new 失敗時目的地屬於別人，不能刪。
+    let guard = super::remove_file_on_drop(destination);
+    let mut buffer = vec![0u8; COPY_CHUNK_BYTES];
+    loop {
+        if is_cancelled.is_some_and(|check| check()) {
+            return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
         }
-        writer.sync_all()?;
-        if let Ok(source_meta) = fs::metadata(source) {
-            let _ = writer.set_permissions(source_meta.permissions());
+        let read = read_chunk(&mut reader, &mut buffer)?;
+        if read == 0 {
+            break;
         }
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(destination);
+        writer.write_all(&buffer[..read])?;
     }
-    result
+    writer.sync_all()?;
+    if let Ok(source_meta) = fs::metadata(source) {
+        let _ = writer.set_permissions(source_meta.permissions());
+    }
+    std::mem::DropGuard::dismiss(guard);
+    Ok(())
 }
 
 fn write_stage(path: &Path, content: &[u8], source_path: &Path) -> Result<(), CoreError> {
-    let result = (|| -> Result<(), CoreError> {
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)?;
-        file.write_all(content)?;
-        file.sync_all()?;
-        if let Ok(source) = fs::metadata(source_path) {
-            let _ = file.set_permissions(source.permissions());
-        }
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(path);
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)?;
+    let guard = super::remove_file_on_drop(path);
+    file.write_all(content)?;
+    file.sync_all()?;
+    if let Ok(source) = fs::metadata(source_path) {
+        let _ = file.set_permissions(source.permissions());
     }
-    result
+    std::mem::DropGuard::dismiss(guard);
+    Ok(())
 }
 
 fn assert_source_writable(path: &Path) -> Result<(), CoreError> {

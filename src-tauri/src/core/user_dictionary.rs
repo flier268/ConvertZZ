@@ -226,24 +226,20 @@ pub fn save(path: &Path, entries: &[UserDictionaryEntry]) -> Result<(), CoreErro
         ".{USER_DICTIONARY_FILE}.{}.stage",
         uuid::Uuid::new_v4().simple()
     ));
-    let result = (|| {
-        let mut file = fs::File::create(&stage)?;
-        file.write_all(text.as_bytes())?;
-        file.sync_all()?;
-        drop(file);
-        if parse(&fs::read_to_string(&stage)?)? != entries {
-            return Err(CoreError::new(
-                "USER_DICTIONARY_VERIFY",
-                "使用者詞典暫存檔驗證失敗。",
-            ));
-        }
-        fs::rename(&stage, path)?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&stage);
+    let stage_guard = super::remove_file_on_drop(&stage);
+    let mut file = fs::File::create_new(&stage)?;
+    file.write_all(text.as_bytes())?;
+    file.sync_all()?;
+    drop(file);
+    if parse(&fs::read_to_string(&stage)?)? != entries {
+        return Err(CoreError::new(
+            "USER_DICTIONARY_VERIFY",
+            "使用者詞典暫存檔驗證失敗。",
+        ));
     }
-    result
+    fs::rename(&stage, path)?;
+    std::mem::DropGuard::dismiss(stage_guard);
+    Ok(())
 }
 
 /// 與設定檔同目錄：可攜模式在執行檔旁，安裝版在應用程式資料目錄。

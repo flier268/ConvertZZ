@@ -29,6 +29,15 @@ use std::sync::{Arc, Mutex};
 use user_dictionary::UserDictionaryEntry;
 use zhconvert::ZhConvertClient;
 
+/// 暫存檔守衛：離開範圍時（含 `?` 提早返回與 panic）刪除；確定取代成功後用 `DropGuard::dismiss` 解除。
+pub(crate) fn remove_file_on_drop(
+    path: &std::path::Path,
+) -> std::mem::DropGuard<PathBuf, impl FnOnce(PathBuf)> {
+    std::mem::DropGuard::new(path.to_path_buf(), |path| {
+        let _ = std::fs::remove_file(&path);
+    })
+}
+
 pub struct CoreState {
     conversion: ConversionService,
     files: FileService,

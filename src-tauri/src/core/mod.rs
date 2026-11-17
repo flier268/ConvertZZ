@@ -10,6 +10,7 @@ mod parallelism;
 pub mod roundtrip_dict;
 mod settings;
 mod types;
+mod user_dictionary;
 mod utility;
 mod zhconvert;
 
@@ -23,7 +24,9 @@ use audio::AudioService;
 use files::FileService;
 use serde_json::Value;
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use user_dictionary::UserDictionaryEntry;
 use zhconvert::ZhConvertClient;
 
 pub struct CoreState {
@@ -31,17 +34,87 @@ pub struct CoreState {
     files: FileService,
     audio: AudioService,
     cancelled_requests: Mutex<HashSet<String>>,
+    user_dictionary_path: Option<PathBuf>,
+    /// 啟動時使用者詞典讀取失敗的原因；此時以空詞典啟動，避免整個程式無法開啟。
+    user_dictionary_error: Mutex<Option<String>>,
+    user_dictionary_write: Mutex<()>,
 }
 
 impl CoreState {
+    /// GUI：載入與設定檔同目錄的使用者詞典。
     pub fn new() -> Result<Self, CoreError> {
-        let conversion = ConversionService::new()?;
+        Self::build(user_dictionary::default_path())
+    }
+
+    /// 無頭模式只在載入全域設定時使用使用者詞典（使用者設定的一部分）。
+    pub fn new_headless(load_user_dictionary: bool) -> Result<Self, CoreError> {
+        Self::build(if load_user_dictionary {
+            user_dictionary::default_path()
+        } else {
+            None
+        })
+    }
+
+    fn build(user_dictionary_path: Option<PathBuf>) -> Result<Self, CoreError> {
+        let (entries, load_error) = match user_dictionary_path.as_deref() {
+            Some(path) => match user_dictionary::load(path) {
+                Ok(entries) => (entries, None),
+                Err(error) => (Vec::new(), Some(error.message)),
+            },
+            None => (Vec::new(), None),
+        };
+        let conversion = ConversionService::with_user_dictionary(&entries)?;
         Ok(Self {
             conversion,
             files: FileService::new(),
             audio: AudioService::new(),
             cancelled_requests: Mutex::new(HashSet::new()),
+            user_dictionary_path,
+            user_dictionary_error: Mutex::new(load_error),
+            user_dictionary_write: Mutex::new(()),
         })
+    }
+
+    fn user_dictionary_path(&self) -> Result<PathBuf, CoreError> {
+        self.user_dictionary_path
+            .clone()
+            .ok_or_else(|| CoreError::new("USER_DICTIONARY_PATH", "找不到使用者詞典的儲存位置。"))
+    }
+
+    fn read_user_dictionary(&self) -> Result<Value, CoreError> {
+        let path = self.user_dictionary_path()?;
+        let (entries, load_error) = match user_dictionary::load(&path) {
+            Ok(entries) => (entries, None),
+            Err(error) => (Vec::new(), Some(error.message)),
+        };
+        let startup_error = self
+            .user_dictionary_error
+            .lock()
+            .ok()
+            .and_then(|error| error.clone());
+        Ok(serde_json::json!({
+            "path": path,
+            "entries": entries,
+            "loadError": load_error.or(startup_error),
+        }))
+    }
+
+    /// 先在記憶體建好新分詞器，再寫檔（暫存驗證後取代），寫檔成功才換上新分詞器。
+    fn save_user_dictionary(&self, entries: Vec<UserDictionaryEntry>) -> Result<Value, CoreError> {
+        let path = self.user_dictionary_path()?;
+        user_dictionary::check_conflicts(&entries)?;
+        let _guard = self
+            .user_dictionary_write
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        run_blocking(|| {
+            self.conversion
+                .set_user_dictionary(&entries, || user_dictionary::save(&path, &entries))
+        })?;
+        if let Ok(mut error) = self.user_dictionary_error.lock() {
+            *error = None;
+        }
+        Ok(serde_json::json!({ "saved": entries.len(), "path": path }))
     }
 
     pub fn begin_request(&self, request_id: &str) {
@@ -211,6 +284,18 @@ pub async fn dispatch(
             let plan_id = required_string(&payload, "planId")?;
             to_value(state.audio.cancel(&plan_id))
         }
+        "userDictionary.read" => state.read_user_dictionary(),
+        "userDictionary.save" => {
+            let entries: Vec<UserDictionaryEntry> =
+                serde_json::from_value(payload.get("entries").cloned().unwrap_or(Value::Null))?;
+            state.save_user_dictionary(entries)
+        }
+        "userDictionary.previewLegacyImport" => {
+            let path = required_string(&payload, "path")?;
+            to_value(run_blocking(|| {
+                user_dictionary::preview_legacy_import(std::path::Path::new(&path))
+            })?)
+        }
         "settings.migrate" => {
             if let Some(path) = payload.get("path").and_then(Value::as_str) {
                 to_value(settings::migrate_from_path(path)?)
@@ -258,6 +343,15 @@ pub async fn dispatch(
             "UNKNOWN_OPERATION",
             format!("未知操作：{other}"),
         )),
+    }
+}
+
+fn run_blocking<R>(work: impl FnOnce() -> R) -> R {
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) if handle.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => {
+            tokio::task::block_in_place(work)
+        }
+        _ => work(),
     }
 }
 

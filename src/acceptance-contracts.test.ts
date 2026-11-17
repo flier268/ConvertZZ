@@ -41,6 +41,15 @@ describe("驗收項目的自動化契約", () => {
     expect(settings).toContain("notifySettingsReplaced");
   });
 
+  it("使用者詞典儲存前會詢問，舊版字典只經匯入預覽", () => {
+    const page = readProjectFile("src/pages/DictionaryPage.vue");
+    expect(page).toContain("重新載入轉換引擎");
+    expect(page).toContain('title: "確認儲存使用者詞典"');
+    expect(page).toContain("userDictionary.save");
+    expect(page).toContain("userDictionary.previewLegacyImport");
+    expect(page).not.toContain("dictionary.update");
+  });
+
   it("E-01／E-02 預覽會顯示來源、輸出、編碼與差異", () => {
     const page = readProjectFile("src/pages/FilesPage.vue");
     const contracts = readProjectFile("shared/contracts.ts");
@@ -111,6 +120,7 @@ describe("驗收項目的自動化契約", () => {
     expect(readProjectFile("src/pages/ClipboardPage.vue")).toContain('class="page-fill-main"');
     expect(readProjectFile("src/pages/ClipboardPage.vue")).toContain("fill-height");
     expect(readProjectFile("src/pages/ToolsPage.vue")).toContain("page-fill-main");
+    expect(readProjectFile("src/pages/DictionaryPage.vue")).toContain("page-fill-main");
     expect(readProjectFile("src/pages/AudioPage.vue")).toContain("page-fill-main audio-review");
     expect(readProjectFile("src/pages/SettingsPage.vue")).toContain(
       'class="page-fill-main settings-main-card"',

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, provide, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
+import { ElNotification } from "element-plus";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  Collection,
   Document,
   Files,
   Headset,
@@ -17,6 +19,7 @@ import FilesPage from "./pages/FilesPage.vue";
 import ClipboardPage from "./pages/ClipboardPage.vue";
 import AudioPage from "./pages/AudioPage.vue";
 import ToolsPage from "./pages/ToolsPage.vue";
+import DictionaryPage from "./pages/DictionaryPage.vue";
 import SettingsPage from "./pages/SettingsPage.vue";
 import AboutPage from "./pages/AboutPage.vue";
 import OnboardingTour from "./OnboardingTour.vue";
@@ -58,6 +61,25 @@ async function openDropActionDialog(paths: string[]): Promise<void> {
   await invoke("show_main_window").catch(() => undefined);
 }
 
+function showLegacyDictionaryNotice(): void {
+  const notification = ElNotification({
+    title: "舊版字典已改為使用者詞典",
+    message:
+      "2.0 移除了以 Dictionary.csv 全文直接取代的舊版字典引擎。若曾自訂詞彙，請到「使用者詞典」頁匯入。點此前往。",
+    type: "info",
+    duration: 0,
+    onClick: () => {
+      active.value = "dictionary";
+      notification.close();
+    },
+    onClose: () => {
+      void patchSavedSettings((current) => {
+        current.legacyDictionaryNotice = false;
+      }).catch(() => undefined);
+    },
+  });
+}
+
 async function confirmDropAction(choice: DropActionChoice): Promise<void> {
   const settings = await patchSavedSettings((current) => {
     current.lastDropAction = { ...choice };
@@ -74,6 +96,7 @@ const pages = {
   clipboard: ClipboardPage,
   audio: AudioPage,
   tools: ToolsPage,
+  dictionary: DictionaryPage,
   settings: SettingsPage,
   about: AboutPage,
 };
@@ -175,6 +198,7 @@ onMounted(async () => {
       }),
     );
     ready.value = true;
+    if (settings.legacyDictionaryNotice) showLegacyDictionaryNotice();
   } catch (error) {
     const detail = formatUnknownError(error);
     const message = `啟動失敗於 ${step}：${detail}`;
@@ -214,6 +238,9 @@ onBeforeUnmount(() => unlisten.forEach((dispose) => dispose()));
         <el-menu-item id="tour-tools" index="tools"
           ><el-icon><Operation /></el-icon><span>文字工具</span></el-menu-item
         >
+        <el-menu-item id="tour-dictionary" index="dictionary"
+          ><el-icon><Collection /></el-icon><span>使用者詞典</span></el-menu-item
+        >
         <el-menu-item id="tour-settings" index="settings"
           ><el-icon><Setting /></el-icon><span>設定</span></el-menu-item
         >
@@ -229,7 +256,9 @@ onBeforeUnmount(() => unlisten.forEach((dispose) => dispose()));
     </el-aside>
     <el-main class="content">
       <template v-if="ready">
-        <keep-alive include="QuickPage,FilesPage,ClipboardPage,AudioPage,ToolsPage,SettingsPage">
+        <keep-alive
+          include="QuickPage,FilesPage,ClipboardPage,AudioPage,ToolsPage,DictionaryPage,SettingsPage"
+        >
           <component :is="currentPage" />
         </keep-alive>
       </template>

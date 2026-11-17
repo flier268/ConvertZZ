@@ -449,6 +449,48 @@ export interface SettingsV2 {
   showMainWindowOnStart: boolean;
   /** 懸浮球拖放詢問對話框記住的上次選項。 */
   lastDropAction: LastDropActionSettings;
+  /** 從 1.x 字典設定遷移而來、尚未關閉的使用者詞典匯入提示。 */
+  legacyDictionaryNotice?: boolean;
+}
+
+/** 使用者詞典方向：兩向、只用於簡轉繁、只用於繁轉簡。 */
+export type UserDictionaryDirection = "both" | "s2t" | "t2s";
+
+/** 整詞對應；來源詞（簡轉繁取簡體、繁轉簡取繁體）只能是中日韓字元。 */
+export interface UserDictionaryEntry {
+  simplified: string;
+  traditional: string;
+  direction: UserDictionaryDirection;
+}
+
+export interface UserDictionaryReadResult {
+  path: string;
+  entries: UserDictionaryEntry[];
+  loadError?: string | null;
+}
+
+export type LegacyImportStatus =
+  "importable" | "builtinDefault" | "disabled" | "invalid" | "duplicate";
+
+export interface LegacyImportRow {
+  line: number;
+  simplified: string;
+  traditional: string;
+  status: LegacyImportStatus;
+  direction?: UserDictionaryDirection;
+  reason?: string;
+}
+
+/** 舊版 Dictionary.csv 匯入預覽；1.x 內建預設列只計數，不列出。 */
+export interface LegacyImportPreview {
+  path: string;
+  total: number;
+  importable: number;
+  builtinDefault: number;
+  disabled: number;
+  invalid: number;
+  duplicate: number;
+  rows: LegacyImportRow[];
 }
 
 export type CoreOperation =
@@ -467,6 +509,9 @@ export type CoreOperation =
   | "audio.apply"
   | "audio.cancel"
   | "settings.migrate"
+  | "userDictionary.read"
+  | "userDictionary.save"
+  | "userDictionary.previewLegacyImport"
   | "zhconvert.configure"
   | "zhconvert.serviceInfo"
   | "utility.convert"

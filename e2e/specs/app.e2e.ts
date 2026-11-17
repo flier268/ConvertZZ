@@ -179,6 +179,7 @@ test.describe("ConvertZZ 前端", () => {
       { nav: "#nav-quick", heading: "快速轉換" },
       { nav: "#nav-clipboard", heading: "剪貼簿" },
       { nav: "#nav-tools", heading: "文字工具" },
+      { nav: "#nav-dictionary", heading: "使用者詞典" },
       { nav: "#nav-settings", heading: "設定" },
       { nav: "#nav-about", heading: "ConvertZZ 2.0" },
       { nav: "#nav-audio", heading: "音訊標籤" },
@@ -372,6 +373,35 @@ test.describe("ConvertZZ 前端", () => {
     await expect(page.getByText("需 AppIndicator；使用選單開啟").first()).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "Linux Wayland" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "macOS" })).toBeVisible();
+  });
+
+  test("1.x 字典設定遷移後提示前往使用者詞典，關閉後記住", async ({ page }) => {
+    await openApp(page, { legacyDictionaryNotice: true });
+    const notice = page.getByText("舊版字典已改為使用者詞典");
+    await expect(notice).toBeVisible();
+    await notice.click();
+    await expect(page.getByRole("heading", { level: 1, name: "使用者詞典" })).toBeVisible();
+    await expect(notice).toBeHidden();
+    await expect
+      .poll(async () => (await e2eState(page)).savedSettings?.legacyDictionaryNotice)
+      .toBe(false);
+  });
+
+  test("使用者詞典匯入舊版 Dictionary.csv 後需確認才儲存", async ({ page }) => {
+    await openApp(page, { selectedFiles: "/tmp/Dictionary.csv" });
+    await openPage(page, "#tour-dictionary", "使用者詞典");
+    await expect(page.getByRole("button", { name: "儲存", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "匯入舊版 Dictionary.csv" }).click();
+    const dialog = page.getByRole("dialog", { name: "匯入舊版 Dictionary.csv" });
+    await expect(dialog.getByText("來源詞只能是中日韓文字。")).toBeVisible();
+    await dialog.getByRole("button", { name: "加入表格" }).click();
+    await expect(page.getByText("2 筆", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "儲存", exact: true }).click();
+    await expect
+      .poll(async () => (await e2eState(page)).confirms ?? [])
+      .toEqual(
+        expect.arrayContaining([expect.stringContaining("將寫入 2 筆詞彙並重新載入轉換引擎")]),
+      );
   });
 
   test("E-01 內容預覽會顯示來源與輸出文字", async ({ page }) => {

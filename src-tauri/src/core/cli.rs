@@ -523,7 +523,7 @@ fn parse_direction_value(value: &str) -> Option<Direction> {
 }
 
 const LEGACY_ENGINE_REMOVED: &str =
-    "舊版字典引擎已在 2.0 移除。請在「字典」頁把 Dictionary.csv 匯入為使用者詞典，再改用 segmented 引擎。";
+    "舊版字典引擎已在 2.0 移除。請在「使用者詞典」頁把 Dictionary.csv 匯入為使用者詞典，再改用 segmented 引擎。";
 
 fn parse_engine_value(value: &str) -> Result<EngineKind, String> {
     match value.to_ascii_lowercase().as_str() {

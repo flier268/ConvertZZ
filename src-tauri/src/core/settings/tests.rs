@@ -503,8 +503,23 @@ fn removed_legacy_engine_migrates_to_segmented_and_drops_dictionary_path() {
     assert_eq!(result["engine"], "segmented");
     assert_eq!(result["audio"]["engine"], "segmented");
     assert!(result.get("dictionaryPath").is_none());
+    assert_eq!(result["legacyDictionaryNotice"], true);
+    let dismissed = migrate(json!({
+        "version": 2,
+        "engine": "legacy",
+        "legacyDictionaryNotice": false
+    }));
+    assert_eq!(dismissed["legacyDictionaryNotice"], false);
     let kept =
         migrate(json!({ "version": 2, "engine": "zhconvert", "audio": { "engine": "zhconvert" } }));
     assert_eq!(kept["engine"], "zhconvert");
     assert_eq!(kept["audio"]["engine"], "zhconvert");
+    assert!(kept.get("legacyDictionaryNotice").is_none());
+}
+
+#[test]
+fn legacy_1x_settings_show_dictionary_notice() {
+    let result = migrate(json!({ "Engine": 0 }));
+    assert_eq!(result["legacyDictionaryNotice"], true);
+    assert_eq!(migrate(Value::Null)["legacyDictionaryNotice"], false);
 }

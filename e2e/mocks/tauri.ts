@@ -123,6 +123,10 @@ const defaultSettings: SettingsV2 = {
 export interface ConvertzzE2eConfig {
   onboardingCompleted?: boolean;
   legacySettingsPath?: string | null;
+  /** 模擬從 1.x 字典設定遷移而來、尚未關閉匯入提示。 */
+  legacyDictionaryNotice?: boolean;
+  /** 最後一次寫入 store 的設定。 */
+  savedSettings?: SettingsV2;
   skippedUpdateVersion?: string;
   checkVersionOnStart?: boolean;
   selectedFiles?: string | string[];
@@ -270,7 +274,11 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
   if (operation === "health") return { engine: "rust", version: appVersion };
   if (operation === "settings.migrate") {
     const input = payload.input as SettingsV2 | undefined;
-    return input?.version === 2 ? input : structuredClone(defaultSettings);
+    const result = input?.version === 2 ? input : structuredClone(defaultSettings);
+    if (e2e().legacyDictionaryNotice && result.legacyDictionaryNotice === undefined) {
+      result.legacyDictionaryNotice = true;
+    }
+    return result;
   }
   if (operation === "files.plan") {
     const mode = String(payload.mode ?? "content");
@@ -700,6 +708,44 @@ async function mockCoreRequest(operation: string, rawPayload: unknown): Promise<
   if (operation === "audio.cancel") {
     return { cancelled: true };
   }
+  if (operation === "userDictionary.read") {
+    return {
+      path: "/tmp/user-dictionary.txt",
+      entries: [{ simplified: "优盘", traditional: "隨身碟", direction: "s2t" }],
+      loadError: null,
+    };
+  }
+  if (operation === "userDictionary.previewLegacyImport") {
+    return {
+      path: String(payload.path ?? "/tmp/Dictionary.csv"),
+      total: 3,
+      importable: 1,
+      builtinDefault: 1,
+      disabled: 0,
+      invalid: 1,
+      duplicate: 0,
+      rows: [
+        {
+          line: 2,
+          simplified: "信息",
+          traditional: "資訊",
+          status: "importable",
+          direction: "both",
+        },
+        {
+          line: 3,
+          simplified: "U盘",
+          traditional: "隨身碟",
+          status: "invalid",
+          reason: "來源詞只能是中日韓文字。",
+        },
+      ],
+    };
+  }
+  if (operation === "userDictionary.save") {
+    const entries = Array.isArray(payload.entries) ? payload.entries : [];
+    return { saved: entries.length, path: "/tmp/user-dictionary.txt" };
+  }
   if (operation === "convert.preview") {
     return { text: "裡面開發頭髮", durationMs: 1 };
   }
@@ -747,6 +793,7 @@ export async function load() {
     get: async <T>(key: string) => store.get(key) as T | undefined,
     set: async (key: string, value: unknown) => {
       store.set(key, value);
+      if (key === "settings") e2e().savedSettings = structuredClone(value) as SettingsV2;
     },
     save: async () => undefined,
     reload: async () => undefined,

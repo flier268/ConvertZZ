@@ -128,6 +128,9 @@ pub fn migrate(input: Value) -> Value {
     migrated
 }
 
+/// 曾使用 1.x 字典（舊版引擎或自訂字典路徑）的設定遷移後，提示改用使用者詞典匯入；使用者關閉後存為 false。
+const LEGACY_DICTIONARY_NOTICE: &str = "legacyDictionaryNotice";
+
 fn migrate_document(input: Value) -> Value {
     if input.get("version").and_then(Value::as_u64) == Some(2) {
         return merge_v2(input);
@@ -223,6 +226,7 @@ fn migrate_document(input: Value) -> Value {
         "skippedUpdateVersion": "",
         "showMainWindowOnStart": false,
         "lastDropAction": defaults["lastDropAction"].clone(),
+        "legacyDictionaryNotice": input.as_object().is_some_and(|object| !object.is_empty()),
         "audio": defaults["audio"].clone()
     })
 }
@@ -262,6 +266,11 @@ fn merge_v2(input: Value) -> Value {
     }
     if !merged.contains_key("engine") {
         merged.insert("engine".into(), json!("segmented"));
+    }
+    let used_legacy_dictionary = input.get("engine").and_then(Value::as_str) == Some("legacy")
+        || input.get("dictionaryPath").is_some();
+    if used_legacy_dictionary && !merged.contains_key(LEGACY_DICTIONARY_NOTICE) {
+        merged.insert(LEGACY_DICTIONARY_NOTICE.into(), json!(true));
     }
     if let Some(audio) = merged.get_mut("audio").and_then(Value::as_object_mut) {
         if let Some(engine) = audio.get("engine") {

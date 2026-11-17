@@ -312,7 +312,7 @@ describe("Tauri desktop shell", () => {
     const clipboard = readProjectFile("src/pages/ClipboardPage.vue");
 
     expect(app).toContain(
-      'include="QuickPage,FilesPage,ClipboardPage,AudioPage,ToolsPage,SettingsPage"',
+      'include="QuickPage,FilesPage,ClipboardPage,AudioPage,ToolsPage,DictionaryPage,SettingsPage"',
     );
     expect(settings).toContain('defineOptions({ name: "SettingsPage" })');
     expect(files).toContain('defineOptions({ name: "FilesPage" })');

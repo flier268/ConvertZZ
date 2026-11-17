@@ -63,7 +63,9 @@ fn run_inner(args: &[String]) -> Result<i32, String> {
     let settings = load_cli_settings(&parsed)?;
     apply_settings_defaults(&mut parsed, settings.as_ref())?;
 
-    let state = Arc::new(CoreState::new().map_err(|error| error.message.clone())?);
+    let state = Arc::new(
+        CoreState::new_headless(parsed.use_global_config).map_err(|error| error.message.clone())?,
+    );
     if let Some(api_key) = load_zhconvert_api_key_quiet() {
         zhconvert_client(&state).configure(&api_key);
     }
@@ -675,7 +677,7 @@ fn engine_from_settings(settings: &Value) -> Result<EngineKind, String> {
         Some("zhconvert") => Ok(EngineKind::Zhconvert),
         // 設定檔尚未經 GUI 遷移時不可默默換引擎；改用 --engine 明確指定。
         Some("legacy") => Err(
-            "設定檔使用的舊版字典引擎已在 2.0 移除。請在「字典」頁匯入 Dictionary.csv，或加上 --engine segmented。"
+            "設定檔使用的舊版字典引擎已在 2.0 移除。請在「使用者詞典」頁匯入 Dictionary.csv，或加上 --engine segmented。"
                 .into(),
         ),
         _ => Ok(EngineKind::Segmented),
@@ -937,6 +939,11 @@ fn normalize_settings_document(raw: Value) -> Value {
         migrated["engine"] = Value::from("legacy");
     }
     migrated
+}
+
+/// GUI 設定檔位置：可攜模式優先，否則為安裝版的應用程式資料目錄。
+pub(crate) fn settings_store_path() -> Option<PathBuf> {
+    portable_settings_store_path().or_else(installed_settings_store_path)
 }
 
 fn portable_settings_store_path() -> Option<PathBuf> {

@@ -4,6 +4,7 @@ use super::roundtrip_dict::{is_package_data_path, parse_synonym_entry};
 use super::types::{
     CancelCheck, ConversionRequest, ConversionResult, Direction, ProgressEvent, ProgressReporter,
 };
+use super::user_dictionary::UserDictionaryEntry;
 use super::zhconvert::ZhConvertClient;
 use cjk_convert_rs::{cn2tw_min_with, tw2cn_with};
 use novel_segment::{DoSegmentOptions, Segment, SegmentOptions, POSTAG};
@@ -11,6 +12,7 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 pub(crate) mod specials;
@@ -102,10 +104,66 @@ fn extra_pos_allows(token_pos: u32, prev_pos: u32, allowed: u32) -> bool {
     true
 }
 
-pub struct ConversionService {
+/// 分詞器與其詞表。使用者詞典變更時整組重建後替換，請求開始時取一份快照。
+struct SegmentEngine {
     segmenter: Segment,
     extra_synonym: ExtraSynonymMap,
+    user_s2t: HashMap<String, String>,
+    user_t2s: HashMap<String, String>,
+}
+
+pub struct ConversionService {
+    engine: RwLock<Arc<SegmentEngine>>,
+    extra: ExtraLoad,
     pub zhconvert: ZhConvertClient,
+}
+
+/// 使用者詞的分詞權值與額外分詞表一般列相同：讓整詞可被分出，但不強過上下文。
+const USER_WORD_FREQ: u64 = 1_000;
+
+fn add_user_words(
+    segmenter: &mut Segment,
+    entries: &[UserDictionaryEntry],
+) -> Result<(HashMap<String, String>, HashMap<String, String>), CoreError> {
+    let mut s2t = HashMap::new();
+    let mut t2s = HashMap::new();
+    let mut words = Vec::new();
+    for entry in entries {
+        if entry.direction.s2t() {
+            s2t.insert(entry.simplified.clone(), entry.traditional.clone());
+        }
+        if entry.direction.t2s() {
+            t2s.insert(entry.traditional.clone(), entry.simplified.clone());
+        }
+        words.push(entry.simplified.as_str());
+        words.push(entry.traditional.as_str());
+    }
+    let positions: Vec<(String, u32)> = words
+        .into_iter()
+        .map(|word| (word.to_string(), isolated_pos(segmenter, word)))
+        .collect();
+    for (word, pos) in positions {
+        let spec = format!("{word}|{pos:#x}|{USER_WORD_FREQ}");
+        segmenter.add_word(&spec, None, None).map_err(|error| {
+            CoreError::new(
+                "USER_DICTIONARY",
+                format!("無法加入使用者詞「{word}」：{error}"),
+            )
+        })?;
+    }
+    Ok((s2t, t2s))
+}
+
+fn isolated_pos(segmenter: &Segment, word: &str) -> u32 {
+    if word.is_empty() {
+        return POSTAG::D_N;
+    }
+    let words = segmenter.do_segment(word, segment_plain_options(false));
+    if words.len() == 1 && words[0].w == word && words[0].pos() != 0 {
+        words[0].pos()
+    } else {
+        POSTAG::D_N
+    }
 }
 
 fn segment_dict_candidates(executable: Option<&Path>, appdir: Option<&Path>) -> Vec<PathBuf> {
@@ -168,6 +226,7 @@ fn extra_correction_candidates(executable: Option<&Path>, appdir: Option<&Path>)
         .collect()
 }
 
+#[derive(Clone)]
 enum ExtraLoad {
     Skip,
     Discover,
@@ -282,18 +341,50 @@ fn apply_specials_pins(segmenter: &mut Segment) -> Result<(), CoreError> {
 
 impl ConversionService {
     pub fn new() -> Result<Self, CoreError> {
-        Self::build(ExtraLoad::Discover)
+        Self::build(ExtraLoad::Discover, &[])
+    }
+
+    pub fn with_user_dictionary(entries: &[UserDictionaryEntry]) -> Result<Self, CoreError> {
+        Self::build(ExtraLoad::Discover, entries)
     }
 
     pub fn without_extra_correction() -> Result<Self, CoreError> {
-        Self::build(ExtraLoad::Skip)
+        Self::build(ExtraLoad::Skip, &[])
     }
 
     pub fn with_extra_correction(extra_root: &Path) -> Result<Self, CoreError> {
-        Self::build(ExtraLoad::Dir(extra_root.to_path_buf()))
+        Self::build(ExtraLoad::Dir(extra_root.to_path_buf()), &[])
     }
 
-    fn build(extra: ExtraLoad) -> Result<Self, CoreError> {
+    fn build(extra: ExtraLoad, user: &[UserDictionaryEntry]) -> Result<Self, CoreError> {
+        let engine = SegmentEngine::build(&extra, user)?;
+        Ok(Self {
+            engine: RwLock::new(Arc::new(engine)),
+            extra,
+            zhconvert: ZhConvertClient::new(),
+        })
+    }
+
+    /// 以新的使用者詞典重建分詞器；`commit` 成功（例如已寫入詞典檔）才替換。
+    /// 進行中的請求繼續使用原本的快照。
+    pub fn set_user_dictionary(
+        &self,
+        entries: &[UserDictionaryEntry],
+        commit: impl FnOnce() -> Result<(), CoreError>,
+    ) -> Result<(), CoreError> {
+        let engine = Arc::new(SegmentEngine::build(&self.extra, entries)?);
+        commit()?;
+        *self.engine.write().unwrap_or_else(|e| e.into_inner()) = engine;
+        Ok(())
+    }
+
+    fn engine(&self) -> Arc<SegmentEngine> {
+        Arc::clone(&self.engine.read().unwrap_or_else(|e| e.into_inner()))
+    }
+}
+
+impl SegmentEngine {
+    fn build(extra: &ExtraLoad, user: &[UserDictionaryEntry]) -> Result<Self, CoreError> {
         configure_segment_dict_root();
         specials::init()?;
         let mut segmenter = Segment::new(SegmentOptions {
@@ -309,17 +400,106 @@ impl ConversionService {
             ExtraLoad::Skip => {}
             ExtraLoad::Discover => load_extra_correction(&mut segmenter, &mut extra_synonym)?,
             ExtraLoad::Dir(root) => {
-                apply_extra_correction(&mut segmenter, &mut extra_synonym, &root, true)?
+                apply_extra_correction(&mut segmenter, &mut extra_synonym, root, true)?
             }
         }
         apply_specials_pins(&mut segmenter)?;
+        let (user_s2t, user_t2s) = add_user_words(&mut segmenter, user)?;
         Ok(Self {
             segmenter,
             extra_synonym,
-            zhconvert: ZhConvertClient::new(),
+            user_s2t,
+            user_t2s,
         })
     }
 
+    fn segmented_convert_chunk(&self, chunk: &str, direction: Direction) -> String {
+        // 只分詞一次。extra 同義詞依整詞詞性拉回（胜肽、膿疱、錶現），不再跑第二次分詞。
+        let words = self
+            .segmenter
+            .do_segment(chunk, segment_plain_options(direction == Direction::S2t));
+        words
+            .iter()
+            .enumerate()
+            .map(|(index, _)| self.convert_segment_token(&words, index, direction))
+            .collect()
+    }
+
+    fn segmented_convert_chunk_range(
+        &self,
+        chunk: &str,
+        direction: Direction,
+        skip_chars: usize,
+        hold_chars: usize,
+    ) -> String {
+        if skip_chars == 0 && hold_chars == 0 {
+            return self.segmented_convert_chunk(chunk, direction);
+        }
+        let total = chunk.chars().count();
+        let emit_end = total.saturating_sub(hold_chars);
+        let words = self
+            .segmenter
+            .do_segment(chunk, segment_plain_options(direction == Direction::S2t));
+        let last = hold_chars == 0;
+        let mut origin = 0usize;
+        let mut output = String::new();
+        for (index, word) in words.iter().enumerate() {
+            let orig_chars = original_token_chars(word);
+            let start = origin;
+            origin += orig_chars;
+            if token_overlaps_emit(start, orig_chars, skip_chars, emit_end, last) {
+                output.push_str(&self.convert_segment_token(&words, index, direction));
+            }
+        }
+        if origin != total {
+            return self
+                .segmented_convert_chunk(&slice_chars(chunk, skip_chars, hold_chars), direction);
+        }
+        output
+    }
+
+    fn convert_segment_token(
+        &self,
+        words: &[novel_segment::Word],
+        index: usize,
+        direction: Direction,
+    ) -> String {
+        let word = &words[index];
+        let user = match direction {
+            Direction::S2t => &self.user_s2t,
+            Direction::T2s => &self.user_t2s,
+            Direction::None => return word.w.clone(),
+        };
+        // 分詞時的同義詞可能已改寫 w；使用者詞先比對原文。
+        if let Some(target) = [word.ow.as_deref(), Some(word.w.as_str())]
+            .into_iter()
+            .flatten()
+            .find_map(|key| user.get(key))
+        {
+            return target.clone();
+        }
+        let pos = word.pos();
+        let prev_pos = index
+            .checked_sub(1)
+            .map(|prev| words[prev].pos())
+            .unwrap_or(0);
+        let from_extra = lookup_extra_synonym(&self.extra_synonym, &word.w, pos, prev_pos)
+            .unwrap_or(&word.w)
+            .to_string();
+        let glyph = base_convert(&from_extra, direction);
+        let pulled = if direction == Direction::S2t {
+            lookup_extra_synonym(&self.extra_synonym, &glyph, pos, prev_pos)
+                .map(str::to_string)
+                .unwrap_or(glyph)
+        } else {
+            glyph
+        };
+        let next = words.get(index + 1).map(|item| item.w.as_str());
+        specials::current().apply_token(&pulled, next, direction, pos, prev_pos)
+    }
+}
+
+impl ConversionService {
     pub fn convert_segmented(&self, text: &str, direction: Direction) -> String {
         if text.is_empty() || direction == Direction::None {
             return text.to_string();
@@ -330,7 +510,8 @@ impl ConversionService {
 
     #[cfg(test)]
     pub(crate) fn debug_pos(&self, text: &str) -> Vec<(String, u32)> {
-        self.segmenter
+        self.engine()
+            .segmenter
             .do_segment(text, segment_plain_options(true))
             .into_iter()
             .map(|word| (word.w.clone(), word.pos()))
@@ -341,7 +522,8 @@ impl ConversionService {
         if text.is_empty() {
             return Vec::new();
         }
-        self.segmenter
+        self.engine()
+            .segmenter
             .do_segment_simple(text, segment_plain_options(false))
     }
 
@@ -350,23 +532,14 @@ impl ConversionService {
         if text.is_empty() {
             return Vec::new();
         }
-        self.segmenter
+        self.engine()
+            .segmenter
             .do_segment_simple(text, segment_align_options())
     }
 
     /// Isolated-word POS for extra-correction dict rows. Unknown or split words use `D_N`.
     pub fn word_pos(&self, word: &str) -> u32 {
-        if word.is_empty() {
-            return POSTAG::D_N;
-        }
-        let words = self
-            .segmenter
-            .do_segment(word, segment_plain_options(false));
-        if words.len() == 1 && words[0].w == word && words[0].pos() != 0 {
-            words[0].pos()
-        } else {
-            POSTAG::D_N
-        }
+        isolated_pos(&self.engine().segmenter, word)
     }
 
     pub async fn convert(&self, request: ConversionRequest) -> Result<ConversionResult, CoreError> {
@@ -527,6 +700,7 @@ impl ConversionService {
         is_cancelled: &Option<CancelCheck>,
     ) -> Result<String, CoreError> {
         // Only run the expensive segmenter on CJK runs. HTML/JS/CSS/base64 stays on glyph path.
+        let engine = self.engine();
         let units = collect_segment_units(text);
         let total = text.chars().count().max(1) as u64;
         let jobs = default_convert_jobs();
@@ -538,7 +712,7 @@ impl ConversionService {
                 let piece = match unit.kind {
                     UnitKind::Plain => base_convert(&text[unit.start..unit.end], direction),
                     UnitKind::Cjk => {
-                        self.segmented_convert_chunk(&text[unit.start..unit.end], direction)
+                        engine.segmented_convert_chunk(&text[unit.start..unit.end], direction)
                     }
                 };
                 output.push_str(&piece);
@@ -556,7 +730,7 @@ impl ConversionService {
             |unit| match unit.kind {
                 UnitKind::Plain => Ok(base_convert(&text[unit.start..unit.end], direction)),
                 UnitKind::Cjk => {
-                    Ok(self.segmented_convert_chunk(&text[unit.start..unit.end], direction))
+                    Ok(engine.segmented_convert_chunk(&text[unit.start..unit.end], direction))
                 }
             },
         )
@@ -571,6 +745,7 @@ impl ConversionService {
         progress: &Option<ProgressReporter>,
         is_cancelled: &Option<CancelCheck>,
     ) -> Result<String, CoreError> {
+        let engine = self.engine();
         let units = collect_segment_units(text);
         let total_chars = text.chars().count();
         let emit_end = total_chars.saturating_sub(hold_chars);
@@ -593,7 +768,7 @@ impl ConversionService {
                     let local_hold = (origin + unit_chars)
                         .saturating_sub(emit_end)
                         .min(unit_chars);
-                    output.push_str(&self.segmented_convert_chunk_range(
+                    output.push_str(&engine.segmented_convert_chunk_range(
                         &text[unit.start..unit.end],
                         direction,
                         local_skip,
@@ -606,78 +781,6 @@ impl ConversionService {
             report_convert_progress(progress, done, total);
         }
         Ok(output)
-    }
-
-    fn segmented_convert_chunk(&self, chunk: &str, direction: Direction) -> String {
-        // 只分詞一次。extra 同義詞依整詞詞性拉回（胜肽、膿疱、錶現），不再跑第二次分詞。
-        let words = self
-            .segmenter
-            .do_segment(chunk, segment_plain_options(direction == Direction::S2t));
-        words
-            .iter()
-            .enumerate()
-            .map(|(index, _)| self.convert_segment_token(&words, index, direction))
-            .collect()
-    }
-
-    fn segmented_convert_chunk_range(
-        &self,
-        chunk: &str,
-        direction: Direction,
-        skip_chars: usize,
-        hold_chars: usize,
-    ) -> String {
-        if skip_chars == 0 && hold_chars == 0 {
-            return self.segmented_convert_chunk(chunk, direction);
-        }
-        let total = chunk.chars().count();
-        let emit_end = total.saturating_sub(hold_chars);
-        let words = self
-            .segmenter
-            .do_segment(chunk, segment_plain_options(direction == Direction::S2t));
-        let last = hold_chars == 0;
-        let mut origin = 0usize;
-        let mut output = String::new();
-        for (index, word) in words.iter().enumerate() {
-            let orig_chars = original_token_chars(word);
-            let start = origin;
-            origin += orig_chars;
-            if token_overlaps_emit(start, orig_chars, skip_chars, emit_end, last) {
-                output.push_str(&self.convert_segment_token(&words, index, direction));
-            }
-        }
-        if origin != total {
-            return self
-                .segmented_convert_chunk(&slice_chars(chunk, skip_chars, hold_chars), direction);
-        }
-        output
-    }
-
-    fn convert_segment_token(
-        &self,
-        words: &[novel_segment::Word],
-        index: usize,
-        direction: Direction,
-    ) -> String {
-        let word = &words[index];
-        let pos = word.pos();
-        let prev_pos = index
-            .checked_sub(1)
-            .map(|prev| words[prev].pos())
-            .unwrap_or(0);
-        let from_extra = lookup_extra_synonym(&self.extra_synonym, &word.w, pos, prev_pos)
-            .unwrap_or(&word.w)
-            .to_string();
-        let glyph = base_convert(&from_extra, direction);
-        let pulled = if direction == Direction::S2t {
-            lookup_extra_synonym(&self.extra_synonym, &glyph, pos, prev_pos)
-                .map(str::to_string)
-                .unwrap_or(glyph)
-        } else {
-            glyph
-        };
-        let next = words.get(index + 1).map(|item| item.w.as_str());
-        specials::current().apply_token(&pulled, next, direction, pos, prev_pos)
     }
 }
 

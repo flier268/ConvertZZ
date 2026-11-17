@@ -129,24 +129,46 @@ pub fn create_user_backup(
             serde_json::json!({ "path": absolute }),
         ));
     }
-    if target.exists() {
-        if policy == ConflictPolicy::Skip {
-            return Ok(target);
-        }
-        let _ = fs::remove_dir_all(&target);
-        let _ = fs::remove_file(&target);
+    let exists = fs::symlink_metadata(&target).is_ok();
+    if exists && policy == ConflictPolicy::Skip {
+        return Ok(target);
     }
-    if metadata.is_dir() {
-        copy_dir(&absolute, &target)?;
-    } else if metadata.is_file() {
-        fs::copy(&absolute, &target)?;
-    } else {
+    if !metadata.is_dir() && !metadata.is_file() {
         return Err(CoreError::with_details(
             "BACKUP_UNSUPPORTED",
             "不支援的備份來源類型。",
             serde_json::json!({ "path": absolute }),
         ));
     }
+    // 先完整複製到同目錄暫存名稱，成功後才換掉既有備份；複製失敗時既有備份保持不變。
+    let staged = sibling_temporary(&target, "convertzz-backup");
+    let copied = if metadata.is_dir() {
+        copy_dir(&absolute, &staged)
+    } else {
+        fs::copy(&absolute, &staged).map(|_| ()).map_err(Into::into)
+    };
+    if let Err(error) = copied {
+        remove_any(&staged);
+        return Err(error);
+    }
+    if !exists {
+        if let Err(error) = fs::rename(&staged, &target) {
+            remove_any(&staged);
+            return Err(error.into());
+        }
+        return Ok(target);
+    }
+    let previous = sibling_temporary(&target, "convertzz-old-backup");
+    if let Err(error) = fs::rename(&target, &previous) {
+        remove_any(&staged);
+        return Err(error.into());
+    }
+    if let Err(error) = fs::rename(&staged, &target) {
+        let _ = fs::rename(&previous, &target);
+        remove_any(&staged);
+        return Err(error.into());
+    }
+    remove_any(&previous);
     Ok(target)
 }
 
@@ -154,6 +176,22 @@ pub fn path_is_inside(path: &Path, directory: &Path) -> bool {
     let path = resolve_path(&path.to_string_lossy());
     let directory = resolve_path(&directory.to_string_lossy());
     path == directory || path.starts_with(&directory)
+}
+
+fn sibling_temporary(target: &Path, label: &str) -> PathBuf {
+    target.with_file_name(format!(".{label}-{}", uuid::Uuid::new_v4()))
+}
+
+fn remove_any(path: &Path) {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_dir() => {
+            let _ = fs::remove_dir_all(path);
+        }
+        Ok(_) => {
+            let _ = fs::remove_file(path);
+        }
+        Err(_) => {}
+    }
 }
 
 fn copy_dir(source: &Path, destination: &Path) -> Result<(), CoreError> {

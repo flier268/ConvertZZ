@@ -191,3 +191,53 @@ fn skip_keeps_existing_bak_overwrite_replaces() {
     assert_eq!(std::fs::read_to_string(&bak).unwrap(), "new-content");
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+#[cfg(unix)]
+#[test]
+fn failed_overwrite_copy_keeps_existing_backup_and_leaves_no_temporary() {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = temp_dir();
+    let source = directory.join("docs");
+    std::fs::create_dir_all(&source).unwrap();
+    std::fs::write(source.join("a.txt"), "new").unwrap();
+    let locked = source.join("b.txt");
+    std::fs::write(&locked, "secret").unwrap();
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let bak = directory.join("docs.bak");
+    std::fs::create_dir_all(&bak).unwrap();
+    std::fs::write(bak.join("a.txt"), "old").unwrap();
+    if std::fs::read(&locked).is_ok() {
+        // root 可讀取無權限檔案，無法觸發複製失敗。
+        let _ = std::fs::remove_dir_all(&directory);
+        return;
+    }
+    assert!(create_user_backup(&source, ConflictPolicy::Overwrite).is_err());
+    assert_eq!(std::fs::read_to_string(bak.join("a.txt")).unwrap(), "old");
+    let mut names = std::fs::read_dir(&directory)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    names.sort();
+    assert_eq!(names, ["docs", "docs.bak"]);
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[test]
+fn overwrite_replaces_directory_backup_without_leftovers() {
+    let directory = temp_dir();
+    let source = directory.join("docs");
+    std::fs::create_dir_all(&source).unwrap();
+    std::fs::write(source.join("a.txt"), "new").unwrap();
+    let bak = directory.join("docs.bak");
+    std::fs::create_dir_all(&bak).unwrap();
+    std::fs::write(bak.join("stale.txt"), "old").unwrap();
+    assert_eq!(
+        create_user_backup(&source, ConflictPolicy::Overwrite).unwrap(),
+        bak
+    );
+    assert_eq!(std::fs::read_to_string(bak.join("a.txt")).unwrap(), "new");
+    assert!(!bak.join("stale.txt").exists());
+    assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 2);
+    let _ = std::fs::remove_dir_all(&directory);
+}

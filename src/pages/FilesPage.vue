@@ -150,7 +150,8 @@ watch(planInputsKey, (key) => {
 });
 let columnResizeCleanup: (() => void) | undefined;
 
-loadSettings().then((settings) => {
+/** 設定預設值套用完成；外部帶入的選項（命令列、拖入）須在它之後套用，才不會被預設值蓋掉。 */
+const defaultsApplied = loadSettings().then((settings) => {
   const defaults = fileConversionDefaults(settings);
   options.engine = defaults.engine;
   options.direction = defaults.direction;
@@ -751,6 +752,8 @@ watch(
   cliInvocation,
   async (invocation) => {
     if (invocation?.options.mode !== "file") return;
+    await defaultsApplied.catch(() => undefined);
+    if (cliInvocation.value !== invocation) return;
     const cli = invocation.options;
     paths.value = cli.paths;
     pickedFolder.value = cli.paths.some((path) => basenameLooksLikeDirectory(path));

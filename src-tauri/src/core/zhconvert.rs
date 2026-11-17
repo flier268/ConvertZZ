@@ -96,16 +96,23 @@ impl ZhConvertClient {
         }
         let options = options.cloned().unwrap_or_default();
         let info = self.service_info(false).await?;
-        let maximum = info
+        let limit = info
             .pointer("/data/maxPostBodyBytes")
             .and_then(Value::as_u64)
-            .unwrap_or(50_000)
-            .saturating_sub(2048)
-            .max(1024) as usize;
+            .unwrap_or(50_000) as usize;
+        // 主體是 form 編碼：中文每個位元組變成 %XX，其他參數（含自訂取代規則）也算在上限內。
+        let fixed = form_body_len(&self.build_params("", direction, &options));
+        let budget = limit.saturating_sub(fixed + BODY_MARGIN);
+        if budget < MIN_CHUNK_COST {
+            return Err(CoreError::new(
+                "ZHCONVERT_BODY",
+                "ZhConvert 的自訂取代規則等參數太長，超過服務允許的請求大小。",
+            ));
+        }
         let total = text.chars().count().max(1) as u64;
         let mut done = 0u64;
         let mut converted = String::new();
-        for chunk in split_utf8(text, maximum) {
+        for chunk in split_form_encoded(text, budget) {
             if is_cancelled.as_ref().is_some_and(|check| check()) {
                 return Err(CoreError::new("CONVERT_CANCELLED", "轉換已由使用者取消。"));
             }
@@ -130,6 +137,43 @@ impl ZhConvertClient {
         direction: Direction,
         options: &ZhConvertOptions,
     ) -> Result<String, CoreError> {
+        let params = self.build_params(chunk, direction, options);
+        let response = self
+            .client
+            .post(format!("{}/convert", self.base_url))
+            .header(
+                "content-type",
+                "application/x-www-form-urlencoded;charset=UTF-8",
+            )
+            .form(&params)
+            .send()
+            .await
+            .map_err(network_error)?;
+        let status = response.status();
+        if !status.is_success() {
+            let detail = response.text().await.unwrap_or_default();
+            return Err(CoreError::with_details(
+                "ZHCONVERT_CONVERT",
+                format!("ZhConvert 轉換失敗。HTTP {status}"),
+                detail,
+            ));
+        }
+        let payload = response.json::<Value>().await.map_err(network_error)?;
+        extract_text(&payload).ok_or_else(|| {
+            CoreError::with_details(
+                "ZHCONVERT_RESPONSE",
+                "ZhConvert 回應不含文字結果。",
+                payload,
+            )
+        })
+    }
+
+    fn build_params(
+        &self,
+        chunk: &str,
+        direction: Direction,
+        options: &ZhConvertOptions,
+    ) -> Vec<(&'static str, String)> {
         let converter = options.converter.clone().unwrap_or_else(|| {
             if direction == Direction::S2t {
                 "Taiwan".into()
@@ -212,34 +256,7 @@ impl ZhConvertClient {
             options.jp_text_styles.as_deref(),
         );
 
-        let response = self
-            .client
-            .post(format!("{}/convert", self.base_url))
-            .header(
-                "content-type",
-                "application/x-www-form-urlencoded;charset=UTF-8",
-            )
-            .form(&params)
-            .send()
-            .await
-            .map_err(network_error)?;
-        let status = response.status();
-        if !status.is_success() {
-            let detail = response.text().await.unwrap_or_default();
-            return Err(CoreError::with_details(
-                "ZHCONVERT_CONVERT",
-                format!("ZhConvert 轉換失敗。HTTP {status}"),
-                detail,
-            ));
-        }
-        let payload = response.json::<Value>().await.map_err(network_error)?;
-        extract_text(&payload).ok_or_else(|| {
-            CoreError::with_details(
-                "ZHCONVERT_RESPONSE",
-                "ZhConvert 回應不含文字結果。",
-                payload,
-            )
-        })
+        params
     }
 }
 
@@ -272,46 +289,57 @@ fn network_error(error: reqwest::Error) -> CoreError {
     CoreError::new("ZHCONVERT_NETWORK", error.to_string())
 }
 
-fn split_utf8(text: &str, maximum_bytes: usize) -> Vec<String> {
-    if text.len() <= maximum_bytes {
-        return vec![text.to_string()];
+/// 請求主體除了文字之外預留的位元組，涵蓋 HTTP 實作差異。
+const BODY_MARGIN: usize = 256;
+/// 扣掉其他參數後，每段至少要能放下的編碼長度。
+const MIN_CHUNK_COST: usize = 64;
+
+fn form_body_len(params: &[(&str, String)]) -> usize {
+    url::form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(params)
+        .finish()
+        .len()
+}
+
+/// 與 `application/x-www-form-urlencoded` 相同：英數與 `*-._`、空白各占 1，其餘位元組各占 3（%XX）。
+fn form_cost(character: char) -> usize {
+    match character {
+        'a'..='z' | 'A'..='Z' | '0'..='9' | '*' | '-' | '.' | '_' | ' ' => 1,
+        other => 3 * other.len_utf8(),
     }
+}
+
+/// 依 form 編碼後的長度切段，每段不超過 `budget`；盡量在句尾切開。
+fn split_form_encoded(text: &str, budget: usize) -> Vec<String> {
     let mut chunks = Vec::new();
-    let mut remaining = text;
-    while !remaining.is_empty() {
-        let mut low = 1;
-        let mut high = remaining.chars().count();
-        while low < high {
-            let middle = (low + high).div_ceil(2);
-            let slice: String = remaining.chars().take(middle).collect();
-            if slice.len() <= maximum_bytes {
-                low = middle;
-            } else {
-                high = middle - 1;
-            }
+    let mut start = 0;
+    let mut cost = 0;
+    let mut natural: Option<(usize, usize)> = None;
+    for (index, character) in text.char_indices() {
+        let width = form_cost(character);
+        if cost + width > budget && index > start {
+            let cut = match natural {
+                Some((end, end_cost)) if end_cost * 2 > budget => end,
+                _ => index,
+            };
+            chunks.push(text[start..cut].to_string());
+            cost = form_cost_of(&text[cut..index]);
+            start = cut;
+            natural = None;
         }
-        let mut boundary = remaining.chars().take(low).collect::<String>();
-        if let Some(natural) = boundary.rfind(|character| "。！？!?\n".contains(character)) {
-            if natural > boundary.len() / 2 {
-                let width = boundary[natural..]
-                    .chars()
-                    .next()
-                    .map(char::len_utf8)
-                    .unwrap_or(0);
-                boundary = boundary[..natural + width].to_string();
-            }
+        cost += width;
+        if "。！？!?\n".contains(character) {
+            natural = Some((index + character.len_utf8(), cost));
         }
-        while !remaining.starts_with(&boundary) && !boundary.is_empty() {
-            boundary.pop();
-        }
-        let length = boundary
-            .len()
-            .max(remaining.chars().next().map(|c| c.len_utf8()).unwrap_or(0));
-        let (chunk, rest) = remaining.split_at(length.min(remaining.len()));
-        chunks.push(chunk.to_string());
-        remaining = rest;
+    }
+    if start < text.len() || chunks.is_empty() {
+        chunks.push(text[start..].to_string());
     }
     chunks
+}
+
+fn form_cost_of(text: &str) -> usize {
+    text.chars().map(form_cost).sum()
 }
 
 #[cfg(test)]

@@ -12,6 +12,7 @@ pub(crate) struct MockState {
     convert: u32,
     fail: bool,
     last_body: HashMap<String, String>,
+    max_body_len: usize,
     pub(crate) stop: bool,
 }
 
@@ -42,6 +43,15 @@ pub(crate) fn start_mock() -> (String, Arc<Mutex<MockState>>) {
                     );
                 } else if request.starts_with("POST /convert") {
                     state.convert += 1;
+                    let body_len = request
+                        .lines()
+                        .find_map(|line| {
+                            line.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .and_then(|value| value.trim().parse::<usize>().ok())
+                        })
+                        .unwrap_or(0);
+                    state.max_body_len = state.max_body_len.max(body_len);
                     if state.fail {
                         let body = "暫時無法使用";
                         let _ = write!(
@@ -114,14 +124,52 @@ fn decode_form(value: &str) -> String {
 }
 
 #[test]
-fn split_utf8_keeps_multibyte_punctuation_on_char_boundaries() {
+fn split_form_encoded_counts_percent_encoding_and_prefers_sentence_ends() {
     let source = format!("{}。{}", "里".repeat(400), "面".repeat(400));
-    let chunks = split_utf8(&source, 1024);
+    let chunks = split_form_encoded(&source, 4000);
     assert!(chunks.len() > 1);
     assert_eq!(chunks.concat(), source);
-    assert!(chunks
-        .iter()
-        .all(|chunk| chunk.is_char_boundary(chunk.len())));
+    assert!(chunks.iter().all(|chunk| form_cost_of(chunk) <= 4000));
+    assert!(chunks[0].ends_with('。'), "{}", chunks[0].chars().count());
+    let ascii = "ab c".repeat(100);
+    assert!(split_form_encoded(&ascii, 400).len() == 1);
+    let encoded = url::form_urlencoded::byte_serialize("里 a/面".as_bytes()).collect::<String>();
+    assert_eq!(form_cost_of("里 a/面"), encoded.len());
+}
+
+#[tokio::test]
+async fn request_bodies_stay_within_declared_limit_including_replace_rules() {
+    let (url, state) = start_mock();
+    let client = ZhConvertClient::with_base_url(url);
+    let options = ZhConvertOptions {
+        user_pre_replace: Some("甲=乙\n".repeat(30)),
+        ..ZhConvertOptions::default()
+    };
+    let source = format!("{}\n", "里面".repeat(100)).repeat(6);
+    let converted = client
+        .convert(&source, Direction::S2t, Some(&options))
+        .await
+        .unwrap();
+    assert_eq!(converted, source.replace('里', "裡"));
+    let snapshot = state.lock().unwrap();
+    assert!(snapshot.convert > 1);
+    assert!(snapshot.max_body_len <= 2048, "{}", snapshot.max_body_len);
+}
+
+#[tokio::test]
+async fn oversized_replace_rules_report_error_instead_of_sending() {
+    let (url, state) = start_mock();
+    let client = ZhConvertClient::with_base_url(url);
+    let options = ZhConvertOptions {
+        user_pre_replace: Some("甲=乙\n".repeat(200)),
+        ..ZhConvertOptions::default()
+    };
+    let error = client
+        .convert("里面", Direction::S2t, Some(&options))
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, "ZHCONVERT_BODY");
+    assert_eq!(state.lock().unwrap().convert, 0);
 }
 
 #[tokio::test]

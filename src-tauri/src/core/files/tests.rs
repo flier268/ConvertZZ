@@ -4750,3 +4750,66 @@ async fn concurrent_batch_skips_second_file_with_same_output() {
     );
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+#[tokio::test]
+async fn plan_marks_in_batch_duplicate_outputs_as_conflict_even_when_overwriting() {
+    let directory = temp_dir();
+    std::fs::write(directory.join("發.txt"), "a").unwrap();
+    std::fs::write(directory.join("髮.txt"), "b").unwrap();
+    let service = FileService::new();
+    let mut conversion = conversion_s2t();
+    conversion.direction = Direction::T2s;
+    let plan = service
+        .plan(
+            shared_conversion(),
+            FilePlanRequest {
+                paths: vec![directory.to_string_lossy().into_owned()],
+                output_path: None,
+                output_directory: None,
+                mode: FileMode::Filename,
+                recursive: false,
+                input_encoding: TextEncoding::Utf8,
+                output_encoding: TextEncoding::Utf8,
+                add_bom: false,
+                fix_charset_declaration: false,
+                fix_charset_extensions: None,
+                allowed_extensions: None,
+                extension_filter: None,
+                preview_max_bytes: None,
+                conflict_policy: ConflictPolicy::Overwrite,
+                backup: Some(false),
+                include_ignored: false,
+                conversion,
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    let files: Vec<_> = plan
+        .items
+        .iter()
+        .filter(|item| item.kind == FileItemKind::File)
+        .collect();
+    assert_eq!(files.len(), 2, "{files:?}");
+    assert_eq!(
+        files[0].output_path, files[1].output_path,
+        "測試前提：兩者輸出相同"
+    );
+    let statuses: Vec<_> = files.iter().map(|item| item.status).collect();
+    assert!(statuses.contains(&PlanStatus::Ready), "{statuses:?}");
+    assert!(statuses.contains(&PlanStatus::Conflict), "{statuses:?}");
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{:?}", result.failed);
+    let remaining = std::fs::read_dir(&directory).unwrap().count();
+    assert_eq!(remaining, 2, "兩個檔案都必須保留");
+    let _ = std::fs::remove_dir_all(&directory);
+}

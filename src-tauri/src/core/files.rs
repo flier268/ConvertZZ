@@ -224,6 +224,7 @@ impl FileService {
             });
         }
 
+        mark_duplicate_outputs(&mut files);
         if renames_directories {
             let planned_file_ancestors = included_file_ancestor_dirs(
                 &files
@@ -296,6 +297,7 @@ impl FileService {
             }
         }
 
+        mark_duplicate_outputs(&mut files);
         let plan_id = Uuid::new_v4().to_string();
         let public = FileConversionPlan {
             plan_id: plan_id.clone(),
@@ -3296,6 +3298,24 @@ fn is_pe_executable(buffer: &[u8]) -> bool {
         return false;
     };
     buffer.len() >= end && &buffer[offset..end] == b"PE\0\0"
+}
+
+/// 同一批裡多個就緒項目輸出到同一路徑時，只保留第一個；其餘不論衝突策略一律標成衝突，
+/// 避免批次內後寫者覆蓋前者（檔名模式下前者的來源已被改名，覆蓋即遺失）。
+fn mark_duplicate_outputs(files: &mut [PreparedFile]) {
+    let mut seen = HashSet::new();
+    for file in files.iter_mut() {
+        if file.item.status != PlanStatus::Ready {
+            continue;
+        }
+        if !seen.insert(file.item.output_path.clone()) {
+            file.item.status = PlanStatus::Conflict;
+            file.item.warning = merge_warning(
+                Some("與本批其他項目輸出到相同路徑。".into()),
+                file.item.warning.take(),
+            );
+        }
+    }
 }
 
 /// 依輸出路徑分組並保留原順序。以小寫比對，讓不分大小寫的檔案系統上撞名的檔案也排在同一組。

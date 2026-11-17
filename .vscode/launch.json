@@ -2,6 +2,13 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Tauri 開發（執行）",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm run dev",
+      "cwd": "${workspaceFolder}"
+    },
+    {
       "name": "Tauri 開發（除錯 Rust）",
       "type": "lldb",
       "request": "launch",

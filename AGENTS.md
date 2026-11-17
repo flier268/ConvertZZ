@@ -109,7 +109,7 @@ Vitest 涵蓋 `src/**/*.test.ts` 與 `tests/**/*.test.ts`。轉換核心單元�
 - 檔名衝突預設略過。覆寫需要額外確認。檔案與音訊的 `.bak` 備份衝突同樣依衝突策略，預設略過（保留既有備份）；選擇覆寫時需額外確認。同一批多個項目輸出到相同路徑時，計劃一律把後者標為衝突。
 - 舊版 `ConvertZZ.json` 只讀取，結果另存為 2.0 設定，不得修改來源。
 - 1.x 的舊版字典引擎（`Dictionary.csv` 全文直接取代）已在 2.0 移除，不要恢復。CLI 的 `--engine legacy`／`/e:l` 與設定檔裡的 `legacy` 須回報錯誤，不得默默改用其他引擎寫入；GUI 設定遷移改回 `segmented`。
-- 使用者詞典（`src-tauri/src/core/user_dictionary.rs`）是使用者自訂的整詞對應：加入分詞並在轉換時整詞套用，依方向（雙向／簡轉繁／繁轉簡）查表；來源詞只能是中日韓文字。存放在設定旁的 `user-dictionary.txt`，儲存時先建好新分詞器、暫存驗證後取代檔案，成功才換上新分詞器。無頭只有 `--globalconfig` 時載入。舊版 `Dictionary.csv` 只經匯入預覽讀取，略過 `user_dictionary/legacy-defaults.tsv` 收錄的 1.x 內建列，不得修改來源，也不得恢復全文取代。
+- 使用者詞典（`src-tauri/src/core/user_dictionary.rs`）是使用者自訂的整詞對應：加入分詞並在轉換時整詞套用，依方向（雙向／簡轉繁／繁轉簡）查表；來源詞只能是中日韓文字。存放在設定旁的 `user-dictionary.txt`，儲存時先建好新分詞器、暫存驗證後取代檔案，成功才換上新分詞器。無頭只有 `--globalconfig` 時載入。舊版 `Dictionary.csv` 只經匯入預覽讀取，略過 `user_dictionary/legacy-defaults.tsv` 收錄的 1.x 內建列，不得修改來源，也不得恢復全文取代。`legacy-defaults.tsv` 只用來辨識內建列；1.x 內建表品質參差，不得併入轉換、extra-correction 或 conversion-specials。
 - 舊 WPF 原始碼已於 K-07 移除；可自 git 標籤 `legacy-wpf-final` 回復 `ConvertZZ/`。
 - 命令列以 2.0 `--flag` 為準（如 `--output`、`--direction`、`--headless`、`--yes`）；舊版 `/o:utf8`、`/f:t` 等仍可解析但不做後續擴充。檔案作業須先預覽（GUI）或 CLI 計劃摘要後確認。無頭模式（`--headless`，或明確 `--output`／`-o` 且未指定 `--file`／`--audio`）全程不開 GUI，寫入需 `--yes`／`-y` 或 TTY 確認（是／否）；`--audio --filename` 先寫標籤再改名、只確認一次。不要恢復無確認寫入。無頭預設不讀設定，須由命令列提供必要參數（至少 `--direction`）；`--globalconfig` 載入本機全域／可攜設定，`--config <路徑>` 載入指定設定檔（二者不可併用）。無頭在 `tauri::Builder`／single-instance 之前 early-exit，行為不依賴 GUI 是否已開啟。
 - 自動更新簽署 Windows 安裝程式、Linux AppImage 與 macOS `.app.tar.gz`。公鑰放在 `tauri.conf.json`，私鑰只存在 GitHub Secrets `TAURI_SIGNING_PRIVATE_KEY`。

@@ -5135,3 +5135,51 @@ async fn unrepresentable_output_characters_skip_the_file_and_keep_source() {
     assert_eq!(names(&directory), ["emoji.txt"]);
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+#[tokio::test]
+async fn swapped_names_with_content_keep_modified_time_only_when_requested() {
+    for preserve in [true, false] {
+        let directory = temp_dir();
+        let first = directory.join("甲.txt");
+        let second = directory.join("乙.txt");
+        for path in [&first, &second] {
+            std::fs::write(path, "里").unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(path)
+                .unwrap()
+                .set_times(old_times())
+                .unwrap();
+        }
+        let original = std::fs::metadata(&first).unwrap().modified().unwrap();
+        let service = FileService::new().with_convert_hook(|text| match text {
+            "甲.txt" => "乙.txt".into(),
+            "乙.txt" => "甲.txt".into(),
+            other => other.replace('里', "裡"),
+        });
+        let mut request = filename_request(&directory, ConflictPolicy::Overwrite);
+        request.mode = FileMode::Both;
+        request.preserve_modified_time = preserve;
+        let plan = service
+            .plan(shared_conversion(), request, noop())
+            .await
+            .unwrap();
+        let result = service
+            .apply(
+                shared_conversion(),
+                &plan.plan_id,
+                None,
+                noop(),
+                never_cancel(),
+            )
+            .await
+            .unwrap();
+        assert!(result.failed.is_empty(), "{result:?}");
+        for path in [&first, &second] {
+            assert_eq!(std::fs::read_to_string(path).unwrap(), "裡");
+            let modified = std::fs::metadata(path).unwrap().modified().unwrap();
+            assert_eq!(modified == original, preserve, "preserve={preserve}");
+        }
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+}

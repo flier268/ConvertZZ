@@ -1112,6 +1112,8 @@ impl FileService {
         }
 
         let mut transaction = Vec::new();
+        // 與 transaction 一一對應；來源被搬開之前記下，提交後還原到輸出。
+        let mut original_times = Vec::new();
         let mut skipped_during_commit = Vec::new();
         let mut unchanged_during_commit = Vec::new();
         let mut skipped_warnings = Vec::new();
@@ -1200,6 +1202,12 @@ impl FileService {
                         return Err(error);
                     }
                 }
+                original_times.push(
+                    request
+                        .preserve_modified_time
+                        .then(|| super::original_file_times(&source))
+                        .flatten(),
+                );
                 transaction.push(TransactionEntry {
                     file,
                     stage_path,
@@ -1281,10 +1289,14 @@ impl FileService {
             return Ok(batch);
         }
 
-        for entry in transaction {
+        for (entry, times) in transaction.into_iter().zip(original_times) {
             if !entry.committed {
                 continue;
             }
+            batch.warnings.extend(super::restore_file_times(
+                Path::new(&entry.file.item.output_path),
+                times,
+            ));
             batch.warnings.extend(content_skip_warnings(&entry.file));
             batch
                 .committed_outputs

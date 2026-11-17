@@ -55,7 +55,6 @@ process.stdout.write(
     {
       app,
       binary,
-      dictionary,
       segmentDict,
       archs: [...archs],
       apeFixture,

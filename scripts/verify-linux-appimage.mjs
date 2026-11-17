@@ -41,7 +41,6 @@ try {
       {
         appImage,
         binary,
-        dictionary,
         segmentDict,
         apeFixture,
         oggFixture,

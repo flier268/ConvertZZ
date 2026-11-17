@@ -4610,3 +4610,68 @@ async fn invalid_utf8_name_is_skipped_when_output_goes_elsewhere() {
         let _ = std::fs::remove_dir_all(&directory);
     }
 }
+
+#[tokio::test]
+async fn batch_files_convert_concurrently() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    if crate::core::parallelism::default_convert_jobs() < 2 {
+        return;
+    }
+    let directory = temp_dir();
+    for index in 0..4 {
+        std::fs::write(directory.join(format!("{index}.txt")), "里面").unwrap();
+    }
+    let active = Arc::new(AtomicUsize::new(0));
+    let peak = Arc::new(AtomicUsize::new(0));
+    let (hook_active, hook_peak) = (Arc::clone(&active), Arc::clone(&peak));
+    let service = FileService::new().with_convert_hook(move |text| {
+        let now = hook_active.fetch_add(1, Ordering::SeqCst) + 1;
+        hook_peak.fetch_max(now, Ordering::SeqCst);
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        hook_active.fetch_sub(1, Ordering::SeqCst);
+        text.replace("里面", "裡面")
+    });
+    let plan = service
+        .plan(
+            shared_conversion(),
+            FilePlanRequest {
+                paths: vec![directory.join("*.txt").to_string_lossy().into_owned()],
+                output_path: None,
+                output_directory: None,
+                mode: FileMode::Content,
+                recursive: false,
+                input_encoding: TextEncoding::Utf8,
+                output_encoding: TextEncoding::Utf8,
+                add_bom: false,
+                fix_charset_declaration: false,
+                fix_charset_extensions: None,
+                allowed_extensions: None,
+                extension_filter: None,
+                preview_max_bytes: None,
+                conflict_policy: ConflictPolicy::Skip,
+                backup: Some(false),
+                include_ignored: false,
+                conversion: conversion_s2t(),
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{:?}", result.failed);
+    for index in 0..4 {
+        let text = std::fs::read_to_string(directory.join(format!("{index}.txt"))).unwrap();
+        assert_eq!(text, "裡面");
+    }
+    assert!(peak.load(Ordering::SeqCst) >= 2, "檔案沒有同時轉換");
+    let _ = std::fs::remove_dir_all(&directory);
+}

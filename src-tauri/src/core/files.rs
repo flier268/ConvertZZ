@@ -957,7 +957,6 @@ impl FileService {
             return false;
         }
 
-        // 必須在 async 路徑上回報進度：rayon worker 上 emit 時前端常收不到更新。
         progress(ProgressEvent {
             current: 0,
             total,
@@ -965,44 +964,80 @@ impl FileService {
 
             batch: None,
         });
-        let completed = Arc::new(AtomicU64::new(0));
-        let outcomes = futures::stream::iter(pending_files.into_iter())
-            .map(|file| {
-                let progress = Arc::clone(&progress);
-                let is_cancelled = Arc::clone(&is_cancelled);
-                let completed = Arc::clone(&completed);
-                async move {
-                    let source_path = file.item.source_path.clone();
-                    if is_cancelled() {
-                        return (
-                            source_path,
-                            Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。")),
-                        );
-                    }
-                    let file_label = file_name(Path::new(&source_path));
-                    let outcome = self
-                        .materialize_and_commit_file(
-                            conversion,
-                            request,
-                            file,
-                            None,
-                            Arc::clone(&is_cancelled),
-                        )
-                        .await;
-                    let current = completed.fetch_add(1, Ordering::Relaxed) + 1;
-                    progress(ProgressEvent {
-                        current: current.min(total),
-                        total,
-                        message: format!("正在轉換並寫入：{file_label}（{current}/{file_total}）"),
-
-                        batch: None,
-                    });
-                    (source_path, outcome)
+        let commit_one = |file: PreparedFile| {
+            let is_cancelled = Arc::clone(&is_cancelled);
+            async move {
+                let source_path = file.item.source_path.clone();
+                if is_cancelled() {
+                    return (
+                        source_path,
+                        Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。")),
+                    );
                 }
-            })
-            .buffer_unordered(jobs)
-            .collect::<Vec<_>>()
-            .await;
+                let outcome = self
+                    .materialize_and_commit_file(conversion, request, file, None, is_cancelled)
+                    .await;
+                (source_path, outcome)
+            }
+        };
+        let report_done = |current: u64, source_path: &str| {
+            progress(ProgressEvent {
+                current: current.min(total),
+                total,
+                message: format!(
+                    "正在轉換並寫入：{}（{current}/{file_total}）",
+                    file_name(Path::new(source_path))
+                ),
+
+                batch: None,
+            });
+        };
+        let outcomes =
+            if self.convert_hook.is_some() || !uses_zhconvert(&request.conversion.with_text(".")) {
+                // 本機引擎整條路徑都是同步 CPU 工作；同一個 async 任務裡的 future 不會交錯執行，
+                // 所以每個檔案改由獨立執行緒推進，進度仍由目前執行緒依完成順序回報。
+                let queue = Mutex::new(pending_files.into_iter());
+                let next_file = || queue.lock().unwrap_or_else(|e| e.into_inner()).next();
+                run_blocking(|| {
+                    std::thread::scope(|scope| {
+                        let (sender, receiver) = std::sync::mpsc::channel();
+                        for _ in 0..jobs {
+                            let sender = sender.clone();
+                            let (next_file, commit_one) = (&next_file, &commit_one);
+                            scope.spawn(move || {
+                                while let Some(file) = next_file() {
+                                    let outcome = futures::executor::block_on(commit_one(file));
+                                    if sender.send(outcome).is_err() {
+                                        break;
+                                    }
+                                }
+                            });
+                        }
+                        drop(sender);
+                        let mut outcomes = Vec::with_capacity(file_total);
+                        for outcome in receiver {
+                            report_done(outcomes.len() as u64 + 1, &outcome.0);
+                            outcomes.push(outcome);
+                        }
+                        outcomes
+                    })
+                })
+            } else {
+                let completed = AtomicU64::new(0);
+                futures::stream::iter(pending_files.into_iter())
+                    .map(|file| {
+                        let (commit_one, report_done, completed) =
+                            (&commit_one, &report_done, &completed);
+                        async move {
+                            let outcome = commit_one(file).await;
+                            report_done(completed.fetch_add(1, Ordering::Relaxed) + 1, &outcome.0);
+                            outcome
+                        }
+                    })
+                    .buffer_unordered(jobs)
+                    .collect::<Vec<_>>()
+                    .await
+            };
         let mut stopped = false;
         for (source_path, outcome) in outcomes {
             match outcome {
@@ -3257,6 +3292,16 @@ fn is_pe_executable(buffer: &[u8]) -> bool {
         return false;
     };
     buffer.len() >= end && &buffer[offset..end] == b"PE\0\0"
+}
+
+/// 在多執行緒 runtime 上讓出 worker 再執行阻塞工作，避免卡住其他請求（例如取消）。
+fn run_blocking<R>(work: impl FnOnce() -> R) -> R {
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) if handle.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => {
+            tokio::task::block_in_place(work)
+        }
+        _ => work(),
+    }
 }
 
 fn file_name(path: &Path) -> String {

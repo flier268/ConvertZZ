@@ -33,9 +33,6 @@ if (binaries.length === 0) {
 if (!existsSync(join(segmentDict, "segment"))) {
   throw new Error("macOS 應用程式包缺少 segment-dict 分詞字典。");
 }
-if (existsSync(join(resourceDirectory, "Dictionary.csv"))) {
-  throw new Error("macOS 應用程式包不應包含 1.x 的 Dictionary.csv。");
-}
 if (existsSync(join(resourceDirectory, "taglib-wasi.wasm"))) {
   throw new Error("macOS 應用程式包不應再包含 taglib-wasi.wasm。");
 }

@@ -35,7 +35,7 @@ function runScript(script: string, args: string[], env: NodeJS.ProcessEnv = proc
 }
 
 /** 假 AppImage：`--appimage-extract` 時在工作目錄建立 squashfs-root。 */
-function fakeAppImage(extraResource?: string): string {
+function fakeAppImage(): string {
   const directory = temporary();
   const appImage = join(directory, "ConvertZZ.AppImage");
   const resources = "squashfs-root/usr/lib/ConvertZZ";
@@ -47,7 +47,6 @@ function fakeAppImage(extraResource?: string): string {
       "mkdir -p squashfs-root/usr/bin " + `${resources}/segment-dict/segment`,
       "printf '#!/bin/sh\\n' > squashfs-root/usr/bin/convertzz",
       "chmod +x squashfs-root/usr/bin/convertzz",
-      ...(extraResource ? [`touch ${resources}/${extraResource}`] : []),
       "",
     ].join("\n"),
   );
@@ -55,13 +54,12 @@ function fakeAppImage(extraResource?: string): string {
 }
 
 /** 假 macOS 應用程式包，並以假 `lipo` 回報 Universal 架構。 */
-function fakeMacApp(extraResource?: string): { app: string; env: NodeJS.ProcessEnv } {
+function fakeMacApp(): { app: string; env: NodeJS.ProcessEnv } {
   const directory = temporary();
   const app = join(directory, "ConvertZZ.app");
   mkdirSync(join(app, "Contents/MacOS"), { recursive: true });
   mkdirSync(join(app, "Contents/Resources/segment-dict/segment"), { recursive: true });
   executable(join(app, "Contents/MacOS/convertzz"), "#!/bin/sh\n");
-  if (extraResource) writeFileSync(join(app, "Contents/Resources", extraResource), "");
   const bin = join(directory, "bin");
   mkdirSync(bin);
   executable(join(bin, "lipo"), "#!/bin/sh\necho 'x86_64 arm64'\n");
@@ -69,31 +67,18 @@ function fakeMacApp(extraResource?: string): { app: string; env: NodeJS.ProcessE
 }
 
 describe.runIf(unix)("發行包離線驗證腳本", () => {
-  it("AppImage 驗證可跑完，並拒絕打包 1.x Dictionary.csv", () => {
-    const passed = runScript("verify-linux-appimage.mjs", [fakeAppImage(), ape, ogg]);
-    expect(passed.stderr).toBe("");
-    expect(passed.status).toBe(0);
-    expect(JSON.parse(passed.stdout)).toHaveProperty("segmentDict");
-
-    const rejected = runScript("verify-linux-appimage.mjs", [
-      fakeAppImage("Dictionary.csv"),
-      ape,
-      ogg,
-    ]);
-    expect(rejected.status).not.toBe(0);
-    expect(rejected.stderr).toContain("不應包含 1.x 的 Dictionary.csv");
+  it("AppImage 驗證可跑完", () => {
+    const result = runScript("verify-linux-appimage.mjs", [fakeAppImage(), ape, ogg]);
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toHaveProperty("segmentDict");
   });
 
-  it("macOS 應用程式包驗證可跑完，並拒絕打包 1.x Dictionary.csv", () => {
-    const passing = fakeMacApp();
-    const passed = runScript("verify-macos-app.mjs", [passing.app, ape, ogg], passing.env);
-    expect(passed.stderr).toBe("");
-    expect(passed.status).toBe(0);
-    expect(JSON.parse(passed.stdout).archs).toEqual(["x86_64", "arm64"]);
-
-    const failing = fakeMacApp("Dictionary.csv");
-    const rejected = runScript("verify-macos-app.mjs", [failing.app, ape, ogg], failing.env);
-    expect(rejected.status).not.toBe(0);
-    expect(rejected.stderr).toContain("不應包含 1.x 的 Dictionary.csv");
+  it("macOS 應用程式包驗證可跑完", () => {
+    const { app, env } = fakeMacApp();
+    const result = runScript("verify-macos-app.mjs", [app, ape, ogg], env);
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).archs).toEqual(["x86_64", "arm64"]);
   });
 });

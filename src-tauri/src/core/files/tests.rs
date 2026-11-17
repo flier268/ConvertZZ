@@ -4675,3 +4675,78 @@ async fn batch_files_convert_concurrently() {
     assert!(peak.load(Ordering::SeqCst) >= 2, "檔案沒有同時轉換");
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+#[tokio::test]
+async fn concurrent_batch_skips_second_file_with_same_output() {
+    if crate::core::parallelism::default_convert_jobs() < 2 {
+        return;
+    }
+    let directory = temp_dir();
+    let output = directory.join("out");
+    std::fs::create_dir_all(directory.join("a")).unwrap();
+    std::fs::create_dir_all(directory.join("b")).unwrap();
+    std::fs::create_dir_all(&output).unwrap();
+    std::fs::write(directory.join("a/x.txt"), "里面").unwrap();
+    std::fs::write(directory.join("b/x.txt"), "开发").unwrap();
+    let service = FileService::new().with_convert_hook(|text| {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        text.replace("里面", "裡面").replace("开发", "開發")
+    });
+    let plan = service
+        .plan(
+            shared_conversion(),
+            FilePlanRequest {
+                paths: vec![
+                    directory.join("a/x.txt").to_string_lossy().into_owned(),
+                    directory.join("b/x.txt").to_string_lossy().into_owned(),
+                ],
+                output_path: None,
+                output_directory: Some(output.to_string_lossy().into_owned()),
+                mode: FileMode::Content,
+                recursive: false,
+                input_encoding: TextEncoding::Utf8,
+                output_encoding: TextEncoding::Utf8,
+                add_bom: false,
+                fix_charset_declaration: false,
+                fix_charset_extensions: None,
+                allowed_extensions: None,
+                extension_filter: None,
+                preview_max_bytes: None,
+                conflict_policy: ConflictPolicy::Skip,
+                backup: Some(false),
+                include_ignored: false,
+                conversion: conversion_s2t(),
+            },
+            noop(),
+        )
+        .await
+        .unwrap();
+    let outputs: Vec<_> = plan
+        .items
+        .iter()
+        .map(|item| item.output_path.clone())
+        .collect();
+    assert_eq!(outputs.len(), 2, "{outputs:?}");
+    assert_eq!(outputs[0], outputs[1], "測試前提：兩個來源輸出到同一路徑");
+    let result = service
+        .apply(
+            shared_conversion(),
+            &plan.plan_id,
+            None,
+            noop(),
+            never_cancel(),
+        )
+        .await
+        .unwrap();
+    assert!(result.failed.is_empty(), "{:?}", result.failed);
+    assert_eq!(
+        result.skipped.len(),
+        1,
+        "第二個檔案應依衝突策略略過：{result:?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(output.join("x.txt")).unwrap(),
+        "裡面"
+    );
+    let _ = std::fs::remove_dir_all(&directory);
+}

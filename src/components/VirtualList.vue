@@ -1,0 +1,159 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+
+const props = withDefaults(
+  defineProps<{
+    count: number;
+    itemHeight?: number;
+    overscan?: number;
+    /** 測試或不依賴版面計算時可直接指定可視高度。 */
+    viewportHeight?: number;
+    /** 列索引 → 所屬區段標題列。有提供時，標題捲出視窗後會黏在上方。 */
+    sectionOf?: (index: number) => number | null;
+  }>(),
+  { itemHeight: 40, overscan: 6 },
+);
+
+const root = ref<HTMLElement | null>(null);
+const scrollTop = ref(0);
+const measured = ref(0);
+
+const viewport = computed(() => props.viewportHeight ?? measured.value);
+
+function maxScrollTop(): number {
+  const view = root.value?.clientHeight || props.viewportHeight || viewport.value || 0;
+  return Math.max(0, props.count * props.itemHeight - view);
+}
+
+function clampScroll(value: number): number {
+  return Math.min(Math.max(0, value), maxScrollTop());
+}
+
+const start = computed(() =>
+  Math.max(0, Math.floor(scrollTop.value / props.itemHeight) - props.overscan),
+);
+const end = computed(() =>
+  Math.min(
+    props.count,
+    start.value +
+      Math.ceil((viewport.value || props.itemHeight) / props.itemHeight) +
+      props.overscan * 2,
+  ),
+);
+const indexes = computed(() => {
+  const list: number[] = [];
+  for (let index = start.value; index < end.value; index += 1) list.push(index);
+  return list;
+});
+const stickyIndex = computed(() => {
+  if (!props.sectionOf || props.count <= 0) return null;
+  const first = Math.min(props.count - 1, Math.floor(scrollTop.value / props.itemHeight));
+  const section = props.sectionOf(first);
+  if (section == null || section < 0) return null;
+  if (section * props.itemHeight >= scrollTop.value) return null;
+  return section;
+});
+
+function applyClampedScroll(value: number) {
+  const next = clampScroll(value);
+  scrollTop.value = next;
+  if (root.value && root.value.scrollTop !== next) root.value.scrollTop = next;
+}
+
+function onScroll(event: Event) {
+  applyClampedScroll((event.target as HTMLElement).scrollTop);
+}
+
+watch(
+  () => [props.count, props.itemHeight, viewport.value] as const,
+  () => applyClampedScroll(scrollTop.value),
+);
+
+function measure() {
+  const frame = root.value?.parentElement;
+  const sticky = frame?.querySelector(".virtual-list-sticky");
+  const stickyHeight = sticky instanceof HTMLElement ? sticky.offsetHeight : 0;
+  // 量外框而不是捲動區。捲動區會因內容與捲軸改變高度，在 callback 裡再改列數就會觸發
+  // “ResizeObserver loop completed with undelivered notifications”。
+  const next = frame
+    ? Math.max(0, frame.clientHeight - stickyHeight)
+    : (root.value?.clientHeight ?? 0);
+  if (next !== measured.value) measured.value = next;
+}
+
+let observer: ResizeObserver | undefined;
+let measureFrame = 0;
+
+function scheduleMeasure() {
+  if (typeof requestAnimationFrame !== "function") {
+    measure();
+    return;
+  }
+  if (measureFrame) cancelAnimationFrame(measureFrame);
+  measureFrame = requestAnimationFrame(() => {
+    measureFrame = 0;
+    measure();
+  });
+}
+
+onMounted(() => {
+  measure();
+  const frame = root.value?.parentElement;
+  if (typeof ResizeObserver !== "undefined" && frame) {
+    observer = new ResizeObserver(() => scheduleMeasure());
+    observer.observe(frame);
+  }
+});
+onBeforeUnmount(() => {
+  observer?.disconnect();
+  if (measureFrame && typeof cancelAnimationFrame === "function")
+    cancelAnimationFrame(measureFrame);
+});
+
+function scrollToIndex(index: number) {
+  const host = root.value;
+  if (!host) return;
+  const top = Math.max(0, index) * props.itemHeight;
+  const view = host.clientHeight || props.viewportHeight || 0;
+  if (view <= 0) {
+    if (host.scrollTop !== top) host.scrollTop = top;
+  } else if (top < host.scrollTop) host.scrollTop = top;
+  else if (top + props.itemHeight > host.scrollTop + view) {
+    host.scrollTop = top + props.itemHeight - view;
+  }
+  applyClampedScroll(host.scrollTop);
+}
+
+function focusList() {
+  root.value?.focus();
+}
+
+defineExpose({ scrollToIndex, focusList, start, end });
+</script>
+
+<template>
+  <div class="virtual-list-frame">
+    <div
+      v-if="stickyIndex != null"
+      class="virtual-list-sticky"
+      :style="{ height: `${itemHeight}px` }"
+    >
+      <slot name="sticky" :index="stickyIndex" />
+    </div>
+    <div ref="root" class="virtual-list" @scroll="onScroll">
+      <div class="virtual-list-spacer" :style="{ height: `${count * itemHeight}px` }">
+        <div
+          v-for="index in indexes"
+          :key="index"
+          class="virtual-list-row"
+          :style="{
+            transform: `translateY(${index * itemHeight}px)`,
+            height: `${itemHeight}px`,
+          }"
+        >
+          <slot :index="index" />
+        </div>
+      </div>
+    </div>
+  </div>
+</template>

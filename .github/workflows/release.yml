@@ -1,0 +1,287 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 發行標籤
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  # 依標籤分組：手動觸發時 github.ref 是分支，同一分支先後發兩個標籤不應互相取消。
+  group: ${{ github.workflow }}-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: windows-x64
+            # WiX/MSI 只接受純數字預發行號；2.0.0-beta1 這類標籤改只產 NSIS。
+            bundles: nsis
+          - os: ubuntu-22.04
+            artifact: linux-x64
+            bundles: appimage,deb,rpm
+          - os: macos-latest
+            artifact: macos-universal
+            bundles: app,dmg
+            target: universal-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: 加入 macOS Universal 編譯目標
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: release
+      - name: 安裝 Linux 建置套件
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ffmpeg file libayatana-appindicator3-dev libdbus-1-dev \
+            librsvg2-dev libwebkit2gtk-4.1-dev patchelf pkg-config rpm
+      - name: 安裝 macOS 建置套件
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+      - name: 確認更新私鑰
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY}" ]; then
+            echo "請設定 GitHub Secret TAURI_SIGNING_PRIVATE_KEY"
+            exit 1
+          fi
+      - name: 安裝相依套件
+        run: pnpm install --frozen-lockfile
+      - name: 執行測試
+        run: pnpm run check
+      - name: 執行 Rust 核心測試
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        run: cargo test --manifest-path src-tauri/Cargo.toml --workspace -- --test-threads=1
+      - name: 準備 Apple 公證 API 金鑰
+        if: runner.os == 'macOS'
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          if [ -z "${APPLE_API_KEY_P8:-}" ]; then
+            exit 0
+          fi
+          if [ -z "${APPLE_API_KEY:-}" ]; then
+            echo "設定 APPLE_API_KEY_P8 時也需要 APPLE_API_KEY"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/private_keys"
+          printf '%s\n' "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/private_keys/AuthKey_${APPLE_API_KEY}.p8"
+          echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/private_keys/AuthKey_${APPLE_API_KEY}.p8" >> "$GITHUB_ENV"
+      - name: 建立安裝包
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            for var in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+              APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID APPLE_API_KEY APPLE_API_ISSUER APPLE_API_KEY_PATH; do
+              if [ -z "${!var:-}" ]; then
+                unset "$var"
+              fi
+            done
+          fi
+          pnpm tauri build --bundles ${{ matrix.bundles }} --config src-tauri/tauri.updater.conf.json ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+      - name: 建立 Windows 免安裝版
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          node scripts/package-windows-portable.mjs \
+            --release-dir src-tauri/target/release \
+            --version "$version" \
+            --out-dir src-tauri/target/release/bundle/portable
+      - name: 離線驗證 macOS 應用程式包
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          set -euo pipefail
+          apps=(src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app)
+          test "${#apps[@]}" -eq 1
+          node scripts/verify-macos-app.mjs \
+            "${apps[0]}" \
+            tests/fixtures/mac-399.ape \
+            tests/fixtures/test.ogg
+          codesign_log="$RUNNER_TEMP/convertzz-codesign.txt"
+          codesign -dv --verbose=2 "${apps[0]}" >"$codesign_log" 2>&1 || true
+          cat "$codesign_log"
+          if [ -n "${APPLE_CERTIFICATE:-}" ]; then
+            grep -q "Developer ID Application" "$codesign_log"
+          fi
+          if [ -n "${APPLE_ID:-}${APPLE_API_KEY:-}" ]; then
+            spctl --assess --verbose --type execute "${apps[0]}"
+            stapler validate "${apps[0]}"
+          fi
+      - name: 離線驗證 AppImage 內的轉換核心
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          appimages=(src-tauri/target/release/bundle/appimage/*.AppImage)
+          test "${#appimages[@]}" -eq 1
+          unshare --user --map-root-user --net \
+            node scripts/verify-linux-appimage.mjs \
+            "${appimages[0]}" \
+            tests/fixtures/mac-399.ape \
+            tests/fixtures/test.ogg
+      - name: 建立 macOS SHA-256
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="src-tauri/target/universal-apple-darwin/release/bundle"
+          shasum -a 256 "$bundle"/dmg/*.dmg "$bundle"/macos/*.app.tar.gz > SHA256SUMS-macos-universal.txt
+      - name: 建立 Linux SHA-256
+        if: runner.os == 'Linux'
+        shell: bash
+        run: sha256sum src-tauri/target/release/bundle/appimage/*.AppImage src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/rpm/*.rpm > SHA256SUMS-linux-x64.txt
+      - name: 記錄 Linux 執行相依
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="RUNTIME-DEPENDENCIES-linux-x64.txt"
+          {
+            echo "ConvertZZ Linux runtime dependency report"
+            echo
+            for package in src-tauri/target/release/bundle/deb/*.deb; do
+              echo "DEB: $(basename "$package")"
+              dpkg-deb --field "$package" Depends
+              echo
+            done
+            for package in src-tauri/target/release/bundle/rpm/*.rpm; do
+              echo "RPM: $(basename "$package")"
+              rpm -qpR "$package"
+              echo
+            done
+            echo "AppImage: Tauri collected shared libraries are bundled."
+            echo "AppImage media framework bundling: disabled."
+          } > "$report"
+
+          if grep -Eiq '(^|[[:space:],])(nodejs|npm|build-essential|pkg-config|[^[:space:],]+-dev)([[:space:],]|$)' "$report"; then
+            echo "Build-only dependency leaked into release metadata."
+            cat "$report"
+            exit 1
+          fi
+      - name: 建立 Windows SHA-256
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem src-tauri/target/release/bundle -File -Recurse | Where-Object {
+            $_.Extension -in '.exe', '.zip'
+          }
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $file.FullName).Hash.ToLowerInvariant()
+            "$hash  $($file.Name)"
+          }
+          $lines | Set-Content -Encoding utf8NoBOM SHA256SUMS-windows-x64.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.deb
+            src-tauri/target/release/bundle/**/*.rpm
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.zip
+            src-tauri/target/release/bundle/**/*.sig
+            src-tauri/target/universal-apple-darwin/release/bundle/**/*.dmg
+            src-tauri/target/universal-apple-darwin/release/bundle/**/*.app.tar.gz
+            src-tauri/target/universal-apple-darwin/release/bundle/**/*.sig
+            SHA256SUMS-*.txt
+            RUNTIME-DEPENDENCIES-*.txt
+          if-no-files-found: error
+
+  draft-release:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: 設定版本字串
+        run: echo "RELEASE_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
+      - name: 建立 latest.json
+        run: |
+          node scripts/write-latest-json.mjs \
+            --dir artifacts \
+            --tag "${{ env.RELEASE_TAG }}" \
+            --repo "${{ github.repository }}" \
+            --out artifacts/latest.json
+      - name: 建立草稿 Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
+          draft: true
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
+          generate_release_notes: true
+          body: |
+            ## 下載說明
+
+            | 平台 | 建議檔案 | 說明 |
+            | --- | --- | --- |
+            | Windows x64（安裝版） | [`ConvertZZ_${{ env.RELEASE_VERSION }}_x64-setup.exe`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_x64-setup.exe) | NSIS 安裝程式；支援應用程式內自動更新 |
+            | Windows x64（免安裝版） | [`ConvertZZ_${{ env.RELEASE_VERSION }}_x64-portable.zip`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_x64-portable.zip) | 解壓後執行 `ConvertZZ/ConvertZZ.exe`；`settings-v2.json` 與程式同目錄可整包帶走；不支援應用程式內自動更新 |
+            | Linux x64（建議） | [`ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.AppImage`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.AppImage) | 免安裝；支援應用程式內自動更新 |
+            | Linux x64（DEB） | [`ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.deb`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_amd64.deb) | 以 APT 安裝；請改從本頁下載更新 |
+            | Linux x64（RPM） | [`ConvertZZ-${{ env.RELEASE_VERSION }}-1.x86_64.rpm`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ-${{ env.RELEASE_VERSION }}-1.x86_64.rpm) | 以 DNF 安裝；請改從本頁下載更新 |
+            | macOS Universal（建議） | [`ConvertZZ_${{ env.RELEASE_VERSION }}_universal.dmg`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/ConvertZZ_${{ env.RELEASE_VERSION }}_universal.dmg) | 拖到「應用程式」資料夾；Apple Silicon 與 Intel 皆可用；支援應用程式內自動更新 |
+
+            Windows 安裝程式、Linux AppImage 與 macOS 應用程式包可用應用程式內自動更新。
+
+            自動更新會驗證 latest.json 與安裝包簽章。
+
+            DEB、RPM 與 Windows 免安裝 zip 請改從本頁下載。
+
+            macOS 若出現「無法驗證是否為惡意軟體」，請打開「系統設定 → 隱私權與安全性」，捲到下方按「仍要打開」。或在終端機執行 `xattr -cr /Applications/ConvertZZ.app` 後再開啟。有 Apple Developer ID 並完成公證後就不會再出現。
+
+            所有發行檔仍可用隨附的 SHA-256 檔案驗證。
+          files: artifacts/**/*

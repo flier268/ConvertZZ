@@ -11,13 +11,41 @@ fn temp_dir() -> PathBuf {
 #[test]
 fn file_backup_path_appends_bak() {
     assert_eq!(
-        user_backup_path(Path::new("/tmp/note.txt")),
+        user_backup_path(Path::new("/tmp/note.txt")).unwrap(),
         PathBuf::from("/tmp/note.txt.bak")
     );
     assert_eq!(
-        user_backup_path(Path::new("/tmp/docs")),
+        user_backup_path(Path::new("/tmp/docs")).unwrap(),
         PathBuf::from("/tmp/docs.bak")
     );
+}
+
+#[test]
+fn backup_path_ignores_trailing_separator_and_rejects_parent_reference() {
+    assert_eq!(
+        user_backup_path(Path::new("/tmp/docs/")).unwrap(),
+        PathBuf::from("/tmp/docs.bak")
+    );
+    assert_eq!(
+        user_backup_path(Path::new("/tmp/docs/.")).unwrap(),
+        PathBuf::from("/tmp/docs.bak")
+    );
+    assert!(user_backup_path(Path::new("/tmp/docs/..")).is_err());
+    assert!(user_backup_path(Path::new("/")).is_err());
+}
+
+#[test]
+fn directory_with_trailing_separator_is_backed_up_beside_it() {
+    let root = temp_dir();
+    let docs = root.join("docs");
+    std::fs::create_dir_all(&docs).unwrap();
+    std::fs::write(docs.join("a.txt"), "a").unwrap();
+    let source = PathBuf::from(format!("{}{}", docs.display(), std::path::MAIN_SEPARATOR));
+    let backup = create_user_backup(&source, ConflictPolicy::Skip).unwrap();
+    assert_eq!(backup, root.join("docs.bak"));
+    assert_eq!(std::fs::read_to_string(backup.join("a.txt")).unwrap(), "a");
+    assert!(!docs.join(".bak").exists(), "備份不得放進來源目錄");
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]

@@ -15,10 +15,17 @@ pub enum BackupKind {
     Directory,
 }
 
-pub fn user_backup_path(source: &Path) -> PathBuf {
-    let mut path = source.as_os_str().to_os_string();
-    path.push(".bak");
-    PathBuf::from(path)
+/// 結尾分隔符號或 `.` 會先正規化，否則 `docs/` 的備份會落在來源目錄內；沒有檔名的路徑（`..`、根目錄）不備份。
+pub fn user_backup_path(source: &Path) -> Result<PathBuf, CoreError> {
+    let normalized: PathBuf = source.components().collect();
+    if normalized.file_name().is_none() {
+        return Err(CoreError::with_details(
+            "BACKUP_PATH",
+            "無法為沒有檔名的路徑建立備份。",
+            serde_json::json!({ "path": source }),
+        ));
+    }
+    Ok(normalized.with_added_extension("bak"))
 }
 
 pub fn resolve_backup_roots(paths: &[String]) -> Result<Vec<BackupRoot>, CoreError> {
@@ -113,7 +120,7 @@ pub fn create_user_backup(
     policy: ConflictPolicy,
 ) -> Result<PathBuf, CoreError> {
     let absolute = resolve_path(&source_path.to_string_lossy());
-    let target = user_backup_path(&absolute);
+    let target = user_backup_path(&absolute)?;
     let metadata = fs::symlink_metadata(&absolute)?;
     if metadata.file_type().is_symlink() {
         return Err(CoreError::with_details(

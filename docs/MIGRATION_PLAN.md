@@ -187,7 +187,7 @@ Linux X11：2026-08-18／19 本機證據見各日期目錄。Linux Wayland：202
 | 驗收編號 | 例如 `F-13`。 |
 | 應用程式版本 | 例如 `2.0.0-rc.1`。 |
 | 原始碼版本 | Git commit SHA。 |
-| 平台 | Windows、Linux X11 或 Linux Wayland。 |
+| 平台 | Windows、Linux X11、Linux Wayland 或 macOS。 |
 | 環境 | 作業系統版本、桌面環境與架構。 |
 | 執行日期 | 使用 ISO 8601 日期。 |
 | 執行者 | 驗收人姓名或帳號。 |
@@ -202,5 +202,6 @@ Linux X11：2026-08-18／19 本機證據見各日期目錄。Linux Wayland：202
 | Windows x64 | 2.0.0-beta6 | 通過 | flier268 | 2026-08-24 | 使用者確認可用；I-01、G-15 Windows NSIS、J-08 |
 | Linux x64 X11 | 2.0.0-beta6 | 通過 | flier268 | 2026-08-24 | `~/Desktop/ConvertZZ-acceptance/2026-08-18-*`、`2026-08-19-linux-update/`、`2026-08-19-i06-i07/` |
 | Linux x64 Wayland | 2.0.0-beta6 | 通過 | flier268 | 2026-08-24 | `~/Desktop/ConvertZZ-acceptance/2026-08-24-wayland/` |
+| macOS Universal | 2.0.0-beta15 | 通過 | flier268 | 2026-11-17 | 使用者確認可用 |
 
-三平台已完成簽核。舊 WPF 可回復標記為 `legacy-wpf-final`（commit `9425ab8a230faf8b573201ef72a6c71dfd17ea7d`）。K-07 已於 2026-08-24 移除倉庫內 `ConvertZZ/`；字典資源改由 `resources/Dictionary.csv` 提供。
+各平台已完成簽核。舊 WPF 可回復標記為 `legacy-wpf-final`（commit `9425ab8a230faf8b573201ef72a6c71dfd17ea7d`）。K-07 已於 2026-08-24 移除倉庫內 `ConvertZZ/`；字典資源改由 `resources/Dictionary.csv` 提供。

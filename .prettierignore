@@ -10,3 +10,4 @@ pnpm-lock.yaml
 *.md
 LICENSE
 licenses
+.vera

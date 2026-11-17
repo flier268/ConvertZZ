@@ -95,7 +95,7 @@ impl ConvertRuntime {
         Ok(RUNTIME.get_or_init(|| runtime))
     }
 
-    fn enter(&self, cancelled: &dyn Fn() -> bool) -> bool {
+    fn enter(&self, cancelled: &dyn Fn() -> bool) -> Option<Admission<'_>> {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         loop {
             if state.sampled.elapsed() >= LIMIT_RESAMPLE_INTERVAL {
@@ -104,10 +104,10 @@ impl ConvertRuntime {
             }
             if state.active == 0 || state.active < state.limit {
                 state.active += 1;
-                return true;
+                return Some(Admission(self));
             }
             if cancelled() {
-                return false;
+                return None;
             }
             state = self
                 .ready
@@ -122,6 +122,19 @@ impl ConvertRuntime {
         state.active -= 1;
         self.ready.notify_one();
     }
+}
+
+/// 全程式共用的名額；以 Drop 歸還，避免轉換 panic 後永久少一個名額。
+struct Admission<'a>(&'a ConvertRuntime);
+
+impl Drop for Admission<'_> {
+    fn drop(&mut self) {
+        self.0.leave();
+    }
+}
+
+fn convert_panic_error() -> CoreError {
+    CoreError::new("CONVERT_PANIC", "轉換時發生內部錯誤。")
 }
 
 pub(super) struct Emit {
@@ -667,8 +680,9 @@ impl Coordinator {
     fn reserve(&self, cap: usize, cancelled: &dyn Fn() -> bool) -> Result<(), CoreError> {
         let mut state = self.lock();
         loop {
-            if let Some(error) = state.error.take() {
-                return Err(error);
+            // 真正的錯誤留給 read_parallel 結尾回報，這裡只負責停止讀取。
+            if state.error.is_some() {
+                return Err(CoreError::new("CONVERT_ABORTED", "轉換已中止。"));
             }
             if cancelled() {
                 return Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"));
@@ -709,9 +723,12 @@ impl Coordinator {
             } else {
                 drop(state);
                 let write = result.and_then(|piece| {
-                    sink.lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .write_piece(piece, is_final)
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        sink.lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .write_piece(piece, is_final)
+                    }))
+                    .unwrap_or_else(|_| Err(convert_panic_error()))
                 });
                 state = self.lock();
                 write
@@ -805,16 +822,17 @@ where
                     scope.spawn(move |_| {
                         let result = if coordinator.failed() {
                             Err(CoreError::new("CONVERT_ABORTED", "轉換已中止。"))
-                        } else if !runtime.enter(&cancelled) {
-                            Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"))
-                        } else {
-                            let result = if cancelled() {
+                        } else if let Some(_admission) = runtime.enter(&cancelled) {
+                            if cancelled() {
                                 Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"))
                             } else {
-                                convert(&emit.text, emit.skip_chars, emit.hold_chars)
-                            };
-                            runtime.leave();
-                            result
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                    convert(&emit.text, emit.skip_chars, emit.hold_chars)
+                                }))
+                                .unwrap_or_else(|_| Err(convert_panic_error()))
+                            }
+                        } else {
+                            Err(CoreError::new("PLAN_CANCELLED", "檔案作業已由使用者取消。"))
                         };
                         coordinator.finish(this, result, is_final, sink);
                     });
@@ -1210,6 +1228,65 @@ mod tests {
         assert_eq!(result.unwrap_err().code, "TEST_FAIL");
         assert!(!stage.exists());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn convert_panic_fails_file_and_releases_admission() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let dir = std::env::temp_dir().join(format!("convertzz-stream-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("in.txt");
+        let stage = dir.join("out.txt");
+        std::fs::write(&source, "里面开发".repeat(100_000)).unwrap();
+        let runtime = ConvertRuntime::new(|| 1).unwrap();
+        let calls = AtomicUsize::new(0);
+        let convert = |piece: &str, skip: usize, hold: usize| {
+            if calls.fetch_add(1, Ordering::SeqCst) == 3 {
+                panic!("convert panic");
+            }
+            Ok(ConvertedPiece {
+                text: slice_chars(piece, skip, hold),
+                warnings: Vec::new(),
+            })
+        };
+        let run = || {
+            stream_convert_path(
+                &source,
+                &stage,
+                TextEncoding::Utf8,
+                TextEncoding::Utf8,
+                false,
+                WindowKind::CjkOverlap,
+                |_, _, _| async { unreachable!() },
+                |_, _| {},
+                |_, _| {},
+                None,
+                Some(ParallelConvert {
+                    convert: &convert,
+                    runtime: &runtime,
+                }),
+            )
+        };
+        let result = tokio::time::timeout(std::time::Duration::from_secs(30), run())
+            .await
+            .expect("panic must not hang the pipeline");
+        assert_eq!(result.unwrap_err().code, "CONVERT_PANIC");
+        assert!(!stage.exists());
+        assert_eq!(runtime.state.lock().unwrap().active, 0);
+        let result = tokio::time::timeout(std::time::Duration::from_secs(30), run())
+            .await
+            .expect("admission must be released after a panic");
+        assert!(matches!(result, Ok(StreamResult::Written(_))), "{result:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn first_error_survives_reader_reservation() {
+        let coordinator = Coordinator::new();
+        coordinator.lock().error = Some(CoreError::new("TEST_FAIL", "boom"));
+        let reserved = coordinator.reserve(4, &|| false);
+        assert_eq!(reserved.unwrap_err().code, "CONVERT_ABORTED");
+        assert_eq!(coordinator.lock().error.as_ref().unwrap().code, "TEST_FAIL");
     }
 
     #[tokio::test]

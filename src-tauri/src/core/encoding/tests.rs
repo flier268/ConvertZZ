@@ -191,3 +191,19 @@ fn detects_bom() {
         TextEncoding::Utf16be
     );
 }
+
+#[test]
+fn stream_decode_input_no_longer_than_bom_in_single_last_push() {
+    for (encoding, source) in [
+        (TextEncoding::Utf8, "里"),
+        (TextEncoding::Utf8, "ab"),
+        (TextEncoding::Utf16le, "里"),
+        (TextEncoding::Utf16be, "里"),
+    ] {
+        let encoded = encode_text(source, encoding, false).unwrap();
+        let mut decoder = StreamDecoder::new(encoding).unwrap();
+        let (text, errors) = decoder.push(&encoded, true).unwrap();
+        assert!(!errors, "{encoding:?}");
+        assert_eq!(text, source, "{encoding:?}");
+    }
+}

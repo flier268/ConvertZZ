@@ -461,7 +461,7 @@ impl StreamDecoder {
                 let prefix = std::mem::take(&mut self.bom_buf);
                 let (mut text, mut errors) =
                     self.decode_inner(&prefix, last && bytes.is_empty())?;
-                if !bytes.is_empty() || last {
+                if !bytes.is_empty() {
                     let (more, more_errors) = self.decode_inner(bytes, last)?;
                     text.push_str(&more);
                     errors |= more_errors;

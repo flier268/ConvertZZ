@@ -26,6 +26,13 @@ describe("CI 工作流程契約", () => {
       "group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}",
     );
   });
+  it("Linux CI 安裝 clang 與 lld 以搭配 .cargo/config.toml", () => {
+    const cargoConfig = readProjectFile(".cargo/config.toml");
+    expect(cargoConfig).toContain('linker = "clang"');
+    expect(cargoConfig).toContain("-fuse-ld=lld");
+    expect(ci).toContain("clang");
+    expect(ci).toContain("lld");
+  });
 });
 
 describe("發行工作流程契約", () => {
@@ -33,13 +40,14 @@ describe("發行工作流程契約", () => {
   const tauri = readProjectFile("src-tauri/tauri.conf.json");
   const updater = readProjectFile("src-tauri/tauri.updater.conf.json");
 
-  it("Linux job 在打包前跑 Rust 核心測試（含 ffmpeg）", () => {
+  it("Linux job 在打包前跑 Rust 核心測試（含 ffmpeg、clang、lld）", () => {
     const rustTest = workflow.indexOf(
       "cargo test --manifest-path src-tauri/Cargo.toml --workspace",
     );
     expect(rustTest).toBeGreaterThan(0);
     expect(rustTest).toBeLessThan(workflow.indexOf("name: 建立安裝包"));
-    expect(workflow).toMatch(/build-essential ffmpeg /u);
+    expect(workflow).toMatch(/build-essential clang ffmpeg /u);
+    expect(workflow).toMatch(/\blld\b/u);
   });
 
   it("J-04 Windows matrix 產出 NSIS（預發行版略過 MSI）", () => {

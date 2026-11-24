@@ -75,3 +75,7 @@ libc = "0.2.191"
 
 [dev-dependencies]
 tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }
+
+[profile.dev.package."*"]
+debug = 0
+

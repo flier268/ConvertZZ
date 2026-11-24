@@ -180,7 +180,7 @@ Linux 使用者可從托盤選單開啟主視窗。
 
 README 開頭列出的 `apt-get install` 套件只供 Ubuntu 建置機使用。
 
-`build-essential`、`patchelf`、`pkg-config` 與所有 `*-dev` 套件不屬於使用者端相依。
+`build-essential`、`clang`、`lld`、`patchelf`、`pkg-config` 與所有 `*-dev` 套件不屬於使用者端相依。
 
 `rpm` 只用於建立 RPM 產物。
 
@@ -323,8 +323,8 @@ Ubuntu 22.04 建置全部 Linux 發行格式時可安裝下列套件。
 ```bash
 sudo apt-get update
 sudo apt-get install -y --no-install-recommends \
-  build-essential file libayatana-appindicator3-dev libdbus-1-dev \
-  librsvg2-dev libwebkit2gtk-4.1-dev patchelf pkg-config rpm
+  build-essential clang file libayatana-appindicator3-dev libdbus-1-dev \
+  librsvg2-dev libwebkit2gtk-4.1-dev lld patchelf pkg-config rpm
 ```
 
 這些套件只供開發與打包使用。
